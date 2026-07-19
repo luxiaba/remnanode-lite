@@ -24,7 +24,7 @@ func runInRepository(repoDir string, args []string, stdout, stderr io.Writer) in
 	releaseTag := flags.String("tag", "", "release tag to validate")
 	artifactsDirectory := flags.String("artifacts", "", "optional directory containing release Node binaries to verify")
 	flags.Usage = func() {
-		fmt.Fprintln(stderr, "usage: release-evidence-check -manifest PATH -tag v0.1.0 [-artifacts DIR]")
+		fmt.Fprintln(stderr, "usage: release-evidence-check -manifest PATH -tag v2.8.0-rnl.1 [-artifacts DIR]")
 		flags.PrintDefaults()
 	}
 	if err := flags.Parse(args); err != nil {

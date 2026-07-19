@@ -1,6 +1,6 @@
 # M8 发布验收证据协议
 
-本协议定义 `0.1.0` 的机器可校验验收记录。它不替代真实测试；它保证所有结果绑定同一个代码候选，并防止验收后代码漂移。当前尚未冻结候选、未生成 evidence，本文件是协议而不是验收结果。
+本协议定义 `2.8.0-rnl.1` 的机器可校验验收记录。它不替代真实测试；它保证所有结果绑定同一个代码候选，并防止验收后代码漂移。当前尚未冻结候选、未生成 evidence，本文件是协议而不是验收结果。
 
 ## 候选冻结
 
@@ -8,12 +8,12 @@
 
 用于验收的 Node 二进制必须由 `scripts/build-release-binaries.sh` 从干净的 `C` 构建。该脚本要求本地工具链精确为 `go1.26.5`，关闭 workspace 与自动工具链漂移，清空会改变产物的 Go 构建选项，并固定 `CGO_ENABLED=0`、架构级别、`-trimpath`、release ldflags 和 `-buildvcs=false`；最终 release gate 会用同一脚本重建两种架构并比较 SHA-256。
 
-验收后只允许修改 README、CHANGELOG、roadmap、`docs/development/acceptance/v0.1.0/` 和 `docs/releases/v0.1.0.md`。验证器要求 `C` 是最终 HEAD 的祖先，逐 commit、逐 parent 检查白名单，并拒绝发布最终化阶段的 merge；修改代码后再 revert 也不能绕过。
+验收后只允许修改 README、CHANGELOG、roadmap、`docs/development/acceptance/v2.8.0-rnl.1/` 和 `docs/releases/v2.8.0-rnl.1.md`。验证器要求 `C` 是最终 HEAD 的祖先，逐 commit、逐 parent 检查白名单，并拒绝发布最终化阶段的 merge；修改代码后再 revert 也不能绕过。
 
 ## 文件布局
 
 ```text
-docs/development/acceptance/v0.1.0/
+docs/development/acceptance/v2.8.0-rnl.1/
   manifest.json
   systemd.json
   openrc.json
@@ -27,7 +27,7 @@ docs/development/acceptance/v0.1.0/
 
 Manifest 固定以下发布边界：
 
-- `releaseVersion=0.1.0`、`releaseTag=v0.1.0`、`decision=pass`。
+- `releaseVersion=2.8.0-rnl.1`、`releaseTag=v2.8.0-rnl.1`、`decision=pass`。
 - `candidateCommit`、`candidateTree`、RFC3339 `acceptedAt`。
 - 官方 Node `2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`。
 - Panel `2.8.1`。
@@ -72,8 +72,8 @@ Manifest 固定以下发布边界：
 
 ```bash
 go run ./cmd/release-evidence-check \
-  -manifest docs/development/acceptance/v0.1.0/manifest.json \
-  -tag v0.1.0
+  -manifest docs/development/acceptance/v2.8.0-rnl.1/manifest.json \
+  -tag v2.8.0-rnl.1
 ```
 
 `scripts/release-check.sh` 会调用同一验证器，并继续检查 release note、版本、完整 Go 门禁、供应链和 tag 位置。在真实证据尚未生成前，release gate 失败是预期行为。

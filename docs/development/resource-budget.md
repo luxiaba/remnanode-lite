@@ -12,7 +12,7 @@
 
 门禁脚本为 [`scripts/test-low-memory.sh`](../../scripts/test-low-memory.sh)，Linux 集成测试为 [`internal/xray/resource_linux_integration_test.go`](../../internal/xray/resource_linux_integration_test.go)。测试同时验证最小 protobuf wire client 的系统统计、inbound 用户数、VLESS 热增删和用户 IP 统计 RPC。
 
-下列 M6/M7 数值早于当前 M8 候选，只作为工程基线；冻结候选 `C` 后必须重新测量并写入 acceptance evidence，不能直接作为 `0.1.0` 发布结论。
+下列 M6/M7 数值早于当前 M8 候选，只作为工程基线；冻结候选 `C` 后必须重新测量并写入 acceptance evidence，不能直接作为 `2.8.0-rnl.1` 发布结论。
 
 ## 固定测试资产
 
@@ -83,7 +83,7 @@ OpenRC 另外由 supervisor 写入 `openrc.log` 与 `openrc.err.log`。它们每
 - Debian 与 Alpine 安装器在 `MemTotal <= 512 MiB` 时自动写入 `LOW_MEMORY=1`。
 - OpenRC 校验 cgroup v2 的 `448 MiB` memory、零 swap、1 CPU、256 PID 以及启动 shell 的实际 cgroup 成员关系；controller 缺失或写入未生效时拒绝启动。停止后不依赖 OpenRC 0.62.6 的路径清理，而是将 `stop_post` 自身迁出、通过 `cgroup.kill` 清理精确 service cgroup、最多等待 5 秒确认 `populated=0` 后删除该目录。
 
-当前上述 OpenRC 清理覆盖 init 实际执行 `stop_post` 的正常停止路径。installer 共享锁已经消除并发写入，但不提供 SIGKILL/掉电后的持久 phase journal；`supervise-daemon` 自身异常退出后也不承诺自动清理残留 cgroup。这是 `0.1.0` 接受的运维限制：原生部署重新运行 installer 或重启主机，容器部署重新创建容器，不作为发布阻断项。
+当前上述 OpenRC 清理覆盖 init 实际执行 `stop_post` 的正常停止路径。installer 共享锁已经消除并发写入，但不提供 SIGKILL/掉电后的持久 phase journal；`supervise-daemon` 自身异常退出后也不承诺自动清理残留 cgroup。这是 `2.8.0-rnl.1` 接受的运维限制：原生部署重新运行 installer 或重启主机，容器部署重新创建容器，不作为发布阻断项。
 
 任何修改请求解码、Xray 配置生命周期、RPC 消息、报告队列或依赖图的提交，都应重新执行此门禁并比较阶段峰值。
 

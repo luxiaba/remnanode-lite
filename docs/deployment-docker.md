@@ -1,6 +1,6 @@
 # Docker Compose 部署
 
-`v0.1.0` 正式发布后，Release workflow 将同一份源码构建为 `linux/amd64`、`linux/arm64` multi-arch 镜像并发布到：
+`v2.8.0-rnl.1` 正式发布后，Release workflow 将同一份源码构建为 `linux/amd64`、`linux/arm64` multi-arch 镜像并发布到：
 
 ```text
 ghcr.io/luxiaba/remnanode-lite
@@ -19,12 +19,12 @@ ghcr.io/luxiaba/remnanode-lite
 
 ## 无源码部署
 
-正式版本发布后，从 GitHub Release 下载经过同一份 `SHA256SUMS` 覆盖的部署文件。以下以 `0.1.0` 为例：
+正式版本发布后，从 GitHub Release 下载经过同一份 `SHA256SUMS` 覆盖的部署文件。以下以 `2.8.0-rnl.1` 为例：
 
 ```bash
 mkdir -p /opt/remnanode && cd /opt/remnanode
 
-base_url=https://github.com/Luxiaba/remnanode-lite/releases/download/v0.1.0
+base_url=https://github.com/Luxiaba/remnanode-lite/releases/download/v2.8.0-rnl.1
 curl -fLO "$base_url/compose.yaml"
 curl -fLO "$base_url/remnanode.env.example"
 curl -fLO "$base_url/SHA256SUMS"
@@ -37,7 +37,7 @@ chmod 600 .env
 编辑 `.env`，至少填写完整 Secret：
 
 ```env
-REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:0.1.0
+REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
 NODE_PORT=2222
 SECRET_KEY=粘贴_Panel_提供的完整_base64_内容
 LOW_MEMORY=1
@@ -70,7 +70,7 @@ unset GHCR_TOKEN
 
 ## 正式发布前的候选验收
 
-合入 `main` 且改动命中容器构建输入时，`container` workflow 自动发布可变的 `edge` 和不可变的 `sha-<commit>` 多架构镜像。`edge` 只方便查看当前主线，服务器验收必须固定 `sha-<commit>`；候选镜像不代表正式 Release，不得自行改写为 `0.1.0` 等正式 tag。维护者仍可从 `main` 手动运行 workflow，补发同一 `sha-<commit>` 并额外生成 `candidate-sha-<commit>` 别名。
+合入 `main` 且改动命中容器构建输入时，`container` workflow 自动发布可变的 `edge` 和不可变的 `sha-<commit>` 多架构镜像。`edge` 只方便查看当前主线，服务器验收必须固定 `sha-<commit>`；候选镜像不代表正式 Release，不得自行改写为 `2.8.0-rnl.1` 等正式 tag。维护者仍可从 `main` 手动运行 workflow，补发同一 `sha-<commit>` 并额外生成 `candidate-sha-<commit>` 别名。
 
 候选阶段没有 GitHub Release 资产。服务器按完整 commit 下载同一版本的 Compose 和环境模板，不需要 clone 仓库：
 
@@ -107,14 +107,14 @@ gh attestation verify \
 ```bash
 docker image inspect \
   --format '{{index .RepoDigests 0}}' \
-  ghcr.io/luxiaba/remnanode-lite:0.1.0
+  ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
 ```
 
 将输出的完整 `name@sha256:...` 写入 `.env` 的 `REMNANODE_IMAGE` 即可固定摘要。GitHub CLI 可验证发布 workflow 生成的 build attestation：
 
 ```bash
 gh attestation verify \
-  oci://ghcr.io/luxiaba/remnanode-lite:0.1.0 \
+  oci://ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1 \
   --repo Luxiaba/remnanode-lite
 ```
 
@@ -169,13 +169,13 @@ docker compose down --volumes
 
 ## 镜像内容
 
-`0.1.0` 镜像包含：
+`2.8.0-rnl.1` 镜像包含：
 
-- `remnanode-lite` `0.1.0`，上报 Node 契约版本 `2.8.0`
+- `remnanode-lite` `2.8.0-rnl.1`，上报 Node 契约版本 `2.8.0`
 - rw-core `v26.6.27`，分别固定 amd64/arm64 Release 资产与 SHA-256
 - 同一 rw-core Release 的 `geoip.dat` / `geosite.dat`
 - 固定 `ipverse/as-ip-blocks@56d021c` 源码归档与 SHA-256，流式生成 compact ASN 数据库
 - 固定 manifest digest 的 Go、Debian 与 Dockerfile frontend 基础镜像
 - Debian bookworm slim、CA 证书和 nftables 运行依赖
 
-稳定 SemVer Release 会更新 `latest`，预发布版本不会；构建过程不消费任何浮动的外部基础镜像或资产，任一固定摘要不匹配都会失败。
+通过完整验收的 `v<官方版本>-rnl.<修订号>` Release 会更新 `latest`；构建过程不消费任何浮动的外部基础镜像或资产，任一固定摘要不匹配都会失败。

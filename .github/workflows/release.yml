@@ -141,6 +141,7 @@ jobs:
         with:
           body_path: docs/releases/${{ github.ref_name }}.md
           fail_on_unmatched_files: true
+          prerelease: false
           files: |
             dist/remnanode-lite_linux_amd64.tar.gz
             dist/remnanode-lite_linux_arm64.tar.gz
@@ -182,11 +183,10 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: latest=auto
+          flavor: latest=false
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref_name, 'v0.') }}
+            type=raw,value=latest
             type=sha,prefix=sha-,format=long
           labels: |
             org.opencontainers.image.title=Remnawave Node Lite (Go)

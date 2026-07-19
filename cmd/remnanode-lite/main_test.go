@@ -49,10 +49,10 @@ func TestRunCLIRejectsUnknownMalformedAndExtraArguments(t *testing.T) {
 		{"validate-secret", "extra"},
 		{"canonicalize-secret"},
 		{"canonicalize-secret", "-", "extra"},
-		{"release-url", "v0.1.0"},
-		{"release-url", "v0.1.0", "amd64", "extra"},
-		{"install-script-url", "v0.1.0"},
-		{"install-script-url", "v0.1.0", "install-node.sh", "extra"},
+		{"release-url", "v2.8.0-rnl.1"},
+		{"release-url", "v2.8.0-rnl.1", "amd64", "extra"},
+		{"install-script-url", "v2.8.0-rnl.1"},
+		{"install-script-url", "v2.8.0-rnl.1", "install-node.sh", "extra"},
 	}
 
 	for _, args := range tests {
@@ -147,8 +147,8 @@ func TestRunCLIPreservesCommandDispatch(t *testing.T) {
 			args []string
 			want string
 		}{
-			{[]string{"release-url", "v0.1.0", "amd64"}, "/v0.1.0/remnanode-lite_linux_amd64.tar.gz"},
-			{[]string{"install-script-url", "v0.1.0", "install-node.sh"}, "/v0.1.0/scripts/install-node.sh"},
+			{[]string{"release-url", "v2.8.0-rnl.1", "amd64"}, "/v2.8.0-rnl.1/remnanode-lite_linux_amd64.tar.gz"},
+			{[]string{"install-script-url", "v2.8.0-rnl.1", "install-node.sh"}, "/v2.8.0-rnl.1/scripts/install-node.sh"},
 		} {
 			var stdout bytes.Buffer
 			code := runCLI(test.args, strings.NewReader(""), &stdout, &bytes.Buffer{}, func() error {

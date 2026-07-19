@@ -435,7 +435,7 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 		{
 			name: "post-candidate code rename",
 			mutate: func(fixture *releaseFixture) {
-				destination := "docs/releases/v0.1.0.md"
+				destination := "docs/releases/v2.8.0-rnl.1.md"
 				fixture.git("rm", "--", destination)
 				if err := os.MkdirAll(filepath.Join(fixture.root, filepath.Dir(destination)), 0o755); err != nil {
 					fixture.t.Fatalf("recreate release-note directory: %v", err)
@@ -623,7 +623,7 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	fixture.writeFile("README.md", []byte("# release\n"))
 	fixture.writeFile("docs/CHANGELOG.md", []byte("# changelog\n"))
 	fixture.writeFile("docs/development/roadmap.md", []byte("# roadmap\n"))
-	fixture.writeFile("docs/releases/v0.1.0.md", []byte("# v0.1.0\n"))
+	fixture.writeFile("docs/releases/v2.8.0-rnl.1.md", []byte("# v2.8.0-rnl.1\n"))
 	fixture.commitAll("record release acceptance")
 	return fixture
 }
@@ -822,7 +822,7 @@ func (fixture *releaseFixture) makeIndexConflict(path string) {
 func (fixture *releaseFixture) replaceAcceptanceDirectoryWithSymlink() {
 	fixture.t.Helper()
 	original := filepath.Join(fixture.root, filepath.FromSlash(acceptanceDirectory))
-	destination := filepath.Join(fixture.t.TempDir(), "acceptance-v0.1.0")
+	destination := filepath.Join(fixture.t.TempDir(), "acceptance-v2.8.0-rnl.1")
 	if err := os.Rename(original, destination); err != nil {
 		fixture.t.Fatalf("move acceptance directory: %v", err)
 	}

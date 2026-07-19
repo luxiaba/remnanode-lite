@@ -8,12 +8,12 @@ Remnawave Panel 的轻量级 Go Node 实现：以**单一可执行文件**运行
 
 | 项目 | 说明 |
 | --- | --- |
-| 当前版本 | `0.1.0`（开发中） |
+| 当前版本 | `2.8.0-rnl.1`（开发中） |
 | 兼容基线 | `@remnawave/node` `2.8.0@596f015`，Panel `2.8.1` |
 | 变更日志 | [CHANGELOG.md](docs/CHANGELOG.md) |
 | 改造路线 | [roadmap.md](docs/development/roadmap.md) |
 
-安装与升级脚本默认固定拉取 `v0.1.0`，不会跟随 `latest` 漂移；后续版本可通过环境变量 `RNL_TAG=vX.Y.Z` 显式指定。
+发行版本采用 `<官方 Node 版本>-rnl.<修订号>`：官方兼容基线升级时更新前三段版本，仅修复本项目时递增 `rnl` 修订号。安装与升级脚本默认固定拉取 `v2.8.0-rnl.1`，不会跟随 `latest` 漂移；后续版本可通过环境变量 `RNL_TAG=vX.Y.Z-rnl.N` 显式指定。
 
 ---
 
@@ -34,7 +34,7 @@ Remnawave Panel 的轻量级 Go Node 实现：以**单一可执行文件**运行
 
 ### Docker Compose
 
-`v0.1.0` 正式发布后，Release 将同时提供 `linux/amd64`、`linux/arm64` GHCR 镜像。生产服务器只需 `compose.yaml` 和 `.env`，不需要源码或 Go 工具链：
+`v2.8.0-rnl.1` 正式发布后，Release 将同时提供 `linux/amd64`、`linux/arm64` GHCR 镜像。生产服务器只需 `compose.yaml` 和 `.env`，不需要源码或 Go 工具链：
 
 ```bash
 # 从同一 GitHub Release 下载 compose.yaml 和 remnanode.env.example
@@ -46,12 +46,12 @@ docker compose up -d --no-build
 docker compose ps
 ```
 
-镜像由 tag Release workflow 推送到 `ghcr.io/luxiaba/remnanode-lite`。稳定版本同时更新精确版本、minor、`latest` 和 commit tag；生产仍推荐使用精确版本或 manifest digest。完整的无源码部署、私有 Package 登录、attestation 验证、更新、回滚和本地构建说明见 [Docker Compose 部署](docs/deployment-docker.md)。
+镜像由 tag Release workflow 推送到 `ghcr.io/luxiaba/remnanode-lite`。稳定版本同时更新精确版本、`latest` 和 commit tag；生产仍推荐使用精确版本或 manifest digest。完整的无源码部署、私有 Package 登录、attestation 验证、更新、回滚和本地构建说明见 [Docker Compose 部署](docs/deployment-docker.md)。
 
 ### systemd（Debian / Ubuntu 等）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v0.1.0/scripts/install-node.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/install-node.sh | sudo bash
 ```
 
 交互菜单：**安装 · 升级 · 卸载 · 退出**
@@ -60,7 +60,7 @@ curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v0.1.0/scrip
 
 ```bash
 apk add --no-cache curl bash util-linux
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v0.1.0/scripts/install-node-alpine.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/install-node-alpine.sh | bash
 ```
 
 ### 安装流程
@@ -79,7 +79,7 @@ curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v0.1.0/scrip
 非交互安装示例：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v0.1.0/scripts/install-node.sh \
+curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/install-node.sh \
   | sudo env SECRET_KEY='eyJ...' NODE_PORT=2222 bash -s -- --install --yes
 ```
 
@@ -107,7 +107,7 @@ LOG_DIR=/var/log/remnanode
 ## 升级
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v0.1.0/scripts/upgrade.sh | sudo bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/upgrade.sh | sudo bash -s -- --yes
 ```
 
 升级会校验 Release 摘要和二进制版本，并在替换前备份 binary、service、support、`node.env` 与 `secret.key`。升级前运行中或由 install 委托要求启动的服务，只有目标二进制进程实际持有监听端口才提交事务；显式升级原本 stopped 的服务则保持 stopped。默认保留 rw-core，同步升级 rw-core：
@@ -129,7 +129,7 @@ sudo RNL_UPGRADE_XRAY=1 bash upgrade.sh --yes
 | 命令行 | `bash uninstall.sh --full` | 等同完全卸载 |
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v0.1.0/scripts/uninstall.sh | sudo bash -s -- --full
+curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/uninstall.sh | sudo bash -s -- --full
 ```
 
 完全卸载只清理 `/usr/local/{lib,share}/remnanode` 等项目私有路径，不会终止其它 `rw-core` 进程，也不会删除通用 `/usr/local/bin/xray` 或 `/usr/local/share/xray`。
@@ -152,7 +152,7 @@ remnanode-xerrors  # rw-core 错误输出
 
 ## 功能与兼容性
 
-目标是与官方 `@remnawave/node` v2.8.0 的 **26 条 REST API** 达到行为级兼容，具体方法、schema、错误与已知偏差见[契约基线](docs/development/contract-2.8.0.md)。当前静态代码对齐已关闭已知 P1/P2，`0.1.0` 仍需按[改造路线](docs/development/roadmap.md)完成真实 Panel/Linux 与发布验收后，才能作为生产稳定版发布。
+目标是与官方 `@remnawave/node` v2.8.0 的 **26 条 REST API** 达到行为级兼容，具体方法、schema、错误与已知偏差见[契约基线](docs/development/contract-2.8.0.md)。当前静态代码对齐已关闭已知 P1/P2，`2.8.0-rnl.1` 仍需按[改造路线](docs/development/roadmap.md)完成真实 Panel/Linux 与发布验收后，才能作为生产稳定版发布。
 
 功能范围涵盖：
 

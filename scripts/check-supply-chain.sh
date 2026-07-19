@@ -44,6 +44,15 @@ grep -Fq 'branches: [dev, main]' .github/workflows/test.yml || {
   echo "CI must run after pushes to dev and main" >&2
   exit 1
 }
+for expected in \
+  'issues: write' \
+  'gh api repos/remnawave/node/releases/latest' \
+  'gh issue create'; do
+  grep -Fq "$expected" .github/workflows/contract-sync.yml || {
+    echo "contract sync does not automate official release detection: $expected" >&2
+    exit 1
+  }
+done
 for job in go repository installer netadmin gate; do
   grep -Eq "^  ${job}:$" .github/workflows/test.yml || {
     echo "CI workflow is missing the ${job} job" >&2

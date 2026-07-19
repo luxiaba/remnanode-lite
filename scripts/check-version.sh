@@ -24,9 +24,15 @@ contract_version="$(extract_go_var ContractVersion)"
 [ -n "$version" ] || fail "internal/version Version is missing"
 [ -n "$contract_version" ] || fail "internal/version ContractVersion is missing"
 
+[[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rnl\.([1-9][0-9]*)$ ]] ||
+  fail "release version $version must use <official>-rnl.<revision>"
+upstream_version="${version%%-rnl.*}"
+
 file_contract_version="$(tr -d '[:space:]' < internal/version/contract.version)"
 [ "$contract_version" = "$file_contract_version" ] ||
   fail "contract.version=${file_contract_version}, Go ContractVersion=${contract_version}"
+[ "$upstream_version" = "$contract_version" ] ||
+  fail "release version $version does not target contract $contract_version"
 
 for script in \
   scripts/install-node.sh \
@@ -62,8 +68,8 @@ toolchain="$(sed -n 's/^toolchain[[:space:]][[:space:]]*//p' go.mod)"
 
 release_tag="${RELEASE_TAG:-}"
 if [ -n "$release_tag" ]; then
-  [[ "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] ||
-    fail "release tag $release_tag is not canonical semver"
+  [[ "$release_tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rnl\.([1-9][0-9]*)$ ]] ||
+    fail "release tag $release_tag must use v<official>-rnl.<revision>"
   [ "$release_tag" = "v$version" ] || fail "release tag $release_tag does not match v$version"
 fi
 
