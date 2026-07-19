@@ -34,7 +34,7 @@ import (
 const nodeShutdownTimeout = 25 * time.Second
 
 const cliUsage = `usage: remnanode-lite [version|doctor|kill-sockets|validate-secret|canonicalize-secret|release-url|install-script-url]
-  kill-sockets, --kill-sockets, -k  Kill sockets by IP address`
+  kill-sockets, --kill-sockets, -k  Kill connected sockets matching a local or remote IP`
 
 type socketKiller func(context.Context, string) error
 
@@ -117,12 +117,22 @@ func runCLI(
 		if len(args) != 3 {
 			return usageError("usage: remnanode-lite release-url <tag> <arch>")
 		}
-		return writeLine(version.ReleaseAssetURL(args[1], args[2]))
+		assetURL, err := version.ReleaseAssetURL(args[1], args[2])
+		if err != nil {
+			fmt.Fprintf(stderr, "release-url: %v\n", err)
+			return 2
+		}
+		return writeLine(assetURL)
 	case "install-script-url":
 		if len(args) != 3 {
 			return usageError("usage: remnanode-lite install-script-url <tag> <script>")
 		}
-		return writeLine(version.InstallScriptURL(args[1], args[2]))
+		scriptURL, err := version.InstallScriptURL(args[1], args[2])
+		if err != nil {
+			fmt.Fprintf(stderr, "install-script-url: %v\n", err)
+			return 2
+		}
+		return writeLine(scriptURL)
 	default:
 		fmt.Fprintf(stderr, "Unknown command: %s\n", args[0])
 		fmt.Fprintln(stderr, cliUsage)
@@ -131,7 +141,7 @@ func runCLI(
 }
 
 func killSocketsCommand(input io.Reader, stdout, stderr io.Writer, killSockets socketKiller) int {
-	if _, err := io.WriteString(stdout, "Enter IP address to kill sockets for: "); err != nil {
+	if _, err := io.WriteString(stdout, "Enter local or remote IP address to match: "); err != nil {
 		fmt.Fprintf(stderr, "Failed to kill sockets: write prompt: %v\n", err)
 		return 1
 	}
@@ -152,7 +162,7 @@ func killSocketsCommand(input io.Reader, stdout, stderr io.Writer, killSockets s
 		fmt.Fprintln(stderr, "Failed to kill sockets: IP address is required")
 		return 1
 	}
-	if _, err := fmt.Fprintf(stdout, "Killing sockets for IP: %s...\n", ipAddress); err != nil {
+	if _, err := fmt.Fprintf(stdout, "Killing connected sockets whose local or remote IP matches: %s...\n", ipAddress); err != nil {
 		fmt.Fprintf(stderr, "Failed to kill sockets: write progress: %v\n", err)
 		return 1
 	}

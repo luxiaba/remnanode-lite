@@ -102,6 +102,9 @@ func Load(dotenvPath string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	if nodePort < 1 || nodePort > 65535 {
+		return Config{}, errors.New("NODE_PORT must be between 1 and 65535")
+	}
 
 	secretKey := strings.TrimSpace(values["SECRET_KEY"])
 	if secretKey == "" {

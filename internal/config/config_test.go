@@ -60,6 +60,19 @@ func TestLoadEnvironmentOverridesDotEnv(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsNodePortOutsideTCPRange(t *testing.T) {
+	for _, value := range []string{"-1", "0", "65536"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("NODE_PORT", value)
+			t.Setenv("SECRET_KEY", "test")
+			_, err := Load("")
+			if err == nil || !strings.Contains(err.Error(), "NODE_PORT must be between 1 and 65535") {
+				t.Fatalf("Load() error = %v", err)
+			}
+		})
+	}
+}
+
 func TestHTTPAddr(t *testing.T) {
 	t.Parallel()
 
