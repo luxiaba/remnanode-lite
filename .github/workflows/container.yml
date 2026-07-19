@@ -11,7 +11,9 @@ on:
     paths:
       - ".github/workflows/container.yml"
       - ".dockerignore"
+      - ".env.example"
       - "Dockerfile"
+      - "compose.yaml"
       - "go.mod"
       - "go.sum"
       - "cmd/**"
@@ -21,7 +23,9 @@ on:
     paths:
       - ".github/workflows/container.yml"
       - ".dockerignore"
+      - ".env.example"
       - "Dockerfile"
+      - "compose.yaml"
       - "go.mod"
       - "go.sum"
       - "cmd/**"

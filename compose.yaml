@@ -18,8 +18,7 @@ services:
     tmpfs:
       - /run/remnanode:rw,noexec,nosuid,nodev,size=4m,mode=0700
       - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
-    volumes:
-      - remnanode-logs:/var/log/remnanode
+      - /var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750
     environment:
       NODE_PORT: "${NODE_PORT:-2222}"
       NODE_BIND_ADDR: "${NODE_BIND_ADDR:-}"
@@ -46,8 +45,5 @@ services:
     logging:
       driver: json-file
       options:
-        max-size: 5m
+        max-size: 2m
         max-file: "2"
-
-volumes:
-  remnanode-logs:

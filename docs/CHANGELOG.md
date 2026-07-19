@@ -13,6 +13,7 @@
 - 新增 GHCR 多架构镜像发布链：`main` 自动发布 `edge` 与不可变 commit 候选镜像，tag Release 在既有门禁后发布 amd64/arm64 manifest、精确版本/`latest` 与 commit 标签、SBOM、BuildKit provenance 和 GitHub build attestation；`dev`/PR 独立验证容器构建。
 - 新增官方 Node Release 定时监测；发现兼容基线变化时创建同步 Issue，但不会自动修改代码或发布镜像。
 - 新增 amd64/arm64 多阶段 Docker 镜像与生产 Compose：固定并校验 rw-core/geo/ASN 资产，采用官方 host network 与能力模型，同时落实 448 MiB/no-swap/1 CPU/256 PID、只读 rootfs、健康检查和日志上限。
+- 容器部署不再创建持久日志卷；rw-core 日志使用有界 tmpfs，Docker 日志严格轮转，容器重建即可回收全部运行日志。
 - 固化官方 Node `2.8.0@596f015` 的 26 条路由、Zod 请求/响应、错误格式和副作用为可执行契约。
 - 新增默认只读、需 mTLS/JWT 的 `contract-probe`，用于官方 Node 与 Go Node 的黑盒语义差分。
 - 新增统一 Node API 边界，覆盖 Zod 等价的必填字段、联合类型、UUID/IP、枚举、nullable/default 和数组长度校验。

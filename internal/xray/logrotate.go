@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	maxLogSize       = 10 << 20
+	maxLogSize       = 4 << 20
 	logCheckInterval = 10 * time.Second
 )
 
