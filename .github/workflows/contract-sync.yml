@@ -1,0 +1,52 @@
+name: contract-sync
+
+on:
+  schedule:
+    - cron: "0 2 * * 1"
+  workflow_dispatch:
+
+env:
+  OFFICIAL_NODE_REF: "2.8.0"
+  OFFICIAL_NODE_COMMIT: "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b"
+
+permissions:
+  contents: read
+
+jobs:
+  compare-routes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Clone pinned official Remnawave Node
+        run: |
+          git clone --depth 1 --branch "$OFFICIAL_NODE_REF" \
+            https://github.com/remnawave/node.git /tmp/remnawave-node
+          actual_commit="$(git -C /tmp/remnawave-node rev-parse HEAD)"
+          if [ "$actual_commit" != "$OFFICIAL_NODE_COMMIT" ]; then
+            echo "::error::official Node ref resolved to $actual_commit, expected $OFFICIAL_NODE_COMMIT"
+            exit 1
+          fi
+
+      - name: Verify pinned contract version
+        id: official
+        run: |
+          official_version="$(jq -r '.version' /tmp/remnawave-node/package.json)"
+          local_version="$(tr -d ' \n\r' < internal/version/contract.version)"
+          if [ "$official_version" != "$local_version" ]; then
+            echo "::error::contract.version ($local_version) != official Node ($official_version)"
+            exit 1
+          fi
+          echo "version=$official_version" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Test contract package
+        run: go test ./internal/contract/...
+        env:
+          REMNANODE_OFFICIAL_SOURCE: /tmp/remnawave-node

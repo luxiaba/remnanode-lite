@@ -1,0 +1,251 @@
+name: release
+
+env:
+  ASN_SOURCE_URL: https://github.com/ipverse/as-ip-blocks/archive/56d021c7536afb15317155e45b57e7b5c87a4700.tar.gz
+  ASN_SOURCE_SHA256: fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa978a33b674a58ec
+  REGISTRY: ghcr.io
+  IMAGE_NAME: luxiaba/remnanode-lite
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release commit is reachable from main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "release commit $GITHUB_SHA is not reachable from origin/main" >&2
+            exit 1
+          }
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: remnawave/node
+          ref: 596f015a5c8f876dc9a9d61b6cb78d35bd8e379b
+          path: .official-source
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.26.5"
+
+      - name: Install pinned static checks
+        run: bash scripts/install-ci-checks.sh
+
+      - name: Release preflight
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          REQUIRE_GOVULNCHECK: "1"
+          REQUIRE_TAG_AT_HEAD: "1"
+          REMNANODE_OFFICIAL_SOURCE: ${{ github.workspace }}/.official-source
+        run: bash scripts/release-check.sh
+
+      - name: Network administration integration in isolated namespaces
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes iproute2 nftables
+          sudo env "PATH=$PATH" REMNANODE_NFT_INTEGRATION=1 \
+            go test ./internal/plugin -run '^TestNFTManagerInNetworkNamespace$' -count=1 -v
+          sudo env "PATH=$PATH" REMNANODE_SOCKET_KILL_INTEGRATION=1 \
+            go test ./internal/netadmin -run '^TestKillSocketsInNetworkNamespace$' -count=1 -v
+
+      - name: Build release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          mkdir -p dist/binaries
+          bash scripts/build-release-binaries.sh dist/binaries
+
+          host_arch="$(uname -m)"
+          for arch in amd64 arm64; do
+            out_dir="$(mktemp -d)"
+            install -m 0755 "dist/binaries/remnanode-lite_linux_${arch}" "${out_dir}/remnanode-lite"
+
+            # amd64 runner cannot execute arm64 binaries (Exec format error)
+            case "${arch}:${host_arch}" in
+              amd64:x86_64|arm64:aarch64|arm64:arm64)
+                "${out_dir}/remnanode-lite" version
+                ;;
+              *)
+                file "${out_dir}/remnanode-lite"
+                ;;
+            esac
+
+            printf '%s\n' \
+              "remnanode-lite ${GITHUB_REF_NAME} linux/${arch}" \
+              "" \
+              "Extract and install to /usr/local/bin/remnanode-lite" \
+              > "${out_dir}/README.txt"
+
+            mkdir -p "${out_dir}/support/deploy" "${out_dir}/support/scripts"
+            install -m 0644 deploy/remnawave-node.service "${out_dir}/support/deploy/"
+            install -m 0755 deploy/remnawave-node.openrc "${out_dir}/support/deploy/"
+            install -m 0644 scripts/install-env-helpers.sh "${out_dir}/support/scripts/"
+            install -m 0755 \
+              scripts/install-xray.sh \
+              scripts/upgrade.sh \
+              scripts/uninstall.sh \
+              "${out_dir}/support/scripts/"
+
+            tar -C "${out_dir}" -czf "dist/remnanode-lite_linux_${arch}.tar.gz" \
+              remnanode-lite README.txt support
+            rm -rf "${out_dir}"
+          done
+          rm -rf dist/binaries
+
+          install -m 0644 compose.yaml dist/compose.yaml
+          install -m 0644 .env.example dist/remnanode.env.example
+
+          curl --fail --location --silent --show-error \
+            --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            "${ASN_SOURCE_URL}" -o /tmp/as-ip-blocks.tar.gz
+          printf '%s  %s\n' "${ASN_SOURCE_SHA256}" /tmp/as-ip-blocks.tar.gz | sha256sum --check --strict
+          go run ./cmd/asn-builder \
+            -format ipverse-tar-gz \
+            -in /tmp/as-ip-blocks.tar.gz \
+            -out dist/asn-prefixes.bin
+          rm -f /tmp/as-ip-blocks.tar.gz
+
+          cd dist
+          sha256sum \
+            remnanode-lite_linux_amd64.tar.gz \
+            remnanode-lite_linux_arm64.tar.gz \
+            asn-prefixes.bin \
+            compose.yaml \
+            remnanode.env.example \
+            > SHA256SUMS
+
+      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          body_path: docs/releases/${{ github.ref_name }}.md
+          fail_on_unmatched_files: true
+          files: |
+            dist/remnanode-lite_linux_amd64.tar.gz
+            dist/remnanode-lite_linux_arm64.tar.gz
+            dist/asn-prefixes.bin
+            dist/compose.yaml
+            dist/remnanode.env.example
+            dist/SHA256SUMS
+
+  publish-container:
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          version: v0.35.0
+          driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref_name, 'v0.') }}
+            type=sha,prefix=sha-,format=long
+          labels: |
+            org.opencontainers.image.title=Remnawave Node Lite (Go)
+            org.opencontainers.image.description=Low-memory Remnawave Node 2.8.0 compatible implementation
+            org.opencontainers.image.licenses=AGPL-3.0-only
+
+      - name: Build and publish multi-architecture image
+        id: image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          pull: true
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=container-release
+          cache-to: type=gha,mode=max,scope=container-release
+          provenance: mode=max
+          sbom: generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68
+
+  attest-container:
+    needs: publish-container
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          version: v0.35.0
+          driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve published manifest digest
+        id: digest
+        env:
+          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$IMAGE_REF" | tr -d '\r\n')"
+          printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+            echo "published image did not return a manifest digest: $digest" >&2
+            exit 1
+          }
+          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest published image
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true

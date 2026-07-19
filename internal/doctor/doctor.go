@@ -1,0 +1,261 @@
+package doctor
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/Luxiaba/remnanode-lite/internal/asn"
+	"github.com/Luxiaba/remnanode-lite/internal/config"
+	"github.com/Luxiaba/remnanode-lite/internal/executil"
+	"github.com/Luxiaba/remnanode-lite/internal/netadmin"
+	"github.com/Luxiaba/remnanode-lite/internal/secret"
+	"github.com/Luxiaba/remnanode-lite/internal/version"
+)
+
+const defaultEnvPath = "/etc/remnanode/node.env"
+const defaultUnitPath = "/etc/systemd/system/remnawave-node.service"
+
+type result struct {
+	level   string
+	title   string
+	detail  string
+	fixHint string
+}
+
+// Run performs deployment health checks and returns exit code 0 (ok) or 1 (errors).
+func Run(args []string) int {
+	envPath := defaultEnvPath
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--env" && i+1 < len(args) {
+			envPath = args[i+1]
+			i++
+		}
+	}
+	if override := strings.TrimSpace(os.Getenv("REMNANODE_ENV")); override != "" {
+		envPath = override
+	}
+
+	fmt.Println(version.String())
+	fmt.Println("── 部署自检 ──")
+
+	var results []result
+
+	results = append(results, checkSystemdCapNetAdmin())
+	results = append(results, checkCapNetAdmin())
+
+	cfg, cfgErr := loadConfig(envPath)
+	if cfgErr != nil {
+		results = append(results, result{
+			level:   "ERROR",
+			title:   "配置文件",
+			detail:  cfgErr.Error(),
+			fixHint: "创建 " + envPath + " 或指定 --env PATH",
+		})
+	} else {
+		results = append(results, checkSecret(cfg)...)
+		results = append(results, checkXrayBinary(cfg.XrayBin)...)
+		results = append(results, checkGeoFiles(cfg.GeoDir)...)
+		results = append(results, checkASNDatabase(cfg.ASNDBPath)...)
+		results = append(results, checkCommand("nft", "nftables 命令行（插件 IP 封禁）")...)
+		results = append(results, checkCommand("ss", "ss 命令（部署监听端口归属检查）")...)
+	}
+
+	exitCode := 0
+	for _, item := range results {
+		fmt.Printf("[%s] %s", item.level, item.title)
+		if item.detail != "" {
+			fmt.Printf(" — %s", item.detail)
+		}
+		fmt.Println()
+		if item.fixHint != "" {
+			fmt.Printf("      → %s\n", item.fixHint)
+		}
+		if item.level == "ERROR" {
+			exitCode = 1
+		}
+	}
+
+	if exitCode == 0 {
+		fmt.Println("── 结论：核心项通过（WARN 项不影响 Panel 基本连接）──")
+	} else {
+		fmt.Println("── 结论：存在 ERROR，请先修复后再接入 Panel ──")
+	}
+	return exitCode
+}
+
+func loadConfig(envPath string) (config.Config, error) {
+	if _, err := os.Stat(envPath); err != nil {
+		if envPath != ".env" {
+			if _, err2 := os.Stat(".env"); err2 == nil {
+				return config.Load(".env")
+			}
+		}
+		return config.Config{}, fmt.Errorf("找不到 %s", envPath)
+	}
+	return config.Load(envPath)
+}
+
+func checkCapNetAdmin() result {
+	if netadmin.HasCapNetAdmin() {
+		return result{level: "OK", title: "CAP_NET_ADMIN", detail: "当前进程已具备"}
+	}
+	return result{
+		level:   "WARN",
+		title:   "CAP_NET_ADMIN",
+		detail:  "当前进程未具备（nftables / NETLINK_SOCK_DIAG socket destroy 不可用）",
+		fixHint: "通过 systemd 启动：确认 unit 含 AmbientCapabilities=CAP_NET_ADMIN，然后 systemctl daemon-reload && systemctl restart remnawave-node",
+	}
+}
+
+func checkSystemdCapNetAdmin() result {
+	data, err := os.ReadFile(defaultUnitPath)
+	if err != nil {
+		return result{
+			level:   "WARN",
+			title:   "systemd unit",
+			detail:  defaultUnitPath + " 未找到",
+			fixHint: "运行 install-node.sh 或 upgrade.sh 安装官方 unit",
+		}
+	}
+	content := string(data)
+	if strings.Contains(content, "AmbientCapabilities=CAP_NET_ADMIN") {
+		return result{level: "OK", title: "systemd unit", detail: "已配置 AmbientCapabilities=CAP_NET_ADMIN"}
+	}
+	return result{
+		level:   "WARN",
+		title:   "systemd unit",
+		detail:  "未包含 AmbientCapabilities=CAP_NET_ADMIN",
+		fixHint: "sudo curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v" + version.Version + "/deploy/remnawave-node.service -o " + defaultUnitPath + " && sudo systemctl daemon-reload && sudo systemctl restart remnawave-node",
+	}
+}
+
+func checkSecret(cfg config.Config) []result {
+	if _, err := secret.Parse(cfg.SecretKey); err == nil {
+		return []result{{level: "OK", title: "Secret Key", detail: "已配置且格式有效"}}
+	}
+	detail := "格式无效（无法解析 Panel 下发的 Key 或缺少必需字段）"
+	if strings.TrimSpace(cfg.SecretKey) == "" {
+		detail = "未配置（SECRET_KEY 或 SECRET_KEY_FILE 为空）"
+	}
+	return []result{{
+		level:   "ERROR",
+		title:   "Secret Key",
+		detail:  detail,
+		fixHint: "编辑 /etc/remnanode/secret.key 写入 Panel 下发的完整 Key，然后重启 remnawave-node 服务",
+	}}
+}
+
+func checkXrayBinary(bin string) []result {
+	if bin == "" {
+		bin = "/usr/local/lib/remnanode/rw-core"
+	}
+	info, err := os.Stat(bin)
+	if err != nil {
+		return []result{{
+			level:   "ERROR",
+			title:   "rw-core",
+			detail:  bin + " 不存在",
+			fixHint: "运行 scripts/install-xray.sh 或 install-node.sh（勿加 --skip-xray）",
+		}}
+	}
+	if info.Mode()&0o111 == 0 {
+		return []result{{
+			level:   "ERROR",
+			title:   "rw-core",
+			detail:  bin + " 不可执行",
+			fixHint: "sudo chmod +x " + bin,
+		}}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	command, err := executil.Run(ctx, nil, 4<<10, bin, "version")
+	if err != nil {
+		return []result{{
+			level:  "WARN",
+			title:  "rw-core",
+			detail: bin + " 存在但 version 命令失败",
+		}}
+	}
+	line := strings.TrimSpace(strings.Split(string(command.Stdout), "\n")[0])
+	return []result{{level: "OK", title: "rw-core", detail: line}}
+}
+
+func checkGeoFiles(dir string) []result {
+	if dir == "" {
+		dir = "/usr/local/share/remnanode/xray"
+	}
+	var missing []string
+	for _, name := range []string{"geoip.dat", "geosite.dat"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		detail := dir + " 含 geoip.dat / geosite.dat"
+		var extras []string
+		for _, name := range []string{"geo-zapret.dat", "ip-zapret.dat"} {
+			if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+				extras = append(extras, name)
+			}
+		}
+		if len(extras) > 0 {
+			detail += "；可选 " + strings.Join(extras, ", ")
+		}
+		return []result{{level: "OK", title: "Geo 数据", detail: detail}}
+	}
+	return []result{{
+		level:   "WARN",
+		title:   "Geo 数据",
+		detail:  "缺少 " + strings.Join(missing, ", "),
+		fixHint: "重新运行 install-xray.sh 或从 Xray 发行版复制到 " + dir,
+	}}
+}
+
+func checkASNDatabase(path string) []result {
+	if path == "" {
+		path = "/usr/local/share/remnanode/asn/asn-prefixes.bin"
+	}
+	database, err := asn.Open(path)
+	if err != nil {
+		return []result{{
+			level:   "WARN",
+			title:   "ASN 数据库",
+			detail:  fmt.Sprintf("%s 无法由运行时加载：%v（插件 asList 共享列表降级为空）", path, err),
+			fixHint: "设置 ASN_DB_URL 重跑 install-xray.sh，或用 cmd/asn-builder 生成后放到该路径",
+		}}
+	}
+	available := database.Available()
+	if err := database.Close(); err != nil {
+		return []result{{
+			level:  "WARN",
+			title:  "ASN 数据库",
+			detail: fmt.Sprintf("%s 无法正常关闭：%v（插件 asList 共享列表可能不可用）", path, err),
+		}}
+	}
+	if !available {
+		return []result{{
+			level:   "WARN",
+			title:   "ASN 数据库",
+			detail:  path + " 不含 ASN 条目（插件 asList 共享列表降级为空）",
+			fixHint: "设置 ASN_DB_URL 重跑 install-xray.sh，或用 cmd/asn-builder 生成后替换该文件",
+		}}
+	}
+	return []result{{level: "OK", title: "ASN 数据库", detail: path + " 已通过运行时打开检查"}}
+}
+
+func checkCommand(name, purpose string) []result {
+	if path, err := exec.LookPath(name); err == nil {
+		return []result{{level: "OK", title: name, detail: path + "（" + purpose + "）"}}
+	}
+	return []result{{
+		level:   "WARN",
+		title:   name,
+		detail:  "未安装（" + purpose + "）",
+		fixHint: "Debian/Ubuntu: apt install iproute2 " + name,
+	}}
+}

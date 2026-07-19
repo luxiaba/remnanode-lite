@@ -1,0 +1,34 @@
+# Local env
+.env
+.env.*
+!.env.example
+
+# Build outputs
+bin/
+dist/
+build/
+tmp/
+/remnanode-lite
+/remnanode-lite.exe
+
+# Logs
+logs/
+*.log
+
+# Local reference repo, only if you accidentally put it inside this project
+remnawave-node-reference/
+.official-source/
+
+# Go
+*.test
+*.exe
+coverage.out
+
+# Node (hash reference vectors only — not used at runtime)
+node_modules/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

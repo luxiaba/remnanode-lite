@@ -1,0 +1,184 @@
+package xray
+
+import (
+	"log/slog"
+	"sort"
+
+	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+)
+
+type runtimeHashState struct {
+	emptyConfigHash string
+	inboundHashes   map[string]*HashedSet
+	inboundTags     map[string]struct{}
+}
+
+func buildRuntimeHashState(hashes ConfigHash, config map[string]any) runtimeHashState {
+	state := runtimeHashState{
+		emptyConfigHash: hashes.EmptyConfig,
+		inboundHashes:   make(map[string]*HashedSet),
+		inboundTags:     make(map[string]struct{}),
+	}
+
+	validTags := make(map[string]struct{}, len(hashes.Inbounds))
+	for _, inbound := range hashes.Inbounds {
+		if inbound.Tag != "" {
+			validTags[inbound.Tag] = struct{}{}
+		}
+	}
+
+	rawInbounds, ok := config["inbounds"].([]any)
+	if !ok {
+		return state
+	}
+
+	for _, item := range rawInbounds {
+		inbound, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		tag, _ := inbound["tag"].(string)
+		if tag == "" {
+			continue
+		}
+		if _, allowed := validTags[tag]; !allowed {
+			continue
+		}
+
+		ids := extractClientIDs(inbound)
+		set := NewHashedSet(ids...)
+		state.inboundHashes[tag] = set
+		state.inboundTags[tag] = struct{}{}
+		slog.Debug("extracted inbound users", "tag", tag, "count", set.Size(), "hash", set.Hash64String())
+	}
+	return state
+}
+
+func (m *Manager) applyRuntimeHashStateLocked(state runtimeHashState) {
+	m.emptyConfigHash = state.emptyConfigHash
+	m.inboundHashes = state.inboundHashes
+	m.inboundTags = state.inboundTags
+}
+
+func (m *Manager) extractUsersFromConfigLocked(hashes ConfigHash, config map[string]any) {
+	m.applyRuntimeHashStateLocked(buildRuntimeHashState(hashes, config))
+}
+
+func (m *Manager) isNeedRestartCoreLocked(incoming ConfigHash) bool {
+	if m.emptyConfigHash == "" {
+		return true
+	}
+	if incoming.EmptyConfig != m.emptyConfigHash {
+		slog.Warn("detected changes in Xray Core base configuration")
+		return true
+	}
+	if len(incoming.Inbounds) != len(m.inboundHashes) {
+		slog.Warn("number of Xray Core inbounds has changed")
+		return true
+	}
+
+	for tag, usersSet := range m.inboundHashes {
+		var incomingInbound *InboundHash
+		for i := range incoming.Inbounds {
+			if incoming.Inbounds[i].Tag == tag {
+				incomingInbound = &incoming.Inbounds[i]
+				break
+			}
+		}
+		if incomingInbound == nil {
+			slog.Warn("inbound no longer exists in Xray Core configuration", "tag", tag)
+			return true
+		}
+		if usersSet.Hash64String() != incomingInbound.Hash {
+			slog.Warn(
+				"user configuration changed for inbound",
+				"tag", tag,
+				"current", usersSet.Hash64String(),
+				"incoming", incomingInbound.Hash,
+			)
+			return true
+		}
+	}
+
+	slog.Info("Xray Core configuration is up-to-date - no restart required")
+	return false
+}
+
+func (m *Manager) CommitUserAdded(result xtls.HandlerResult, inboundTag, userUUID string) bool {
+	if !result.OK || inboundTag == "" || userUUID == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != lifecycleRunning || m.generation != result.Generation {
+		return false
+	}
+
+	set, ok := m.inboundHashes[inboundTag]
+	if !ok {
+		if m.inboundHashes == nil {
+			m.inboundHashes = make(map[string]*HashedSet)
+		}
+		set = NewHashedSet()
+		m.inboundHashes[inboundTag] = set
+	}
+	if m.inboundTags == nil {
+		m.inboundTags = make(map[string]struct{})
+	}
+	set.Add(userUUID)
+	m.inboundTags[inboundTag] = struct{}{}
+	return true
+}
+
+func (m *Manager) CommitUserRemoved(result xtls.HandlerResult, inboundTag, userUUID string) bool {
+	if !result.OK || inboundTag == "" || userUUID == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.state != lifecycleRunning || m.generation != result.Generation {
+		return false
+	}
+
+	set, ok := m.inboundHashes[inboundTag]
+	if !ok {
+		return true
+	}
+	set.Delete(userUUID)
+	if set.Size() == 0 {
+		delete(m.inboundHashes, inboundTag)
+		delete(m.inboundTags, inboundTag)
+		slog.Warn("inbound has no users, clearing hash map", "tag", inboundTag)
+	}
+	return true
+}
+
+func (m *Manager) clearHashStateLocked() {
+	m.emptyConfigHash = ""
+	m.inboundHashes = nil
+}
+
+func extractClientIDs(inbound map[string]any) []string {
+	settings, ok := inbound["settings"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	clients, ok := settings["clients"].([]any)
+	if !ok {
+		return nil
+	}
+
+	ids := make([]string, 0, len(clients))
+	for _, item := range clients {
+		client, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := client["id"].(string)
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
