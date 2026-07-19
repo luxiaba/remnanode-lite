@@ -609,10 +609,7 @@ func (m *Manager) startProcess(generation uint64) (*processState, error) {
 	if len(baseEnv) == 0 {
 		baseEnv = os.Environ()
 	}
-	cmd.Env = append(append([]string(nil), baseEnv...),
-		"XRAY_LOCATION_ASSET="+geoDir,
-		unixconfig.InternalTokenEnvVar+"="+token,
-	)
+	cmd.Env = rwCoreEnvironment(baseEnv, geoDir, token)
 
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
@@ -632,6 +629,32 @@ func (m *Manager) startProcess(generation uint64) (*processState, error) {
 	}
 	go m.monitorProcess(process)
 	return process, nil
+}
+
+func rwCoreEnvironment(base []string, geoDir, token string) []string {
+	managed := map[string]struct{}{
+		"SECRET_KEY":                   {},
+		"SECRET_KEY_FILE":              {},
+		"INTERNAL_REST_TOKEN":          {},
+		"REMNANODE_ENV":                {},
+		"XRAY_LOCATION_ASSET":          {},
+		unixconfig.InternalTokenEnvVar: {},
+	}
+
+	environment := make([]string, 0, len(base)+2)
+	for _, assignment := range base {
+		key, _, ok := strings.Cut(assignment, "=")
+		if ok {
+			if _, sensitive := managed[key]; sensitive {
+				continue
+			}
+		}
+		environment = append(environment, assignment)
+	}
+	return append(environment,
+		"XRAY_LOCATION_ASSET="+geoDir,
+		unixconfig.InternalTokenEnvVar+"="+token,
+	)
 }
 
 func (m *Manager) monitorProcess(process *processState) {

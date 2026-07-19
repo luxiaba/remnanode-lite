@@ -8,12 +8,15 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
 )
 
 const helperProcessEnv = "GO_WANT_XRAY_PROCESS_HELPER"
@@ -74,6 +77,29 @@ func appendHelperEvent(path, event string) {
 	}
 	_, _ = file.WriteString(event)
 	_ = file.Close()
+}
+
+func TestRWCoreEnvironmentStripsNodeSecrets(t *testing.T) {
+	environment := rwCoreEnvironment([]string{
+		"PATH=/usr/bin",
+		"SECRET_KEY=panel-secret",
+		"SECRET_KEY_FILE=/etc/remnanode/secret.key",
+		"INTERNAL_REST_TOKEN=caller-token",
+		"REMNANODE_ENV=/etc/remnanode/node.env",
+		"XRAY_LOCATION_ASSET=/old/assets",
+		unixconfig.InternalTokenEnvVar + "=old-token",
+		"GOMEMLIMIT=180MiB",
+	}, "/new/assets", "new-token")
+
+	want := []string{
+		"PATH=/usr/bin",
+		"GOMEMLIMIT=180MiB",
+		"XRAY_LOCATION_ASSET=/new/assets",
+		unixconfig.InternalTokenEnvVar + "=new-token",
+	}
+	if !slices.Equal(environment, want) {
+		t.Fatalf("rw-core environment = %#v, want %#v", environment, want)
+	}
 }
 
 type testProcess struct {
