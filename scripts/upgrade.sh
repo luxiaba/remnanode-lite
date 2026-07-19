@@ -132,7 +132,7 @@ usage() {
   cat <<EOF
 用法：upgrade.sh [--yes] [--dry-run] [--upgrade-xray] [--low-memory] [--help] [--version]
 
-Remnawave Node Lite (Go) 升级到 ${TAG}
+Remnanode Lite 升级到 ${TAG}
 
 环境变量：
   RNL_REPO           GitHub 仓库，默认 Luxiaba/remnanode-lite
@@ -149,7 +149,7 @@ EOF
 }
 
 version() {
-  echo "remnawave-node-lite upgrade ${VERSION}"
+  echo "remnanode-lite upgrade ${VERSION}"
 }
 
 while [ $# -gt 0 ]; do

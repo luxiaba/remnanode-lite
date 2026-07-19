@@ -1,5 +1,5 @@
 [Unit]
-Description=Remnawave Node Lite (Go)
+Description=Remnanode Lite
 Documentation=https://github.com/Luxiaba/remnanode-lite
 After=network-online.target
 Wants=network-online.target

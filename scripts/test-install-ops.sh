@@ -563,7 +563,6 @@ if grep -ERn 'rm[^#]*remnanode-installer\.lock' "$ROOT_DIR/scripts" >/dev/null; 
   echo "installer scripts must never unlink the shared lock file" >&2
   exit 1
 fi
-grep -Fq 'apk add --no-cache curl bash util-linux' "$ROOT_DIR/README.md"
 grep -Fq 'util-linux' "$ROOT_DIR/scripts/install-node-alpine.sh"
 grep -Fq 'util-linux' "$ROOT_DIR/scripts/install-node.sh"
 if grep -Fq 'bootstrap_installer_lock_dependency' \

@@ -35,7 +35,7 @@ usage() {
   cat <<EOF
 用法：uninstall.sh [选项]
 
-Remnawave Node Lite (Go) 卸载 ${VERSION}
+Remnanode Lite 卸载 ${VERSION}
 
 选项：
   --yes, -y           跳过确认（非交互）
@@ -52,7 +52,7 @@ EOF
 }
 
 version() {
-  echo "remnawave-node-lite uninstall ${VERSION}"
+  echo "remnanode-lite uninstall ${VERSION}"
 }
 
 while [ $# -gt 0 ]; do
@@ -685,7 +685,7 @@ main() {
   fi
 
   if ! installed; then
-    echo "未检测到 remnawave-node-lite 安装痕迹。"
+    echo "未检测到 remnanode-lite 安装痕迹。"
     exit 0
   fi
 

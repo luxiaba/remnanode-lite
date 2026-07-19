@@ -1,0 +1,55 @@
+# Single-file deployment for small Linux nodes.
+# Keep this file private because SECRET_KEY is stored inline: chmod 600.
+name: remnanode-lite
+
+services:
+  remnanode:
+    container_name: remnanode
+    hostname: remnanode
+    # Before the first stable Release, replace latest with a real sha-<commit> tag.
+    image: ghcr.io/luxiaba/remnanode-lite:latest
+    network_mode: host
+    restart: unless-stopped
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+
+    tmpfs:
+      - /run/remnanode:rw,noexec,nosuid,nodev,size=4m,mode=0700
+      - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
+      - /var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750
+
+    mem_limit: 448m
+    memswap_limit: 448m
+    cpus: 1.0
+    pids_limit: 256
+    stop_grace_period: 35s
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+
+    environment:
+      NODE_PORT: "38329"
+      SECRET_KEY: "REPLACE_WITH_THE_COMPLETE_PANEL_SECRET_KEY"
+      LOW_MEMORY: "1"
+      DISABLE_HASHED_SET_CHECK: "false"
+
+    healthcheck:
+      test: ["CMD-SHELL", "test -S /run/remnanode/internal.sock && kill -0 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 2m
+        max-file: "2"

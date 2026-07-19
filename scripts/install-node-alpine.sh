@@ -126,7 +126,7 @@ usage() {
   cat <<EOF
 用法：install-node-alpine.sh [选项]
 
-Remnawave Node Lite (Go) ${VERSION} — Alpine / OpenRC 安装 / 升级 / 卸载
+Remnanode Lite ${VERSION} — Alpine / OpenRC 安装 / 升级 / 卸载
 
 无参数时在终端显示菜单；非交互请指定动作：
   --install           全新安装；检测到完整安装时走事务升级
@@ -150,7 +150,7 @@ EOF
 }
 
 version() {
-  echo "remnawave-node-lite alpine install ${VERSION}"
+  echo "remnanode-lite alpine install ${VERSION}"
 }
 
 while [ $# -gt 0 ]; do
@@ -312,7 +312,7 @@ run_selected_uninstall() {
 
 show_menu() {
   echo
-  echo "Remnawave Node Lite ${VERSION} (contract 2.8.0) — Alpine"
+  echo "Remnanode Lite ${VERSION} (contract 2.8.0) — Alpine"
   echo "  1) 安装"
   echo "  2) 升级"
   echo "  3) 卸载"
@@ -446,7 +446,7 @@ confirm_install() {
     return 0
   fi
   echo
-  echo "检测到本机已安装 remnawave-node-lite。"
+  echo "检测到本机已安装 remnanode-lite。"
   echo "  1) 升级（保留 ${NODE_ENV}）"
   echo "  2) 全新安装（删除配置/日志后重装）"
   echo "  3) 取消"

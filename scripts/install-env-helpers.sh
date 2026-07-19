@@ -2038,7 +2038,7 @@ render_env_template() {
   local low_mem="$2"
   local installer="$3"
   cat <<EOF
-# Remnawave Node Lite — 由 ${installer} 生成
+# Remnanode Lite — 由 ${installer} 生成
 # 借鉴官方 environment 变量名，仅需修改下面两项：
 
 NODE_PORT=${port}

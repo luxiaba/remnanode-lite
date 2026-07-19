@@ -1,5 +1,7 @@
 # 变更日志
 
+[返回文档首页](README.md)
+
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 仅记录面向用户/运维的 notable 变更；完整 diff 见 GitHub Releases。
 
@@ -7,10 +9,12 @@
 
 这是 `Luxiaba/remnanode-lite` 的首个自有版本线，兼容目标固定为官方 Node 2.8.0 与 Panel 2.8.1。
 
+首个条目同时保存接管和架构整改摘要，因此比后续版本更详细；未来条目只记录用户、运维或维护者需要感知的变化。
+
 ### 新增
 
 - 将开发门禁拆为可并行诊断的 Go、仓库、离线 installer 与 Linux 网络管理任务，由稳定的 `ci / gate` 汇总；漏洞扫描改为独立定时任务，所有 GitHub runner 固定为 Ubuntu 24.04。
-- 新增 GHCR 多架构镜像发布链：`main` 自动发布 `edge` 与不可变 commit 候选镜像，tag Release 在既有门禁后发布 amd64/arm64 manifest、精确版本/`latest` 与 commit 标签、SBOM、BuildKit provenance 和 GitHub build attestation；`dev`/PR 独立验证容器构建。
+- 新增 GHCR 多架构镜像发布链：`main` 先构建无业务 tag 的 manifest，生成 SBOM、BuildKit provenance 与 GitHub build attestation，再发布不可移动的 `sha-*` 候选和浮动 `edge`；tag Release 验证 acceptance digest 后直接晋升同一镜像为精确版本与 `latest`，不重新构建；`dev`/PR 独立验证容器构建。
 - 新增官方 Node Release 定时监测；发现兼容基线变化时创建同步 Issue，但不会自动修改代码或发布镜像。
 - 新增 amd64/arm64 多阶段 Docker 镜像与生产 Compose：固定并校验 rw-core/geo/ASN 资产，采用官方 host network 与能力模型，同时落实 448 MiB/no-swap/1 CPU/256 PID、只读 rootfs、健康检查和日志上限。
 - 容器部署不再创建持久日志卷；rw-core 日志使用有界 tmpfs，Docker 日志严格轮转，容器重建即可回收全部运行日志。
@@ -23,6 +27,7 @@
 
 ### 安全
 
+- rw-core 子进程环境会剥离 Panel Secret、Secret 文件路径、Node 配置路径和调用方提供的内部 token，只重新注入运行所需的资源路径与受控内部 webhook token；该 token 默认每次启动随机生成。
 - JWT header 与 claims 必须各自只包含一个完整 JSON 值；签名有效但附带第二个 JSON 值的畸形 token 不再被接受。
 - 外部传输最低版本收敛为 TLS 1.3，并禁用 HTTP/2；无效 JWT、未知路由和错误 method 与官方一致地直接销毁连接。
 - systemd/OpenRC 改用专用 `remnanode` 用户，只保留 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`；systemd 同时启用 capability bounding、sandbox、448 MiB/no-swap/1 CPU/256 tasks 限额。
@@ -33,6 +38,8 @@
 
 ### 修复
 
+- `NODE_PORT` 现在在读取配置时统一拒绝 `0`、负数和大于 65535 的值，不再让直接运行路径意外绑定随机端口。
+- `release-url` 与 `install-script-url` 会校验正式 tag、目标架构和脚本 allowlist，拒绝路径型或未知输入。
 - 路由测试改为校验真实 dispatcher 注册表；`/node/xray/stop` 收敛为官方定义的仅 GET，不再错误接受 POST。
 - stats、handler、plugin 与 Xray start 不再吞掉 JSON 解码和类型错误；畸形、尾随或不完整请求会在任何 provider、进程、nftables、连接和状态副作用前返回 400。
 - 已知应用错误补齐官方要求的 `timestamp`、`path`、`message` 与 `errorCode`，底层 SDK 错误不再替换官方 A001/A010-A017 文案。
@@ -62,9 +69,14 @@
 
 ### 维护
 
+- 重建文档信息架构，新增项目背景、总体架构、完整配置、Docker/原生部署、运维排障、开发测试、版本发布、贡献与安全专题；README 收敛为清晰的项目入口。
+- 新增可执行文档门禁，检查 Markdown 标题、围栏、文件、锚点和入口可达性；新增固定 `protoc 35.1`/`protoc-gen-go v1.36.11` 的 wire 再生成入口。
+- 项目 `Version` 与官方 `ContractVersion` 正式解耦：`X.Y.Z-rnl.N` 表示独立项目迭代，纯 `X.Y.Z` 表示完成官方对齐的正式版本。
+- 候选镜像先完成 attestation，再发布不可移动的 commit tag；验收 manifest 绑定实际 digest，Release 只允许把该 digest 晋升为精确版本和 `latest`，并拒绝覆盖不同内容；发布 tag 必须指向当前 `main` HEAD。
+- 候选镜像 OCI version 使用项目版本而不是 commit 别名；发布资料严格 squash 为一个提交，Release note 记录候选和 digest，最终提交由 Git tag 解析，避免不可实现的 commit 自引用。
 - Go module、安装脚本、发布地址和文档归属切换到本仓库。
 - 建立行为兼容、架构修复和 512 MiB 小内存验收路线。
-- 契约 CI 验证固定官方提交、版本和所有引用的源码证据文件。
+- 契约 CI 验证固定官方提交、包名/版本，以及所有登记源码证据路径存在且非空；内容差分仍由契约升级评审负责。
 - 发布门禁绑定冻结候选 commit、严格 JSON 验收证据、兼容/资源/故障结果和只允许发布文档变化的两阶段流程。
 - HTTP transport 与 stats、用户 handler、plugin 业务服务分离，业务层不再依赖 `net/http` 或自行解码 JSON。
 - 固定并校准外部 `@remnawave/node-plugins@0.4.5` schema 证据，覆盖显式 null、AS number、`ext:` 与数值边界。

@@ -1,14 +1,10 @@
-# M8 审计整改计划
+# 2026-07 静态审计整改记录（归档）
 
-本文记录 `2.8.0-rnl.1` 发布前的静态整改边界。审计基线为本地提交
-`489eb258faa1e804b959b94b8c28fe5dbe4782c0`，官方行为参考固定为
-`@remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`。
+[返回开发文档](README.md) · [当前路线图](roadmap.md) · [架构说明](../architecture.md)
 
-当前候选不是发布候选。只有本计划中的静态整改完成、门禁重新变绿，并对冻结后的
-同一提交完成真实 Linux、Panel 2.8.1 和资源验收后，才能进入 `v2.8.0-rnl.1` 发布流程。
+本文保存首个独立版本线在 2026 年 7 月执行的静态审计和整改原则。它是决策记录，不是当前待办列表，也不应作为新维护者的入口。原审计发生在仓库历史重置之前，其本地基线 commit 已不属于当前独立 Git 历史；可持续追踪的事实已经转移到代码测试、[2.8.0 契约基线](contract-2.8.0.md)、[资源预算](resource-budget.md)和[发布验收协议](release-acceptance.md)。
 
-当前执行顺序以官方 `2.8.0` 行为对齐、明确 Go bug 和代码级资源边界为先。发布 evidence、
-tag 和真实 Panel/Linux 验收仍是未来发布条件；掉电、installer/supervisor 自身被强杀后的自动恢复是接受的运维限制，不作为 `2.8.0-rnl.1` 门禁。
+M0-M7 的静态整改已经完成；冻结候选上的真实 Panel/Linux、资源、故障和长期运行证据仍由 M8 管理。掉电、installer/supervisor 自身被强杀后的自动恢复是已接受的运维限制，处理方式是重新运行 installer、重启主机或重新创建容器。
 
 ## 工程原则
 
@@ -22,11 +18,11 @@ tag 和真实 Panel/Linux 验收仍是未来发布条件；掉电、installer/su
 - 防火墙更新遵循 fail-closed、plan/apply/reconcile/commit；失败必须可见、可回滚、可幂等重试。
 - 所有来自 HTTP、Panel、插件配置、rw-core webhook、文件和外部命令的数据都必须有字节、
   条目、深度、并发、时间和输出边界。错误与日志本身也属于资源预算。
-- `512 MiB RAM / 1 vCPU / 2 GiB disk` 是整机目标。Go heap 限制不能替代 core、cgroup、
+- `512 MiB RAM / 1 vCPU / 2 GiB disk` 是整机目标。Go runtime 内存软限制不能替代 core、cgroup、
   内核 nftables、页缓存、安装临时文件和日志的整机预算。
 - 兼容性 oracle 必须独立于 Go 实现生成。复制实现常量或手写 schema 后自我比较不构成证据。
 
-## 整改阶段
+## 已执行的整改阶段
 
 1. **输入与部署安全**：移除 OpenRC root shell source；校验 Secret；限制请求数组、validation
    issue、JSON 深度、插件展开和日志字段。
@@ -41,10 +37,10 @@ tag 和真实 Panel/Linux 验收仍是未来发布条件；掉电、installer/su
    回滚和进程身份健康检查。
 6. **可信测试链**：从锁定官方源码和 SDK 校验静态契约；完整场景 runner 与逐 case evidence
    在后续发布阶段绑定退出码、日志摘要和二进制摘要。
-7. **后续代码冻结与验收**：集中完成 test/race/vet/static analysis/双架构构建后冻结提交；
+7. **代码冻结与验收准备**：集中完成 test/race/vet/static analysis/双架构构建后冻结提交；
    再执行 systemd、OpenRC、Panel 2.8.1、真实 rw-core、50k 用户和至少 24 小时整机 soak。
 
-## 提交策略
+## 当时采用的提交策略
 
 - 以可回归的阶段批次提交相关实现、测试和文档，避免把同一问题拆成大量微小 commit。
 - 架构迁移先提交所有者与接口，再提交调用方，禁止长期保留双重真相源。

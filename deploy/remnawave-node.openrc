@@ -2,7 +2,7 @@
 # shellcheck shell=sh disable=SC2034,SC3043
 
 name="remnawave-node"
-description="Remnawave Node Lite (Go)"
+description="Remnanode Lite"
 
 supervisor=supervise-daemon
 command="/usr/bin/env"
