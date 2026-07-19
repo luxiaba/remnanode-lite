@@ -78,8 +78,8 @@ RUN set -eux; \
 
 FROM ${DEBIAN_IMAGE} AS runtime
 
-LABEL org.opencontainers.image.title="Remnawave Node Lite (Go)" \
-      org.opencontainers.image.description="Low-memory Remnawave Node 2.8.0 compatible implementation" \
+LABEL org.opencontainers.image.title="Remnanode Lite" \
+      org.opencontainers.image.description="Low-memory Remnawave Node compatible implementation" \
       org.opencontainers.image.source="https://github.com/Luxiaba/remnanode-lite" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 

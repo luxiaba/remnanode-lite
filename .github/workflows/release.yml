@@ -12,7 +12,7 @@ on:
       - "v*"
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 permissions:
@@ -24,20 +24,26 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: write
+      packages: read
+      attestations: read
+    outputs:
+      candidate_commit: ${{ steps.accepted-image.outputs.commit }}
+      candidate_digest: ${{ steps.accepted-image.outputs.digest }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Verify release commit is reachable from main
+      - name: Verify release commit is the current main head
         run: |
           set -euo pipefail
           git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
-            echo "release commit $GITHUB_SHA is not reachable from origin/main" >&2
+          main_head="$(git rev-parse origin/main)"
+          if [ "$GITHUB_SHA" != "$main_head" ]; then
+            echo "release commit $GITHUB_SHA is not current origin/main head $main_head" >&2
             exit 1
-          }
+          fi
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -60,6 +66,49 @@ jobs:
           REQUIRE_TAG_AT_HEAD: "1"
           REMNANODE_OFFICIAL_SOURCE: ${{ github.workspace }}/.official-source
         run: bash scripts/release-check.sh
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          version: v0.35.0
+          driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify accepted candidate image
+        id: accepted-image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          manifest="docs/development/acceptance/v${version}/manifest.json"
+          candidate_commit="$(jq -r '.candidateCommit // empty' "$manifest")"
+          candidate_digest="$(jq -r '.candidateImageDigest // empty' "$manifest")"
+          printf '%s\n' "$candidate_commit" | grep -Eq '^[0-9a-f]{40}$'
+          printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+
+          image="${REGISTRY}/${IMAGE_NAME}"
+          candidate_ref="${image}:sha-${candidate_commit}"
+          resolved="$(docker buildx imagetools inspect \
+            --format '{{.Manifest.Digest}}' "$candidate_ref" | tr -d '\r\n')"
+          if [ "$resolved" != "$candidate_digest" ]; then
+            echo "$candidate_ref resolved to $resolved, acceptance requires $candidate_digest" >&2
+            exit 1
+          fi
+
+          gh attestation verify "oci://${image}@${candidate_digest}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/container.yml" \
+            --source-digest "$candidate_commit" \
+            --source-ref refs/heads/main \
+            --deny-self-hosted-runners
+
+          printf 'commit=%s\n' "$candidate_commit" >> "$GITHUB_OUTPUT"
+          printf 'digest=%s\n' "$candidate_digest" >> "$GITHUB_OUTPUT"
 
       - name: Network administration integration in isolated namespaces
         run: |
@@ -116,6 +165,11 @@ jobs:
           rm -rf dist/binaries
 
           install -m 0644 compose.yaml dist/compose.yaml
+          install -m 0644 docs/examples/compose.single-file.yaml dist/docker-compose.single-file.yaml
+          release_version="${GITHUB_REF_NAME#v}"
+          sed -i \
+            "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${release_version}|" \
+            dist/docker-compose.single-file.yaml
           install -m 0644 .env.example dist/remnanode.env.example
 
           curl --fail --location --silent --show-error \
@@ -134,6 +188,7 @@ jobs:
             remnanode-lite_linux_arm64.tar.gz \
             asn-prefixes.bin \
             compose.yaml \
+            docker-compose.single-file.yaml \
             remnanode.env.example \
             > SHA256SUMS
 
@@ -141,32 +196,35 @@ jobs:
         with:
           body_path: docs/releases/${{ github.ref_name }}.md
           fail_on_unmatched_files: true
+          make_latest: false
+          overwrite_files: false
           prerelease: false
           files: |
             dist/remnanode-lite_linux_amd64.tar.gz
             dist/remnanode-lite_linux_arm64.tar.gz
             dist/asn-prefixes.bin
             dist/compose.yaml
+            dist/docker-compose.single-file.yaml
             dist/remnanode.env.example
             dist/SHA256SUMS
 
   publish-container:
     needs: release
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
+    concurrency:
+      group: registry-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.release-image.outputs.digest }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
 
-      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
-        with:
-          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
-          platforms: arm64
-
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
           version: v0.35.0
@@ -178,47 +236,43 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate release image metadata
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: latest=false
-          tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest
-            type=sha,prefix=sha-,format=long
-          labels: |
-            org.opencontainers.image.title=Remnawave Node Lite (Go)
-            org.opencontainers.image.description=Low-memory Remnawave Node 2.8.0 compatible implementation
-            org.opencontainers.image.licenses=AGPL-3.0-only
+      - name: Publish accepted candidate as the exact release version
+        id: release-image
+        env:
+          SOURCE_DIGEST: ${{ needs.release.outputs.candidate_digest }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          bash scripts/promote-image-tag.sh immutable \
+            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" "$version"
+          printf 'digest=%s\n' "$SOURCE_DIGEST" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish multi-architecture image
-        id: image
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          pull: true
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=container-release
-          cache-to: type=gha,mode=max,scope=container-release
-          provenance: mode=max
-          sbom: generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68
-
-  attest-container:
+  promote-latest:
     needs: publish-container
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    concurrency:
+      group: registry-publish
+      cancel-in-progress: false
     permissions:
-      contents: read
+      contents: write
       packages: write
-      id-token: write
-      attestations: write
     steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Revalidate main head before latest promotion
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          main_head="$(git rev-parse origin/main)"
+          if [ "$GITHUB_SHA" != "$main_head" ]; then
+            echo "refusing to move latest from stale release $GITHUB_SHA; current main is $main_head" >&2
+            exit 1
+          fi
+
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
           version: v0.35.0
@@ -230,22 +284,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve published manifest digest
-        id: digest
+      - name: Promote attested image to GHCR latest
         env:
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          SOURCE_DIGEST: ${{ needs.publish-container.outputs.digest }}
         run: |
           set -euo pipefail
-          digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$IMAGE_REF" | tr -d '\r\n')"
-          printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
-            echo "published image did not return a manifest digest: $digest" >&2
-            exit 1
-          }
-          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          bash scripts/promote-image-tag.sh mutable \
+            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" latest
 
-      - name: Attest published image
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.digest.outputs.digest }}
-          push-to-registry: true
+      - name: Mark GitHub release as latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq .id)"
+          printf '%s\n' "$release_id" | grep -Eq '^[1-9][0-9]*$'
+          gh api --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+            -f make_latest=true >/dev/null

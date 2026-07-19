@@ -69,9 +69,14 @@ jobs:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    concurrency:
+      group: registry-publish
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -93,22 +98,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate main image metadata
-        id: meta
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          flavor: latest=false
-          tags: |
-            type=raw,value=edge,enable=${{ github.event_name == 'push' }}
-            type=sha,prefix=sha-,format=long
-            type=sha,prefix=candidate-sha-,format=long,enable=${{ github.event_name == 'workflow_dispatch' }}
-          labels: |
-            org.opencontainers.image.title=Remnawave Node Lite (Go)
-            org.opencontainers.image.description=Unreleased main-branch image for server acceptance
-            org.opencontainers.image.licenses=AGPL-3.0-only
+      - name: Read project version
+        id: project-version
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
+          printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-rnl\.[1-9][0-9]*)?$' || {
+            echo "invalid project version: $version" >&2
+            exit 1
+          }
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
 
-      - name: Build and publish main image
+      - name: Build and publish untagged main image
         id: image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
@@ -116,9 +117,14 @@ jobs:
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           pull: true
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.title=Remnanode Lite
+            org.opencontainers.image.description=Low-memory Remnawave Node compatible implementation
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.project-version.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-only
           cache-from: type=gha,scope=container-main
           cache-to: type=gha,mode=max,scope=container-main
           provenance: mode=max
@@ -146,6 +152,47 @@ jobs:
       id-token: write
       attestations: write
     steps:
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate main manifest digest
+        id: digest
+        env:
+          SOURCE_DIGEST: ${{ needs.publish-main.outputs.digest }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$SOURCE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+            echo "main image did not return a manifest digest: $SOURCE_DIGEST" >&2
+            exit 1
+          }
+          printf 'digest=%s\n' "$SOURCE_DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Attest main image
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+  promote-main:
+    needs: [publish-main, attest-main]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: registry-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
           version: v0.35.0
@@ -157,22 +204,30 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve main manifest digest
-        id: digest
+      - name: Publish immutable candidate tag
         env:
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          SOURCE_DIGEST: ${{ needs.publish-main.outputs.digest }}
         run: |
           set -euo pipefail
-          digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$IMAGE_REF" | tr -d '\r\n')"
-          printf '%s\n' "$digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
-            echo "main image did not return a manifest digest: $digest" >&2
-            exit 1
-          }
-          printf 'digest=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+          image="${REGISTRY}/${IMAGE_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
+            tag="candidate-sha-${GITHUB_SHA}"
+          else
+            tag="sha-${GITHUB_SHA}"
+          fi
+          bash scripts/promote-image-tag.sh immutable "$image" "$SOURCE_DIGEST" "$tag"
 
-      - name: Attest main image
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.digest.outputs.digest }}
-          push-to-registry: true
+      - name: Promote current main image to edge
+        if: github.event_name == 'push'
+        env:
+          SOURCE_DIGEST: ${{ needs.publish-main.outputs.digest }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          main_head="$(git rev-parse origin/main)"
+          if [ "$GITHUB_SHA" != "$main_head" ]; then
+            echo "skip edge promotion for stale main commit $GITHUB_SHA; current main is $main_head"
+            exit 0
+          fi
+          bash scripts/promote-image-tag.sh mutable \
+            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" edge

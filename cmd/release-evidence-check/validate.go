@@ -62,25 +62,27 @@ var expectedAcceptancePaths = []string{
 }
 
 type validationResult struct {
-	ReleaseTag       string
-	CandidateCommit  string
-	NodeSHA256ByArch map[string]string
+	ReleaseTag           string
+	CandidateCommit      string
+	CandidateImageDigest string
+	NodeSHA256ByArch     map[string]string
 }
 
 type acceptanceManifest struct {
-	SchemaVersion   int                 `json:"schemaVersion"`
-	ReleaseVersion  string              `json:"releaseVersion"`
-	ReleaseTag      string              `json:"releaseTag"`
-	CandidateCommit string              `json:"candidateCommit"`
-	CandidateTree   string              `json:"candidateTree"`
-	AcceptedAt      string              `json:"acceptedAt"`
-	Decision        string              `json:"decision"`
-	OfficialNode    officialNodeTarget  `json:"officialNode"`
-	PanelTarget     panelTarget         `json:"panelTarget"`
-	RWCore          rwCoreTarget        `json:"rwCore"`
-	Policy          acceptancePolicy    `json:"policy"`
-	Evidence        []evidenceReference `json:"evidence"`
-	Risks           []releaseRisk       `json:"risks"`
+	SchemaVersion        int                 `json:"schemaVersion"`
+	ReleaseVersion       string              `json:"releaseVersion"`
+	ReleaseTag           string              `json:"releaseTag"`
+	CandidateCommit      string              `json:"candidateCommit"`
+	CandidateTree        string              `json:"candidateTree"`
+	CandidateImageDigest string              `json:"candidateImageDigest"`
+	AcceptedAt           string              `json:"acceptedAt"`
+	Decision             string              `json:"decision"`
+	OfficialNode         officialNodeTarget  `json:"officialNode"`
+	PanelTarget          panelTarget         `json:"panelTarget"`
+	RWCore               rwCoreTarget        `json:"rwCore"`
+	Policy               acceptancePolicy    `json:"policy"`
+	Evidence             []evidenceReference `json:"evidence"`
+	Risks                []releaseRisk       `json:"risks"`
 }
 
 type officialNodeTarget struct {
@@ -303,7 +305,8 @@ func validateReleaseEvidenceAt(
 	if err != nil {
 		return validationResult{}, err
 	}
-	if err := repo.validatePostCandidateChanges(ctx, manifest.CandidateCommit); err != nil {
+	postCandidateCommits, err := repo.validatePostCandidateChanges(ctx, manifest.CandidateCommit)
+	if err != nil {
 		return validationResult{}, err
 	}
 
@@ -366,15 +369,19 @@ func validateReleaseEvidenceAt(
 	if acceptedAt.Before(latestEvidenceFinish) {
 		return validationResult{}, fmt.Errorf("acceptedAt %s is before evidence completion %s", acceptedAt.Format(time.RFC3339), latestEvidenceFinish.Format(time.RFC3339))
 	}
+	if postCandidateCommits != 1 {
+		return validationResult{}, fmt.Errorf("release finalization must contain exactly one single-parent commit after the candidate, found %d", postCandidateCommits)
+	}
 
 	nodeSHAByArch := make(map[string]string, len(systemsByArch))
 	for arch, system := range systemsByArch {
 		nodeSHAByArch[arch] = system.Node.BinarySHA256
 	}
 	return validationResult{
-		ReleaseTag:       releaseTag,
-		CandidateCommit:  manifest.CandidateCommit,
-		NodeSHA256ByArch: nodeSHAByArch,
+		ReleaseTag:           releaseTag,
+		CandidateCommit:      manifest.CandidateCommit,
+		CandidateImageDigest: manifest.CandidateImageDigest,
+		NodeSHA256ByArch:     nodeSHAByArch,
 	}, nil
 }
 
@@ -428,6 +435,9 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 	}
 	if !isLowerHex(manifest.CandidateTree, 40) {
 		return time.Time{}, errors.New("manifest candidateTree must be 40 lowercase hexadecimal characters")
+	}
+	if !isSHA256Digest(manifest.CandidateImageDigest) {
+		return time.Time{}, errors.New("manifest candidateImageDigest must be sha256: followed by 64 lowercase hexadecimal characters")
 	}
 	acceptedAt, err := parseRFC3339("manifest acceptedAt", manifest.AcceptedAt)
 	if err != nil {
@@ -900,19 +910,20 @@ func (repo gitRepository) validateCandidate(ctx context.Context, candidateCommit
 	return committedAt, nil
 }
 
-func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, candidateCommit string) error {
+func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, candidateCommit string) (int, error) {
 	commitsRaw, err := repo.gitOutput(ctx, "rev-list", "--reverse", candidateCommit+"..HEAD")
 	if err != nil {
-		return fmt.Errorf("list post-candidate commits: %w", err)
+		return 0, fmt.Errorf("list post-candidate commits: %w", err)
 	}
-	for _, commit := range strings.Fields(commitsRaw) {
+	commits := strings.Fields(commitsRaw)
+	for _, commit := range commits {
 		parentsRaw, err := repo.gitOutput(ctx, "show", "-s", "--format=%P", commit)
 		if err != nil {
-			return fmt.Errorf("read parents for post-candidate commit %s: %w", commit, err)
+			return 0, fmt.Errorf("read parents for post-candidate commit %s: %w", commit, err)
 		}
 		parents := strings.Fields(parentsRaw)
 		if len(parents) != 1 {
-			return fmt.Errorf("post-candidate commit %s is a merge with %d parents; merges are not allowed during release finalization", commit, len(parents))
+			return 0, fmt.Errorf("post-candidate commit %s is a merge with %d parents; merges are not allowed during release finalization", commit, len(parents))
 		}
 		changedRaw, err := repo.gitBytes(
 			ctx,
@@ -925,15 +936,15 @@ func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, cand
 			"--",
 		)
 		if err != nil {
-			return fmt.Errorf("list changes for post-candidate commit %s: %w", commit, err)
+			return 0, fmt.Errorf("list changes for post-candidate commit %s: %w", commit, err)
 		}
 		for _, path := range splitNUL(changedRaw) {
 			if !isAllowedPostCandidatePath(path) {
-				return fmt.Errorf("post-candidate commit %s changes %q outside the release-finalization allowlist", commit, path)
+				return 0, fmt.Errorf("post-candidate commit %s changes %q outside the release-finalization allowlist", commit, path)
 			}
 		}
 	}
-	return nil
+	return len(commits), nil
 }
 
 func isAllowedPostCandidatePath(path string) bool {
@@ -1366,6 +1377,11 @@ func isLowerHex(value string, length int) bool {
 	}
 	_, err := hex.DecodeString(value)
 	return err == nil
+}
+
+func isSHA256Digest(value string) bool {
+	const prefix = "sha256:"
+	return strings.HasPrefix(value, prefix) && isLowerHex(value[len(prefix):], 64)
 }
 
 func exactStringSliceSet(values, expected []string) bool {

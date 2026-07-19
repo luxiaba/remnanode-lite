@@ -51,7 +51,7 @@ jobs:
 
           gh issue create \
             --title "$title" \
-            --body "Official remnawave/node released ${latest_version}; the current compatibility baseline is ${pinned_version}. Update the pinned source commit, contract evidence, implementation, tests, release version, and acceptance scope before publishing."
+            --body "Official remnawave/node released ${latest_version}; the current compatibility baseline is ${pinned_version}. Update the pinned source commit, contract evidence, implementation, tests, and acceptance scope before changing ContractVersion. Choose the project Version independently according to docs/versioning.md."
 
   compare-routes:
     runs-on: ubuntu-24.04

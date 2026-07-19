@@ -24,10 +24,11 @@ var (
 )
 
 type releaseFixture struct {
-	t         *testing.T
-	root      string
-	manifest  string
-	candidate string
+	t                    *testing.T
+	root                 string
+	manifest             string
+	candidate            string
+	candidateImageDigest string
 }
 
 func TestValidateReleaseEvidence(t *testing.T) {
@@ -37,7 +38,9 @@ func TestValidateReleaseEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("validateReleaseEvidence() error = %v", err)
 	}
-	if result.ReleaseTag != expectedReleaseTag || result.CandidateCommit != fixture.candidate {
+	if result.ReleaseTag != expectedReleaseTag ||
+		result.CandidateCommit != fixture.candidate ||
+		result.CandidateImageDigest != fixture.candidateImageDigest {
 		t.Fatalf("validateReleaseEvidence() = %#v", result)
 	}
 	for _, arch := range []string{"amd64", "arm64"} {
@@ -77,6 +80,25 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 				fixture.writeFile(manifestRepositoryPath, appendJSONField(raw, `"Decision":"pass"`))
 			},
 			wantErr: "unknown field \"Decision\"",
+		},
+		{
+			name: "missing candidate image digest",
+			mutate: func(fixture *releaseFixture) {
+				var manifest map[string]json.RawMessage
+				fixture.readJSON(manifestRepositoryPath, &manifest)
+				delete(manifest, "candidateImageDigest")
+				fixture.writeJSON(manifestRepositoryPath, manifest)
+			},
+			wantErr: "candidateImageDigest must be sha256: followed by 64 lowercase hexadecimal characters",
+		},
+		{
+			name: "invalid candidate image digest",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.CandidateImageDigest = "sha256:" + strings.Repeat("A", 64)
+				fixture.writeManifest(manifest)
+			},
+			wantErr: "candidateImageDigest must be sha256: followed by 64 lowercase hexadecimal characters",
 		},
 		{
 			name: "evidence unknown field",
@@ -433,6 +455,14 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 			wantErr: "merges are not allowed during release finalization",
 		},
 		{
+			name: "multiple allowed post-candidate commits",
+			mutate: func(fixture *releaseFixture) {
+				fixture.writeFile("README.md", []byte("# release\n\nsecond finalization commit\n"))
+				fixture.commitAll("add another allowed release documentation commit")
+			},
+			wantErr: "must contain exactly one single-parent commit",
+		},
+		{
 			name: "post-candidate code rename",
 			mutate: func(fixture *releaseFixture) {
 				destination := "docs/releases/v2.8.0-rnl.1.md"
@@ -501,6 +531,9 @@ func TestRunValidatesReleaseArtifacts(t *testing.T) {
 	if !strings.Contains(stdout.String(), "release evidence check passed") {
 		t.Fatalf("runInRepository() stdout = %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), fixture.candidateImageDigest) {
+		t.Fatalf("runInRepository() stdout = %q, want image digest %q", stdout.String(), fixture.candidateImageDigest)
+	}
 
 	arm64Path := filepath.Join(artifactsDirectory, "remnanode-lite_linux_arm64")
 	if err := os.WriteFile(arm64Path, []byte("wrong artifact\n"), 0o755); err != nil {
@@ -522,7 +555,12 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 		t.Skip("git is required for release evidence tests")
 	}
 
-	fixture := &releaseFixture{t: t, root: t.TempDir(), manifest: manifestRepositoryPath}
+	fixture := &releaseFixture{
+		t:                    t,
+		root:                 t.TempDir(),
+		manifest:             manifestRepositoryPath,
+		candidateImageDigest: "sha256:" + strings.Repeat("a", 64),
+	}
 	fixture.git("init", "-q")
 	fixture.writeFile("code.txt", []byte("release candidate\n"))
 	fixture.commitAllAt("freeze release candidate", testCandidateAt)
@@ -586,13 +624,14 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", resource)
 
 	manifest := acceptanceManifest{
-		SchemaVersion:   1,
-		ReleaseVersion:  expectedReleaseVersion,
-		ReleaseTag:      expectedReleaseTag,
-		CandidateCommit: fixture.candidate,
-		CandidateTree:   candidateTree,
-		AcceptedAt:      testAcceptedAt,
-		Decision:        "pass",
+		SchemaVersion:        1,
+		ReleaseVersion:       expectedReleaseVersion,
+		ReleaseTag:           expectedReleaseTag,
+		CandidateCommit:      fixture.candidate,
+		CandidateTree:        candidateTree,
+		CandidateImageDigest: fixture.candidateImageDigest,
+		AcceptedAt:           testAcceptedAt,
+		Decision:             "pass",
 		OfficialNode: officialNodeTarget{
 			Version: expectedOfficialNodeVersion,
 			Commit:  expectedOfficialNodeCommit,
