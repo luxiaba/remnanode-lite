@@ -103,6 +103,8 @@ require_text .github/workflows/container.yml 'outputs: type=cacheonly'
 require_text .github/workflows/container.yml 'push: false'
 require_text .github/workflows/container.yml 'workflow_dispatch:'
 require_text .github/workflows/container.yml 'branches: [dev, main]'
+require_text .github/workflows/container.yml '      - ".env.example"'
+require_text .github/workflows/container.yml '      - "compose.yaml"'
 require_text .github/workflows/container.yml "cancel-in-progress: \${{ github.event_name != 'workflow_dispatch' }}"
 require_text .github/workflows/container.yml "if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')"
 require_text .github/workflows/container.yml "if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
@@ -125,6 +127,14 @@ require_text .github/workflows/container.yml "sha-${github_expression_prefix}{{ 
 require_text .github/workflows/container.yml "subject-digest: ${github_expression_prefix}{{ steps.digest.outputs.digest }}"
 require_text .github/workflows/container.yml 'image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0'
 require_text .github/workflows/container.yml 'image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a'
+require_text compose.yaml '/var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750'
+require_text compose.yaml 'max-size: 2m'
+require_text internal/xray/logrotate.go 'maxLogSize       = 4 << 20'
+
+if grep -Fq 'remnanode-logs' compose.yaml; then
+  echo "production compose must keep rw-core logs ephemeral" >&2
+  exit 1
+fi
 
 if grep -Eq 'ghcr\.io/[^[:space:]]+:latest' compose.yaml .env.example; then
   echo "production container configuration must default to an immutable version" >&2

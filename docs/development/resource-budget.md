@@ -6,7 +6,7 @@
 
 - `448 MiB` hard memory limit，为宿主机内核与基础服务保留至少 `64 MiB`。
 - `1 CPU`、`256` 个 PID、禁用 swap 与外部网络。
-- 只读 rootfs，仅提供 `64 MiB` tmpfs。
+- 只读 rootfs，Compose 的 run/tmp/log tmpfs 合计上限为 `48 MiB`；rw-core 日志不写入持久卷。
 - `LOW_MEMORY=1`，Go 运行时软内存上限为 `180 MiB`。
 - 大配置包含 `50,000` 个 VLESS 用户。
 

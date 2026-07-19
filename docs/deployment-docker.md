@@ -6,7 +6,7 @@
 ghcr.io/luxiaba/remnanode-lite
 ```
 
-生产服务器只需要 `compose.yaml` 和 `.env`。Compose 与官方 Remnawave Node 一样使用宿主网络；Go Node 直接管理 rw-core 生命周期，因此容器只有一个主进程，不需要 s6 或第二个常驻 supervisor。
+生产服务器只需要 `compose.yaml`；Secret 可以放在权限为 `0600` 的 `.env`，也可以直接写入同样限制权限的 Compose。Compose 与官方 Remnawave Node 一样使用宿主网络；Go Node 直接管理 rw-core 生命周期，因此容器只有一个主进程，不需要 s6 或第二个常驻 supervisor。
 
 ## 前置条件
 
@@ -55,6 +55,17 @@ docker compose logs --tail=100 remnanode
 看到容器为 `healthy` 且目标进程监听 `NODE_PORT` 后，在 Panel 启用节点。宿主机防火墙只需对 Panel 地址开放 Node API 端口；Panel 下发的代理入站端口也必须按实际配置放行。
 
 Compose 使用 `network_mode: host`，因此没有也不应添加 `ports:` 映射。`NET_ADMIN` 用于 nftables 和 socket destroy；显式的 `NET_BIND_SERVICE` 等价于官方镜像默认保留的低端口监听能力。
+
+大量独立小节点需要单文件部署时，可以把环境部分改为映射值，并对 Compose 本身执行 `chmod 600 compose.yaml`：
+
+```yaml
+environment:
+  NODE_PORT: "38329"
+  SECRET_KEY: "粘贴_Panel_提供的完整_base64_内容"
+  LOW_MEMORY: "1"
+```
+
+不要使用 `- SECRET_KEY="..."` 列表写法；列表中的引号会成为 Secret 内容并导致 base64 解析失败。
 
 ## GHCR 可见性与登录
 
@@ -159,10 +170,11 @@ docker compose stop remnanode
 docker compose down
 ```
 
-rw-core 输出保存在命名卷 `remnanode-logs`，Node 会限制并轮转日志；Docker 自身日志也限制为 `2 x 5 MiB`。普通 `docker compose down` 保留日志，确认不再需要数据时才执行：
+rw-core 输出保存在容器内的 `28 MiB` tmpfs，单个 stdout/stderr 日志限制为 `4 MiB` 并各保留一份轮转；容器重建后自动清空，不占用持久磁盘。Docker 自身的 Node 日志限制为 `2 x 2 MiB`。实时查看：
 
 ```bash
-docker compose down --volumes
+docker exec -it remnanode tail -n 50 -F /var/log/remnanode/xray.out.log
+docker exec -it remnanode tail -n 50 -F /var/log/remnanode/xray.err.log
 ```
 
 不要提交 `.env`。Secret 会作为容器环境变量存在于本机 Docker 元数据中，应限制 Docker socket 和主机管理员权限。
