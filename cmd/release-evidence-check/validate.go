@@ -22,9 +22,9 @@ import (
 const (
 	expectedSchemaVersion = 1
 
-	expectedReleaseVersion = "0.1.0"
-	expectedReleaseTag     = "v0.1.0"
-	expectedVersionOutput  = "remnanode-lite 0.1.0 (contract 2.8.0)"
+	expectedReleaseVersion = "2.8.0-rnl.1"
+	expectedReleaseTag     = "v2.8.0-rnl.1"
+	expectedVersionOutput  = "remnanode-lite 2.8.0-rnl.1 (contract 2.8.0)"
 
 	expectedOfficialNodeVersion = "2.8.0"
 	expectedOfficialNodeCommit  = "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b"
@@ -44,7 +44,7 @@ const (
 	maximumClockSkew              = 5 * time.Minute
 	maximumAcceptanceFileBytes    = 1 << 20
 
-	acceptanceDirectory    = "docs/development/acceptance/v0.1.0"
+	acceptanceDirectory    = "docs/development/acceptance/v2.8.0-rnl.1"
 	manifestRepositoryPath = acceptanceDirectory + "/manifest.json"
 )
 
@@ -941,7 +941,7 @@ func isAllowedPostCandidatePath(path string) bool {
 	case "README.md",
 		"docs/CHANGELOG.md",
 		"docs/development/roadmap.md",
-		"docs/releases/v0.1.0.md",
+		"docs/releases/v2.8.0-rnl.1.md",
 		manifestRepositoryPath,
 		acceptanceDirectory + "/systemd.json",
 		acceptanceDirectory + "/openrc.json",

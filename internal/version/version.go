@@ -7,7 +7,7 @@ import (
 )
 
 // Version is the release version (overridable via -ldflags at build time).
-var Version = "0.1.0"
+var Version = "2.8.0-rnl.1"
 
 // ContractVersion is the upstream @remnawave/node version reported to Panel as nodeVersion.
 // Default must stay in sync with contract.version and contract-sync CI.

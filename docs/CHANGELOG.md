@@ -3,14 +3,15 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 仅记录面向用户/运维的 notable 变更；完整 diff 见 GitHub Releases。
 
-## [0.1.0] - Unreleased
+## [2.8.0-rnl.1] - Unreleased
 
 这是 `Luxiaba/remnanode-lite` 的首个自有版本线，兼容目标固定为官方 Node 2.8.0 与 Panel 2.8.1。
 
 ### 新增
 
 - 将开发门禁拆为可并行诊断的 Go、仓库、离线 installer 与 Linux 网络管理任务，由稳定的 `ci / gate` 汇总；漏洞扫描改为独立定时任务，所有 GitHub runner 固定为 Ubuntu 24.04。
-- 新增 GHCR 多架构镜像发布链：`main` 自动发布 `edge` 与不可变 commit 候选镜像，tag Release 在既有门禁后发布 amd64/arm64 manifest、稳定 SemVer/`latest` 与 commit 标签、SBOM、BuildKit provenance 和 GitHub build attestation；`dev`/PR 独立验证容器构建。
+- 新增 GHCR 多架构镜像发布链：`main` 自动发布 `edge` 与不可变 commit 候选镜像，tag Release 在既有门禁后发布 amd64/arm64 manifest、精确版本/`latest` 与 commit 标签、SBOM、BuildKit provenance 和 GitHub build attestation；`dev`/PR 独立验证容器构建。
+- 新增官方 Node Release 定时监测；发现兼容基线变化时创建同步 Issue，但不会自动修改代码或发布镜像。
 - 新增 amd64/arm64 多阶段 Docker 镜像与生产 Compose：固定并校验 rw-core/geo/ASN 资产，采用官方 host network 与能力模型，同时落实 448 MiB/no-swap/1 CPU/256 PID、只读 rootfs、健康检查和日志上限。
 - 固化官方 Node `2.8.0@596f015` 的 26 条路由、Zod 请求/响应、错误格式和副作用为可执行契约。
 - 新增默认只读、需 mTLS/JWT 的 `contract-probe`，用于官方 Node 与 Go Node 的黑盒语义差分。

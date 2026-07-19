@@ -13,6 +13,46 @@ permissions:
   contents: read
 
 jobs:
+  watch-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Open an issue when the official Node release changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pinned_version="$(tr -d ' \n\r' < internal/version/contract.version)"
+          latest_version="$(gh api repos/remnawave/node/releases/latest --jq .tag_name)"
+          if ! [[ "$latest_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "official Node returned an invalid release tag: $latest_version" >&2
+            exit 1
+          fi
+          if [ "$latest_version" = "$pinned_version" ]; then
+            echo "official Node remains at $pinned_version"
+            exit 0
+          fi
+
+          title="chore: sync official Node ${latest_version}"
+          existing="$(gh issue list --state open --limit 100 --json title --jq \
+            ".[] | select(.title == \"${title}\") | .title")"
+          if [ -n "$existing" ]; then
+            echo "sync issue already exists: $title"
+            exit 0
+          fi
+
+          gh issue create \
+            --title "$title" \
+            --body "Official remnawave/node released ${latest_version}; the current compatibility baseline is ${pinned_version}. Update the pinned source commit, contract evidence, implementation, tests, release version, and acceptance scope before publishing."
+
   compare-routes:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

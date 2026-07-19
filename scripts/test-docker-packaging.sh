@@ -91,9 +91,10 @@ require_text .github/workflows/release.yml 'platforms: linux/amd64,linux/arm64'
 require_text .github/workflows/release.yml 'provenance: mode=max'
 sbom_generator='generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68'
 require_text .github/workflows/release.yml "sbom: ${sbom_generator}"
-require_text .github/workflows/release.yml 'flavor: latest=auto'
-require_text .github/workflows/release.yml 'type=semver,pattern={{major}}.{{minor}}'
-require_text .github/workflows/release.yml "type=semver,pattern={{major}},enable=\${{ !startsWith(github.ref_name, 'v0.') }}"
+require_text .github/workflows/release.yml 'flavor: latest=false'
+require_text .github/workflows/release.yml 'type=semver,pattern={{version}}'
+require_text .github/workflows/release.yml 'type=raw,value=latest'
+require_text .github/workflows/release.yml 'prerelease: false'
 require_text .github/workflows/release.yml 'image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0'
 require_text .github/workflows/release.yml 'image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a'
 require_text .github/workflows/release.yml 'dist/compose.yaml'
@@ -130,8 +131,8 @@ if grep -Eq 'ghcr\.io/[^[:space:]]+:latest' compose.yaml .env.example; then
   exit 1
 fi
 
-if grep -Eq 'type=raw[^[:space:]]*latest' .github/workflows/release.yml .github/workflows/container.yml; then
-  echo "stable latest must be derived automatically from a SemVer release" >&2
+if grep -Eq 'type=raw[^[:space:]]*latest' .github/workflows/container.yml; then
+  echo "candidate workflows must not publish latest" >&2
   exit 1
 fi
 
