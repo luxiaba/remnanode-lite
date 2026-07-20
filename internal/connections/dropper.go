@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/netadmin"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/netadmin"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type IPListProvider interface {
-	GetUserIPList(ctx context.Context, userID string, reset bool) ([]xtls.IPEntry, error)
+	GetUserIPList(ctx context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error)
 }
 
 type Dropper struct {

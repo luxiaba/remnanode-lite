@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/secret"
+	"github.com/luxiaba/remnanode-lite/internal/secret"
 	"golang.org/x/sys/unix"
 )
 
@@ -38,7 +38,7 @@ func TestLoadDotEnvWithDefaults(t *testing.T) {
 	if cfg.LogDir != defaultLogDir {
 		t.Fatalf("unexpected default LOG_DIR: %s (want %s)", cfg.LogDir, defaultLogDir)
 	}
-	if cfg.InternalSocketPath != defaultInternalSocketPath || cfg.InternalRESTToken == "" {
+	if cfg.InternalSocketPath != DefaultInternalSocketPath || cfg.InternalRESTToken == "" {
 		t.Fatalf("unexpected internal defaults: %#v", cfg)
 	}
 }
@@ -57,6 +57,19 @@ func TestLoadEnvironmentOverridesDotEnv(t *testing.T) {
 	}
 	if cfg.NodePort != 4000 || cfg.SecretKey != "from-env" {
 		t.Fatalf("environment did not override .env: %#v", cfg)
+	}
+}
+
+func TestLoadRejectsNodePortOutsideTCPRange(t *testing.T) {
+	for _, value := range []string{"-1", "0", "65536"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("NODE_PORT", value)
+			t.Setenv("SECRET_KEY", "test")
+			_, err := Load("")
+			if err == nil || !strings.Contains(err.Error(), "NODE_PORT must be between 1 and 65535") {
+				t.Fatalf("Load() error = %v", err)
+			}
+		})
 	}
 }
 

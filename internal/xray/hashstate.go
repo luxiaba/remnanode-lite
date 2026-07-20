@@ -3,8 +3,6 @@ package xray
 import (
 	"log/slog"
 	"sort"
-
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
 )
 
 type runtimeHashState struct {
@@ -104,13 +102,13 @@ func (m *Manager) isNeedRestartCoreLocked(incoming ConfigHash) bool {
 	return false
 }
 
-func (m *Manager) CommitUserAdded(result xtls.HandlerResult, inboundTag, userUUID string) bool {
-	if !result.OK || inboundTag == "" || userUUID == "" {
+func (m *Manager) commitUserAdded(token *mutationToken, inboundTag, userUUID string) bool {
+	if inboundTag == "" || userUUID == "" {
 		return false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.state != lifecycleRunning || m.generation != result.Generation {
+	if !m.mutationTokenCurrentLocked(token) {
 		return false
 	}
 
@@ -130,13 +128,13 @@ func (m *Manager) CommitUserAdded(result xtls.HandlerResult, inboundTag, userUUI
 	return true
 }
 
-func (m *Manager) CommitUserRemoved(result xtls.HandlerResult, inboundTag, userUUID string) bool {
-	if !result.OK || inboundTag == "" || userUUID == "" {
+func (m *Manager) commitUserRemoved(token *mutationToken, inboundTag, userUUID string) bool {
+	if inboundTag == "" || userUUID == "" {
 		return false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.state != lifecycleRunning || m.generation != result.Generation {
+	if !m.mutationTokenCurrentLocked(token) {
 		return false
 	}
 

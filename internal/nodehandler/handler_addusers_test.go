@@ -4,19 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type hashTrackingProvider struct {
 	stubProvider
 	hashAdds []string
-}
-
-func (p *hashTrackingProvider) CommitUserAdded(_ xtls.HandlerResult, tag, uuid string) bool {
-	p.hashAdds = append(p.hashAdds, tag+":"+uuid)
-	return true
 }
 
 func TestAddUsersSkipsHashOnHandlerFailure(t *testing.T) {
@@ -38,13 +33,9 @@ type successVlessProvider struct {
 	hashAdds []string
 }
 
-func (p *successVlessProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
-}
-
-func (p *successVlessProvider) CommitUserAdded(_ xtls.HandlerResult, tag, uuid string) bool {
-	p.hashAdds = append(p.hashAdds, tag+":"+uuid)
-	return true
+func (p *successVlessProvider) HandlerAddVlessUser(_ context.Context, tag, _, _, _ string, _ uint32, hashUUID string) xrayrpc.HandlerResult {
+	p.hashAdds = append(p.hashAdds, tag+":"+hashUUID)
+	return xrayrpc.HandlerResult{OK: true}
 }
 
 func TestAddUsersAddsHashOnHandlerSuccess(t *testing.T) {

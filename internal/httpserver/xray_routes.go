@@ -3,13 +3,13 @@ package httpserver
 import (
 	"net/http"
 
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
-	"github.com/Luxiaba/remnanode-lite/internal/xray"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/xray"
 )
 
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.XrayStartRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 

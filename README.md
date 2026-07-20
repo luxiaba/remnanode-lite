@@ -1,175 +1,174 @@
-# Remnawave Node Lite (Go)
+<div align="center">
 
-Remnawave Panel 的轻量级 Go Node 实现：以**单一可执行文件**运行，支持 Docker Compose、systemd 与 OpenRC 部署，面向小内存 Linux 服务器。
+# Remnanode Lite
 
----
+**A resource-conscious Go implementation of Remnawave Node for small Linux servers**
 
-## 版本信息
+[English](README.md) | [简体中文](README.zh-CN.md) | [Русский](README.ru.md)
 
-| 项目 | 说明 |
+[![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
+[![Container](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
+[![Security](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml/badge.svg)](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml)
+[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
+
+[Documentation](docs/README.md) · [Docker deployment](docs/deployment-docker.md) · [Architecture](docs/architecture.md) · [Development](docs/development/README.md) · [Versioning](docs/versioning.md) · [Release process](docs/release.md)
+
+</div>
+
+> [!IMPORTANT]
+> Remnanode Lite is an independently maintained community project. It is not affiliated with or endorsed by Remnawave. The official `remnawave/node` repository defines an external behavior and protocol reference; it is not this repository's code upstream.
+
+Remnanode Lite receives commands from Remnawave Panel and manages the rw-core lifecycle, live user updates, statistics, and plugin rules. A single Go Node process owns rw-core directly. The container does not require Node.js, s6, or a second application supervisor; native installations rely on systemd or OpenRC to supervise the Node process.
+
+The production engineering target is a complete Linux host with **512 MiB RAM, 1 vCPU, and 2 GB of disk**. That target is a constrained operating envelope, not a blanket performance guarantee for every traffic pattern or plugin configuration.
+
+## Why this project exists
+
+Small edge nodes need more than a process that starts. They need verifiable Panel behavior, recoverable process and firewall state, bounded input and concurrency, controlled logs, and upgrades that can fail without silently corrupting the installation.
+
+This repository began with experience from a community Go implementation, then re-audited and reworked the API contract, Xray lifecycle, plugin transactions, network administration, installation supply chain, and low-memory profile. The goal is not a line-by-line TypeScript port. It is an idiomatic Go system that preserves the observable contract while making ownership and resource limits explicit.
+
+| Area | Current design |
 | --- | --- |
-| 当前版本 | `2.8.0-rnl.1`（开发中） |
-| 兼容基线 | `@remnawave/node` `2.8.0@596f015`，Panel `2.8.1` |
-| 变更日志 | [CHANGELOG.md](docs/CHANGELOG.md) |
-| 改造路线 | [roadmap.md](docs/development/roadmap.md) |
+| Panel contract | Pinned official source evidence for 26 `/node` routes, request and response schemas, error mapping, and observable side effects |
+| Resource bounds | `LOW_MEMORY=1`, bounded bodies, queues and concurrency, a 448 MiB container limit, ephemeral runtime logs |
+| Lifecycle | One owner for rw-core, explicit lifecycle states, separate operation and process epochs, process leases, bounded shutdown |
+| Network effects | Project-owned nftables tables and dual-stack socket destruction with only `NET_ADMIN` and `NET_BIND_SERVICE` added |
+| Delivery | amd64/arm64 GHCR candidates, SBOM, provenance, build attestation, and integrity-checked native release assets |
 
-发行版本采用 `<官方 Node 版本>-rnl.<修订号>`：官方兼容基线升级时更新前三段版本，仅修复本项目时递增 `rnl` 修订号。安装与升级脚本默认固定拉取 `v2.8.0-rnl.1`，不会跟随 `latest` 漂移；后续版本可通过环境变量 `RNL_TAG=vX.Y.Z-rnl.N` 显式指定。
+See [Project scope and goals](docs/project.md) for the background, supported boundaries, and non-goals.
 
----
+## Current status
 
-## 系统要求
+| Item | Current value |
+| --- | --- |
+| Project version | `2.8.0-rnl.1`; the first stable Release has not been published |
+| Official contract baseline | `remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b` |
+| Panel acceptance target | `2.8.1` |
+| rw-core | `v26.6.27` |
+| Target architectures | `linux/amd64`, `linux/arm64` |
+| M7 engineering snapshots | Ubuntu 24.04 arm64/systemd and Alpine 3.22 arm64/OpenRC container; these are not frozen-candidate M8 acceptance |
+| Production resource target | Whole host `512 MiB / 1 vCPU / 2 GB disk`, service maximum `448 MiB`, no swap |
 
-- Linux amd64/arm64（Docker Compose，或 Debian / Ubuntu 等 systemd 发行版，或 Alpine + OpenRC）
-- 生产目标：整机 `512 MiB RAM / 1 vCPU / 2 GB disk`
-- 所有变更型 installer 依赖 `util-linux` 提供的 `flock`；Alpine 新旧节点在安装、升级、卸载或独立更新 rw-core 前均须先执行 `apk add --no-cache util-linux`
-- Alpine 生产部署要求 cgroup v2 的 memory/cpu/pids controller；OpenRC 会验证 `448MiB / 0 swap / 1 CPU / 256 PID`，缺失时拒绝启动
-- systemd/OpenRC 都将 `/etc/remnanode/node.env` 作为有界数据文件读取，不会把 Secret 或未知变量导出到 Node/rw-core 环境
-- Panel 下发的 `SECRET_KEY`（含 mTLS 证书与 JWT 公钥）
-- [rw-core](https://github.com/XTLS/Xray-core) **≥ v26.6.27**（2.8.0 抽象套接字 API 的硬性要求；安装脚本固定安装并校验该版本）
-- `CAP_NET_ADMIN` 用于 nftables 插件规则与 `NETLINK_SOCK_DIAG` socket destroy；安装器使用 iproute2 的 `ss` 复核监听端口确由目标进程持有
+The static contract and code-level remediation are in place. A production Release still requires frozen-candidate Panel, init-system, dual-architecture, resource, fault, and soak evidence. Follow the [roadmap](docs/development/roadmap.md) and do not treat an engineering snapshot as a published SLA.
 
----
+## Quick start
 
-## 安装
+Docker Compose is the recommended deployment model. The repository includes a complete [single-file Compose template](deploy/compose.single-file.yaml) that does not require source code or a separate `.env` file.
 
-### Docker Compose
-
-`v2.8.0-rnl.1` 正式发布后，Release 将同时提供 `linux/amd64`、`linux/arm64` GHCR 镜像。生产服务器只需 `compose.yaml` 和 `.env`，不需要源码或 Go 工具链：
+Because the first stable Release does not exist yet, select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite). Bind the image and deployment template to the same 40-character `main` commit:
 
 ```bash
-# 从同一 GitHub Release 下载 compose.yaml 和 remnanode.env.example
-mv remnanode.env.example .env
-chmod 600 .env
-# 编辑 .env，填写完整 SECRET_KEY
+(
+  set -euo pipefail
+  candidate_commit=REPLACE_WITH_40_CHAR_COMMIT
+  candidate_tag="sha-${candidate_commit}"
+  # For a manually rebuilt candidate, use candidate-sha-${candidate_commit}.
+  printf '%s\n' "$candidate_commit" | grep -Eq '^[0-9a-f]{40}$'
+
+  mkdir -p /opt/remnanode
+  cd /opt/remnanode
+  curl -fL \
+    "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${candidate_commit}/deploy/compose.single-file.yaml" \
+    -o docker-compose.yaml
+  sed -i \
+    "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${candidate_tag}|" \
+    docker-compose.yaml
+  chmod 600 docker-compose.yaml
+)
+```
+
+After a formal Release, download the matching Compose asset and `SHA256SUMS` from that GitHub Release instead. The release workflow pins the asset to the exact version rather than `latest`.
+
+Edit only the node port and the complete Secret issued by Panel:
+
+```yaml
+environment:
+  NODE_PORT: "38329"
+  SECRET_KEY: "PASTE_THE_COMPLETE_BASE64_PANEL_SECRET"
+```
+
+Then start the node:
+
+```bash
+docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build
 docker compose ps
+docker compose logs --tail=100 remnanode
 ```
 
-镜像由 tag Release workflow 推送到 `ghcr.io/luxiaba/remnanode-lite`。稳定版本同时更新精确版本、`latest` 和 commit tag；生产仍推荐使用精确版本或 manifest digest。完整的无源码部署、私有 Package 登录、attestation 验证、更新、回滚和本地构建说明见 [Docker Compose 部署](docs/deployment-docker.md)。
+> [!NOTE]
+> `latest` is created only by a completed stable Release. `edge` follows the current `main` container build and is not a rollback target. A healthy container proves that the internal Unix socket accepts connections; it does not prove Panel reachability, mTLS/JWT validity, or that rw-core is online.
 
-### systemd（Debian / Ubuntu 等）
+For image selection, digest pinning, Secret handling, logs, upgrades, and rollback, read [Docker Compose deployment](docs/deployment-docker.md). Native systemd and OpenRC installations are documented in [Native Linux deployment](docs/deployment-native.md).
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/install-node.sh | sudo bash
+## Runtime model
+
+```mermaid
+flowchart LR
+    Panel["Remnawave Panel"] -->|"TLS 1.3+ with mTLS and JWT"| HTTP["Node HTTP boundary"]
+    HTTP --> API["Validated application services"]
+    API --> Manager["Xray Manager"]
+    API --> Plugin["Plugin Service"]
+    API --> Stats["User and statistics services"]
+    Manager -->|"process and config socket"| Core["rw-core"]
+    Stats -->|"gRPC abstract socket"| Core
+    Plugin --> NFT["nftables and socket destroy"]
+    Core -->|"torrent webhook"| Plugin
 ```
 
-交互菜单：**安装 · 升级 · 卸载 · 退出**
+The central rule is single ownership of mutable state. The HTTP layer authenticates, validates, applies capacity limits, and coordinates operations. Application services do not depend on `net/http`. Xray Manager owns process and lifecycle state plus process leases. Plugin Service owns plugin snapshots and nftables transactions. See [Architecture and runtime design](docs/architecture.md) for the data flows, lock ordering, and package responsibilities.
 
-### OpenRC（Alpine）
+## Image channels
 
-```bash
-apk add --no-cache curl bash util-linux
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/install-node-alpine.sh | bash
-```
-
-### 安装流程
-
-1. 在 Panel 创建节点并复制 `SECRET_KEY`
-2. 在本机运行安装脚本并粘贴 Secret Key
-3. 看到目标 `remnanode-lite` 进程正在监听 `TCP :2222` 后，在 Panel 启用节点（若已启用，约 10s 内自动上线）
-4. 防火墙仅对 Panel 地址开放 `NODE_PORT`
-
-手动配置（非交互安装未带 `SECRET_KEY` 时）：
-
-1. 编辑 `/etc/remnanode/node.env` 确认 `NODE_PORT`，将 Secret Key 写入 `/etc/remnanode/secret.key`（单行 base64、`root:remnanode 0640`）
-2. 重启服务：`systemctl restart remnawave-node`（Alpine：`rc-service remnawave-node restart`）
-3. 在 Panel 中启用节点，端口须与 `NODE_PORT` 一致（默认 `2222`）
-
-非交互安装示例：
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/install-node.sh \
-  | sudo env SECRET_KEY='eyJ...' NODE_PORT=2222 bash -s -- --install --yes
-```
-
-配置模板见 [deploy/node.env.example](deploy/node.env.example)。安装器接收 `SECRET_KEY` 输入后会验证并写入受限的 `SECRET_KEY_FILE`，不会将密钥内联留在 `node.env`。
-
----
-
-## 配置说明
-
-原生部署主配置文件为 `/etc/remnanode/node.env`，模板见 `deploy/node.env.example`；Docker Compose 从仓库根目录 `.env` 读取运行变量，模板见 `.env.example`。
-
-```env
-NODE_PORT=2222
-SECRET_KEY=
-SECRET_KEY_FILE=/etc/remnanode/secret.key
-XRAY_BIN=/usr/local/lib/remnanode/rw-core
-GEO_DIR=/usr/local/share/remnanode/xray
-LOG_DIR=/var/log/remnanode
-```
-
-可选能力见 `deploy/node.env.example`：`LOW_MEMORY`、`BODY_LIMIT_MB`、`NODE_BIND_ADDR`（绑定监听地址）、`CUSTOM_CORE_URL`、`GEO_ZAPRET_FILE` / `IP_ZAPRET_FILE` 等。
-
----
-
-## 升级
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/upgrade.sh | sudo bash -s -- --yes
-```
-
-升级会校验 Release 摘要和二进制版本，并在替换前备份 binary、service、support、`node.env` 与 `secret.key`。升级前运行中或由 install 委托要求启动的服务，只有目标二进制进程实际持有监听端口才提交事务；显式升级原本 stopped 的服务则保持 stopped。默认保留 rw-core，同步升级 rw-core：
-
-```bash
-sudo RNL_UPGRADE_XRAY=1 bash upgrade.sh --yes
-```
-
-旧版配置缺少 `LOW_MEMORY` 时升级器会按整机内存迁移；512MiB 节点可强制执行 `bash upgrade.sh --yes --low-memory`。安装、升级、rw-core 安装与卸载通过 `/run/lock/remnanode-installer.lock` 串行执行，并发入口会立即失败而不排队；安装工作区固定为 root-only 的 `/var/lib/remnanode-installer`，并在下载、解压和可用磁盘不足时提前失败。
-
----
-
-## 卸载
-
-| 模式 | 操作 | 说明 |
+| Tag | Meaning | Intended use |
 | --- | --- | --- |
-| 保留配置 | 安装菜单 → 卸载 → 选项 1 | 移除服务与二进制，保留 `node.env` 与 rw-core |
-| 完全卸载 | 安装菜单 → 卸载 → 选项 2 | 删除配置、日志、数据、rw-core 及 geo 数据 |
-| 命令行 | `bash uninstall.sh --full` | 等同完全卸载 |
+| `sha-<commit>` | Candidate built automatically from a `main` commit | Server acceptance; record the manifest digest for strict pinning |
+| `candidate-sha-<commit>` | Independent candidate built by a manual workflow run on `main` | Rebuild or acceptance when the automatic candidate is unavailable |
+| `edge` | Moving image for the current `main` head | Short-lived observation only |
+| `X.Y.Z-rnl.N` | Independently versioned Remnanode Lite Release | Exact deployment and rollback |
+| `X.Y.Z` | Formal Release after matching the official version's contract | Exact deployment and rollback |
+| `latest` | Most recent Release that completed the full stable workflow | Opt-in stable tracking; running containers are not updated automatically |
+
+`rnl.N` is this project's iteration number. It can identify work started ahead of a future official line or further work on an existing contract baseline; it is not an official revision number. The authoritative rules are in [Versioning and image tags](docs/versioning.md).
+
+## Documentation map
+
+| Goal | Start here |
+| --- | --- |
+| Decide whether the project fits a node | [Project scope](docs/project.md) · [Resource budget](docs/development/resource-budget.md) |
+| Deploy or migrate | [Docker Compose](docs/deployment-docker.md) · [Native Linux](docs/deployment-native.md) |
+| Configure, observe, or troubleshoot | [Configuration](docs/configuration.md) · [Operations](docs/operations.md) |
+| Understand the implementation | [Architecture](docs/architecture.md) · [2.8.0 contract baseline](docs/development/contract-2.8.0.md) |
+| Contribute code | [Development guide](docs/development/README.md) · [Testing](docs/development/testing.md) · [Contributing](CONTRIBUTING.md) |
+| Prepare a Release | [Versioning](docs/versioning.md) · [Release process](docs/release.md) |
+| Review security boundaries | [Security policy](SECURITY.md) |
+
+The complete role-based index is available in [docs/README.md](docs/README.md).
+
+## Development
+
+Ordinary unit tests do not require Panel, a Secret, or rw-core:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v2.8.0-rnl.1/scripts/uninstall.sh | sudo bash -s -- --full
+git switch dev
+go mod download
+go test -count=1 ./...
+mkdir -p bin
+go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
+./bin/remnanode-lite version
 ```
 
-完全卸载只清理 `/usr/local/{lib,share}/remnanode` 等项目私有路径，不会终止其它 `rw-core` 进程，也不会删除通用 `/usr/local/bin/xray` 或 `/usr/local/share/xray`。
+Linux nftables, socket destruction, real rw-core, Panel differential testing, and Release acceptance are separate test layers. A local `go test ./...` run on macOS does not replace them. Read the [development guide](docs/development/README.md) and [testing strategy](docs/development/testing.md) before changing those areas.
 
----
+## Security boundary
 
-## 运维
+The container uses host networking and holds `NET_ADMIN`, so it can affect the host network namespace. Run only trusted images and prefer an exact version or manifest digest. An inline Docker Secret is visible in local Docker metadata; keep the Compose file at mode `0600` and tightly restrict Docker socket and host administrator access.
 
-```bash
-sudo remnanode-lite doctor
-systemctl status remnawave-node
-journalctl -u remnawave-node -f
-remnanode-xlogs    # rw-core 标准输出
-remnanode-xerrors  # rw-core 错误输出
-```
+Do not disclose exploit details, Secrets, certificates, or real node information in a public Issue. Follow [SECURITY.md](SECURITY.md) for private vulnerability reporting.
 
-**重启语义**：Node 不在本地持久化 Panel 下发的 Xray 配置。进程重启后先报告 Xray 离线，由 Panel 健康检查重新下发 `/node/xray/start`，与官方 Node 2.8.x 保持一致。
+## License
 
----
-
-## 功能与兼容性
-
-目标是与官方 `@remnawave/node` v2.8.0 的 **26 条 REST API** 达到行为级兼容，具体方法、schema、错误与已知偏差见[契约基线](docs/development/contract-2.8.0.md)。当前静态代码对齐已关闭已知 P1/P2，`2.8.0-rnl.1` 仍需按[改造路线](docs/development/roadmap.md)完成真实 Panel/Linux 与发布验收后，才能作为生产稳定版发布。
-
-功能范围涵盖：
-
-- 节点注册与 mTLS / JWT 认证
-- Xray 生命周期（启动、停止、配置热更新）
-- 流量与在线统计
-- 用户热更新（VLESS / Trojan / Shadowsocks）
-- 插件同步（nftables、torrent-blocker、AS/IP 共享列表等）
-
----
-
-## 维护者
-
-发布流程见 [docs/release.md](docs/release.md)。
-
----
-
-## 许可证
-
-本项目采用 [AGPL-3.0-only](LICENSE) 许可证。
+Remnanode Lite is licensed under [AGPL-3.0-only](LICENSE).

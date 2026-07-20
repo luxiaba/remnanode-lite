@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/asn"
+	"github.com/luxiaba/remnanode-lite/internal/asn"
 )
 
 func TestParseRemnawaveJSON(t *testing.T) {

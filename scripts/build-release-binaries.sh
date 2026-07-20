@@ -32,7 +32,7 @@ for arch in amd64 arm64; do
   GOTOOLCHAIN=local GOWORK=off GOFLAGS='' GOEXPERIMENT='' GOFIPS140=off \
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" GOAMD64=v1 GOARM64=v8.0 \
     go build -mod=readonly -buildvcs=false -trimpath \
-      -ldflags="-s -w -X github.com/Luxiaba/remnanode-lite/internal/version.Version=${version} -X github.com/Luxiaba/remnanode-lite/internal/version.ContractVersion=${contract_version}" \
+      -ldflags="-s -w -X github.com/luxiaba/remnanode-lite/internal/version.Version=${version} -X github.com/luxiaba/remnanode-lite/internal/version.ContractVersion=${contract_version}" \
       -o "$output_dir/remnanode-lite_linux_${arch}" \
       ./cmd/remnanode-lite
 done

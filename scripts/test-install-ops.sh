@@ -563,7 +563,6 @@ if grep -ERn 'rm[^#]*remnanode-installer\.lock' "$ROOT_DIR/scripts" >/dev/null; 
   echo "installer scripts must never unlink the shared lock file" >&2
   exit 1
 fi
-grep -Fq 'apk add --no-cache curl bash util-linux' "$ROOT_DIR/README.md"
 grep -Fq 'util-linux' "$ROOT_DIR/scripts/install-node-alpine.sh"
 grep -Fq 'util-linux' "$ROOT_DIR/scripts/install-node.sh"
 if grep -Fq 'bootstrap_installer_lock_dependency' \
@@ -2089,8 +2088,8 @@ restart_log="$TMP_ROOT/restart-service.log"
 )
 
 dry_run_output="$(run_trusted_installer upgrade.sh --yes --dry-run --low-memory)"
-grep -Fq '[dry-run] 停止服务并确认 remnanode-lite/rw-core 全部退出' <<<"$dry_run_output"
-grep -Fq '[dry-run] 设置 /etc/remnanode/node.env LOW_MEMORY=1' <<<"$dry_run_output"
+grep -Fq '[dry-run] Stop the service and confirm all remnanode-lite/rw-core processes have exited' <<<"$dry_run_output"
+grep -Fq '[dry-run] Set LOW_MEMORY=1 in /etc/remnanode/node.env' <<<"$dry_run_output"
 if RNL_ENSURE_SERVICE_STARTED=invalid \
   run_trusted_installer upgrade.sh --yes --dry-run >/dev/null 2>&1; then
   echo "upgrade accepted invalid ensure-start state" >&2

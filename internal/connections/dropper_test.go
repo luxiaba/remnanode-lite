@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 func testDropper(available bool, localIPs ...string) (*Dropper, *[]string) {
@@ -175,13 +175,13 @@ func TestDropIPsAppliesOneDeadlineToWholeBatch(t *testing.T) {
 type fakeIPProvider struct {
 	calls    atomic.Int64
 	mu       sync.Mutex
-	entries  map[string][]xtls.IPEntry
+	entries  map[string][]xrayrpc.IPEntry
 	err      error
 	resetErr error
 	resets   []bool
 }
 
-func (p *fakeIPProvider) GetUserIPList(_ context.Context, userID string, reset bool) ([]xtls.IPEntry, error) {
+func (p *fakeIPProvider) GetUserIPList(_ context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error) {
 	p.calls.Add(1)
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -192,7 +192,7 @@ func (p *fakeIPProvider) GetUserIPList(_ context.Context, userID string, reset b
 	if reset && p.resetErr != nil {
 		return nil, p.resetErr
 	}
-	entries := append([]xtls.IPEntry(nil), p.entries[userID]...)
+	entries := append([]xrayrpc.IPEntry(nil), p.entries[userID]...)
 	if reset {
 		delete(p.entries, userID)
 	}
@@ -216,7 +216,7 @@ func TestDropUsersDoesNotResetStatsWithoutCapability(t *testing.T) {
 	t.Parallel()
 
 	dropper, _ := testDropper(false)
-	provider := &fakeIPProvider{entries: map[string][]xtls.IPEntry{
+	provider := &fakeIPProvider{entries: map[string][]xrayrpc.IPEntry{
 		"u1": {{IP: "203.0.113.10"}},
 	}}
 	if dropper.DropUsers(context.Background(), provider, []string{"u1"}) {
@@ -231,7 +231,7 @@ func TestDropUsersSucceedsWhenUsersHaveNoTrackedIPs(t *testing.T) {
 	t.Parallel()
 
 	dropper, killed := testDropper(true)
-	provider := &fakeIPProvider{entries: map[string][]xtls.IPEntry{"u1": {}}}
+	provider := &fakeIPProvider{entries: map[string][]xrayrpc.IPEntry{"u1": {}}}
 	if !dropper.DropUsers(context.Background(), provider, []string{"u1"}) {
 		t.Fatal("a user with no tracked IPs should be a successful no-op")
 	}
@@ -254,7 +254,7 @@ func TestDropUsersRetriesSocketKillWithoutResettingOnlineStats(t *testing.T) {
 		}
 		return nil
 	}
-	provider := &fakeIPProvider{entries: map[string][]xtls.IPEntry{
+	provider := &fakeIPProvider{entries: map[string][]xrayrpc.IPEntry{
 		"u1": {{IP: "203.0.113.10"}},
 	}}
 
@@ -263,7 +263,7 @@ func TestDropUsersRetriesSocketKillWithoutResettingOnlineStats(t *testing.T) {
 	}
 	provider.mu.Lock()
 	firstResets := append([]bool(nil), provider.resets...)
-	remaining := append([]xtls.IPEntry(nil), provider.entries["u1"]...)
+	remaining := append([]xrayrpc.IPEntry(nil), provider.entries["u1"]...)
 	provider.mu.Unlock()
 	if !slices.Equal(firstResets, []bool{false}) {
 		t.Fatalf("first attempt reset flags = %v, want [false]", firstResets)
@@ -277,7 +277,7 @@ func TestDropUsersRetriesSocketKillWithoutResettingOnlineStats(t *testing.T) {
 	}
 	provider.mu.Lock()
 	allResets := append([]bool(nil), provider.resets...)
-	remaining = append([]xtls.IPEntry(nil), provider.entries["u1"]...)
+	remaining = append([]xrayrpc.IPEntry(nil), provider.entries["u1"]...)
 	provider.mu.Unlock()
 	if !slices.Equal(allResets, []bool{false, false}) {
 		t.Fatalf("all reset flags = %v, want read-only lookups", allResets)
@@ -295,7 +295,7 @@ func TestDropUsersNeverRequestsDestructiveOnlineStatsReset(t *testing.T) {
 
 	dropper, _ := testDropper(true)
 	provider := &fakeIPProvider{
-		entries:  map[string][]xtls.IPEntry{"u1": {{IP: "203.0.113.10"}}},
+		entries:  map[string][]xrayrpc.IPEntry{"u1": {{IP: "203.0.113.10"}}},
 		resetErr: errors.New("reset failed"),
 	}
 	if !dropper.DropUsers(context.Background(), provider, []string{"u1"}) {
@@ -326,7 +326,7 @@ func TestDropUsersAggregatesTargetsUnderOneAddressSnapshot(t *testing.T) {
 		snapshots.Add(1)
 		return map[netip.Addr]struct{}{}, nil
 	}
-	provider := &fakeIPProvider{entries: map[string][]xtls.IPEntry{
+	provider := &fakeIPProvider{entries: map[string][]xrayrpc.IPEntry{
 		"u1": {{IP: "203.0.113.10"}},
 		"u2": {{IP: "198.51.100.20"}},
 	}}

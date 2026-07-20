@@ -1,6 +1,6 @@
 [Unit]
-Description=Remnawave Node Lite (Go)
-Documentation=https://github.com/Luxiaba/remnanode-lite
+Description=Remnanode Lite
+Documentation=https://github.com/luxiaba/remnanode-lite
 After=network-online.target
 Wants=network-online.target
 
@@ -9,8 +9,9 @@ Type=simple
 User=remnanode
 Group=remnanode
 UMask=0077
-# remnanode-lite 将 node.env 作为有界数据文件自行解析。禁止 systemd
-# 导出整份文件，避免兼容的内联 SECRET_KEY 或未知变量进入进程环境。
+# remnanode-lite parses node.env itself as a bounded data file. Do not have
+# systemd export the entire file: this prevents a legacy inline SECRET_KEY or
+# unknown variables from entering the process environment.
 WorkingDirectory=/var/lib/remnanode
 ExecStart=/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode USER=remnanode LOGNAME=remnanode REMNANODE_ENV=/etc/remnanode/node.env /usr/local/bin/remnanode-lite
 Restart=on-failure
@@ -25,8 +26,8 @@ CPUQuota=100%
 MemoryMax=448M
 MemorySwapMax=0
 
-# nftables 与 NETLINK_SOCK_DIAG socket destroy 需要 NET_ADMIN；
-# rw-core 监听 1-1023 端口需要 NET_BIND_SERVICE。
+# nftables and NETLINK_SOCK_DIAG socket destruction require NET_ADMIN.
+# rw-core requires NET_BIND_SERVICE to listen on ports 1-1023.
 AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true

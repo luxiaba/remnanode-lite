@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
 )
 
 var (

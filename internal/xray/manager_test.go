@@ -2,8 +2,13 @@ package xray
 
 import (
 	"context"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/luxiaba/remnanode-lite/internal/system"
 )
 
 func TestBuildCommandArgs(t *testing.T) {
@@ -64,7 +69,10 @@ func TestStartDoesNotCommitConfigWhenCommandFails(t *testing.T) {
 		GeoDir:             "/tmp",
 		LogDir:             t.TempDir(),
 		InternalSocketPath: "/run/remnawave.sock",
-		InternalRESTToken:  "token"})
+		InternalRESTToken:  "token",
+		NodeVersion:        "2.8.0",
+		System:             system.NewCollector(nil),
+	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -93,7 +101,10 @@ func TestStopClearsConfig(t *testing.T) {
 		GeoDir:             "/tmp",
 		LogDir:             t.TempDir(),
 		InternalSocketPath: "/run/remnawave.sock",
-		InternalRESTToken:  "token"})
+		InternalRESTToken:  "token",
+		NodeVersion:        "2.8.0",
+		System:             system.NewCollector(nil),
+	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -123,7 +134,10 @@ func TestCurrentConfigJSONRemainsEmptyAfterFailedStart(t *testing.T) {
 		GeoDir:             "/tmp",
 		LogDir:             t.TempDir(),
 		InternalSocketPath: "/run/remnawave.sock",
-		InternalRESTToken:  "token"})
+		InternalRESTToken:  "token",
+		NodeVersion:        "2.8.0",
+		System:             system.NewCollector(nil),
+	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
 	}
@@ -152,8 +166,165 @@ func TestParseVersionLine(t *testing.T) {
 		t.Fatalf("parseVersionLine() = %q, want 26.3.27", got)
 	}
 
-	t.Setenv("XRAY_CORE_VERSION", "v26.3.27")
-	if got := parseVersionLine("ignored"); got != "26.3.27" {
-		t.Fatalf("XRAY_CORE_VERSION override = %q, want 26.3.27", got)
+	if got := parseVersionLine("not a version"); got != "" {
+		t.Fatalf("parseVersionLine() = %q, want empty", got)
+	}
+}
+
+func TestManagerFreezesInjectedVersionsAndSystemSnapshotter(t *testing.T) {
+	collector := system.NewCollector(nil)
+	manager, err := NewManager(Options{
+		XrayBin:            "definitely-missing-rw-core",
+		GeoDir:             t.TempDir(),
+		LogDir:             t.TempDir(),
+		InternalSocketPath: "/run/remnawave.sock",
+		InternalRESTToken:  "token",
+		NodeVersion:        "2.8.1",
+		CoreVersion:        "v26.6.27",
+		System:             collector,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = manager.Shutdown(context.Background()) })
+
+	health := manager.Health()
+	if health.NodeVersion != "2.8.1" || health.XrayVersion == nil || *health.XrayVersion != "26.6.27" {
+		t.Fatalf("health versions = %+v", health)
+	}
+	t.Setenv("NODE_CONTRACT_VERSION", "9.9.9")
+	t.Setenv("XRAY_CORE_VERSION", "v9.9.9")
+	health = manager.Health()
+	if health.NodeVersion != "2.8.1" || health.XrayVersion == nil || *health.XrayVersion != "26.6.27" {
+		t.Fatalf("environment changed frozen versions: %+v", health)
+	}
+}
+
+func TestManagerInitialVersionProbeUsesLifetime(t *testing.T) {
+	lifetime, cancelLifetime := context.WithCancel(context.Background())
+	defer cancelLifetime()
+	geoDir := t.TempDir()
+	logDir := t.TempDir()
+	probeStarted := make(chan struct{})
+	type constructorResult struct {
+		manager *Manager
+		err     error
+	}
+	result := make(chan constructorResult, 1)
+	go func() {
+		manager, err := newManager(Options{
+			Lifetime:           lifetime,
+			XrayBin:            "unused-rw-core",
+			GeoDir:             geoDir,
+			LogDir:             logDir,
+			InternalSocketPath: "/run/remnawave.sock",
+			InternalRESTToken:  "token",
+			NodeVersion:        "2.8.0",
+			System:             system.NewCollector(nil),
+		}, func(ctx context.Context) (string, error) {
+			close(probeStarted)
+			<-ctx.Done()
+			return "", ctx.Err()
+		})
+		result <- constructorResult{manager: manager, err: err}
+	}()
+
+	select {
+	case <-probeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("initial version probe did not start")
+	}
+	cancelLifetime()
+
+	select {
+	case outcome := <-result:
+		if outcome.err != nil {
+			t.Fatalf("newManager: %v", outcome.err)
+		}
+		if outcome.manager == nil {
+			t.Fatal("newManager returned a nil manager")
+		}
+		if !errors.Is(outcome.manager.versionProbeContext.Err(), context.Canceled) {
+			t.Fatalf("version probe context error = %v, want context canceled", outcome.manager.versionProbeContext.Err())
+		}
+		if err := outcome.manager.Shutdown(context.Background()); err != nil {
+			t.Fatalf("Shutdown: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("manager construction did not stop after lifetime cancellation")
+	}
+}
+
+func TestManagerLifetimeCancelsBackgroundVersionProbeAndShutdownRemainsIdempotent(t *testing.T) {
+	lifetime, cancelLifetime := context.WithCancel(context.Background())
+	defer cancelLifetime()
+	probeStarted := make(chan struct{})
+	probeExited := make(chan struct{})
+	var calls atomic.Int32
+	manager, err := newManager(Options{
+		Lifetime:           lifetime,
+		XrayBin:            "unused-rw-core",
+		GeoDir:             t.TempDir(),
+		LogDir:             t.TempDir(),
+		InternalSocketPath: "/run/remnawave.sock",
+		InternalRESTToken:  "token",
+		NodeVersion:        "2.8.0",
+		System:             system.NewCollector(nil),
+	}, func(ctx context.Context) (string, error) {
+		if calls.Add(1) == 1 {
+			return "", errors.New("initial probe failed")
+		}
+		close(probeStarted)
+		<-ctx.Done()
+		close(probeExited)
+		return "", ctx.Err()
+	})
+	if err != nil {
+		t.Fatalf("newManager: %v", err)
+	}
+
+	manager.mu.Lock()
+	manager.nextVersionProbe = time.Time{}
+	manager.mu.Unlock()
+	_ = manager.Health()
+	select {
+	case <-probeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("background version probe did not start")
+	}
+
+	cancelLifetime()
+	select {
+	case <-probeExited:
+	case <-time.After(time.Second):
+		t.Fatal("background version probe did not stop after lifetime cancellation")
+	}
+	deadline := time.Now().Add(time.Second)
+	for {
+		manager.mu.RLock()
+		busy := manager.versionProbeBusy
+		manager.mu.RUnlock()
+		if !busy {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("background version probe did not publish completion")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	manager.mu.Lock()
+	manager.nextVersionProbe = time.Time{}
+	manager.mu.Unlock()
+	_ = manager.Health()
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("version probes after lifetime cancellation = %d, want 2", got)
+	}
+
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), time.Second)
+	defer cancelShutdown()
+	for attempt := 1; attempt <= 2; attempt++ {
+		if err := manager.Shutdown(shutdownContext); err != nil {
+			t.Fatalf("Shutdown attempt %d: %v", attempt, err)
+		}
 	}
 }

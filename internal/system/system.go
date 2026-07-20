@@ -13,8 +13,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var processStartedAt = time.Now()
-
 type kernelIdentity struct {
 	Release string
 	Type    string
@@ -57,7 +55,7 @@ type Snapshot struct {
 	Stats Stats `json:"stats"`
 }
 
-func GetInfo() Info {
+func collectInfo() Info {
 	hostname, _ := os.Hostname()
 	kernel := currentKernelIdentity()
 	return Info{
@@ -133,28 +131,6 @@ func nodeSystemType(goos string) string {
 	}
 }
 
-func GetStats() Stats {
-	free, total := memoryFreeAndTotal()
-	used := uint64(0)
-	if total > free {
-		used = total - free
-	}
-	return Stats{
-		MemoryFree: free,
-		MemoryUsed: used,
-		Uptime:     uptime(),
-		LoadAvg:    loadAvg(),
-		Interface:  defaultMonitor.GetDefaultInterface(),
-	}
-}
-
-func GetSnapshot() Snapshot {
-	return Snapshot{
-		Info:  GetInfo(),
-		Stats: GetStats(),
-	}
-}
-
 func networkInterfaces() []string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
@@ -223,18 +199,18 @@ func loadAvg() []float64 {
 	return values
 }
 
-func uptime() float64 {
+func uptime(startedAt time.Time) float64 {
 	raw, err := os.ReadFile("/proc/uptime")
 	if err != nil {
-		return time.Since(processStartedAt).Seconds()
+		return time.Since(startedAt).Seconds()
 	}
 	fields := strings.Fields(string(raw))
 	if len(fields) == 0 {
-		return time.Since(processStartedAt).Seconds()
+		return time.Since(startedAt).Seconds()
 	}
 	parsed, err := strconv.ParseFloat(fields[0], 64)
 	if err != nil {
-		return time.Since(processStartedAt).Seconds()
+		return time.Since(startedAt).Seconds()
 	}
 	return parsed
 }

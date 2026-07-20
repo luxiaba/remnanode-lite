@@ -28,41 +28,90 @@ type NetworkMonitor struct {
 	previous     map[string]interfaceSample
 	current      *NetworkInterface
 	pollInterval time.Duration
+	readSamples  func() map[string]interfaceSample
+	resolveIface func() string
+	now          func() time.Time
 	stop         chan struct{}
+	done         chan struct{}
 	stopOnce     sync.Once
 }
 
-var defaultMonitor = NewNetworkMonitor()
-
-func DefaultNetworkMonitor() *NetworkMonitor {
-	return defaultMonitor
+type networkMonitorConfig struct {
+	available    bool
+	pollInterval time.Duration
+	readSamples  func() map[string]interfaceSample
+	resolveIface func() string
+	now          func() time.Time
 }
 
+// NewNetworkMonitor starts a network monitor. Call Stop to synchronously stop
+// its polling goroutine. Constructing a monitor is the only operation that
+// starts background work in this package.
 func NewNetworkMonitor() *NetworkMonitor {
-	m := &NetworkMonitor{
-		// 3s keeps Panel stats fresh enough while cutting idle wakeups to 1/3.
+	return newNetworkMonitor(networkMonitorConfig{
+		available:    fileExists("/proc/net/dev"),
 		pollInterval: 3 * time.Second,
+		readSamples:  readProcNetDev,
+		resolveIface: resolveDefaultInterface,
+		now:          time.Now,
+	})
+}
+
+func newNetworkMonitor(config networkMonitorConfig) *NetworkMonitor {
+	if config.pollInterval <= 0 {
+		config.pollInterval = 3 * time.Second
+	}
+	if config.readSamples == nil {
+		config.readSamples = func() map[string]interfaceSample { return nil }
+	}
+	if config.resolveIface == nil {
+		config.resolveIface = func() string { return "" }
+	}
+	if config.now == nil {
+		config.now = time.Now
+	}
+
+	m := &NetworkMonitor{
+		available:    config.available,
+		pollInterval: config.pollInterval,
+		readSamples:  config.readSamples,
+		resolveIface: config.resolveIface,
+		now:          config.now,
 		stop:         make(chan struct{}),
+		done:         make(chan struct{}),
 	}
-	m.available = fileExists("/proc/net/dev")
-	if m.available {
-		m.defaultIface = resolveDefaultInterface()
-		m.previous = readProcNetDev()
-		stampInterfaceSamples(m.previous, time.Now())
-		go m.loop()
+	if !m.available {
+		close(m.done)
+		return m
 	}
+
+	m.defaultIface = m.resolveIface()
+	m.previous = m.readSamples()
+	stampInterfaceSamples(m.previous, m.now())
+	go m.loop()
 	return m
 }
 
+// Stop is safe to call concurrently and waits until the polling goroutine has
+// exited. It is also safe on an unavailable or zero-value monitor.
 func (m *NetworkMonitor) Stop() {
+	if m == nil {
+		return
+	}
 	m.stopOnce.Do(func() {
 		if m.stop != nil {
 			close(m.stop)
 		}
 	})
+	if m.done != nil {
+		<-m.done
+	}
 }
 
 func (m *NetworkMonitor) GetDefaultInterface() *NetworkInterface {
+	if m == nil {
+		return nil
+	}
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if m.current == nil {
@@ -75,7 +124,15 @@ func (m *NetworkMonitor) GetDefaultInterface() *NetworkInterface {
 func (m *NetworkMonitor) loop() {
 	ticker := time.NewTicker(m.pollInterval)
 	defer ticker.Stop()
+	defer close(m.done)
 	for {
+		// Prefer shutdown once requested, even when a ticker event is already
+		// queued. This bounds Stop to the duration of at most one active poll.
+		select {
+		case <-m.stop:
+			return
+		default:
+		}
 		select {
 		case <-m.stop:
 			return
@@ -86,7 +143,7 @@ func (m *NetworkMonitor) loop() {
 }
 
 func (m *NetworkMonitor) tick() {
-	m.updateSamplesForInterface(readProcNetDev(), time.Now(), resolveDefaultInterface())
+	m.updateSamplesForInterface(m.readSamples(), m.now(), m.resolveIface())
 }
 
 func (m *NetworkMonitor) updateSamples(current map[string]interfaceSample, now time.Time) {

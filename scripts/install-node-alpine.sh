@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# remnanode-lite Alpine Linux 一键安装（OpenRC）
+# remnanode-lite one-command installer for Alpine Linux (OpenRC)
 # shellcheck source-path=SCRIPTDIR
 set -Eeuo pipefail
 
@@ -14,7 +14,7 @@ NODE_ENV="${ETC_DIR}/node.env"
 SECRET_FILE="${ETC_DIR}/secret.key"
 SERVICE_USER="remnanode"
 SERVICE_GROUP="remnanode"
-REPO="${RNL_REPO:-Luxiaba/remnanode-lite}"
+REPO="${RNL_REPO:-luxiaba/remnanode-lite}"
 BOOTSTRAP_TAG="${RNL_TAG:-v${VERSION}}"
 RESTART_CMD="rc-service remnawave-node restart"
 export RESTART_CMD
@@ -63,7 +63,7 @@ bootstrap_helper_is_trusted() {
 }
 
 if ! command -v curl >/dev/null 2>&1; then
-  echo "缺少命令：curl（Alpine: apk add --no-cache curl bash util-linux）" >&2
+  echo "Required command not found: curl (Alpine: apk add --no-cache curl bash util-linux)" >&2
   exit 1
 fi
 if [ -n "${BASH_SOURCE[0]:-}" ] \
@@ -75,7 +75,7 @@ if [ -n "${BASH_SOURCE[0]:-}" ] \
 else
   if ! [[ "$REPO" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] \
     || ! [[ "$BOOTSTRAP_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-    echo "非法 RNL_REPO 或 RNL_TAG，拒绝下载 bootstrap helper" >&2
+    echo "Invalid RNL_REPO or RNL_TAG; refusing to download the bootstrap helper" >&2
     exit 2
   fi
   _HELPERS_TMP="$(mktemp -d /var/tmp/remnanode-bootstrap.XXXXXX)"
@@ -92,14 +92,14 @@ else
   if [ "${_HELPERS_DOWNLOAD_STATUS[0]:-1}" -ne 0 ] \
     || [ "${_HELPERS_DOWNLOAD_STATUS[1]:-1}" -ne 0 ] \
     || [ "$_HELPERS_DOWNLOAD_BYTES" -gt 1048576 ]; then
-    echo "bootstrap helper 下载失败或超过 1048576 bytes 硬上限" >&2
+    echo "Bootstrap helper download failed or exceeded the 1048576-byte hard limit" >&2
     exit 1
   fi
   for _HELPERS_FUNCTION in \
     installer_acquire_lock installer_run_nested installer_run_without_lock; do
     grep -Eq "^${_HELPERS_FUNCTION}\\(\\) [({]$" \
       "${_HELPERS_TMP}/install-env-helpers.sh" || {
-      echo "bootstrap helper 缺少锁 API：${_HELPERS_FUNCTION}" >&2
+      echo "Bootstrap helper is missing lock API: ${_HELPERS_FUNCTION}" >&2
       exit 1
     }
   done
@@ -119,38 +119,39 @@ LOW_MEMORY=0
 PORT_EXPLICIT=0
 ACTION=""
 UNINSTALL_MODE=""
-STAGE="初始化"
+STAGE="initialization"
 DELEGATE_TO_UPGRADE=0
 
 usage() {
   cat <<EOF
-用法：install-node-alpine.sh [选项]
+Usage: install-node-alpine.sh [options]
 
-Remnawave Node Lite (Go) ${VERSION} — Alpine / OpenRC 安装 / 升级 / 卸载
+Remnanode Lite ${VERSION} - install, upgrade, or uninstall on Alpine/OpenRC
 
-无参数时在终端显示菜单；非交互请指定动作：
-  --install           全新安装；检测到完整安装时走事务升级
-  --upgrade           事务升级 Node/service/support（默认保留 rw-core）
-  --uninstall         卸载
+With no arguments, an interactive menu is shown when a terminal is available.
+For non-interactive use, specify an action:
+  --install           Perform a fresh install; use a transactional upgrade when a complete install exists
+  --upgrade           Transactionally upgrade the node, service, and support files (preserves rw-core by default)
+  --uninstall         Uninstall
 
-其它选项：
-  --yes, -y           跳过确认
-  --dry-run           预览
-  --skip-xray         跳过 rw-core
-  --low-memory        低内存模式
-  --port PORT         监听端口（默认 2222）
-  --secret-file PATH  从文件导入 Secret Key
-  --help, -h          帮助
-  --version           版本
+Other options:
+  --yes, -y           Skip confirmation prompts
+  --dry-run           Preview the operation
+  --skip-xray         Skip rw-core installation
+  --low-memory        Enable low-memory mode
+  --port PORT         Set the listening port (default: 2222)
+  --secret-file PATH  Import the Secret Key from a file
+  --help, -h          Show this help
+  --version           Show the version
 
-一键入口（Alpine 无 sudo，root 下直接 bash）：
+One-command installation (Alpine has no sudo; run bash directly as root):
   apk add --no-cache curl bash util-linux
   curl -fsSL https://raw.githubusercontent.com/${REPO}/v${VERSION}/scripts/install-node-alpine.sh | bash
 EOF
 }
 
 version() {
-  echo "remnawave-node-lite alpine install ${VERSION}"
+  echo "remnanode-lite alpine install ${VERSION}"
 }
 
 while [ $# -gt 0 ]; do
@@ -166,7 +167,7 @@ while [ $# -gt 0 ]; do
     --port)
       NODE_PORT="${2:-}"
       if [ -z "$NODE_PORT" ]; then
-        echo "--port 需要端口号" >&2
+        echo "--port requires a port number" >&2
         exit 1
       fi
       PORT_EXPLICIT=1
@@ -176,7 +177,7 @@ while [ $# -gt 0 ]; do
     --secret-file)
       SECRET_FILE_ARG="${2:-}"
       if [ -z "$SECRET_FILE_ARG" ]; then
-        echo "--secret-file 需要文件路径" >&2
+        echo "--secret-file requires a file path" >&2
         exit 1
       fi
       shift 2
@@ -185,7 +186,7 @@ while [ $# -gt 0 ]; do
     --help|-h) usage; exit 0 ;;
     --version) version; exit 0 ;;
     *)
-      echo "未知参数：$1" >&2
+      echo "Unknown option: $1" >&2
       usage
       exit 1
       ;;
@@ -196,8 +197,8 @@ done
 on_error() {
   local status="${1:-1}"
   local command="${2:-unknown}"
-  echo "安装失败：${STAGE}" >&2
-  echo "失败命令：${command}" >&2
+  echo "Installation failed during: ${STAGE}" >&2
+  echo "Failed command: ${command}" >&2
   exit "$status"
 }
 
@@ -259,7 +260,7 @@ run_sibling_script() {
     local support
     support="$(installed_support_file "scripts/${name}")"
     if [ ! -f "$support" ]; then
-      echo "缺少已校验 support 脚本：${support}" >&2
+      echo "Verified support script not found: ${support}" >&2
       return 1
     fi
     installer_run_nested bash "$support" "$@"
@@ -279,7 +280,7 @@ run_upgrade_transaction() {
     args+=(--low-memory)
   fi
 
-  echo "检测到完整安装，交由 upgrade.sh 执行可回滚升级。"
+  echo "Complete installation detected; delegating to upgrade.sh for a rollback-capable upgrade."
   RNL_REPO="$REPO" RNL_TAG="$TAG" RNL_UPGRADE_XRAY="$upgrade_xray" \
     RNL_ENSURE_SERVICE_STARTED=1 RNL_ENSURE_SERVICE_ENABLED=1 \
     run_sibling_script upgrade.sh "${args[@]}"
@@ -312,15 +313,15 @@ run_selected_uninstall() {
 
 show_menu() {
   echo
-  echo "Remnawave Node Lite ${VERSION} (contract 2.8.0) — Alpine"
-  echo "  1) 安装"
-  echo "  2) 升级"
-  echo "  3) 卸载"
-  echo "  4) 退出"
+  echo "Remnanode Lite ${VERSION} (contract 2.8.0) — Alpine"
+  echo "  1) Install"
+  echo "  2) Upgrade"
+  echo "  3) Uninstall"
+  echo "  4) Exit"
   echo
   local choice=""
-  read_tty choice "请选择 [1-4]: " || {
-    echo "无法读取输入。非交互请用: --install | --upgrade | --uninstall" >&2
+  read_tty choice "Select an option [1-4]: " || {
+    echo "Unable to read input. For non-interactive use, specify --install, --upgrade, or --uninstall." >&2
     exit 1
   }
   case "$choice" in
@@ -329,7 +330,7 @@ show_menu() {
     3) ACTION=uninstall ;;
     4) exit 0 ;;
     *)
-      echo "无效选择：${choice}" >&2
+      echo "Invalid selection: ${choice}" >&2
       exit 1
       ;;
   esac
@@ -337,18 +338,18 @@ show_menu() {
 
 show_uninstall_menu() {
   echo
-  echo "卸载选项："
-  echo "  1) 仅卸服务（保留 node.env / rw-core）"
-  echo "  2) 完全卸载（配置+日志+rw-core 全删）"
-  echo "  3) 返回"
+  echo "Uninstall options:"
+  echo "  1) Remove the service only (preserve node.env and rw-core)"
+  echo "  2) Remove everything (configuration, logs, and rw-core)"
+  echo "  3) Back"
   local choice=""
-  read_tty choice "请选择 [1-3]: " || exit 1
+  read_tty choice "Select an option [1-3]: " || exit 1
   case "$choice" in
     1) UNINSTALL_MODE=keep ;;
     2) UNINSTALL_MODE=full ;;
     3) exit 0 ;;
     *)
-      echo "无效选择" >&2
+      echo "Invalid selection" >&2
       exit 1
       ;;
   esac
@@ -364,7 +365,7 @@ dispatch_action() {
       ;;
     menu) show_menu; dispatch_action ;;
     *)
-      echo "未知动作：${ACTION}" >&2
+      echo "Unknown action: ${ACTION}" >&2
       usage
       exit 1
       ;;
@@ -376,7 +377,7 @@ require_root() {
     return 0
   fi
   if [ "$(id -u)" -ne 0 ]; then
-    echo "请使用 root 运行（Alpine 通常无 sudo）：" >&2
+    echo "Run this script as root (Alpine does not normally include sudo):" >&2
     echo "  su -" >&2
     echo "  curl -fsSL .../install-node-alpine.sh | bash" >&2
     exit 1
@@ -388,8 +389,8 @@ require_alpine() {
     return 0
   fi
   if [ ! -f /etc/alpine-release ]; then
-    echo "此脚本仅适用于 Alpine Linux（未找到 /etc/alpine-release）。" >&2
-    echo "Debian/Ubuntu 等请使用：scripts/install-node.sh" >&2
+    echo "This installer supports Alpine Linux only (/etc/alpine-release was not found)." >&2
+    echo "For Debian, Ubuntu, and similar systems, use scripts/install-node.sh." >&2
     exit 1
   fi
 }
@@ -397,7 +398,7 @@ require_alpine() {
 validate_port() {
   local port="$1"
   if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-    echo "无效端口：${port}（有效范围 1-65535）" >&2
+    echo "Invalid port: ${port} (valid range: 1-65535)" >&2
     exit 1
   fi
 }
@@ -422,7 +423,7 @@ prompt_node_port() {
   fi
   echo
   local input=""
-  read_tty input "NODE 监听端口（Panel 连接用，默认 2222）: " || input=""
+  read_tty input "Node listening port (used by the Panel; default: 2222): " || input=""
   NODE_PORT="${input:-2222}"
   validate_port "$NODE_PORT"
 }
@@ -431,13 +432,13 @@ confirm_install() {
   if [ ! -x "${PREFIX}/${BIN_NAME}" ] || [ ! -f "$NODE_ENV" ] \
     || [ ! -f "$OPENRC_SVC" ] || [ -L "$OPENRC_SVC" ]; then
     if [ -x "${PREFIX}/${BIN_NAME}" ] || [ -f "$NODE_ENV" ] || [ -e "$OPENRC_SVC" ]; then
-      echo "检测到未完成的安装，继续执行安装恢复而不是委托 stopped-state 升级。"
+      echo "Incomplete installation detected; continuing installation recovery instead of delegating to a stopped-state upgrade."
     fi
     return 0
   fi
 
   if [ "$PORT_EXPLICIT" -eq 1 ] || [ -n "$SECRET_FILE_ARG" ]; then
-    echo "已有安装的事务升级不接受 --port / --secret-file；请先升级，再单独修改 ${NODE_ENV}。" >&2
+    echo "A transactional upgrade of an existing installation does not accept --port or --secret-file. Upgrade first, then edit ${NODE_ENV} separately." >&2
     return 1
   fi
 
@@ -446,20 +447,20 @@ confirm_install() {
     return 0
   fi
   echo
-  echo "检测到本机已安装 remnawave-node-lite。"
-  echo "  1) 升级（保留 ${NODE_ENV}）"
-  echo "  2) 全新安装（删除配置/日志后重装）"
-  echo "  3) 取消"
+  echo "An existing remnanode-lite installation was detected."
+  echo "  1) Upgrade (preserve ${NODE_ENV})"
+  echo "  2) Fresh install (remove configuration and logs before reinstalling)"
+  echo "  3) Cancel"
   local choice=""
-  read_tty choice "请选择 [1-3]: " || {
-    echo "非交互环境请用: --yes 或 --install" >&2
+  read_tty choice "Select an option [1-3]: " || {
+    echo "For non-interactive use, specify --yes or --install." >&2
     exit 1
   }
   case "$choice" in
     1) DELEGATE_TO_UPGRADE=1 ;;
     2)
       if [ "$DRY_RUN" -eq 1 ]; then
-        echo "[dry-run] 删除 ${ETC_DIR} ${LOG_DIR} ${DATA_DIR}"
+        echo "[dry-run] Remove ${ETC_DIR} ${LOG_DIR} ${DATA_DIR}"
       else
         local configured_xray previous_port
         configured_xray="$(read_env_value XRAY_BIN "$NODE_ENV")" || return
@@ -471,11 +472,11 @@ confirm_install() {
         rm -rf "$ETC_DIR" "$LOG_DIR" "$DATA_DIR"
         cleanup_runtime
         rm -f "${ETC_DIR}.bak."* 2>/dev/null || true
-        echo "已清除旧配置，开始全新安装。"
+        echo "Existing configuration removed; starting a fresh installation."
       fi
       ;;
     *)
-      echo "已取消。"
+      echo "Cancelled."
       exit 0
       ;;
   esac
@@ -485,11 +486,11 @@ update_node_port_in_env() {
   local port="$1"
   validate_port "$port"
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 更新 ${NODE_ENV} NODE_PORT=${port}"
+    echo "[dry-run] Update ${NODE_ENV}: NODE_PORT=${port}"
     return 0
   fi
   set_env_value NODE_PORT "$port"
-  echo "已设置 NODE_PORT=${port}"
+  echo "Set NODE_PORT=${port}"
 }
 
 detect_arch() {
@@ -497,53 +498,53 @@ detect_arch() {
     x86_64|amd64) echo "amd64" ;;
     aarch64|arm64) echo "arm64" ;;
     *)
-      echo "不支持的架构：$(uname -m)" >&2
+      echo "Unsupported architecture: $(uname -m)" >&2
       exit 1
       ;;
   esac
 }
 
 install_packages() {
-  step "安装 Alpine 依赖包"
+  step "Install Alpine dependencies"
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "[dry-run] apk add --no-cache bash curl tar unzip ca-certificates libcap openrc iproute2 nftables util-linux"
     return 0
   fi
-  require_free_bytes / 536870912 "系统依赖与安装工作区"
+  require_free_bytes / 536870912 "system dependencies and installer workspace"
   apk add --no-cache \
     bash curl tar unzip ca-certificates libcap openrc iproute2 nftables util-linux
 }
 
 download_binary() {
   local arch="$1"
-  step "下载 ${BIN_NAME} ${TAG} (linux/${arch})"
+  step "Download ${BIN_NAME} ${TAG} (linux/${arch})"
   install_release_binary "$REPO" "$TAG" "$arch" "${PREFIX}/${BIN_NAME}"
 }
 
 install_xray() {
   if [ "$SKIP_XRAY" -eq 1 ] || [ "$INSTALL_XRAY" -eq 0 ]; then
-    echo "跳过 rw-core 安装。"
+    echo "Skipping rw-core installation."
     return 0
   fi
 
-  step "安装 rw-core (Xray core)"
+  step "Install rw-core (Xray core)"
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 执行目标 Release 中已校验的 install-xray.sh"
+    echo "[dry-run] Run the verified install-xray.sh from the target release"
     return 0
   fi
   local support
   support="$(installed_support_file scripts/install-xray.sh)"
-  [ -f "$support" ] || { echo "缺少已校验 install-xray.sh" >&2; return 1; }
+  [ -f "$support" ] || { echo "Verified install-xray.sh not found" >&2; return 1; }
   RNL_REPO="$REPO" RNL_TAG="$TAG" installer_run_nested bash "$support"
 }
 
 setup_directories() {
-  step "创建目录"
+  step "Create directories"
   setup_service_directories
 }
 
 setup_env_file() {
-  step "配置 ${NODE_ENV}"
+  step "Configure ${NODE_ENV}"
   local port
   port="$(effective_node_port)"
   validate_port "$port"
@@ -552,11 +553,11 @@ setup_env_file() {
     if [ "$PORT_EXPLICIT" -eq 1 ] || [ -n "${NODE_PORT:-}" ]; then
       update_node_port_in_env "$port"
     else
-      echo "保留现有配置：${NODE_ENV}（NODE_PORT=$(configured_node_port)）"
+      echo "Preserving existing configuration: ${NODE_ENV} (NODE_PORT=$(configured_node_port))"
     fi
     if [ "$LOW_MEMORY" -eq 1 ]; then
       set_env_value LOW_MEMORY 1
-      echo "已启用 LOW_MEMORY=1"
+      echo "Enabled LOW_MEMORY=1"
     fi
     return 0
   fi
@@ -567,17 +568,17 @@ setup_env_file() {
   fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 创建 ${NODE_ENV}"
+    echo "[dry-run] Create ${NODE_ENV}"
     return 0
   fi
 
   render_env_template "$port" "$low_mem" "install-node-alpine.sh" >"$NODE_ENV"
   secure_config_file "$NODE_ENV"
-  echo "已创建 ${NODE_ENV}"
+  echo "Created ${NODE_ENV}"
 }
 
 setup_secret_file() {
-  step "配置 Secret Key"
+  step "Configure the Secret Key"
 
   migrate_inline_secret_to_file
 
@@ -586,20 +587,20 @@ setup_secret_file() {
       validate_secret_file "$SECRET_FILE"
     fi
     if secret_from_env_file; then
-      echo "保留现有 SECRET_KEY（${NODE_ENV}）"
+      echo "Preserving existing SECRET_KEY in ${NODE_ENV}"
     else
-      echo "保留现有 Secret Key：${SECRET_FILE}"
+      echo "Preserving existing Secret Key: ${SECRET_FILE}"
     fi
     return 0
   fi
 
   if [ -n "$SECRET_FILE_ARG" ]; then
     if [ ! -f "$SECRET_FILE_ARG" ]; then
-      echo "找不到 --secret-file 指定路径：${SECRET_FILE_ARG}" >&2
+      echo "Path specified by --secret-file not found: ${SECRET_FILE_ARG}" >&2
       exit 1
     fi
     write_secret_from_source "$SECRET_FILE_ARG"
-    echo "已从文件导入 Secret Key（SECRET_KEY_FILE 模式）。"
+    echo "Imported the Secret Key from a file (SECRET_KEY_FILE mode)."
     return 0
   fi
 
@@ -607,16 +608,16 @@ setup_secret_file() {
 }
 
 install_openrc() {
-  step "安装 OpenRC 服务"
+  step "Install the OpenRC service"
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 安装 ${OPENRC_SVC}"
+    echo "[dry-run] Install ${OPENRC_SVC}"
     return 0
   fi
 
   local support
   support="$(installed_support_file deploy/remnawave-node.openrc)" || return
-  [ -f "$support" ] || { echo "缺少已校验 OpenRC service" >&2; return 1; }
+  [ -f "$support" ] || { echo "Verified OpenRC service not found" >&2; return 1; }
   install_managed_file "$support" "$OPENRC_SVC" 0755 || return
 
   rc-update add remnawave-node default || return
@@ -633,7 +634,7 @@ install_log_helper_command() (
   tmp="$(mktemp "$(dirname "$target")/.$(basename "$target").XXXXXX")" || return
   trap 'if [ -n "${tmp:-}" ]; then rm -f -- "$tmp"; fi' EXIT
   [ -f "$tmp" ] && [ ! -L "$tmp" ] || {
-    echo "日志辅助命令 staging 不是普通文件：${tmp}" >&2
+    echo "Log helper staging path is not a regular file: ${tmp}" >&2
     return 1
   }
   printf '%s\n' '#!/bin/sh' "exec tail -n +1 -f ${log_file}" >"$tmp" || return
@@ -646,7 +647,7 @@ install_log_helper_command() (
 )
 
 install_helpers() {
-  step "安装日志辅助命令"
+  step "Install log helper commands"
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "[dry-run] remnanode-xlogs / remnanode-xerrors"
     return 0
@@ -660,12 +661,12 @@ install_helpers() {
 
 start_service() {
   if ! secret_configured; then
-    echo "⚠ Secret Key 未配置，跳过启动服务。"
-    echo "  请将 Secret Key 写入 ${SECRET_FILE} 并确认 ${NODE_ENV} 中的 NODE_PORT 后：${RESTART_CMD}"
+    echo "Warning: Secret Key is not configured; the service will not be started."
+    echo "  Write the Secret Key to ${SECRET_FILE}, verify NODE_PORT in ${NODE_ENV}, then run: ${RESTART_CMD}"
     return 0
   fi
 
-  step "启动 remnawave-node 服务"
+  step "Start the remnawave-node service"
   if [ "$DRY_RUN" -eq 1 ]; then
     echo "[dry-run] ${RESTART_CMD}"
     return 0
@@ -696,7 +697,7 @@ detect_low_memory_auto() {
   total_kb="$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
   if [ -n "$total_kb" ] && [ "$total_kb" -le 524288 ]; then
     LOW_MEMORY=1
-    echo "检测到内存 ${total_kb}KB（≤512MB），自动启用低内存模式 LOW_MEMORY=1"
+    echo "Detected ${total_kb} KB of memory (<= 512 MB); enabling low-memory mode with LOW_MEMORY=1"
   fi
 }
 
@@ -739,14 +740,14 @@ do_install() {
   fi
 
   echo
-  echo "Alpine 安装完成。"
-  echo "  二进制：    ${PREFIX}/${BIN_NAME}"
-  echo "  环境配置：  ${NODE_ENV}"
-  echo "  监听端口：  $(configured_node_port)（Panel 须填相同端口）"
-  echo "  服务管理：  rc-service remnawave-node {start|stop|restart|status}"
-  echo "  日志：      tail -f /var/log/remnanode/openrc.log"
-  echo "  Xray：      remnanode-xlogs / remnanode-xerrors"
-  echo "  管理：      再次运行 install-node-alpine.sh 可升级或卸载"
+  echo "Alpine installation complete."
+  echo "  Binary:        ${PREFIX}/${BIN_NAME}"
+  echo "  Environment:   ${NODE_ENV}"
+  echo "  Listening port: $(configured_node_port) (configure the same port in the Panel)"
+  echo "  Service:       rc-service remnawave-node {start|stop|restart|status}"
+  echo "  Logs:          tail -f /var/log/remnanode/openrc.log"
+  echo "  Xray logs:     remnanode-xlogs / remnanode-xerrors"
+  echo "  Management:    Run install-node-alpine.sh again to upgrade or uninstall"
   if ! secret_configured; then
     print_env_config_hint "$RESTART_CMD"
   fi

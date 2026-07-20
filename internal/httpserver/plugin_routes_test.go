@@ -10,9 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/plugin"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
 )
 
 type recordingPluginController struct {
@@ -123,7 +122,7 @@ func TestPluginValidationPrecedesServiceCalls(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			controller := &recordingPluginController{}
-			server := &Server{pluginService: controller}
+			server := &Server{pluginService: controller, bodyBudget: newHTTPTestBudget(t, false, 0)}
 			req := newJSONRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 			rec := httptest.NewRecorder()
 
@@ -168,14 +167,14 @@ func TestRoutesWithoutDTORejectMalformedJSONBeforeSideEffects(t *testing.T) {
 		{
 			name: "system stats", path: "/node/stats/get-system-stats", method: http.MethodGet,
 			server: func(calls *atomic.Int64) *Server {
-				return &Server{statsService: stats.NewService(countingStatsProvider{calls: calls}, nil)}
+				return &Server{statsService: newTestStatsService(countingStatsProvider{calls: calls})}
 			},
 			calls: func(_ *Server, calls *atomic.Int64) int64 { return calls.Load() },
 		},
 		{
 			name: "users IP list", path: "/node/stats/get-users-ip-list", method: http.MethodGet,
 			server: func(calls *atomic.Int64) *Server {
-				return &Server{statsService: stats.NewService(countingStatsProvider{calls: calls}, nil)}
+				return &Server{statsService: newTestStatsService(countingStatsProvider{calls: calls})}
 			},
 			calls: func(_ *Server, calls *atomic.Int64) int64 { return calls.Load() },
 		},
@@ -200,6 +199,7 @@ func TestRoutesWithoutDTORejectMalformedJSONBeforeSideEffects(t *testing.T) {
 			t.Parallel()
 			var providerCalls atomic.Int64
 			server := test.server(&providerCalls)
+			server.bodyBudget = newHTTPTestBudget(t, false, 0)
 			request := newJSONRequest(test.method, test.path, strings.NewReader(`{"broken":`))
 			response := httptest.NewRecorder()
 
@@ -231,7 +231,7 @@ func TestPluginRoutesProduceOfficialResponseShapes(t *testing.T) {
 			t.Parallel()
 			route, _ := contractspec.FindRouteByPath(path)
 			controller := &recordingPluginController{}
-			server := &Server{pluginService: controller}
+			server := &Server{pluginService: controller, bodyBudget: newHTTPTestBudget(t, false, 0)}
 			req := newJSONRequest(route.Method, route.Path, bytes.NewReader(route.ValidRequest))
 			rec := httptest.NewRecorder()
 
@@ -311,7 +311,7 @@ func TestPluginLifecycleOperationsSerializeWithXrayLifecycle(t *testing.T) {
 			plugins := &recordingPluginController{events: &events}
 			test.configurePlugin(plugins, operationStarted, releaseOperation)
 			manager := &recordingXrayController{events: &events}
-			server := &Server{manager: manager, pluginService: plugins}
+			server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 
 			pluginRoute, _ := contractspec.FindRouteByPath(test.pluginPath)
 			pluginResult := serveNodeRouteAsync(server, newJSONRequest(
@@ -383,7 +383,7 @@ func TestPluginLifecycleOperationsWaitUntilXrayStartFinishes(t *testing.T) {
 				startWait:  releaseStart,
 			}
 			plugins := &recordingPluginController{events: &events}
-			server := &Server{manager: manager, pluginService: plugins}
+			server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 
 			startRoute, _ := contractspec.FindRouteByPath("/node/xray/start")
 			startResult := serveNodeRouteAsync(server, newJSONRequest(
@@ -445,7 +445,7 @@ func TestLifecycleGateCancellationDoesNotReachWaitingController(t *testing.T) {
 			syncWait:  releaseSync,
 		}
 		manager := &recordingXrayController{events: &events}
-		server := &Server{manager: manager, pluginService: plugins}
+		server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 
 		syncRoute, _ := contractspec.FindRouteByPath("/node/plugin/sync")
 		syncResult := serveNodeRouteAsync(server, newJSONRequest(
@@ -496,7 +496,7 @@ func TestLifecycleGateCancellationDoesNotReachWaitingController(t *testing.T) {
 			resetWait:  releaseReset,
 		}
 		manager := &recordingXrayController{events: &events}
-		server := &Server{manager: manager, pluginService: plugins}
+		server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 
 		stopRoute, _ := contractspec.FindRouteByPath("/node/xray/stop")
 		stopResult := serveNodeRouteAsync(server, httptest.NewRequest(stopRoute.Method, stopRoute.Path, nil))
@@ -535,7 +535,7 @@ func TestPluginTransportPreservesConfigJSONAndFractionalTimeout(t *testing.T) {
 	t.Parallel()
 
 	controller := &recordingPluginController{}
-	server := &Server{pluginService: controller}
+	server := &Server{pluginService: controller, bodyBudget: newHTTPTestBudget(t, false, 0)}
 	syncBody := `{"plugin":{"config":{"z":1,"a":2},"uuid":"00000000-0000-4000-8000-000000000001","name":"p"}}`
 	syncRequest := newJSONRequest(http.MethodPost, "/node/plugin/sync", strings.NewReader(syncBody))
 	syncRecorder := httptest.NewRecorder()

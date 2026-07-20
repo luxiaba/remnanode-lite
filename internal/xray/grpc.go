@@ -2,28 +2,34 @@ package xray
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
-func (m *Manager) statsAPI(ctx context.Context, requireOnline bool) (*xtls.StatsAPI, func(), error) {
-	m.mu.RLock()
-	online := m.state == lifecycleRunning
-	socket := m.xtlsSocket
-	m.mu.RUnlock()
-
-	if requireOnline && !online {
-		return nil, nil, fmt.Errorf("xray is not online")
+func (m *Manager) statsAPI(ctx context.Context, requireOnline bool) (*xrayrpc.StatsAPI, func(), error) {
+	process, err := m.processForRPC(ctx, requireOnline)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	client, err := xtls.NewClient(socket)
+	client, err := xrayrpc.NewClient(process.socket)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	api := xtls.NewStatsAPI(client.Conn(), &m.statsCapabilities)
+	api := xrayrpc.NewStatsAPI(client.Conn(), &process.statsCapabilities)
 	return api, func() { _ = client.Close() }, nil
+}
+
+func (m *Manager) pingProcess(ctx context.Context, process *processState) bool {
+	if process == nil || process.socket == "" {
+		return false
+	}
+	client, err := xrayrpc.NewClient(process.socket)
+	if err != nil {
+		return false
+	}
+	defer client.Close()
+	return xrayrpc.NewStatsAPI(client.Conn(), &process.statsCapabilities).Ping(ctx) == nil
 }
 
 func (m *Manager) PingXrayGRPC(ctx context.Context) bool {
@@ -35,7 +41,7 @@ func (m *Manager) PingXrayGRPC(ctx context.Context) bool {
 	return api.Ping(ctx) == nil
 }
 
-func (m *Manager) GetSysStats(ctx context.Context) (*xtls.SysStats, error) {
+func (m *Manager) GetSysStats(ctx context.Context) (*xrayrpc.SysStats, error) {
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
 		return nil, err
@@ -44,7 +50,12 @@ func (m *Manager) GetSysStats(ctx context.Context) (*xtls.SysStats, error) {
 	return api.GetSysStats(ctx)
 }
 
-func (m *Manager) GetAllUsersStats(ctx context.Context, reset bool) ([]xtls.UserTraffic, error) {
+func (m *Manager) GetAllUsersStats(ctx context.Context, reset bool) ([]xrayrpc.UserTraffic, error) {
+	ctx, release, err := m.statsMutationContext(ctx, reset)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
 		return nil, err
@@ -62,25 +73,40 @@ func (m *Manager) GetUserOnlineStatus(ctx context.Context, username string) (boo
 	return api.GetUserOnlineStatus(ctx, username)
 }
 
-func (m *Manager) GetInboundStats(ctx context.Context, tag string, reset bool) (xtls.TagTraffic, error) {
+func (m *Manager) GetInboundStats(ctx context.Context, tag string, reset bool) (xrayrpc.TagTraffic, error) {
+	ctx, release, err := m.statsMutationContext(ctx, reset)
+	if err != nil {
+		return xrayrpc.TagTraffic{}, err
+	}
+	defer release()
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
-		return xtls.TagTraffic{}, err
+		return xrayrpc.TagTraffic{}, err
 	}
 	defer closeFn()
 	return api.GetInboundStats(ctx, tag, reset)
 }
 
-func (m *Manager) GetOutboundStats(ctx context.Context, tag string, reset bool) (xtls.TagTraffic, error) {
+func (m *Manager) GetOutboundStats(ctx context.Context, tag string, reset bool) (xrayrpc.TagTraffic, error) {
+	ctx, release, err := m.statsMutationContext(ctx, reset)
+	if err != nil {
+		return xrayrpc.TagTraffic{}, err
+	}
+	defer release()
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
-		return xtls.TagTraffic{}, err
+		return xrayrpc.TagTraffic{}, err
 	}
 	defer closeFn()
 	return api.GetOutboundStats(ctx, tag, reset)
 }
 
-func (m *Manager) GetAllInboundsStats(ctx context.Context, reset bool) ([]xtls.TagTraffic, error) {
+func (m *Manager) GetAllInboundsStats(ctx context.Context, reset bool) ([]xrayrpc.TagTraffic, error) {
+	ctx, release, err := m.statsMutationContext(ctx, reset)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
 		return nil, err
@@ -89,7 +115,12 @@ func (m *Manager) GetAllInboundsStats(ctx context.Context, reset bool) ([]xtls.T
 	return api.GetAllInboundsStats(ctx, reset)
 }
 
-func (m *Manager) GetAllOutboundsStats(ctx context.Context, reset bool) ([]xtls.TagTraffic, error) {
+func (m *Manager) GetAllOutboundsStats(ctx context.Context, reset bool) ([]xrayrpc.TagTraffic, error) {
+	ctx, release, err := m.statsMutationContext(ctx, reset)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
 		return nil, err
@@ -98,7 +129,12 @@ func (m *Manager) GetAllOutboundsStats(ctx context.Context, reset bool) ([]xtls.
 	return api.GetAllOutboundsStats(ctx, reset)
 }
 
-func (m *Manager) GetUserIPList(ctx context.Context, userID string, reset bool) ([]xtls.IPEntry, error) {
+func (m *Manager) GetUserIPList(ctx context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error) {
+	ctx, release, err := m.statsMutationContext(ctx, reset)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
 		return nil, err
@@ -107,7 +143,18 @@ func (m *Manager) GetUserIPList(ctx context.Context, userID string, reset bool) 
 	return api.GetUserIPList(ctx, userID, reset)
 }
 
-func (m *Manager) GetUsersIPList(ctx context.Context) ([]xtls.UserIPEntry, error) {
+func (m *Manager) statsMutationContext(ctx context.Context, reset bool) (context.Context, func(), error) {
+	if !reset {
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		return ctx, func() {}, nil
+	}
+	_, leaseContext, release, err := m.mutationToken(ctx)
+	return leaseContext, release, err
+}
+
+func (m *Manager) GetUsersIPList(ctx context.Context) ([]xrayrpc.UserIPEntry, error) {
 	api, closeFn, err := m.statsAPI(ctx, true)
 	if err != nil {
 		return nil, err

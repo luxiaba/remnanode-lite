@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strings"
 )
 
 const (
@@ -16,16 +17,17 @@ const (
 // RouteContract is one executable route contract backed by the pinned
 // controller and Zod command schemas.
 type RouteContract struct {
-	ID             string
-	Method         string
-	Path           string
-	Request        *Schema
-	ValidRequest   json.RawMessage
-	Response       *Schema
-	SuccessStatus  int
-	SideEffects    []string
-	ApplicationErr []string
-	Sources        []string
+	ID               string
+	Method           string
+	Path             string
+	Request          *Schema
+	ValidRequest     json.RawMessage
+	Response         *Schema
+	SuccessStatus    int
+	SideEffects      []string
+	ApplicationErr   []string
+	ControllerSource string
+	Sources          []string
 }
 
 type ErrorContract struct {
@@ -65,17 +67,24 @@ func buildOfficialRoutes() []RouteContract {
 		if validRequest != "" {
 			request = json.RawMessage(validRequest)
 		}
+		controllerSource := ""
+		for _, source := range sources {
+			if strings.HasSuffix(source, ".controller.ts") {
+				controllerSource = source
+			}
+		}
 		return RouteContract{
-			ID:             id,
-			Method:         method,
-			Path:           path,
-			Request:        requests[id],
-			ValidRequest:   request,
-			Response:       responses[id],
-			SuccessStatus:  http.StatusOK,
-			SideEffects:    effects,
-			ApplicationErr: errors,
-			Sources:        sources,
+			ID:               id,
+			Method:           method,
+			Path:             path,
+			Request:          requests[id],
+			ValidRequest:     request,
+			Response:         responses[id],
+			SuccessStatus:    http.StatusOK,
+			SideEffects:      effects,
+			ApplicationErr:   errors,
+			ControllerSource: controllerSource,
+			Sources:          sources,
 		}
 	}
 
@@ -84,8 +93,13 @@ func buildOfficialRoutes() []RouteContract {
 			"xray.start", http.MethodPost, "/node/xray/start",
 			`{"internals":{"forceRestart":false,"hashes":{"emptyConfig":"empty-hash","inbounds":[]}},"xrayConfig":{}}`,
 			[]string{"start or replace the rw-core process", "replace active config and inbound hash state"},
-			[]string{"RN-001 is represented inside the success response"},
-			[]string{controller("xray-core/xray.controller.ts"), command("xray/start.command.ts")},
+			[]string{"HTTP 200 with isStarted=false and nullable error; RN-001 is an official readiness-failure log diagnostic, not a response field"},
+			[]string{
+				controller("xray-core/xray.controller.ts"),
+				command("xray/start.command.ts"),
+				"src/modules/xray-core/xray.service.ts",
+				"libs/contract/constants/errors/known-errors.ts",
+			},
 		),
 		route(
 			"xray.stop", http.MethodGet, "/node/xray/stop", "",
@@ -252,20 +266,32 @@ func OfficialRoutes() []RouteContract {
 // executable contract. The list is stable and contains no duplicates.
 func OfficialSourceFiles() []string {
 	sources := map[string]struct{}{
-		"package.json": {},
-		"src/main.ts":  {},
-		"src/common/exception/http-exception.filter.ts":         {},
-		"src/common/exception/not-found-exception.filter.ts":    {},
-		"src/common/helpers/error-handler.helper.ts":            {},
-		"libs/contract/api/routes.ts":                           {},
-		"libs/contract/api/controllers/xray.ts":                 {},
-		"libs/contract/api/controllers/stats.ts":                {},
-		"libs/contract/api/controllers/handler.ts":              {},
-		"libs/contract/api/controllers/plugin.ts":               {},
-		"libs/contract/constants/errors/errors.ts":              {},
-		"libs/contract/models/node-system.schema.ts":            {},
-		"libs/contract/models/torrent-blocker.report.schema.ts": {},
-		"libs/contract/models/xray-webhook.schema.ts":           {},
+		"package.json":                                           {},
+		"package-lock.json":                                      {},
+		"src/app.module.ts":                                      {},
+		"src/main.ts":                                            {},
+		"src/modules/remnawave-node.modules.ts":                  {},
+		"src/modules/_plugin/plugin.module.ts":                   {},
+		"src/modules/asn-lmdb/asn-lmdb.module.ts":                {},
+		"src/modules/handler/handler.module.ts":                  {},
+		"src/modules/internal/internal.controller.ts":            {},
+		"src/modules/internal/internal.module.ts":                {},
+		"src/modules/network-stats/network-stats.module.ts":      {},
+		"src/modules/stats/stats.module.ts":                      {},
+		"src/modules/xray-core/xray.module.ts":                   {},
+		"src/common/exception/http-exception.filter.ts":          {},
+		"src/common/exception/not-found-exception.filter.ts":     {},
+		"src/common/helpers/error-handler.helper.ts":             {},
+		"libs/contract/api/routes.ts":                            {},
+		"libs/contract/api/controllers/xray.ts":                  {},
+		"libs/contract/api/controllers/stats.ts":                 {},
+		"libs/contract/api/controllers/handler.ts":               {},
+		"libs/contract/api/controllers/plugin.ts":                {},
+		"libs/contract/constants/errors/errors.ts":               {},
+		"libs/contract/constants/internal/internal.constants.ts": {},
+		"libs/contract/models/node-system.schema.ts":             {},
+		"libs/contract/models/torrent-blocker.report.schema.ts":  {},
+		"libs/contract/models/xray-webhook.schema.ts":            {},
 	}
 	for _, route := range officialRoutes {
 		for _, source := range route.Sources {

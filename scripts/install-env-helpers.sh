@@ -17,11 +17,11 @@ readonly RNL_ARCHIVE_TIMEOUT_SECONDS=120
 validate_release_coordinates() {
   local repo="$1" tag="$2"
   if ! [[ "$repo" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
-    echo "非法 GitHub 仓库名：${repo}" >&2
+    echo "Invalid GitHub repository name: ${repo}" >&2
     return 2
   fi
   if ! [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-    echo "非法 Release 标签：${tag}" >&2
+    echo "Invalid release tag: ${tag}" >&2
     return 2
   fi
 }
@@ -46,11 +46,11 @@ download_https_file() {
   local -a pipeline_status
   case "$url" in
     https://*) ;;
-    *) echo "拒绝非 HTTPS 下载：${url}" >&2; return 1 ;;
+    *) echo "Refusing non-HTTPS download: ${url}" >&2; return 1 ;;
   esac
   if ! [[ "$max_bytes" =~ ^[1-9][0-9]*$ ]] \
     || [ "${#max_bytes}" -gt 10 ] || [ "$max_bytes" -gt 1073741824 ]; then
-    echo "无效下载大小上限：${max_bytes}" >&2
+    echo "Invalid download size limit: ${max_bytes}" >&2
     return 2
   fi
 
@@ -73,7 +73,7 @@ download_https_file() {
 
     if ! [[ "$size" =~ ^[0-9]+$ ]] || [ "$size" -gt "$max_bytes" ]; then
       rm -f "$output"
-      echo "下载文件超过硬上限：${size:-unknown} bytes > ${max_bytes} bytes" >&2
+      echo "Download exceeds hard limit: ${size:-unknown} bytes > ${max_bytes} bytes" >&2
       return 1
     fi
     if [ "$curl_status" -eq 0 ] && [ "$head_status" -eq 0 ]; then
@@ -91,15 +91,15 @@ file_size_bytes() {
 }
 
 require_file_size_at_most() {
-  local file="$1" max_bytes="$2" label="${3:-文件}"
+  local file="$1" max_bytes="$2" label="${3:-file}"
   local size
   [ -f "$file" ] || {
-    echo "${label}不存在：${file}" >&2
+    echo "${label} does not exist: ${file}" >&2
     return 1
   }
   size="$(file_size_bytes "$file")"
   if ! [[ "$size" =~ ^[0-9]+$ ]] || [ "$size" -gt "$max_bytes" ]; then
-    echo "${label}超过硬上限：${size:-unknown} bytes > ${max_bytes} bytes" >&2
+    echo "${label} exceeds hard limit: ${size:-unknown} bytes > ${max_bytes} bytes" >&2
     return 1
   fi
 }
@@ -112,36 +112,36 @@ validate_installer_temp_root_path() {
   local root="$1" component current="/"
   local -a components
   case "$root" in
-    /) echo "拒绝使用 / 作为安装临时根" >&2; return 1 ;;
+    /) echo "Refusing to use / as the installer temporary root" >&2; return 1 ;;
     /*) ;;
-    *) echo "安装临时目录必须是绝对路径：${root}" >&2; return 2 ;;
+    *) echo "Installer temporary directory must be an absolute path: ${root}" >&2; return 2 ;;
   esac
   if [[ "$root" == */ ]] || [[ "$root" == *//* ]] \
     || [[ "$root" == *$'\n'* ]] || [[ "$root" == *$'\r'* ]]; then
-    echo "安装临时目录路径不规范：${root}" >&2
+    echo "Installer temporary directory path is not canonical: ${root}" >&2
     return 2
   fi
 
   if ! installer_ancestor_is_safe /; then
-    echo "安装临时目录祖先不属于 root:root 或可被非 root 写入：/" >&2
+    echo "Installer temporary directory ancestor is not owned by root:root or is writable by non-root users: /" >&2
     return 1
   fi
   IFS=/ read -r -a components <<<"${root#/}"
   for component in "${components[@]}"; do
     case "$component" in
-      ''|.|..) echo "安装临时目录包含不安全路径分量：${root}" >&2; return 2 ;;
+      ''|.|..) echo "Installer temporary directory contains an unsafe path component: ${root}" >&2; return 2 ;;
     esac
     current="${current%/}/${component}"
     if [ -L "$current" ]; then
-      echo "安装临时目录包含符号链接祖先：${current}" >&2
+      echo "Installer temporary directory has a symlink ancestor: ${current}" >&2
       return 1
     fi
     if [ -e "$current" ] && [ ! -d "$current" ]; then
-      echo "安装临时目录祖先不是目录：${current}" >&2
+      echo "Installer temporary directory ancestor is not a directory: ${current}" >&2
       return 1
     fi
     if [ -e "$current" ] && ! installer_ancestor_is_safe "$current"; then
-      echo "安装临时目录祖先不属于 root:root 或可被非 root 写入：${current}" >&2
+      echo "Installer temporary directory ancestor is not owned by root:root or is writable by non-root users: ${current}" >&2
       return 1
     fi
   done
@@ -196,30 +196,30 @@ validate_installer_temp_root_marker() {
   local root="$1" marker="${1}/.remnanode-installer-root"
   local expected="remnanode-installer-root-v1" size mode links
   installer_ancestor_is_safe "$root" || {
-    echo "安装临时根必须属于 root:root 且不可被 group/other 写入：${root}" >&2
+    echo "Installer temporary root must be owned by root:root and not writable by group or others: ${root}" >&2
     return 1
   }
   [ -f "$marker" ] && [ ! -L "$marker" ] || {
-    echo "非空安装临时根缺少普通 marker：${marker}" >&2
+    echo "Non-empty installer temporary root is missing a regular marker file: ${marker}" >&2
     return 1
   }
   if ! installer_path_has_root_owner "$marker"; then
-    echo "安装临时根 marker 必须属于 root:root：${marker}" >&2
+    echo "Installer temporary root marker must be owned by root:root: ${marker}" >&2
     return 1
   fi
   links="$(installer_path_link_count "$marker")" || return 1
   [ "$links" = 1 ] || {
-    echo "安装临时根 marker 存在硬链接：${marker}" >&2
+    echo "Installer temporary root marker has hard links: ${marker}" >&2
     return 1
   }
   mode="$(installer_path_mode "$marker")" || return 1
   [[ "$mode" =~ ^[0-7]{3,4}$ ]] && [ $((8#$mode & 022)) -eq 0 ] || {
-    echo "安装临时根 marker 可被 group/other 写入：${marker}" >&2
+    echo "Installer temporary root marker is writable by group or others: ${marker}" >&2
     return 1
   }
   size="$(file_size_bytes "$marker")"
   if [ "$size" -ne $((${#expected} + 1)) ] || [ "$(cat "$marker")" != "$expected" ]; then
-    echo "安装临时根 marker 内容无效：${marker}" >&2
+    echo "Installer temporary root marker has invalid content: ${marker}" >&2
     return 1
   fi
 }
@@ -233,18 +233,18 @@ ensure_installer_temp_root() {
   fi
   validate_installer_temp_root_path "$root" || return
   [ -d "$root" ] || {
-    echo "安装临时根不是目录：${root}" >&2
+    echo "Installer temporary root is not a directory: ${root}" >&2
     return 1
   }
   if ! installer_path_has_root_owner "$root"; then
-    echo "安装临时根必须在使用前属于 root:root：${root}" >&2
+    echo "Installer temporary root must be owned by root:root before use: ${root}" >&2
     return 1
   fi
 
   marker="${root}/.remnanode-installer-root"
   if installer_temp_root_is_empty "$root"; then
     if ! (umask 077; set -o noclobber; printf '%s\n' "$expected" >"$marker") 2>/dev/null; then
-      echo "无法原子创建安装临时根 marker：${marker}" >&2
+      echo "Cannot atomically create installer temporary root marker: ${marker}" >&2
       return 1
     fi
   fi
@@ -264,20 +264,20 @@ make_installer_temp_dir() {
 }
 
 require_free_bytes() {
-  local path="$1" required="$2" label="${3:-安装事务}"
+  local path="$1" required="$2" label="${3:-installation transaction}"
   local available_kb available
   if ! [[ "$required" =~ ^[1-9][0-9]*$ ]]; then
-    echo "无效磁盘预算：${required}" >&2
+    echo "Invalid disk-space budget: ${required}" >&2
     return 2
   fi
   available_kb="$(df -Pk "$path" | awk 'NR == 2 { print $4; exit }')"
   if ! [[ "$available_kb" =~ ^[0-9]+$ ]]; then
-    echo "无法读取 ${path} 的可用磁盘空间" >&2
+    echo "Cannot determine available disk space at ${path}" >&2
     return 1
   fi
   available=$((available_kb * 1024))
   if [ "$available" -lt "$required" ]; then
-    echo "${label}空间不足：${path} 可用 ${available} bytes，需要至少 ${required} bytes" >&2
+    echo "Insufficient space for ${label}: ${available} bytes available at ${path}; at least ${required} bytes required" >&2
     return 1
   fi
 }
@@ -295,14 +295,14 @@ existing_parent() {
 validate_managed_absolute_path() {
   local path="$1"
   case "$path" in
-    /|'') echo "拒绝使用空路径或 / 作为受管路径" >&2; return 1 ;;
+    /|'') echo "Refusing to use an empty path or / as a managed path" >&2; return 1 ;;
     /*) ;;
-    *) echo "受管路径必须是绝对路径：${path}" >&2; return 2 ;;
+    *) echo "Managed path must be absolute: ${path}" >&2; return 2 ;;
   esac
   if [[ "$path" == */ ]] || [[ "$path" == *//* ]] \
     || [[ "$path" == *$'\n'* ]] || [[ "$path" == *$'\r'* ]] \
     || [[ "/${path#/}/" == */./* ]] || [[ "/${path#/}/" == */../* ]]; then
-    echo "受管路径不规范：${path}" >&2
+    echo "Managed path is not canonical: ${path}" >&2
     return 2
   fi
 }
@@ -655,7 +655,7 @@ validate_managed_parent_path() {
   validate_managed_absolute_path "$path" || return
   parent="$(dirname "$path")"
   managed_ancestor_is_safe / || {
-    echo "受管路径祖先不安全：/" >&2
+    echo "Managed path ancestor is unsafe: /" >&2
     return 1
   }
   [ "$parent" = / ] && return 0
@@ -664,12 +664,12 @@ validate_managed_parent_path() {
   for component in "${components[@]}"; do
     current="${current%/}/${component}"
     if [ -L "$current" ]; then
-      echo "受管路径包含符号链接祖先：${current}" >&2
+      echo "Managed path has a symlink ancestor: ${current}" >&2
       return 1
     fi
     if [ -e "$current" ]; then
       if ! managed_ancestor_is_safe "$current"; then
-        echo "受管路径祖先必须由 root 控制且不可被 group/other 写入：${current}" >&2
+        echo "Managed path ancestor must be root-controlled and not writable by group or others: ${current}" >&2
         return 1
       fi
     fi
@@ -692,16 +692,16 @@ validate_existing_owned_directory() {
     return 0
   fi
   [ -d "$path" ] && [ ! -L "$path" ] || {
-    echo "受管目录不是普通目录或是符号链接：${path}" >&2
+    echo "Managed directory is not a directory or is a symlink: ${path}" >&2
     return 1
   }
   managed_path_has_owner "$path" "$uid" "$gid" || {
-    echo "受管目录 owner 不符合预期：${path}" >&2
+    echo "Managed directory owner does not match the expected owner: ${path}" >&2
     return 1
   }
   mode="$(installer_path_mode "$path")" || return 1
   [[ "$mode" =~ ^[0-7]{3,4}$ ]] && [ $((8#$mode & 022)) -eq 0 ] || {
-    echo "受管目录可被 group/other 写入：${path}" >&2
+    echo "Managed directory is writable by group or others: ${path}" >&2
     return 1
   }
 }
@@ -714,7 +714,7 @@ ensure_owned_directory() {
   else
     gid="$(awk -F: -v name="$group" '$1 == name { print $3; exit }' /etc/group)"
   fi
-  [[ "$gid" =~ ^[0-9]+$ ]] || { echo "找不到受管目录目标组：${group}" >&2; return 1; }
+  [[ "$gid" =~ ^[0-9]+$ ]] || { echo "Cannot find target group for managed directory: ${group}" >&2; return 1; }
   validate_existing_owned_directory "$path" "$uid" "$gid" || return
   if [ ! -d "$path" ]; then
     install -d -o "$user" -g "$group" -m "$mode" "$path" || return
@@ -727,39 +727,39 @@ validate_managed_regular_file() {
   local path="$1" mode links owner uid
   validate_managed_parent_path "$path" || return
   [ -f "$path" ] && [ ! -L "$path" ] || {
-    echo "受管配置不是普通文件或是符号链接：${path}" >&2
+    echo "Managed configuration is not a regular file or is a symlink: ${path}" >&2
     return 1
   }
   links="$(managed_path_link_count "$path")" || return 1
-  [ "$links" = 1 ] || { echo "受管配置存在硬链接：${path}" >&2; return 1; }
+  [ "$links" = 1 ] || { echo "Managed configuration has hard links: ${path}" >&2; return 1; }
   owner="$(installer_path_owner_ids "$path")" || return 1
   uid=${owner%%:*}
-  [ "$uid" = 0 ] || { echo "受管配置必须属于 root：${path}" >&2; return 1; }
+  [ "$uid" = 0 ] || { echo "Managed configuration must be owned by root: ${path}" >&2; return 1; }
   mode="$(installer_path_mode "$path")" || return 1
   [[ "$mode" =~ ^[0-7]{3,4}$ ]] && [ $((8#$mode & 022)) -eq 0 ] || {
-    echo "受管配置可被 group/other 写入：${path}" >&2
+    echo "Managed configuration is writable by group or others: ${path}" >&2
     return 1
   }
 }
 
 validate_managed_install_file() {
-  local path="$1" label="${2:-受管文件}" mode links
+  local path="$1" label="${2:-managed file}" mode links
   [ -f "$path" ] && [ ! -L "$path" ] || {
-    echo "${label}不是普通文件或是符号链接：${path}" >&2
+    echo "${label} is not a regular file or is a symlink: ${path}" >&2
     return 1
   }
   links="$(managed_path_link_count "$path")" || return 1
   [ "$links" = 1 ] || {
-    echo "${label}存在硬链接：${path}" >&2
+    echo "${label} has hard links: ${path}" >&2
     return 1
   }
   managed_path_has_owner "$path" 0 0 || {
-    echo "${label}必须属于 root:root：${path}" >&2
+    echo "${label} must be owned by root:root: ${path}" >&2
     return 1
   }
   mode="$(installer_path_mode "$path")" || return 1
   [[ "$mode" =~ ^[0-7]{3,4}$ ]] && [ $((8#$mode & 022)) -eq 0 ] || {
-    echo "${label}可被 group/other 写入：${path}" >&2
+    echo "${label} is writable by group or others: ${path}" >&2
     return 1
   }
 }
@@ -770,19 +770,19 @@ install_managed_file() (
 
   if [ "$#" -ne 3 ] || ! [[ "$requested_mode" =~ ^0?[0-7]{3}$ ]] \
     || [ $((8#$requested_mode & 022)) -ne 0 ]; then
-    echo "受管文件安装参数或 mode 无效" >&2
+    echo "Managed-file installation arguments or mode are invalid" >&2
     return 2
   fi
   [ "$source" != "$target" ] || {
-    echo "受管文件 source 与 target 不能相同：${source}" >&2
+    echo "Managed-file source and target must differ: ${source}" >&2
     return 2
   }
 
   validate_managed_parent_path "$source" || return
-  validate_managed_install_file "$source" "受管文件 source" || return
+  validate_managed_install_file "$source" "managed-file source" || return
   validate_managed_parent_path "$target" || return
   if [ -e "$target" ] || [ -L "$target" ]; then
-    validate_managed_install_file "$target" "受管文件 target" || return
+    validate_managed_install_file "$target" "managed-file target" || return
   fi
 
   target_dir="$(dirname "$target")" || return
@@ -790,32 +790,32 @@ install_managed_file() (
   tmp="$(mktemp "${target_dir}/.${target_name}.XXXXXX")" || return
   trap 'if [ -n "${tmp:-}" ]; then rm -f -- "$tmp"; fi' EXIT
 
-  validate_managed_install_file "$tmp" "受管文件 staging" || return
+  validate_managed_install_file "$tmp" "managed-file staging file" || return
   cp -- "$source" "$tmp" || return
   chown root:root "$tmp" || return
   chmod "$requested_mode" "$tmp" || return
-  validate_managed_install_file "$tmp" "受管文件 staging" || return
+  validate_managed_install_file "$tmp" "managed-file staging file" || return
   actual_mode="$(installer_path_mode "$tmp")" || return
   [ $((8#$actual_mode)) -eq $((8#$requested_mode)) ] || {
-    echo "受管文件 staging mode 不符合预期：${tmp}" >&2
+    echo "Managed-file staging mode does not match the requested mode: ${tmp}" >&2
     return 1
   }
 
   # Revalidate immutable inputs immediately before replacing the old inode.
   validate_managed_parent_path "$source" || return
-  validate_managed_install_file "$source" "受管文件 source" || return
+  validate_managed_install_file "$source" "managed-file source" || return
   validate_managed_parent_path "$target" || return
   if [ -e "$target" ] || [ -L "$target" ]; then
-    validate_managed_install_file "$target" "受管文件 target" || return
+    validate_managed_install_file "$target" "managed-file target" || return
   fi
   mv -f -- "$tmp" "$target" || return
   tmp=""
 
   validate_managed_parent_path "$target" || return
-  validate_managed_install_file "$target" "受管文件 target" || return
+  validate_managed_install_file "$target" "managed-file target" || return
   actual_mode="$(installer_path_mode "$target")" || return
   [ $((8#$actual_mode)) -eq $((8#$requested_mode)) ] || {
-    echo "受管文件 target mode 不符合预期：${target}" >&2
+    echo "Managed-file target mode does not match the requested mode: ${target}" >&2
     return 1
   }
 )
@@ -824,7 +824,7 @@ run_with_timeout() {
   local seconds="$1"
   shift
   command -v timeout >/dev/null 2>&1 || {
-    echo "缺少命令：timeout" >&2
+    echo "Missing command: timeout" >&2
     return 1
   }
   installer_run_without_lock timeout "$seconds" "$@"
@@ -853,19 +853,19 @@ archive_unpacked_bytes() {
 
 validate_release_archive_budget() {
   local archive="$1" unpacked count
-  require_file_size_at_most "$archive" "$RNL_RELEASE_ARCHIVE_MAX_BYTES" "Release 归档" || return
+  require_file_size_at_most "$archive" "$RNL_RELEASE_ARCHIVE_MAX_BYTES" "Release archive" || return
   unpacked="$(archive_unpacked_bytes "$archive")" || {
-    echo "无法计算 Release 归档解压大小" >&2
+    echo "Cannot calculate release archive unpacked size" >&2
     return 1
   }
   count="$(run_with_timeout "$RNL_ARCHIVE_TIMEOUT_SECONDS" tar -tzf "$archive" \
     | awk 'END { print NR + 0 }')"
   if ! [[ "$unpacked" =~ ^[0-9]+$ ]] || [ "$unpacked" -gt "$RNL_RELEASE_EXTRACT_MAX_BYTES" ]; then
-    echo "Release 归档解压大小超过硬上限：${unpacked} bytes" >&2
+    echo "Release archive unpacked size exceeds hard limit: ${unpacked} bytes" >&2
     return 1
   fi
   if ! [[ "$count" =~ ^[0-9]+$ ]] || [ "$count" -gt "$RNL_RELEASE_FILE_MAX_COUNT" ]; then
-    echo "Release 归档文件数超过硬上限：${count}" >&2
+    echo "Release archive file count exceeds hard limit: ${count}" >&2
     return 1
   fi
 }
@@ -890,12 +890,12 @@ file_sha256() {
 verify_file_sha256() {
   local file="$1" expected="$2" actual
   if ! [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]]; then
-    echo "无效 SHA-256：${expected}" >&2
+    echo "Invalid SHA-256: ${expected}" >&2
     return 1
   fi
   actual="$(file_sha256 "$file")"
   if [ "${actual,,}" != "${expected,,}" ]; then
-    echo "SHA-256 校验失败：${file} got=${actual} want=${expected}" >&2
+    echo "SHA-256 verification failed: ${file} got=${actual} want=${expected}" >&2
     return 1
   fi
 }
@@ -912,16 +912,16 @@ validate_release_support_link() {
     return 0
   fi
   [ -L "$link" ] || {
-    echo "Release support-current 必须是符号链接或不存在：${link}" >&2
+    echo "Release support-current must be a symlink or absent: ${link}" >&2
     return 1
   }
   installer_path_has_root_owner "$link" || {
-    echo "Release support-current 必须属于 root:root：${link}" >&2
+    echo "Release support-current must be owned by root:root: ${link}" >&2
     return 1
   }
   target="$(readlink "$link")" || return 1
   if ! [[ "$target" =~ ^support/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-    echo "Release support-current 指向不安全位置：${target}" >&2
+    echo "Release support-current points to an unsafe location: ${target}" >&2
     return 1
   fi
 }
@@ -942,7 +942,7 @@ remove_existing_support_release() {
     return 0
   fi
   validate_existing_owned_directory "$release_path" 0 0 || {
-    echo "拒绝清理不安全的 Release support 目录：${release_path}" >&2
+    echo "Refusing to remove unsafe release support directory: ${release_path}" >&2
     return 1
   }
   rm -rf "$release_path"
@@ -955,8 +955,8 @@ install_release_binary() (
   local base="https://github.com/${repo}/releases/download/${tag}"
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 下载并校验 ${base}/${name}"
-    echo "[dry-run] 原子安装 ${target}"
+    echo "[dry-run] Download and verify ${base}/${name}"
+    echo "[dry-run] Atomically install ${target}"
     exit 0
   fi
 
@@ -974,9 +974,9 @@ install_release_binary() (
   ensure_release_support_layout "$support_root" "$support_link"
   tmp="$(make_installer_temp_dir release)"
   trap '[ -z "${tmp:-}" ] || rm -rf "$tmp"; [ -z "${staged:-}" ] || rm -f "$staged"; [ -z "${support_stage:-}" ] || rm -rf "$support_stage"; [ -z "${support_link:-}" ] || rm -f "${support_link}.new.$$"' EXIT
-  require_free_bytes "$tmp" "$RNL_RELEASE_WORK_BYTES" "Release 下载与解压"
+  require_free_bytes "$tmp" "$RNL_RELEASE_WORK_BYTES" "Release download and extraction"
   require_free_bytes "$(existing_parent "$(dirname "$target")")" \
-    "$RNL_RELEASE_EXTRACT_MAX_BYTES" "Release 目标文件系统"
+    "$RNL_RELEASE_EXTRACT_MAX_BYTES" "Release target filesystem"
   staged="${target}.new.$$"
 
   download_https_file "${base}/${name}" "$tmp/archive.tar.gz" "$RNL_RELEASE_ARCHIVE_MAX_BYTES"
@@ -986,38 +986,38 @@ install_release_binary() (
     expected="$(awk -v name="$name" '$2 == name || $2 == "*" name { print $1; exit }' "$tmp/SHA256SUMS")"
   fi
   if [ -z "$expected" ]; then
-    echo "SHA256SUMS 未包含 ${name}" >&2
+    echo "SHA256SUMS does not contain ${name}" >&2
     exit 1
   fi
   verify_file_sha256 "$tmp/archive.tar.gz" "$expected"
   validate_release_archive_budget "$tmp/archive.tar.gz"
 
   if release_archive_has_unsafe_paths "$tmp/archive.tar.gz"; then
-    echo "Release 归档包含不安全路径" >&2
+    echo "Release archive contains unsafe paths" >&2
     exit 1
   fi
   if run_with_timeout "$RNL_ARCHIVE_TIMEOUT_SECONDS" tar -tvzf "$tmp/archive.tar.gz" | awk '
     { type = substr($1, 1, 1); if (type != "-" && type != "d") bad = 1 }
     END { exit(bad ? 0 : 1) }
   '; then
-    echo "Release 归档包含符号链接、硬链接或特殊文件" >&2
+    echo "Release archive contains symlinks, hard links, or special files" >&2
     exit 1
   fi
   run_with_timeout "$RNL_ARCHIVE_TIMEOUT_SECONDS" tar -xzf "$tmp/archive.tar.gz" -C "$tmp"
   extracted_bytes="$(( $(du -sk "$tmp" | awk '{ print $1 }') * 1024 ))"
   if [ "$extracted_bytes" -gt "$RNL_RELEASE_WORK_BYTES" ]; then
-    echo "Release 解压目录超过事务硬上限：${extracted_bytes} bytes" >&2
+    echo "Release extraction directory exceeds transaction hard limit: ${extracted_bytes} bytes" >&2
     exit 1
   fi
   extracted="$tmp/remnanode-lite"
   [ -f "$extracted" ] && [ ! -L "$extracted" ] || {
-    echo "Release 归档缺少常规文件 remnanode-lite" >&2
+    echo "Release archive is missing the regular file remnanode-lite" >&2
     exit 1
   }
   chmod 0755 "$extracted"
   version_output="$(installer_run_without_lock "$extracted" version)"
   if ! release_binary_version_matches_tag "$version_output" "$tag"; then
-    echo "Release 二进制版本与标签 ${tag} 不一致" >&2
+    echo "Release binary version does not match tag ${tag}" >&2
     exit 1
   fi
 
@@ -1029,7 +1029,7 @@ install_release_binary() (
     support/scripts/upgrade.sh \
     support/scripts/uninstall.sh; do
     [ -f "$tmp/$support_file" ] && [ ! -L "$tmp/$support_file" ] || {
-      echo "Release 归档缺少常规文件 ${support_file}" >&2
+      echo "Release archive is missing the regular file ${support_file}" >&2
       exit 1
     }
   done
@@ -1064,11 +1064,11 @@ install_release_binary() (
 resolve_installed_support_file() {
   local support_link="$1" relative="$2" support_base link_target
   case "/${relative}/" in
-    *//*|*/./*|*/../*) echo "非法 support 相对路径：${relative}" >&2; return 2 ;;
+    *//*|*/./*|*/../*) echo "Invalid support-relative path: ${relative}" >&2; return 2 ;;
   esac
   [ -n "$relative" ] && [[ "$relative" != /* ]] \
     && [[ "$relative" != *$'\n'* ]] && [[ "$relative" != *$'\r'* ]] || {
-    echo "非法 support 相对路径：${relative}" >&2
+    echo "Invalid support-relative path: ${relative}" >&2
     return 2
   }
   validate_release_support_link "$support_link" || return
@@ -1100,25 +1100,25 @@ validate_service_group_exclusive() {
     [ "$name" = "$group" ] || continue
     found=$((found + 1))
     [ "$gid" = "$expected_gid" ] || {
-      echo "组 ${group} 的 GID 在校验期间发生变化" >&2
+      echo "GID for group ${group} changed during validation" >&2
       return 1
     }
     IFS=, read -r -a member_list <<<"$members"
     for member in "${member_list[@]}"; do
       [ -z "$member" ] || [ "$member" = "$user" ] || {
-        echo "拒绝使用包含其他成员 ${member} 的 ${group} 组" >&2
+        echo "Refusing to use group ${group} because it contains another member: ${member}" >&2
         return 1
       }
     done
   done <"$group_file"
   [ "$found" -eq 1 ] || {
-    echo "组 ${group} 在 ${group_file} 中必须唯一存在" >&2
+    echo "Group ${group} must appear exactly once in ${group_file}" >&2
     return 1
   }
 
   while IFS=: read -r name _ _ gid _; do
     if [ "$gid" = "$expected_gid" ] && [ "$name" != "$user" ]; then
-      echo "拒绝使用同时作为其他用户 ${name} 主组的 ${group} 组" >&2
+      echo "Refusing to use group ${group} because it is also the primary group of user ${name}" >&2
       return 1
     fi
   done <"$passwd_file"
@@ -1131,7 +1131,7 @@ ensure_service_account() {
   home="${DATA_DIR:-/var/lib/remnanode}"
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 创建系统用户 ${user}:${group}（home=${home}）"
+    echo "[dry-run] Create system account ${user}:${group} (home=${home})"
     return 0
   fi
 
@@ -1144,20 +1144,20 @@ ensure_service_account() {
   fi
   group_gid="$(awk -F: -v name="$group" '$1 == name { print $3; exit }' /etc/group)"
   if ! [[ "$group_gid" =~ ^[0-9]+$ ]] || [ "$group_gid" -eq 0 ]; then
-    echo "拒绝使用缺失或 GID 0 的 ${group} 组" >&2
+    echo "Refusing to use missing group ${group} or a group with GID 0" >&2
     return 1
   fi
   validate_service_group_exclusive "$user" "$group" "$group_gid"
 
   if id "$user" >/dev/null 2>&1; then
     if [ "$(id -u "$user")" -eq 0 ]; then
-      echo "拒绝使用 UID 0 的 ${user} 账号" >&2
+      echo "Refusing to use account ${user} with UID 0" >&2
       return 1
     fi
     local existing_home
     existing_home="$(awk -F: -v name="$user" '$1 == name { print $6 }' /etc/passwd)"
     if [ -n "$existing_home" ] && [ "$existing_home" != "$home" ]; then
-      echo "现有用户 ${user} 的 home 为 ${existing_home}，预期 ${home}；拒绝接管" >&2
+      echo "Existing user ${user} has home ${existing_home}, expected ${home}; refusing to take ownership" >&2
       return 1
     fi
   else
@@ -1171,12 +1171,12 @@ ensure_service_account() {
   fi
 
   if [ "$(id -gn "$user")" != "$group" ]; then
-    echo "现有用户 ${user} 的主组不是 ${group}；拒绝接管" >&2
+    echo "Existing user ${user} does not have ${group} as its primary group; refusing to take ownership" >&2
     return 1
   fi
   for membership in $(id -nG "$user"); do
     if [ "$membership" != "$group" ]; then
-      echo "现有用户 ${user} 属于额外组 ${membership}；拒绝接管" >&2
+      echo "Existing user ${user} belongs to additional group ${membership}; refusing to take ownership" >&2
       return 1
     fi
   done
@@ -1189,7 +1189,7 @@ setup_service_directories() {
   group="$(service_group_name)"
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 创建专用目录并设置 ${user}:${group} 权限"
+    echo "[dry-run] Create dedicated directories and assign ownership to ${user}:${group}"
     return 0
   fi
 
@@ -1216,7 +1216,7 @@ secure_config_file() {
 
 normalize_service_permissions() {
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 规范化 remnanode 配置、状态与日志权限"
+    echo "[dry-run] Normalize permissions for remnanode configuration, state, and logs"
     return 0
   fi
 
@@ -1251,7 +1251,7 @@ secret_configured() {
 secret_validator_binary() {
   local validator="${PREFIX:?PREFIX is required}/${BIN_NAME:?BIN_NAME is required}"
   if [ ! -x "$validator" ]; then
-    echo "找不到 Secret Key 校验器：${validator}" >&2
+    echo "Secret Key validator not found: ${validator}" >&2
     return 1
   fi
   printf '%s' "$validator"
@@ -1261,28 +1261,28 @@ validate_secret_key() {
   local value="$1" length remainder validator
   length="${#value}"
   if [ "$length" -eq 0 ] || [ "$length" -gt "$RNL_SECRET_MAX_BYTES" ]; then
-    echo "SECRET_KEY 长度必须在 1..${RNL_SECRET_MAX_BYTES} bytes" >&2
+    echo "SECRET_KEY length must be between 1 and ${RNL_SECRET_MAX_BYTES} bytes" >&2
     return 1
   fi
   if ! [[ "$value" =~ ^[A-Za-z0-9+/_-]+={0,2}$ ]]; then
-    echo "SECRET_KEY 必须是单行 base64/base64url，拒绝 shell 字符或空白" >&2
+    echo "SECRET_KEY must be single-line base64 or base64url; shell characters and whitespace are not allowed" >&2
     return 1
   fi
   remainder=$((length % 4))
   if [[ "$value" == *=* ]]; then
     if [ "$remainder" -ne 0 ]; then
-      echo "SECRET_KEY base64 padding 无效" >&2
+      echo "SECRET_KEY has invalid base64 padding" >&2
       return 1
     fi
   elif [ "$remainder" -eq 1 ]; then
-    echo "SECRET_KEY base64 长度无效" >&2
+    echo "SECRET_KEY has an invalid base64 length" >&2
     return 1
   fi
 
   validator="$(secret_validator_binary)" || return
   if ! printf '%s' "$value" \
     | installer_run_without_lock "$validator" validate-secret; then
-    echo "SECRET_KEY 未通过严格 JSON 校验" >&2
+    echo "SECRET_KEY failed strict JSON validation" >&2
     return 1
   fi
 }
@@ -1293,7 +1293,7 @@ read_secret_source_canonical() {
   if ! installer_run_without_lock \
     "$validator" canonicalize-secret "$src" >"$output"; then
     rm -f "$output"
-    echo "Secret Key 输入未通过安全读取与严格校验：${src}" >&2
+    echo "Secret Key input failed secure reading or strict validation: ${src}" >&2
     return 1
   fi
 }
@@ -1306,7 +1306,7 @@ validate_secret_file() {
   validator="$(secret_validator_binary)" || return
   if ! installer_run_without_lock \
     "$validator" canonicalize-secret "$path" >/dev/null; then
-    echo "Secret Key 文件未通过安全读取与严格校验：${path}" >&2
+    echo "Secret Key file failed secure reading or strict validation: ${path}" >&2
     return 1
   fi
 }
@@ -1314,15 +1314,15 @@ validate_secret_file() {
 set_env_value() {
   local key="$1" value="$2" tmp
   if ! [[ "$key" =~ ^[A-Z][A-Z0-9_]*$ ]] || [[ "$value" == *$'\n'* ]] || [[ "$value" == *$'\r'* ]]; then
-    echo "拒绝写入无效环境配置：${key}" >&2
+    echo "Refusing to write invalid environment setting: ${key}" >&2
     return 2
   fi
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 设置 ${NODE_ENV} ${key}=${value}"
+    echo "[dry-run] Set ${key}=${value} in ${NODE_ENV}"
     return 0
   fi
   [ -f "$NODE_ENV" ] || {
-    echo "找不到 ${NODE_ENV}，请先创建环境配置。" >&2
+    echo "${NODE_ENV} not found; create the environment configuration first." >&2
     return 1
   }
   tmp="$(mktemp "$(dirname "$NODE_ENV")/.node.env.XXXXXX")"
@@ -1343,7 +1343,7 @@ normalize_env_key_assignment() {
   ' "$file")"
   [ "$count" -gt 1 ] || return 0
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 合并 ${file} 中重复的 ${key}（保留最后一项）"
+    echo "[dry-run] Merge duplicate ${key} entries in ${file} (keep the last entry)"
     return 0
   fi
   tmp="$(mktemp "$(dirname "$file")/.node.env.XXXXXX")"
@@ -1358,7 +1358,7 @@ normalize_env_key_assignment() {
   fi
   secure_config_file "$tmp"
   mv -f "$tmp" "$file"
-  echo "已合并 ${file} 中重复的 ${key}（保留最后一项）"
+  echo "Merged duplicate ${key} entries in ${file} (kept the last entry)"
 }
 
 normalize_runtime_environment() {
@@ -1375,7 +1375,7 @@ normalize_runtime_environment() {
 
 enable_secret_key_file() {
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 启用 ${NODE_ENV} SECRET_KEY_FILE=${SECRET_FILE}"
+    echo "[dry-run] Enable SECRET_KEY_FILE=${SECRET_FILE} in ${NODE_ENV}"
     return 0
   fi
   if [ ! -f "$NODE_ENV" ]; then
@@ -1399,13 +1399,13 @@ enable_secret_key_file() {
 write_secret_value() {
   local value="$1" tmp
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 验证并写入 Secret Key 到 ${SECRET_FILE}"
+    echo "[dry-run] Validate and write the Secret Key to ${SECRET_FILE}"
     return 0
   fi
   validate_secret_key "$value"
   validate_managed_parent_path "$SECRET_FILE" || return
   [ -d "$(dirname "$SECRET_FILE")" ] || {
-    echo "Secret Key 父目录不存在：$(dirname "$SECRET_FILE")" >&2
+    echo "Secret Key parent directory does not exist: $(dirname "$SECRET_FILE")" >&2
     return 1
   }
   tmp="$(mktemp "$(dirname "$SECRET_FILE")/.secret.key.XXXXXX")"
@@ -1421,18 +1421,18 @@ write_secret_to_env() {
   local value="$1"
   [ -n "$value" ] || return 0
   write_secret_value "$value"
-  echo "已将 Secret Key 安全写入 ${SECRET_FILE}"
+  echo "Secret Key securely written to ${SECRET_FILE}"
 }
 
 write_secret_from_source() {
   local src="$1" tmp
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 验证并写入 ${SECRET_FILE} <- ${src}"
+    echo "[dry-run] Validate and write ${SECRET_FILE} <- ${src}"
     return 0
   fi
   validate_managed_parent_path "$SECRET_FILE" || return
   [ -d "$(dirname "$SECRET_FILE")" ] || {
-    echo "Secret Key 父目录不存在：$(dirname "$SECRET_FILE")" >&2
+    echo "Secret Key parent directory does not exist: $(dirname "$SECRET_FILE")" >&2
     return 1
   }
   tmp="$(mktemp "$(dirname "$SECRET_FILE")/.secret.input.XXXXXX")"
@@ -1458,11 +1458,11 @@ migrate_inline_secret_to_file() {
   value="$(read_env_value SECRET_KEY "$NODE_ENV")"
   [ -n "$value" ] || return 0
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 将 node.env 内联 SECRET_KEY 迁移到 ${SECRET_FILE}"
+    echo "[dry-run] Migrate inline SECRET_KEY from node.env to ${SECRET_FILE}"
     return 0
   fi
   write_secret_value "$value"
-  echo "已将 node.env 内联 SECRET_KEY 迁移到受限文件 ${SECRET_FILE}"
+  echo "Migrated inline SECRET_KEY from node.env to restricted file ${SECRET_FILE}"
 }
 
 ensure_internal_socket_in_env() {
@@ -1478,7 +1478,7 @@ ensure_internal_socket_in_env() {
 migrate_owned_asset_paths() {
   [ -f "$NODE_ENV" ] || return 0
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 将旧版通用 rw-core/geo/ASN 路径迁移到项目专属目录"
+    echo "[dry-run] Migrate legacy shared rw-core, geo, and ASN paths to project-owned directories"
     return 0
   fi
 
@@ -1488,7 +1488,7 @@ migrate_owned_asset_paths() {
       sed -i 's|^XRAY_BIN=/usr/local/bin/rw-core$|XRAY_BIN=/usr/local/lib/remnanode/rw-core|' "$NODE_ENV"
       changed=1
     else
-      echo "保留旧 XRAY_BIN：项目私有 rw-core 尚未安装。" >&2
+      echo "Keeping legacy XRAY_BIN because the project-owned rw-core is not installed yet." >&2
     fi
   fi
   if grep -q '^GEO_DIR=/usr/local/share/xray$' "$NODE_ENV"; then
@@ -1497,7 +1497,7 @@ migrate_owned_asset_paths() {
       sed -i 's|^GEO_DIR=/usr/local/share/xray$|GEO_DIR=/usr/local/share/remnanode/xray|' "$NODE_ENV"
       changed=1
     else
-      echo "保留旧 GEO_DIR：项目私有 geo 资产尚未安装。" >&2
+      echo "Keeping legacy GEO_DIR because the project-owned geo assets are not installed yet." >&2
     fi
   fi
   if grep -q '^ASN_DB_PATH=/usr/local/share/asn/asn-prefixes.bin$' "$NODE_ENV"; then
@@ -1505,12 +1505,12 @@ migrate_owned_asset_paths() {
       sed -i 's|^ASN_DB_PATH=/usr/local/share/asn/asn-prefixes.bin$|ASN_DB_PATH=/usr/local/share/remnanode/asn/asn-prefixes.bin|' "$NODE_ENV"
       changed=1
     else
-      echo "保留旧 ASN_DB_PATH：项目私有 ASN 数据尚未安装。" >&2
+      echo "Keeping legacy ASN_DB_PATH because the project-owned ASN database is not installed yet." >&2
     fi
   fi
   if [ "$changed" -eq 1 ]; then
     secure_config_file "$NODE_ENV"
-    echo "已将旧版共享资产路径迁移到 /usr/local/{lib,share}/remnanode。"
+    echo "Migrated legacy shared asset paths to /usr/local/{lib,share}/remnanode."
   fi
 }
 
@@ -1533,8 +1533,8 @@ prompt_secret_key() {
   fi
 
   echo
-  echo "请粘贴 Panel 节点页下发的 Secret Key（整段 base64，粘贴后按 Enter）："
-  echo "（节点已启用时，装完后约 10s 内 Panel 将自动上线）"
+  echo "Paste the Secret Key issued on the Panel node page (the complete base64 string, then press Enter):"
+  echo "(If the node is already enabled, the Panel should bring it online about 10s after installation.)"
   local secret=""
   if [ -t 0 ]; then
     read -r secret
@@ -1562,14 +1562,14 @@ cleanup_runtime() {
 
 print_pre_install_panel_hint() {
   echo
-  echo "━━━━━━━━ Panel 接入提示 ━━━━━━━━"
-  echo "  推荐顺序："
-  echo "    1) Panel 创建节点，复制 Secret Key"
-  echo "    2) 完成本脚本安装并粘贴 Secret Key"
-  echo "    3) 看到目标 remnanode-lite 进程持有 TCP 监听后，在 Panel 启用节点"
+  echo "━━━━━━━━ Panel setup reminder ━━━━━━━━"
+  echo "  Recommended sequence:"
+  echo "    1) Create the node in the Panel and copy its Secret Key"
+  echo "    2) Complete this installation and paste the Secret Key"
+  echo "    3) Enable the node in the Panel after the target remnanode-lite process owns the TCP listener"
   echo
-  echo "  节点已启用时：装完后 Panel 每 10s 健康检查，约 10s 内自动上线。"
-  echo "  若超过 30s 仍离线：检查防火墙，或 Panel 禁用→启用一次。"
+  echo "  If already enabled, the Panel checks health every 10s and should bring the node online in about 10s."
+  echo "  If it remains offline after 30s, check the firewall or disable and re-enable it in the Panel."
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 }
 
@@ -1579,18 +1579,18 @@ print_panel_address_hint() {
   pub_ip="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1 || true)"
 
   echo
-  echo "━━━━━━━━ Panel 对接（必读）━━━━━━━━"
-  echo "  节点端口: ${port}"
+  echo "━━━━━━━━ Panel connection (required) ━━━━━━━━"
+  echo "  Node port: ${port}"
   if [ -n "$pub_ip" ]; then
-    echo "  本机公网 IP（参考）: ${pub_ip}"
+    echo "  Host public IP (for reference): ${pub_ip}"
   fi
-  echo "  Panel 在其它服务器：地址填 Panel 能 ping/tcp 通的本机 IP"
-  echo "  Panel 服务器上自测:"
-  echo "    nc -zv -w 5 <节点IP> ${port}"
+  echo "  If the Panel runs on another server, use an IP of this host that it can reach over TCP."
+  echo "  Test from the Panel server:"
+  echo "    nc -zv -w 5 <node-ip> ${port}"
   echo
-  echo "  节点已就绪。Panel 通常 10s 内自动上线。"
-  echo "  若仍离线：检查防火墙 / Secret Key，或 Panel 禁用→启用一次。"
-  echo "  服务器 reboot 后由 Panel 健康检查重新下发配置并自动上线。"
+  echo "  The node is ready. The Panel normally brings it online within 10s."
+  echo "  If it remains offline, check the firewall and Secret Key, or disable and re-enable it in the Panel."
+  echo "  After a server reboot, the Panel health check sends the configuration again and brings the node online."
 }
 
 running_pids_for_binary() {
@@ -1614,7 +1614,7 @@ require_binary_not_running() {
   local binary="$1" pids
   pids="$(running_pids_for_binary "$binary")"
   if [ -n "$pids" ]; then
-    echo "拒绝替换运行中的 ${binary}: ${pids//$'\n'/,}" >&2
+    echo "Refusing to replace running binary ${binary}: ${pids//$'\n'/,}" >&2
     return 1
   fi
 }
@@ -1703,7 +1703,7 @@ probe_remnanode_service_state() {
       esac
       ;;
     *)
-      echo "未知服务管理器：${platform}" >&2
+      echo "Unknown service manager: ${platform}" >&2
       return 2
       ;;
   esac
@@ -1730,7 +1730,7 @@ stop_remnanode_and_wait() {
       ;;
     inactive) ;;
     *)
-      echo "无法可靠探测 remnawave-node 状态，拒绝停止后续操作" >&2
+      echo "Cannot reliably determine remnawave-node status; refusing to continue with the stop operation" >&2
       return 1
       ;;
   esac
@@ -1740,7 +1740,7 @@ stop_remnanode_and_wait() {
       inactive) break ;;
       active) ;;
       *)
-        echo "停止期间无法可靠探测 remnawave-node 状态" >&2
+        echo "Cannot reliably determine remnawave-node status while stopping" >&2
         return 1
         ;;
     esac
@@ -1751,11 +1751,11 @@ stop_remnanode_and_wait() {
   case "$state" in
     inactive) ;;
     active)
-      echo "服务管理器仍报告 remnawave-node 运行中" >&2
+      echo "Service manager still reports remnawave-node as running" >&2
       return 1
       ;;
     *)
-      echo "停止后无法可靠确认 remnawave-node 状态" >&2
+      echo "Cannot reliably confirm remnawave-node status after stopping" >&2
       return 1
       ;;
   esac
@@ -1763,7 +1763,7 @@ stop_remnanode_and_wait() {
     return 1
   fi
   if [ "$stop_failed" -ne 0 ]; then
-    echo "服务停止命令失败；即使当前未发现进程，也拒绝执行破坏性后续操作" >&2
+    echo "Service stop command failed; refusing destructive follow-up actions even though no process is currently detected" >&2
     return 1
   fi
 }
@@ -1796,7 +1796,7 @@ wait_for_service_stable() {
     return 0
   fi
   if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-    echo "无效服务监听端口：${port}" >&2
+    echo "Invalid service listening port: ${port}" >&2
     return 2
   fi
   if [ -z "$platform" ]; then
@@ -1806,7 +1806,7 @@ wait_for_service_stable() {
   while [ "$i" -lt "$max_wait" ]; do
     state="$(probe_remnanode_service_state "$platform")" || return
     if [ "$state" = error ]; then
-      echo "服务启动验证期间无法可靠探测 remnawave-node 状态" >&2
+      echo "Cannot reliably determine remnawave-node status during startup verification" >&2
       return 1
     fi
     pid="$(single_service_pid "$binary" || true)"
@@ -1826,11 +1826,11 @@ verify_service_listening() {
     return 0
   fi
   if ! wait_for_service_stable "$port" 30 "$binary"; then
-    echo "错误: 目标进程 ${binary} 未在 30s 内以唯一服务实例持有 TCP :${port}" >&2
+    echo "Error: target process ${binary} did not become the sole service instance listening on TCP :${port} within 30s" >&2
     return 1
   fi
   pid="$(single_service_pid "$binary")"
-  echo "OK: ${binary} (pid=${pid}) 正在监听 TCP :${port}"
+  echo "OK: ${binary} (pid=${pid}) is listening on TCP :${port}"
   ss -H -ltnp 2>/dev/null | grep -E ":${port}[[:space:]]" | grep -F "pid=${pid}," | head -n1 || true
 }
 
@@ -1855,7 +1855,7 @@ wait_for_owned_processes_stopped() {
   for binary in "$@"; do
     [ -n "$binary" ] || continue
     pids="$(running_pids_for_binary "$binary")"
-    [ -z "$pids" ] || echo "仍有进程使用 ${binary}: ${pids//$'\n'/,}" >&2
+    [ -z "$pids" ] || echo "Processes still use ${binary}: ${pids//$'\n'/,}" >&2
   done
   return 1
 }
@@ -1868,17 +1868,17 @@ stop_for_fresh_reinstall() {
   case "$original_state" in
     active)
       if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-        echo "无法验证旧服务监听端口，拒绝停止：${port}" >&2
+        echo "Cannot validate the legacy service listening port; refusing to stop it: ${port}" >&2
         return 1
       fi
       ;;
     inactive) ;;
     error)
-      echo "无法可靠探测旧 remnawave-node 状态，拒绝全新安装" >&2
+      echo "Cannot reliably determine legacy remnawave-node status; refusing a fresh installation" >&2
       return 1
       ;;
     *)
-      echo "服务状态探测返回无效状态：${original_state}" >&2
+      echo "Service status probe returned an invalid state: ${original_state}" >&2
       return 1
       ;;
   esac
@@ -1886,16 +1886,16 @@ stop_for_fresh_reinstall() {
   if stop_remnanode_and_wait "$node_binary" "$xray_binary" 35 "$platform"; then
     return 0
   fi
-  echo "未确认旧服务与 rw-core 正常停止，拒绝清除现有安装" >&2
+  echo "Legacy service and rw-core shutdown was not confirmed; refusing to remove the existing installation" >&2
 
   [ "$original_state" = active ] || return 1
   current_state="$(probe_remnanode_service_state "$platform")" || return 1
   if [ "$current_state" != inactive ]; then
-    echo "旧服务管理器未确认 inactive，不尝试补偿启动" >&2
+    echo "Legacy service manager did not confirm an inactive state; not attempting compensating startup" >&2
     return 1
   fi
   if ! wait_for_owned_processes_stopped 1 "$node_binary" "$xray_binary"; then
-    echo "旧 Node/rw-core 仍在运行，不尝试补偿启动" >&2
+    echo "Legacy Node or rw-core is still running; not attempting compensating startup" >&2
     return 1
   fi
 
@@ -1904,14 +1904,14 @@ stop_for_fresh_reinstall() {
     systemd) systemctl start remnawave-node.service >/dev/null 2>&1 ;;
     *) return 1 ;;
   esac || {
-    echo "旧 remnawave-node 补偿启动失败" >&2
+    echo "Compensating startup of legacy remnawave-node failed" >&2
     return 1
   }
   if ! wait_for_service_stable "$port" 30 "$node_binary" "$platform"; then
-    echo "旧 remnawave-node 补偿启动后未通过端口验证" >&2
+    echo "Legacy remnawave-node failed port verification after compensating startup" >&2
     return 1
   fi
-  echo "旧 remnawave-node 已恢复；本次全新安装仍中止" >&2
+  echo "Legacy remnawave-node was restored; this fresh installation remains aborted" >&2
   return 1
 }
 
@@ -1919,7 +1919,7 @@ verify_installed_version_tag() {
   local binary="$1" tag="$2" output
   output="$(installer_run_without_lock "$binary" version 2>/dev/null)" || return 1
   if ! release_binary_version_matches_tag "$output" "$tag"; then
-    echo "运行目标版本不匹配：got=${output} want=${tag}" >&2
+    echo "Installed version does not match the target: got=${output} want=${tag}" >&2
     return 1
   fi
 }
@@ -1928,11 +1928,11 @@ print_env_config_hint() {
   local restart_cmd="$1"
   echo
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo " 配置节点（编辑 node.env，变量名同官方 environment）"
+  echo " Configure the node (edit node.env; variable names match the official environment)"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo
-  echo "编辑 ${NODE_ENV}，确认监听端口；Secret Key 请写入受限文件："
-  echo "  NODE_PORT=2222          # 与 Panel 添加节点时的端口一致"
+  echo "Edit ${NODE_ENV}, confirm the listening port, and write the Secret Key to the restricted file:"
+  echo "  NODE_PORT=2222          # Must match the port configured for the node in the Panel"
   echo "  SECRET_KEY_FILE=${SECRET_FILE}"
   if [ -f /etc/alpine-release ]; then
     printf '%s\n' "  printf '%s' 'eyJ...' > ${SECRET_FILE}"
@@ -1942,9 +1942,9 @@ print_env_config_hint() {
     echo "  sudo chown root:$(service_group_name) ${SECRET_FILE} && sudo chmod 0640 ${SECRET_FILE}"
   fi
   echo
-  echo "完成后执行：${restart_cmd}"
+  echo "When finished, run: ${restart_cmd}"
   echo
-  echo "也可安装时传入："
+  echo "Alternatively, provide the values during installation:"
   echo "  SECRET_KEY='eyJ...' NODE_PORT=8443 bash install-*.sh --install --yes"
 }
 
@@ -1984,20 +1984,20 @@ install_geo_extra_files() {
   install_one_geo_extra() {
     local src="$1" dest_name="$2" size size_after staged_size target staged
     [ -n "$src" ] || return 0
-    [ -f "$src" ] || { echo "警告：找不到 ${src}（跳过 ${dest_name}）" >&2; return 0; }
-    require_file_size_at_most "$src" "$RNL_GEO_EXTRA_MAX_BYTES" "$dest_name 源文件" || return
+    [ -f "$src" ] || { echo "Warning: ${src} not found (skipping ${dest_name})" >&2; return 0; }
+    require_file_size_at_most "$src" "$RNL_GEO_EXTRA_MAX_BYTES" "$dest_name source file" || return
     size="$(file_size_bytes "$src")"
     if [ "$size" -eq 0 ]; then
-      echo "拒绝安装空的 ${dest_name} 源文件：${src}" >&2
+      echo "Refusing to install empty ${dest_name} source file: ${src}" >&2
       return 1
     fi
     if [ "$DRY_RUN" -eq 1 ]; then
-      echo "[dry-run] 有界原子安装 ${src} -> ${geo_dir}/${dest_name}"
+      echo "[dry-run] Atomically install ${src} -> ${geo_dir}/${dest_name} with size limits"
       return 0
     fi
 
     require_free_bytes "$(existing_parent "$geo_dir")" $((RNL_GEO_EXTRA_MAX_BYTES + 1048576)) \
-      "$dest_name 目标 staging" || return
+      "$dest_name target staging" || return
     install -d -o root -g root -m 0755 "$geo_dir"
     target="${geo_dir}/${dest_name}"
     staged="${target}.new.$$"
@@ -2011,7 +2011,7 @@ install_geo_extra_files() {
     if [ "$size_after" != "$size" ] || [ "$staged_size" != "$size" ] \
       || ! require_file_size_at_most "$staged" "$RNL_GEO_EXTRA_MAX_BYTES" "$dest_name staging"; then
       rm -f "$staged"
-      echo "${dest_name} 源文件在复制期间发生变化或超过硬上限" >&2
+      echo "${dest_name} source file changed during copying or exceeded the hard limit" >&2
       return 1
     fi
     chown root:root "$staged"
@@ -2020,7 +2020,7 @@ install_geo_extra_files() {
       rm -f "$staged"
       return 1
     fi
-    echo "已安装 ${dest_name} -> ${target}"
+    echo "Installed ${dest_name} -> ${target}"
     copied=1
   }
 
@@ -2030,7 +2030,7 @@ install_geo_extra_files() {
   if [ "$copied" -eq 0 ]; then
     return 0
   fi
-  echo "提示：Xray 路由使用 ext:geo-zapret.dat:zapret / ext:ip-zapret.dat:zapret 引用上述文件。"
+  echo "Note: Xray routing references these files as ext:geo-zapret.dat:zapret and ext:ip-zapret.dat:zapret."
 }
 
 render_env_template() {
@@ -2038,8 +2038,8 @@ render_env_template() {
   local low_mem="$2"
   local installer="$3"
   cat <<EOF
-# Remnawave Node Lite — 由 ${installer} 生成
-# 借鉴官方 environment 变量名，仅需修改下面两项：
+# Remnanode Lite - generated by ${installer}
+# Uses the official environment variable names. Only the following two values need to be changed:
 
 NODE_PORT=${port}
 SECRET_KEY=
@@ -2054,15 +2054,15 @@ INTERNAL_REST_TOKEN=
 LOW_MEMORY=${low_mem}
 BODY_LIMIT_MB=
 
-# 可选：自定义 rw-core 下载 URL（对齐官方 CUSTOM_CORE_URL）
+# Optional: custom rw-core download URL (equivalent to the official CUSTOM_CORE_URL)
 # CUSTOM_CORE_URL=https://example.com/xray-custom
 # CUSTOM_CORE_SHA256=<64-hex>
 
-# 可选：compact ASN 数据库；URL 与 SHA-256 必须同时设置
+# Optional: compact ASN database; URL and SHA-256 must be configured together
 # ASN_DB_URL=https://example.com/asn-prefixes.bin
 # ASN_DB_SHA256=<64-hex>
 
-# 可选：zapret 规则文件（复制到 GEO_DIR，供 ext:geo-zapret.dat 引用）
+# Optional: zapret rule files (copied to GEO_DIR for ext:geo-zapret.dat references)
 # GEO_ZAPRET_FILE=/path/to/geo-zapret.dat
 # IP_ZAPRET_FILE=/path/to/ip-zapret.dat
 EOF

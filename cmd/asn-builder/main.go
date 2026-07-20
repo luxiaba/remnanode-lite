@@ -30,7 +30,7 @@ import (
 
 	"go4.org/netipx"
 
-	"github.com/Luxiaba/remnanode-lite/internal/asn"
+	"github.com/luxiaba/remnanode-lite/internal/asn"
 )
 
 const (

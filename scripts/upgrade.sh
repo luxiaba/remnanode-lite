@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# remnanode-lite 升级脚本（保留 node.env 与 rw-core）
+# remnanode-lite upgrade script (preserves node.env and rw-core)
 # shellcheck source-path=SCRIPTDIR
 set -Eeuo pipefail
 
@@ -19,7 +19,7 @@ XRAY_BIN="/usr/local/lib/remnanode/rw-core"
 GEO_DIR="/usr/local/share/remnanode/xray"
 ASN_DIR="/usr/local/share/remnanode/asn"
 SUPPORT_LINK="/usr/local/lib/remnanode/support-current"
-REPO="${RNL_REPO:-Luxiaba/remnanode-lite}"
+REPO="${RNL_REPO:-luxiaba/remnanode-lite}"
 BOOTSTRAP_TAG="${RNL_TAG:-v${VERSION}}"
 
 bootstrap_helper_is_trusted() {
@@ -66,7 +66,7 @@ bootstrap_helper_is_trusted() {
 }
 
 if ! command -v curl >/dev/null 2>&1; then
-  echo "缺少命令：curl" >&2
+  echo "Missing required command: curl" >&2
   exit 1
 fi
 if [ -n "${BASH_SOURCE[0]:-}" ] \
@@ -78,7 +78,7 @@ if [ -n "${BASH_SOURCE[0]:-}" ] \
 else
   if ! [[ "$REPO" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] \
     || ! [[ "$BOOTSTRAP_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-    echo "非法 RNL_REPO 或 RNL_TAG，拒绝下载 bootstrap helper" >&2
+    echo "Invalid RNL_REPO or RNL_TAG; refusing to download the bootstrap helper" >&2
     exit 2
   fi
   _HELPERS_TMP="$(mktemp -d /var/tmp/remnanode-bootstrap.XXXXXX)"
@@ -95,14 +95,14 @@ else
   if [ "${_HELPERS_DOWNLOAD_STATUS[0]:-1}" -ne 0 ] \
     || [ "${_HELPERS_DOWNLOAD_STATUS[1]:-1}" -ne 0 ] \
     || [ "$_HELPERS_DOWNLOAD_BYTES" -gt 1048576 ]; then
-    echo "bootstrap helper 下载失败或超过 1048576 bytes 硬上限" >&2
+    echo "Bootstrap helper download failed or exceeded the 1048576-byte hard limit" >&2
     exit 1
   fi
   for _HELPERS_FUNCTION in \
     installer_acquire_lock installer_run_nested installer_run_without_lock; do
     grep -Eq "^${_HELPERS_FUNCTION}\\(\\) [({]$" \
       "${_HELPERS_TMP}/install-env-helpers.sh" || {
-      echo "bootstrap helper 缺少锁 API：${_HELPERS_FUNCTION}" >&2
+      echo "Bootstrap helper is missing lock API: ${_HELPERS_FUNCTION}" >&2
       exit 1
     }
   done
@@ -118,7 +118,7 @@ ENSURE_SERVICE_ENABLED="${RNL_ENSURE_SERVICE_ENABLED:-0}"
 
 YES=0
 DRY_RUN=0
-STAGE="初始化"
+STAGE="Initialization"
 BACKUP_DIR=""
 ROLLBACK_ARMED=0
 SERVICE_WAS_ACTIVE=0
@@ -130,26 +130,27 @@ LOW_MEMORY=0
 
 usage() {
   cat <<EOF
-用法：upgrade.sh [--yes] [--dry-run] [--upgrade-xray] [--low-memory] [--help] [--version]
+Usage: upgrade.sh [--yes] [--dry-run] [--upgrade-xray] [--low-memory] [--help] [--version]
 
-Remnawave Node Lite (Go) 升级到 ${TAG}
+Upgrade Remnanode Lite to ${TAG}
 
-环境变量：
-  RNL_REPO           GitHub 仓库，默认 Luxiaba/remnanode-lite
-  RNL_TAG            Release 标签；未设置时固定为 v${VERSION}
-  RNL_UPGRADE_XRAY   设为 1 时同时运行 install-xray.sh
+Environment variables:
+  RNL_REPO           GitHub repository (default: luxiaba/remnanode-lite)
+  RNL_TAG            Release tag (defaults to v${VERSION} when unset)
+  RNL_UPGRADE_XRAY   Set to 1 to run install-xray.sh during the upgrade
   RNL_ENSURE_SERVICE_STARTED
-                     仅由 install 入口设置；配置有效时确保恢复安装后启动服务
+                     Install entrypoint only; start the service after recovery
+                     when the configuration is valid
   RNL_ENSURE_SERVICE_ENABLED
-                     仅由 install 入口设置；确保服务已注册为开机启动
+                     Install entrypoint only; ensure the service starts at boot
 
-选项：
-  --low-memory       强制迁移为 LOW_MEMORY=1（适用于 512MiB 节点）
+Options:
+  --low-memory       Force LOW_MEMORY=1 (recommended for 512 MiB nodes)
 EOF
 }
 
 version() {
-  echo "remnawave-node-lite upgrade ${VERSION}"
+  echo "remnanode-lite upgrade ${VERSION}"
 }
 
 while [ $# -gt 0 ]; do
@@ -161,7 +162,7 @@ while [ $# -gt 0 ]; do
     --help|-h) usage; exit 0 ;;
     --version) version; exit 0 ;;
     *)
-      echo "未知参数：$1" >&2
+      echo "Unknown argument: $1" >&2
       usage
       exit 1
       ;;
@@ -172,7 +173,7 @@ done
 cleanup_unarmed_upgrade_backup() {
   local root backup_name
   [ "$ROLLBACK_ARMED" -eq 0 ] || {
-    echo "拒绝清理已 armed 的升级备份：${BACKUP_DIR}" >&2
+    echo "Refusing to clean an armed upgrade backup: ${BACKUP_DIR}" >&2
     return 1
   }
   [ -n "$BACKUP_DIR" ] || return 0
@@ -181,12 +182,12 @@ cleanup_unarmed_upgrade_backup() {
   validate_installer_temp_root_path "$root" || return
   validate_installer_temp_root_marker "$root" || return
   [ "$(dirname "$BACKUP_DIR")" = "$root" ] || {
-    echo "拒绝清理安装临时根以外的升级备份：${BACKUP_DIR}" >&2
+    echo "Refusing to clean an upgrade backup outside the installer temporary root: ${BACKUP_DIR}" >&2
     return 1
   }
   backup_name="$(basename "$BACKUP_DIR")" || return
   [[ "$backup_name" =~ ^upgrade\.[A-Za-z0-9]{6}$ ]] || {
-    echo "拒绝清理名称异常的升级备份：${BACKUP_DIR}" >&2
+    echo "Refusing to clean an upgrade backup with an invalid name: ${BACKUP_DIR}" >&2
     return 1
   }
   if [ ! -e "$BACKUP_DIR" ] && [ ! -L "$BACKUP_DIR" ]; then
@@ -194,7 +195,7 @@ cleanup_unarmed_upgrade_backup() {
     return 0
   fi
   [ -d "$BACKUP_DIR" ] && [ ! -L "$BACKUP_DIR" ] || {
-    echo "拒绝清理非普通目录升级备份：${BACKUP_DIR}" >&2
+    echo "Refusing to clean an upgrade backup that is not a regular directory: ${BACKUP_DIR}" >&2
     return 1
   }
   validate_existing_owned_directory "$BACKUP_DIR" 0 0 || return
@@ -206,13 +207,13 @@ on_error() {
   local status="${1:-1}"
   local command="${2:-unknown}"
   trap - ERR
-  echo "升级失败：${STAGE}" >&2
-  echo "失败命令：${command}" >&2
+  echo "Upgrade failed during: ${STAGE}" >&2
+  echo "Failed command: ${command}" >&2
   if [ "$ROLLBACK_ARMED" -eq 1 ]; then
-    rollback_upgrade || echo "自动回滚未完整成功，请检查 ${BACKUP_DIR}" >&2
+    rollback_upgrade || echo "Automatic rollback did not complete; inspect ${BACKUP_DIR}" >&2
   elif [ -n "$BACKUP_DIR" ]; then
     cleanup_unarmed_upgrade_backup \
-      || echo "未能安全清理未 armed 的升级备份：${BACKUP_DIR}" >&2
+      || echo "Could not safely clean the unarmed upgrade backup: ${BACKUP_DIR}" >&2
   fi
   exit "$status"
 }
@@ -233,14 +234,14 @@ require_root() {
     return 0
   fi
   if [ "$(id -u)" -ne 0 ]; then
-    echo "请使用 root 运行：sudo bash upgrade.sh" >&2
+    echo "Run this script as root: sudo bash upgrade.sh" >&2
     exit 1
   fi
 }
 
 require_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "缺少命令：$1" >&2
+    echo "Missing required command: $1" >&2
     exit 1
   fi
 }
@@ -250,7 +251,7 @@ detect_arch() {
     x86_64|amd64) echo "amd64" ;;
     aarch64|arm64) echo "arm64" ;;
     *)
-      echo "不支持的架构：$(uname -m)" >&2
+      echo "Unsupported architecture: $(uname -m)" >&2
       exit 1
       ;;
   esac
@@ -268,12 +269,12 @@ confirm_upgrade() {
   if [ "$YES" -eq 1 ] || [ "$DRY_RUN" -eq 1 ]; then
     return 0
   fi
-  echo "当前：$(current_version)"
-  echo "目标：${TAG}"
-  read -r -p "继续升级？[y/N] " ans
+  echo "Current: $(current_version)"
+  echo "Target: ${TAG}"
+  read -r -p "Continue with the upgrade? [y/N] " ans
   case "$ans" in
     y|Y|yes|YES) ;;
-    *) echo "已取消。"; exit 0 ;;
+    *) echo "Cancelled."; exit 0 ;;
   esac
 }
 
@@ -363,13 +364,13 @@ preflight_upgrade_space() {
     ))
     required=$((backup_bytes + RNL_RELEASE_WORK_BYTES + 134217728))
   fi
-  require_free_bytes "$root" "$required" "升级备份与工作集"
+  require_free_bytes "$root" "$required" "upgrade backup and working set"
 }
 
 begin_upgrade_transaction() {
-  step "创建升级事务备份"
+  step "Create upgrade transaction backup"
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 备份 binary / service / support / node.env / secret.key / 可选 rw-core 资产"
+    echo "[dry-run] Back up binary / service / support / node.env / secret.key / optional rw-core assets"
     return 0
   fi
 
@@ -384,19 +385,19 @@ begin_upgrade_transaction() {
     local support_target support_path
     support_target="$(readlink "$SUPPORT_LINK")"
     if ! [[ "$support_target" =~ ^support/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-      echo "拒绝备份异常 support 链接：${SUPPORT_LINK} -> ${support_target}" >&2
+      echo "Refusing to back up an invalid support link: ${SUPPORT_LINK} -> ${support_target}" >&2
       return 1
     fi
     support_path="/usr/local/lib/remnanode/${support_target}"
     if [ ! -d "$support_path" ] || find "$support_path" -type l -print -quit | grep -q .; then
-      echo "拒绝备份缺失或含链接的 support 目录：${support_path}" >&2
+      echo "Refusing to back up a missing support directory or one containing links: ${support_path}" >&2
       return 1
     fi
     printf '%s\n' "$support_target" >"$BACKUP_DIR/support-link"
     mkdir "$BACKUP_DIR/support-content"
     cp -a "$support_path/." "$BACKUP_DIR/support-content/"
   elif [ -e "$SUPPORT_LINK" ]; then
-    echo "拒绝覆盖非符号链接的 ${SUPPORT_LINK}" >&2
+    echo "Refusing to overwrite ${SUPPORT_LINK} because it is not a symbolic link" >&2
     return 1
   else
     : >"$BACKUP_DIR/support-link.absent"
@@ -412,19 +413,19 @@ restore_path() {
   local backup="$1" target="$2" failed=0
   if [ -e "$BACKUP_DIR/$backup" ] || [ -L "$BACKUP_DIR/$backup" ]; then
     if ! rm -rf "$target"; then
-      echo "回滚无法移除 ${target}" >&2
+      echo "Rollback could not remove ${target}" >&2
       failed=1
     elif ! cp -a "$BACKUP_DIR/$backup" "$target"; then
-      echo "回滚无法恢复 ${target}" >&2
+      echo "Rollback could not restore ${target}" >&2
       failed=1
     fi
   elif [ -f "$BACKUP_DIR/$backup.absent" ]; then
     if ! rm -rf "$target"; then
-      echo "回滚无法移除升级新增的 ${target}" >&2
+      echo "Rollback could not remove upgrade-created path ${target}" >&2
       failed=1
     fi
   else
-    echo "回滚缺少 ${target} 的备份记录" >&2
+    echo "Rollback has no backup record for ${target}" >&2
     failed=1
   fi
   return "$failed"
@@ -443,11 +444,11 @@ configured_xray_binary() {
 stop_service_for_maintenance() {
   local xray_binary platform
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 停止服务并确认 remnanode-lite/rw-core 全部退出"
+    echo "[dry-run] Stop the service and confirm all remnanode-lite/rw-core processes have exited"
     return 0
   fi
   if ! xray_binary="$(configured_xray_binary)"; then
-    echo "拒绝停止服务：无法解析配置的 rw-core 路径" >&2
+    echo "Refusing to stop the service: could not resolve the configured rw-core path" >&2
     return 1
   fi
   if is_alpine; then
@@ -457,7 +458,7 @@ stop_service_for_maintenance() {
   fi
   if ! stop_remnanode_and_wait \
     "${PREFIX}/${BIN_NAME}" "$xray_binary" 35 "$platform"; then
-    echo "拒绝继续：remnanode-lite 或其配置的 rw-core 未确认停止" >&2
+    echo "Refusing to continue: remnanode-lite or its configured rw-core was not confirmed stopped" >&2
     return 1
   fi
 }
@@ -472,21 +473,21 @@ restore_service_enabled_state() {
   if [ "$SERVICE_WAS_ENABLED" -eq 1 ]; then
     if is_alpine; then
       if ! rc-update add remnawave-node default >/dev/null 2>&1; then
-        echo "回滚无法恢复 OpenRC 开机注册" >&2
+        echo "Rollback could not restore OpenRC boot registration" >&2
         failed=1
       fi
     elif ! systemctl enable remnawave-node.service >/dev/null 2>&1; then
-      echo "回滚无法恢复 systemd 开机注册" >&2
+      echo "Rollback could not restore systemd boot registration" >&2
       failed=1
     fi
   else
     if is_alpine; then
       if ! rc-update del remnawave-node default >/dev/null 2>&1; then
-        echo "回滚无法移除升级新增的 OpenRC 开机注册" >&2
+        echo "Rollback could not remove the OpenRC boot registration added by the upgrade" >&2
         failed=1
       fi
     elif ! systemctl disable remnawave-node.service >/dev/null 2>&1; then
-      echo "回滚无法移除升级新增的 systemd 开机注册" >&2
+      echo "Rollback could not remove the systemd boot registration added by the upgrade" >&2
       failed=1
     fi
   fi
@@ -497,10 +498,10 @@ restore_service_enabled_state() {
     probe_status=$?
   fi
   if [ "$SERVICE_WAS_ENABLED" -eq 1 ] && [ "$probe_status" -ne 0 ]; then
-    echo "回滚后服务未确认恢复开机注册" >&2
+    echo "Service boot registration was not confirmed after rollback" >&2
     failed=1
   elif [ "$SERVICE_WAS_ENABLED" -eq 0 ] && [ "$probe_status" -ne 1 ]; then
-    echo "回滚后服务未确认恢复 disabled 状态" >&2
+    echo "Service disabled state was not confirmed after rollback" >&2
     failed=1
   fi
   return "$failed"
@@ -508,9 +509,9 @@ restore_service_enabled_state() {
 
 rollback_upgrade() {
   local failed=0 support_link_value="" support_target="" port=""
-  echo "==> 自动回滚升级" >&2
+  echo "==> Automatically roll back the upgrade" >&2
   if ! stop_service_for_maintenance; then
-    echo "为避免替换运行中的二进制，未执行文件回滚；备份目录：${BACKUP_DIR}" >&2
+    echo "File rollback was skipped to avoid replacing a running binary; backup directory: ${BACKUP_DIR}" >&2
     return 1
   fi
 
@@ -520,35 +521,35 @@ rollback_upgrade() {
   restore_path systemd-unit "$UNIT" || failed=1
   restore_path openrc-service "$OPENRC_SVC" || failed=1
   if ! rm -f "$SUPPORT_LINK"; then
-    echo "回滚无法移除 ${SUPPORT_LINK}" >&2
+    echo "Rollback could not remove ${SUPPORT_LINK}" >&2
     failed=1
   fi
   if ! rm -rf "/usr/local/lib/remnanode/support/$TAG"; then
-    echo "回滚无法移除升级 support 目录" >&2
+    echo "Rollback could not remove the upgraded support directory" >&2
     failed=1
   fi
   if [ -f "$BACKUP_DIR/support-link" ]; then
     if ! support_link_value="$(cat "$BACKUP_DIR/support-link")"; then
-      echo "回滚无法读取原 support 链接" >&2
+      echo "Rollback could not read the original support link" >&2
       failed=1
     elif ! [[ "$support_link_value" =~ ^support/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
-      echo "回滚拒绝异常 support 链接：${support_link_value}" >&2
+      echo "Rollback refused an invalid support link: ${support_link_value}" >&2
       failed=1
     else
       support_target="/usr/local/lib/remnanode/${support_link_value}"
       if ! rm -rf "$support_target"; then
-        echo "回滚无法移除 ${support_target}" >&2
+        echo "Rollback could not remove ${support_target}" >&2
         failed=1
       elif ! cp -a "$BACKUP_DIR/support-content" "$support_target"; then
-        echo "回滚无法恢复 ${support_target}" >&2
+        echo "Rollback could not restore ${support_target}" >&2
         failed=1
       elif ! ln -s "$support_link_value" "$SUPPORT_LINK"; then
-        echo "回滚无法恢复 ${SUPPORT_LINK}" >&2
+        echo "Rollback could not restore ${SUPPORT_LINK}" >&2
         failed=1
       fi
     fi
   elif [ ! -f "$BACKUP_DIR/support-link.absent" ]; then
-    echo "回滚缺少 support 链接备份记录" >&2
+    echo "Rollback has no backup record for the support link" >&2
     failed=1
   fi
   if [ "$UPGRADE_XRAY" -eq 1 ]; then
@@ -559,7 +560,7 @@ rollback_upgrade() {
 
   if ! is_alpine; then
     if ! systemctl daemon-reload >/dev/null 2>&1; then
-      echo "回滚后 systemd daemon-reload 失败" >&2
+      echo "systemd daemon-reload failed after rollback" >&2
       failed=1
     fi
   fi
@@ -567,33 +568,33 @@ rollback_upgrade() {
   if [ "$SERVICE_WAS_ACTIVE" -eq 1 ]; then
     if is_alpine; then
       if ! installer_run_without_lock rc-service remnawave-node start >/dev/null 2>&1; then
-        echo "回滚后 OpenRC 服务启动失败" >&2
+        echo "OpenRC failed to start the service after rollback" >&2
         failed=1
       fi
     else
       if ! systemctl start remnawave-node.service >/dev/null 2>&1; then
-        echo "回滚后 systemd 服务启动失败" >&2
+        echo "systemd failed to start the service after rollback" >&2
         failed=1
       fi
     fi
     if ! port="$(read_env_value NODE_PORT "$NODE_ENV")"; then
-      echo "回滚后无法读取 NODE_PORT" >&2
+      echo "Could not read NODE_PORT after rollback" >&2
       failed=1
     elif [ -z "$port" ]; then
       port=2222
     fi
     if [ -n "$port" ] \
       && ! wait_for_service_stable "$port" 30 "${PREFIX}/${BIN_NAME}"; then
-      echo "回滚后的目标服务进程未恢复 :${port} 监听" >&2
+      echo "The restored service process did not resume listening on :${port}" >&2
       failed=1
     fi
   fi
   ROLLBACK_ARMED=0
   if [ "$failed" -ne 0 ]; then
-    echo "回滚不完整；备份目录：${BACKUP_DIR}" >&2
+    echo "Rollback is incomplete; backup directory: ${BACKUP_DIR}" >&2
     return 1
   fi
-  echo "已恢复升级前文件与服务。备份目录：${BACKUP_DIR}" >&2
+  echo "Pre-upgrade files and service state were restored. Backup directory: ${BACKUP_DIR}" >&2
 }
 
 commit_upgrade_transaction() {
@@ -606,35 +607,35 @@ commit_upgrade_transaction() {
   for support_dir in "$support_root"/*; do
     [ -e "$support_dir" ] || continue
     if [ "$support_dir" != "$support_root/$TAG" ] && ! rm -rf "$support_dir"; then
-      echo "警告：无法清理旧 support 目录 ${support_dir}" >&2
+      echo "Warning: could not clean old support directory ${support_dir}" >&2
     fi
   done
   if [ -n "$BACKUP_DIR" ]; then
-    rm -rf "$BACKUP_DIR" || echo "警告：无法清理事务备份 ${BACKUP_DIR}" >&2
+    rm -rf "$BACKUP_DIR" || echo "Warning: could not clean transaction backup ${BACKUP_DIR}" >&2
     BACKUP_DIR=""
   fi
 }
 
 download_binary() {
   local arch="$1"
-  step "下载 ${BIN_NAME} ${TAG} (linux/${arch})"
+  step "Download ${BIN_NAME} ${TAG} (linux/${arch})"
   install_release_binary "$REPO" "$TAG" "$arch" "${PREFIX}/${BIN_NAME}"
 }
 
 upgrade_xray() {
   if [ "$UPGRADE_XRAY" -ne 1 ]; then
-    echo "跳过 rw-core 升级（设 RNL_UPGRADE_XRAY=1 或 --upgrade-xray 可启用）。"
+    echo "Skipping the rw-core upgrade (set RNL_UPGRADE_XRAY=1 or use --upgrade-xray to enable it)."
     return 0
   fi
 
-  step "升级 rw-core"
+  step "Upgrade rw-core"
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 执行目标 Release 中已校验的 install-xray.sh"
+    echo "[dry-run] Run the verified install-xray.sh from the target release"
     return 0
   fi
   local support
   support="$(installed_support_file scripts/install-xray.sh)"
-  [ -f "$support" ] || { echo "缺少已校验 install-xray.sh" >&2; return 1; }
+  [ -f "$support" ] || { echo "Verified install-xray.sh is missing" >&2; return 1; }
   RNL_REPO="$REPO" RNL_TAG="$TAG" \
     RNL_TMP_ROOT="$(installer_temp_root)" RNL_EXTERNAL_ASSET_ROLLBACK=1 \
     installer_run_nested bash "$support"
@@ -660,9 +661,9 @@ migrate_runtime_configuration() {
   fi
   set_env_value LOW_MEMORY "$target"
   if [ "$target" -eq 1 ]; then
-    echo "已迁移为 LOW_MEMORY=1（512MiB 资源模式）"
+    echo "Migrated to LOW_MEMORY=1 (512 MiB resource profile)"
   else
-    echo "已补齐 LOW_MEMORY=0；可用 --low-memory 显式启用"
+    echo "Added LOW_MEMORY=0; use --low-memory to enable it explicitly"
   fi
 }
 
@@ -671,16 +672,16 @@ refresh_systemd() {
     return 0
   fi
 
-  step "刷新 systemd unit"
+  step "Refresh systemd unit"
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 更新 ${UNIT}"
+    echo "[dry-run] Update ${UNIT}"
     return 0
   fi
 
   local support
   support="$(installed_support_file deploy/remnawave-node.service)" || return
-  [ -f "$support" ] || { echo "缺少已校验 systemd unit" >&2; return 1; }
+  [ -f "$support" ] || { echo "Verified systemd unit is missing" >&2; return 1; }
   install_managed_file "$support" "$UNIT" 0644 || return
   systemctl daemon-reload || return
 }
@@ -690,16 +691,16 @@ refresh_openrc() {
     return 0
   fi
 
-  step "刷新 OpenRC 服务文件"
+  step "Refresh OpenRC service file"
 
   if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[dry-run] 更新 ${OPENRC_SVC}"
+    echo "[dry-run] Update ${OPENRC_SVC}"
     return 0
   fi
 
   local support
   support="$(installed_support_file deploy/remnawave-node.openrc)" || return
-  [ -f "$support" ] || { echo "缺少已校验 OpenRC service" >&2; return 1; }
+  [ -f "$support" ] || { echo "Verified OpenRC service file is missing" >&2; return 1; }
   install_managed_file "$support" "$OPENRC_SVC" 0755 || return
 }
 
@@ -709,12 +710,12 @@ ensure_service_enabled() {
     return 0
   fi
 
-  step "注册 remnawave-node 开机启动"
+  step "Register remnawave-node to start at boot"
   if [ "$DRY_RUN" -eq 1 ]; then
     if is_alpine; then
-      echo "[dry-run] rc-update add remnawave-node default 并确认注册"
+      echo "[dry-run] Run rc-update add remnawave-node default and verify registration"
     else
-      echo "[dry-run] systemctl enable remnawave-node.service 并确认注册"
+      echo "[dry-run] Run systemctl enable remnawave-node.service and verify registration"
     fi
     return 0
   fi
@@ -722,11 +723,11 @@ ensure_service_enabled() {
   SERVICE_ENABLE_MUTATION_ATTEMPTED=1
   if is_alpine; then
     if ! rc-update add remnawave-node default; then
-      echo "OpenRC 开机注册失败" >&2
+      echo "OpenRC boot registration failed" >&2
       return 1
     fi
   elif ! systemctl enable remnawave-node.service; then
-    echo "systemd 开机注册失败" >&2
+    echo "systemd boot registration failed" >&2
     return 1
   fi
 
@@ -737,16 +738,16 @@ ensure_service_enabled() {
   fi
   if [ "$probe_status" -ne 0 ]; then
     if [ "$probe_status" -eq 1 ]; then
-      echo "服务管理器未保留 remnawave-node 开机注册" >&2
+      echo "The service manager did not retain remnawave-node boot registration" >&2
     else
-      echo "开机注册后无法可靠确认服务状态" >&2
+      echo "Could not reliably confirm service state after boot registration" >&2
     fi
     return 1
   fi
 }
 
 restart_service() {
-  step "重启 remnawave-node"
+  step "Restart remnawave-node"
   if [ "$DRY_RUN" -eq 1 ]; then
     if is_alpine; then
       echo "[dry-run] rc-service remnawave-node restart"
@@ -756,12 +757,12 @@ restart_service() {
     return 0
   fi
   if [ ! -f "$NODE_ENV" ]; then
-    echo "未找到 ${NODE_ENV}，请先运行 install 脚本。" >&2
+    echo "${NODE_ENV} was not found; run the install script first" >&2
     return 1
   fi
 
   if [ "$SERVICE_SHOULD_BE_ACTIVE" -eq 0 ]; then
-    echo "服务升级前未运行，保留 stopped 状态。"
+    echo "The service was not running before the upgrade; preserving the stopped state."
     return 0
   fi
 
@@ -815,9 +816,9 @@ main() {
 
   if [ ! -f "${PREFIX}/${BIN_NAME}" ] && [ "$DRY_RUN" -eq 0 ]; then
     if is_alpine; then
-      echo "未检测到已安装的 ${BIN_NAME}，请先运行 install-node-alpine.sh。" >&2
+      echo "No installed ${BIN_NAME} was detected; run install-node-alpine.sh first" >&2
     else
-      echo "未检测到已安装的 ${BIN_NAME}，请先运行 install-node.sh。" >&2
+      echo "No installed ${BIN_NAME} was detected; run install-node.sh first" >&2
     fi
     exit 1
   fi
@@ -838,7 +839,7 @@ main() {
         ;;
       1) ;;
       *)
-        echo "无法可靠探测 remnawave-node 运行状态，拒绝升级" >&2
+        echo "Could not reliably determine the remnawave-node runtime state; refusing to upgrade" >&2
         return 1
         ;;
     esac
@@ -853,7 +854,7 @@ main() {
         0) SERVICE_WAS_ENABLED=1 ;;
         1) SERVICE_WAS_ENABLED=0 ;;
         *)
-          echo "无法可靠探测 remnawave-node 开机注册状态，拒绝升级" >&2
+          echo "Could not reliably determine remnawave-node boot registration; refusing to upgrade" >&2
           return 1
           ;;
       esac
@@ -868,14 +869,14 @@ main() {
   local arch
   arch="$(detect_arch)"
 
-  echo "升级前：$(current_version)"
+  echo "Before upgrade: $(current_version)"
   ensure_service_account
   setup_service_directories
   begin_upgrade_transaction
   if [ "$DRY_RUN" -eq 0 ]; then
     ROLLBACK_ARMED=1
   fi
-  step "停止并确认现有 remnanode-lite/rw-core"
+  step "Stop and confirm the existing remnanode-lite/rw-core processes"
   stop_service_for_maintenance || return $?
   normalize_runtime_environment
   download_binary "$arch"
@@ -891,13 +892,13 @@ main() {
   commit_upgrade_transaction
 
   echo
-  echo "升级完成。"
-  echo "  当前版本：$(current_version)"
-  echo "  配置保留：${NODE_ENV}"
+  echo "Upgrade complete."
+  echo "  Current version: $(current_version)"
+  echo "  Configuration preserved: ${NODE_ENV}"
   if is_alpine; then
-    echo "  日志：    tail -f /var/log/remnanode/openrc.log"
+    echo "  Logs: tail -f /var/log/remnanode/openrc.log"
   else
-    echo "  日志：    journalctl -u remnawave-node -f"
+    echo "  Logs: journalctl -u remnawave-node -f"
   fi
 }
 

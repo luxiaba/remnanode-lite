@@ -2,8 +2,21 @@ package system
 
 import (
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
+
+type stubNetworkStatsProvider struct {
+	stats *NetworkInterface
+	calls atomic.Int64
+}
+
+func (p *stubNetworkStatsProvider) GetDefaultInterface() *NetworkInterface {
+	p.calls.Add(1)
+	return p.stats
+}
 
 func TestNodeArchitectureMatchesProcessArchNames(t *testing.T) {
 	// Oracle: Node.js os.arch()/process.arch documented values.
@@ -56,8 +69,8 @@ func TestNodeSystemTypeMatchesOSNames(t *testing.T) {
 	}
 }
 
-func TestGetInfoUsesKernelIdentity(t *testing.T) {
-	info := GetInfo()
+func TestCollectorInfoUsesKernelIdentity(t *testing.T) {
+	info := NewCollector(nil).Info()
 	if info.Arch != nodeArchitecture(runtime.GOARCH) {
 		t.Fatalf("arch = %q, want Node name for %q", info.Arch, runtime.GOARCH)
 	}
@@ -72,5 +85,77 @@ func TestGetInfoUsesKernelIdentity(t *testing.T) {
 	}
 	if info.Release == runtime.GOOS || info.Version == runtime.Version() {
 		t.Fatalf("kernel fields contain Go runtime placeholders: %+v", info)
+	}
+}
+
+func TestCollectorUsesInjectedNetworkProvider(t *testing.T) {
+	t.Parallel()
+
+	provided := &NetworkInterface{
+		Interface:     "eth0",
+		RxBytesPerSec: 10,
+		TxBytesPerSec: 20,
+		RxTotal:       30,
+		TxTotal:       40,
+	}
+	provider := &stubNetworkStatsProvider{stats: provided}
+	startedAt := time.Unix(123, 0)
+	collector := newCollector(provider, startedAt)
+
+	stats := collector.Stats()
+	if stats.Interface == nil || *stats.Interface != *provided {
+		t.Fatalf("interface stats = %#v, want %#v", stats.Interface, provided)
+	}
+	if stats.Interface == provided {
+		t.Fatal("collector returned provider-owned network stats without copying")
+	}
+	if got := provider.calls.Load(); got != 1 {
+		t.Fatalf("provider calls = %d, want 1", got)
+	}
+	if collector.startedAt != startedAt {
+		t.Fatalf("collector startedAt = %v, want %v", collector.startedAt, startedAt)
+	}
+}
+
+func TestCollectorSupportsNoNetworkProvider(t *testing.T) {
+	t.Parallel()
+
+	collector := newCollector(nil, time.Now())
+	if stats := collector.Stats(); stats.Interface != nil {
+		t.Fatalf("interface stats = %#v, want nil", stats.Interface)
+	}
+	if snapshot := collector.Snapshot(); snapshot.Stats.Interface != nil {
+		t.Fatalf("snapshot interface stats = %#v, want nil", snapshot.Stats.Interface)
+	}
+}
+
+func TestCollectorSupportsConcurrentReads(t *testing.T) {
+	t.Parallel()
+
+	provider := &stubNetworkStatsProvider{stats: &NetworkInterface{Interface: "eth0"}}
+	collector := newCollector(provider, time.Now())
+	const goroutines = 16
+	const readsPerGoroutine = 10
+
+	var readers sync.WaitGroup
+	readers.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer readers.Done()
+			for range readsPerGoroutine {
+				if got := collector.Stats().Interface; got == nil || got.Interface != "eth0" {
+					t.Errorf("stats interface = %#v", got)
+				}
+				if got := collector.Snapshot().Stats.Interface; got == nil || got.Interface != "eth0" {
+					t.Errorf("snapshot interface = %#v", got)
+				}
+			}
+		}()
+	}
+	readers.Wait()
+
+	wantCalls := int64(goroutines * readsPerGoroutine * 2)
+	if got := provider.calls.Load(); got != wantCalls {
+		t.Fatalf("provider calls = %d, want %d", got, wantCalls)
 	}
 }

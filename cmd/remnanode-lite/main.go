@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -15,26 +16,29 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/asn"
-	"github.com/Luxiaba/remnanode-lite/internal/auth"
-	"github.com/Luxiaba/remnanode-lite/internal/bodylimit"
-	"github.com/Luxiaba/remnanode-lite/internal/config"
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	"github.com/Luxiaba/remnanode-lite/internal/doctor"
-	"github.com/Luxiaba/remnanode-lite/internal/httpserver"
-	"github.com/Luxiaba/remnanode-lite/internal/netadmin"
-	"github.com/Luxiaba/remnanode-lite/internal/plugin"
-	"github.com/Luxiaba/remnanode-lite/internal/secret"
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
-	"github.com/Luxiaba/remnanode-lite/internal/version"
-	"github.com/Luxiaba/remnanode-lite/internal/xray"
+	"github.com/luxiaba/remnanode-lite/internal/asn"
+	"github.com/luxiaba/remnanode-lite/internal/auth"
+	"github.com/luxiaba/remnanode-lite/internal/bodylimit"
+	"github.com/luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/doctor"
+	"github.com/luxiaba/remnanode-lite/internal/httpserver"
+	"github.com/luxiaba/remnanode-lite/internal/netadmin"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
+	"github.com/luxiaba/remnanode-lite/internal/secret"
+	"github.com/luxiaba/remnanode-lite/internal/stats"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/unixconfig"
+	"github.com/luxiaba/remnanode-lite/internal/version"
+	"github.com/luxiaba/remnanode-lite/internal/xray"
 )
 
 const nodeShutdownTimeout = 25 * time.Second
+const internalHealthcheckTimeout = 2 * time.Second
 
-const cliUsage = `usage: remnanode-lite [version|doctor|kill-sockets|validate-secret|canonicalize-secret|release-url|install-script-url]
-  kill-sockets, --kill-sockets, -k  Kill sockets by IP address`
+const cliUsage = `usage: remnanode-lite [version|healthcheck|doctor|kill-sockets|validate-secret|canonicalize-secret|release-url|install-script-url]
+  kill-sockets, --kill-sockets, -k  Kill connected sockets matching a local or remote IP`
 
 type socketKiller func(context.Context, string) error
 
@@ -92,6 +96,11 @@ func runCLI(
 			return usageError("usage: remnanode-lite version")
 		}
 		return writeLine(version.String())
+	case "healthcheck":
+		if len(args) != 1 {
+			return usageError("usage: remnanode-lite healthcheck")
+		}
+		return internalHealthcheck(stderr)
 	case "doctor":
 		doctorArgs := args[1:]
 		if len(doctorArgs) != 0 && (len(doctorArgs) != 2 || doctorArgs[0] != "--env" || doctorArgs[1] == "") {
@@ -117,12 +126,22 @@ func runCLI(
 		if len(args) != 3 {
 			return usageError("usage: remnanode-lite release-url <tag> <arch>")
 		}
-		return writeLine(version.ReleaseAssetURL(args[1], args[2]))
+		assetURL, err := version.ReleaseAssetURL(args[1], args[2])
+		if err != nil {
+			fmt.Fprintf(stderr, "release-url: %v\n", err)
+			return 2
+		}
+		return writeLine(assetURL)
 	case "install-script-url":
 		if len(args) != 3 {
 			return usageError("usage: remnanode-lite install-script-url <tag> <script>")
 		}
-		return writeLine(version.InstallScriptURL(args[1], args[2]))
+		scriptURL, err := version.InstallScriptURL(args[1], args[2])
+		if err != nil {
+			fmt.Fprintf(stderr, "install-script-url: %v\n", err)
+			return 2
+		}
+		return writeLine(scriptURL)
 	default:
 		fmt.Fprintf(stderr, "Unknown command: %s\n", args[0])
 		fmt.Fprintln(stderr, cliUsage)
@@ -130,8 +149,27 @@ func runCLI(
 	}
 }
 
+func internalHealthcheck(stderr io.Writer) int {
+	path := strings.TrimSpace(os.Getenv("INTERNAL_SOCKET_PATH"))
+	if path == "" {
+		path = config.DefaultInternalSocketPath
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), internalHealthcheckTimeout)
+	defer cancel()
+	connection, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
+	if err != nil {
+		fmt.Fprintf(stderr, "internal healthcheck failed: %v\n", err)
+		return 1
+	}
+	if err := connection.Close(); err != nil {
+		fmt.Fprintf(stderr, "internal healthcheck failed: close socket: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
 func killSocketsCommand(input io.Reader, stdout, stderr io.Writer, killSockets socketKiller) int {
-	if _, err := io.WriteString(stdout, "Enter IP address to kill sockets for: "); err != nil {
+	if _, err := io.WriteString(stdout, "Enter local or remote IP address to match: "); err != nil {
 		fmt.Fprintf(stderr, "Failed to kill sockets: write prompt: %v\n", err)
 		return 1
 	}
@@ -152,7 +190,7 @@ func killSocketsCommand(input io.Reader, stdout, stderr io.Writer, killSockets s
 		fmt.Fprintln(stderr, "Failed to kill sockets: IP address is required")
 		return 1
 	}
-	if _, err := fmt.Fprintf(stdout, "Killing sockets for IP: %s...\n", ipAddress); err != nil {
+	if _, err := fmt.Fprintf(stdout, "Killing connected sockets whose local or remote IP matches: %s...\n", ipAddress); err != nil {
 		fmt.Fprintf(stderr, "Failed to kill sockets: write progress: %v\n", err)
 		return 1
 	}
@@ -218,15 +256,16 @@ func canonicalSecretFromReader(input io.Reader) (string, error) {
 }
 
 func runNode() (runErr error) {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	cfg, err := config.Load(runtimeEnvPath())
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
-	if err := bodylimit.Configure(cfg.LowMemory, cfg.BodyLimitMB); err != nil {
+	bodyBudget, err := bodylimit.New(cfg.LowMemory, cfg.BodyLimitMB)
+	if err != nil {
 		return fmt.Errorf("configure request body limit: %w", err)
-	}
-	if err := applyRuntimeOverrides(cfg); err != nil {
-		return err
 	}
 	applyMemoryLimit(cfg)
 	if !netadmin.HasCapNetAdmin() {
@@ -243,19 +282,6 @@ func runNode() (runErr error) {
 		return fmt.Errorf("initialize JWT validator: %w", err)
 	}
 
-	manager, err := xray.NewManager(xray.Options{
-		XrayBin:            cfg.XrayBin,
-		GeoDir:             cfg.GeoDir,
-		LogDir:             cfg.LogDir,
-		InternalSocketPath: cfg.InternalSocketPath,
-		InternalRESTToken:  cfg.InternalRESTToken,
-		DisableHashCheck:   cfg.DisableHashedSetCheck,
-		LowMemory:          cfg.LowMemory,
-	})
-	if err != nil {
-		return fmt.Errorf("initialize Xray manager: %w", err)
-	}
-
 	pluginState := plugin.NewState()
 	if asnDB, err := asn.Open(cfg.ASNDBPath); err != nil {
 		log.Printf("ASN database unavailable (%s): %v — asList shared lists resolve empty", cfg.ASNDBPath, err)
@@ -268,22 +294,9 @@ func runNode() (runErr error) {
 		}()
 		log.Printf("ASN database loaded from %s", cfg.ASNDBPath)
 	}
-	dropper := connections.NewDropper(pluginState.IsWhitelisted)
-	pluginService := plugin.NewService(pluginState, dropper, manager)
-	if err := pluginService.Initialize(); err != nil {
-		log.Printf("warning: plugin nftables unavailable; nft-dependent plugins are disabled: %v", err)
-	}
-	cleanup := &nodeComponentCleanup{
-		stopNetwork:     system.DefaultNetworkMonitor().Stop,
-		shutdownManager: manager.Shutdown,
-		stopCore: func() error {
-			if response := manager.Stop(); !response.IsStopped {
-				return errors.New("process did not stop")
-			}
-			return nil
-		},
-		closePlugin: pluginService.CloseContext,
-	}
+
+	networkMonitor := system.NewNetworkMonitor()
+	cleanup := &nodeComponentCleanup{stopNetwork: networkMonitor.Stop}
 	cleanupComponents := cleanup.Run
 	cleanupCompleted := false
 	defer func() {
@@ -294,15 +307,55 @@ func runNode() (runErr error) {
 		}
 	}()
 
-	manager.SetTorrentBlockerProvider(pluginState)
+	systemCollector := system.NewCollector(networkMonitor)
+	manager, err := xray.NewManager(xray.Options{
+		Lifetime:           ctx,
+		XrayBin:            cfg.XrayBin,
+		GeoDir:             cfg.GeoDir,
+		LogDir:             cfg.LogDir,
+		InternalSocketPath: cfg.InternalSocketPath,
+		InternalRESTToken:  cfg.InternalRESTToken,
+		DisableHashCheck:   cfg.DisableHashedSetCheck,
+		LowMemory:          cfg.LowMemory,
+		NodeVersion:        version.ResolveContractVersion(cfg.NodeContractVersion),
+		CoreVersion:        cfg.XrayCoreVersion,
+		System:             systemCollector,
+		TorrentBlocker:     pluginState,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize Xray manager: %w", err)
+	}
+	cleanup.shutdownManager = manager.Shutdown
+	cleanup.stopCore = func() error {
+		if response := manager.Stop(); !response.IsStopped {
+			return errors.New("process did not stop")
+		}
+		return nil
+	}
+	dropper := connections.NewDropper(pluginState.IsWhitelisted)
+	pluginService := plugin.NewService(pluginState, dropper, manager)
+	cleanup.closePlugin = pluginService.CloseContext
+	if err := pluginService.InitializeContext(ctx); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("initialize plugin service: %w", ctx.Err())
+		}
+		log.Printf("warning: plugin nftables unavailable; nft-dependent plugins are disabled: %v", err)
+	}
 
-	server, err := httpserver.New(cfg, payload, validator, manager, pluginService, dropper)
+	statsService := stats.NewService(manager, pluginService, systemCollector)
+	handlerService := nodehandler.NewService(manager, dropper)
+
+	server, err := httpserver.New(cfg, payload, httpserver.Dependencies{
+		Validator: validator,
+		Xray:      manager,
+		Stats:     statsService,
+		Handler:   handlerService,
+		Plugins:   pluginService,
+		Body:      bodyBudget,
+	})
 	if err != nil {
 		return fmt.Errorf("initialize HTTPS server: %w", err)
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	unixServer := &unixconfig.Server{
 		Path:     cfg.InternalSocketPath,
@@ -383,21 +436,6 @@ func runtimeEnvPath() string {
 		return path
 	}
 	return config.ResolveEnvPath()
-}
-
-func applyRuntimeOverrides(cfg config.Config) error {
-	for key, value := range map[string]string{
-		"NODE_CONTRACT_VERSION": cfg.NodeContractVersion,
-		"XRAY_CORE_VERSION":     cfg.XrayCoreVersion,
-	} {
-		if value == "" {
-			continue
-		}
-		if err := os.Setenv(key, value); err != nil {
-			return fmt.Errorf("set %s runtime override: %w", key, err)
-		}
-	}
-	return nil
 }
 
 // applyMemoryLimit runs after the bounded config read and before Secret parsing

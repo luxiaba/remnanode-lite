@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/executil"
-	"github.com/Luxiaba/remnanode-lite/internal/netadmin"
+	"github.com/luxiaba/remnanode-lite/internal/executil"
+	"github.com/luxiaba/remnanode-lite/internal/netadmin"
 )
 
 const (

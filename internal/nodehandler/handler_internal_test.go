@@ -4,15 +4,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 func TestResultAccumulatorRetainsFirstFailure(t *testing.T) {
 	t.Parallel()
 	var results resultAccumulator
-	results.Add(xtls.HandlerResult{OK: true})
-	results.Add(xtls.HandlerResult{OK: false, Message: "first"})
-	results.Add(xtls.HandlerResult{OK: false, Message: "second"})
+	results.Add(xrayrpc.HandlerResult{OK: true})
+	results.Add(xrayrpc.HandlerResult{OK: false, Message: "first"})
+	results.Add(xrayrpc.HandlerResult{OK: false, Message: "second"})
 	response := results.Response()
 	if response.Success || response.Error == nil || *response.Error != "first" {
 		t.Fatalf("response = %#v", response)

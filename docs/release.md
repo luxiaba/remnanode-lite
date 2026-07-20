@@ -1,160 +1,694 @@
-# 2.8.0-rnl.1 本地发布清单
+# Release and Version Maintenance Guide
 
-本项目在获得明确授权前只在本地提交和打 tag，不 push、不创建 PR。公开发布时，自有仓库的 tag workflow 同时构建 GitHub Release 资产和 GHCR 多架构镜像。
+[Documentation home](README.md) | [Versioning model](versioning.md)
 
-当前尚未冻结代码候选 `C`，也未生成真实验收 evidence；本清单是发布流程，不是已经完成的验收报告。
+This guide defines the long-term release process for maintainers, from routine
+development and candidate freezing through real-environment acceptance, GitHub
+Releases, and GHCR image publication. It is the repository's authoritative
+release procedure, not a one-time checklist for a particular version.
 
-发布采用两阶段冻结：先形成代码候选 commit `C`，所有真实验收绑定 `C`；验收后只能修改发布文档和验收记录。任何 Go、脚本、workflow 或部署文件变化都会使证据失效，必须形成新候选并重跑验收。
+See [`versioning.md`](versioning.md) for the normative version and image-channel
+rules. This guide explains how to turn those rules into a verifiable release.
 
-## 1. 冻结代码候选
+The process has three primary goals:
 
-准备固定官方源码 checkout、完整 Go module cache，以及 ShellCheck `0.11.0`、`actionlint v1.7.7`、`govulncheck v1.1.4`：
+1. Every final release is traceable to one specific commit on the protected
+   `main` branch.
+2. Acceptance records bind the candidate commit, binary digests, and the exact
+   container manifest digest that was tested.
+3. `latest` always refers to the most recently completed release whose
+   candidate attestation was verified. Re-running an older release must never
+   move `latest` backwards.
+
+## 1. Version Model
+
+The project version and the official Node contract version are separate
+concepts.
+
+| Name | Example | Meaning |
+| --- | --- | --- |
+| Project version | `2.8.1-rnl.9` | Identity of this remnanode-lite build and Release |
+| Contract version | `2.8.0` | Official Node contract baseline currently proven by the code and reported to the Panel by default |
+| Git tag | `v2.8.1-rnl.9` | Triggers the final release workflow and becomes immutable after publication |
+| Image tag | `2.8.1-rnl.9` | Exactly matches the project version, without the Git tag's `v` prefix |
+
+Final releases may use only these formats:
+
+- `X.Y.Z-rnl.N`: an independent project iteration. `N` has no direct
+  relationship to the official release sequence. The project may start work on
+  a future version early or continue improving an already aligned official
+  version.
+- `X.Y.Z`: an official-alignment release. This form is permitted only after the
+  current contract, pinned official source, implementation, tests, and
+  real-environment acceptance have all been aligned with `X.Y.Z`.
+
+For a plain `X.Y.Z` release, the project version must equal the contract
+version. The first three components of `X.Y.Z-rnl.N` do not claim official
+compatibility; the actual compatibility range is always defined by the
+contract version and the compatibility matrix in the Release notes.
+
+The following progressions are all valid:
+
+```text
+Project version     Contract version     Meaning
+2.8.1-rnl.1         2.8.0                Begin the 2.8.1 project line early while still reporting the 2.8.0 contract
+2.8.1               2.8.1                Plain release after official 2.8.1 alignment is complete
+2.8.1-rnl.9         2.8.1                Continue project-specific improvements on an aligned version
+2.8.2-rnl.1         2.8.1                Begin the next project development line early
+```
+
+In SemVer syntax, `-rnl.N` is a prerelease suffix, so SemVer sorts
+`2.8.1-rnl.9` before `2.8.1`. This project does not use SemVer ordering to
+determine release chronology or the target of `latest`. The complete release
+gates determine stability, and the actual release history determines order.
+
+### 1.1 Tag Immutability
+
+- A published final Git tag, `v${VERSION}`, must never be moved, overwritten,
+  or reused.
+- Published exact-version GHCR tags and `sha-*` tags must never be deliberately
+  overwritten.
+- `edge` and `latest` are explicitly mutable aliases and must not be used as
+  rollback identities.
+- Builds that have not completed final acceptance may use only `edge`, `sha-*`,
+  or `candidate-sha-*`; they must not receive a final `v*` Git tag.
+- `latest` is this project's stable image channel. It does not refer to the
+  `latest` tag of the official `remnawave/node` image.
+
+## 2. Branch and Automation Boundaries
+
+The repository maintains two long-lived branches:
+
+| Branch | Responsibility | Normal entry path |
+| --- | --- | --- |
+| `dev` | Routine development, integration, and regression testing | Pull request from a short-lived topic branch after CI passes |
+| `main` | Source of release candidates and final releases | Pull request from `dev` after CI passes |
+
+The GitHub Actions workflows have distinct responsibilities:
+
+| Workflow | Trigger | Output or responsibility |
+| --- | --- | --- |
+| [`ci`](../.github/workflows/ci.yml) | Pushes to `dev`/`main` and relevant pull requests | Go, repository, installer, and Linux network-management gates, summarized by `ci / gate` |
+| [`container`](../.github/workflows/container.yml) | Pushes or pull requests to `dev`/`main` that change container inputs | Builds only on `dev` and pull requests; on `main`, builds and attests by digest before publishing `sha-<commit>` and `edge` |
+| [`security`](../.github/workflows/security.yml) | Scheduled or manual | Scans for reachable Go vulnerabilities |
+| [`contract-sync`](../.github/workflows/contract-sync.yml) | Scheduled or manual | Checks the pinned official contract and opens an issue when a new official version appears; never changes code automatically |
+| [`release`](../.github/workflows/release.yml) | Push of a `v*` tag | Runs final gates, verifies candidate attestation, creates the GitHub Release, and promotes exact and `latest` GHCR tags |
+
+`ci` and `container` are not duplicate pipelines. The former verifies the code
+and repository; the latter verifies or publishes the container. Branch
+protection should always require `ci / gate`, which cannot disappear because of
+path filtering. The path-filtered `container` workflow is unsuitable as the
+only required check.
+
+## 3. Routine Development
+
+All features, fixes, dependency changes, workflows, deployment assets, and
+long-lived documentation changes first enter `dev` through a topic branch:
 
 ```bash
-export REMNANODE_OFFICIAL_SOURCE=/path/to/remnawave-node-2.8.0-596f015
+git switch dev
+git pull --ff-only origin dev
+git switch -c chore/prepare-next-release
+
+# Make the changes and run checks appropriate to their risk.
+bash scripts/check-go.sh
+
+git status --short
+git diff --check
+git add <explicit-file-list>
+git diff --cached --check
+git commit -m "type(scope): describe the change"
+git push -u origin chore/prepare-next-release
+
+# Open a chore/prepare-next-release -> dev pull request on GitHub.
+# Merge it after CI succeeds and the review is complete.
+```
+
+Even with a single maintainer, use the same pull-request path so that changes,
+CI conclusions, and review context on `dev` remain traceable. Permission to
+push directly is not the normal development entry point.
+
+Before release, update all version metadata on `dev`. Define the intended
+project version as:
+
+```bash
+VERSION=X.Y.Z-rnl.N   # Or X.Y.Z after official alignment is complete.
+TAG="v${VERSION}"
+```
+
+The version update must cover the application version, default tags in the
+install and upgrade scripts, default container images, contract-probe identity,
+the root [`CHANGELOG.md`](../CHANGELOG.md), and related tests. Merely entering a
+new `rnl` project line must not silently change the contract version or the
+official source pin.
+
+An official contract upgrade is a separate compatibility project. At minimum,
+it requires:
+
+- pinning the new official Node tag and full commit;
+- updating the contract version and version reported to the Panel;
+- re-auditing routes, schemas, errors, and side effects;
+- updating the implementation and automated tests; and
+- updating compatibility documentation, the real Panel target, and the
+  acceptance scope.
+
+## 4. Merge the Code Candidate into `main`
+
+After regression testing on `dev`, open a `dev -> main` pull request. The code
+pull request may use any normal merge method allowed by the repository. Define
+candidate commit `C` as the final commit on `main` after that pull request has
+been merged, not the pre-merge commit from `dev`.
+
+```bash
+git fetch origin dev main
+git switch main
+git pull --ff-only origin main
+
+C="$(git rev-parse HEAD)"
+git rev-parse "${C}^{commit}"
+git rev-parse "${C}^{tree}"
+```
+
+Freeze `main` at this point. The freeze covers Go code, tests, scripts,
+workflows, Dockerfiles, Compose files, service definitions, and all
+documentation outside the release-finalization allowlist. If `main` changes
+beyond that allowlist during acceptance, the original evidence becomes
+invalid. Treat the new `main` commit as `C` and repeat the affected acceptance
+work.
+
+Do not create the final `v${VERSION}` tag yet. The full 40-character commit is
+sufficient to identify a candidate. If a local marker is genuinely useful, it
+may include the short commit SHA, but it must not be treated or pushed as a
+Release tag.
+
+## 5. Accept the Candidate Image
+
+When the candidate changes a container input, the `container` workflow on
+`main` first builds a multi-architecture manifest without a user-facing tag. It
+produces BuildKit SBOM/provenance and a GitHub build attestation before
+publishing:
+
+```text
+ghcr.io/luxiaba/remnanode-lite:edge
+ghcr.io/luxiaba/remnanode-lite:sha-${C}
+```
+
+The workflow refuses to move `sha-${C}` after its first publication. It updates
+`edge` only while `C` remains the current `main` HEAD. Use `sha-${C}` to locate
+the automatic candidate, then treat the manifest digest returned by the
+registry as the canonical image identity for acceptance. Download the Compose
+and deployment assets from the same `C` so the image and its configuration
+cannot come from different commits.
+
+```bash
+IMAGE="ghcr.io/luxiaba/remnanode-lite:sha-${C}"
+docker pull "$IMAGE"
+docker buildx imagetools inspect "$IMAGE"
+
+CANDIDATE_DIGEST="$(docker buildx imagetools inspect \
+  --format '{{.Manifest.Digest}}' "$IMAGE")"
+printf '%s\n' "$CANDIDATE_DIGEST" \
+  | grep -Eq '^sha256:[0-9a-f]{64}$'
+
+gh attestation verify \
+  "oci://ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}" \
+  --repo luxiaba/remnanode-lite \
+  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml \
+  --source-digest "$C" \
+  --source-ref refs/heads/main \
+  --deny-self-hosted-runners
+```
+
+A manual run of the candidate workflow from `main` publishes only the
+policy-immutable `candidate-sha-${C}` alias. It does not overwrite an automatic
+`sha-${C}` created by a push. This is a discovery alias for manually requested
+candidates, and its digest is not guaranteed to match the automatic
+candidate's digest. Either candidate may enter acceptance, but the same full
+commit and manifest digest must remain fixed from the start of acceptance
+through final publication. The final Release verifies the chosen digest and
+its attestation directly; it does not depend on which candidate alias was used.
+
+M8 container acceptance must use
+[`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml) from
+`C`, with its image reference replaced by
+`ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}`. The evidence records both
+the file SHA-256 of that template in the candidate Git object and the digest
+that actually ran. Running only `docker compose config`, or testing another
+build behind the same tag, cannot substitute for acceptance of the final
+candidate. See [Docker Compose evidence](development/release-acceptance.md#docker-compose-evidence)
+for the complete schema and collection rules.
+
+## 6. Freeze the Candidate and Run Real-Environment Acceptance
+
+Final acceptance must target the same `C`. Build native binaries from a clean
+worktree with `scripts/build-release-binaries.sh`. The official Git repository
+must contain the pinned commit for the current contract baseline. The source
+oracle reads that commit object directly and does not trust its checkout,
+index, or `HEAD`:
+
+```bash
+export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned-remnawave-node
 export REQUIRE_GOVULNCHECK=1
 
 bash scripts/check.sh
 git status --short
 ```
 
-按主题显式暂存文件，不使用 `git add -A`。暂存后重新检查 staged diff：
+The authoritative scope is defined in
+[`development/release-acceptance.md`](development/release-acceptance.md). It
+must cover at least:
 
-```bash
-git add <本次候选的明确文件列表>
-git diff --cached --check
-git diff --cached --stat
-git commit -m "chore(release): freeze 2.8.0-rnl.1 candidate"
+- route, response, error, and side-effect differential testing between the
+  pinned official Node and the candidate Node;
+- node registration, Xray lifecycle, statistics, user, and plugin flows against
+  the target Panel;
+- Ubuntu/systemd and Alpine/OpenRC, with the union of tested systems covering
+  amd64 and arm64;
+- a candidate manifest containing both `linux/amd64` and `linux/arm64`, with
+  the same accepted digest launched from the fleet Compose template on native
+  amd64 and arm64 hosts;
+- actual container cgroups, read-only root filesystem, init/reaper, tmpfs,
+  capabilities, health, graceful shutdown, PID/zombie behavior, and log
+  rotation;
+- rw-core, nftables, socket destruction, process-group cleanup, installation,
+  upgrade, rollback, and uninstall isolation;
+- the whole-machine budget of `512 MiB RAM / 1 vCPU / 2 GiB disk / no swap`,
+  while retaining one real rollback image within the container disk peak; and
+- 50,000 users, the prescribed soak duration, and fault-recovery scenarios.
 
-C="$(git rev-parse HEAD)"
-git rev-parse "${C}^{tree}"
-CANDIDATE_TAG="candidate-v2.8.0-rnl.1-$(git rev-parse --short=12 "$C")"
-git tag -a "$CANDIDATE_TAG" -m "v2.8.0-rnl.1 code candidate $C"
+Store acceptance material under the directory for the current project version:
+
+```text
+docs/development/acceptance/v${VERSION}/
+  manifest.json
+  systemd.json
+  openrc.json
+  panel.json
+  compose.json
+  resource-fault.json
 ```
 
-候选 tag 包含 commit 短 SHA，因此每次重新冻结都会创建唯一且不可变的本地 tag。此阶段不得创建 `v2.8.0-rnl.1`。
+The current `cmd/release-evidence-check` implements a strict profile for the
+first release line. It pins the version, official commit, Panel, rw-core,
+operating systems, route count, and resource policy. When preparing a new
+project or contract version, update and test this profile in a normal code pull
+request first. Never loosen it ad hoc in the tag workflow, and never rename and
+reuse evidence from an older release.
 
-## 2. 执行 M8 真实验收
+`manifest.json` must record `C`, the candidate tree, `CANDIDATE_DIGEST`, project
+version, Git tag, official contract pin, Panel, rw-core, resource policy, known
+risks, and SHA-256 digests of all other evidence files. It must not record final
+commit `F`, which does not exist yet; the strict schema rejects that unknown
+field. Never commit a Secret Key, JWT, CA, certificate, private key, IP address,
+hostname, Panel URL, raw response body, or any user data that can be
+reconstructed.
 
-验收协议见 [`development/release-acceptance.md`](development/release-acceptance.md)。必须对同一个 `C` 完成：
+## 7. Commit Release Material under Protected `main`
 
-- 官方 Node `2.8.0@596f015` 的 26 路由黑盒语义差分。
-- Panel `2.8.1` 在 systemd 与 OpenRC 节点上的完整生命周期、统计、用户和插件流程。
-- 并发交错 `xray start/stop` 与 `plugin sync/recreate`，确认共用外层 lifecycle gate、固定锁序和取消传播。
-- Ubuntu 24.04/systemd 与 Alpine 3.22/OpenRC；两者架构并集覆盖 amd64、arm64。
-- rw-core `v26.6.27`、nftables、`NETLINK_SOCK_DIAG` socket destroy、安装、重复安装、升级、坏版本回滚、reboot 和卸载隔离；两种 init 环境都验证正常停止与 leader 自然退出后的独立进程组清理。
-- 整机 `512 MiB / 1 CPU / 2 GiB / no swap`、50k 用户、至少 24 小时持续运行及故障恢复。
-
-证据写入 `docs/development/acceptance/v2.8.0-rnl.1/`。不得记录 JWT、证书、私钥、Secret Key、IP、hostname 或原始响应 body。
-
-## 3. 提交验收与发布资料
-
-所有验收通过后，填写四份 evidence、`manifest.json` 和 `docs/releases/v2.8.0-rnl.1.md`，并更新：
-
-- `README.md`：移除“开发中”。
-- `docs/CHANGELOG.md`：将 `Unreleased` 改为实际日期。
-- `docs/development/roadmap.md`：M8 标记为已完成。
-
-从候选 `C` 到最终 HEAD 只允许以下路径变化：
+After candidate acceptance succeeds, only release-finalization material may be
+changed. The current allowlist is:
 
 ```text
 README.md
-docs/CHANGELOG.md
+CHANGELOG.md
 docs/development/roadmap.md
-docs/development/acceptance/v2.8.0-rnl.1/**
-docs/releases/v2.8.0-rnl.1.md
+docs/development/acceptance/v${VERSION}/**
+docs/releases/v${VERSION}.md
 ```
 
+Complete all other long-lived documentation before acceptance. Changes after
+`C` to architecture, configuration, deployment documentation, or this release
+guide invalidate the candidate.
+
+Create a dedicated documentation branch from `C`:
+
 ```bash
-git diff --name-only "${C}..HEAD"
-git add README.md docs/CHANGELOG.md docs/development/roadmap.md \
-  docs/development/acceptance/v2.8.0-rnl.1 docs/releases/v2.8.0-rnl.1.md
+git switch --detach "$C"
+git switch -c "release/v${VERSION}-docs"
+
+# Add evidence and Release notes, update CHANGELOG, and move README/roadmap
+# from candidate status to released status.
+git add README.md CHANGELOG.md docs/development/roadmap.md \
+  "docs/development/acceptance/v${VERSION}" \
+  "docs/releases/v${VERSION}.md"
 git diff --cached --check
-git commit -m "docs(release): record v2.8.0-rnl.1 acceptance"
+git commit -m "docs(release): record v${VERSION} acceptance"
+git push -u origin "release/v${VERSION}-docs"
 ```
 
-## 4. 最终门禁与本地 tag
+Open a pull request from this branch to `main`. One constraint is mandatory:
+**the release-material pull request must use squash merge**.
+
+The evidence validator examines every commit in `C..HEAD` and rejects:
+
+- any merge commit with two or more parents;
+- changes outside the allowlist;
+- code drift that was later reverted; and
+- evidence that disagrees with `HEAD`, the Git index, or the worktree.
+
+Therefore, do not use a regular merge commit for the release-material pull
+request. `main` must still be at `C` when it is merged. If another commit has
+entered `main`, do not rebase and continue using the old evidence; reassess the
+changes and freeze a new candidate.
+
+After the squash merge, call the final release commit `F`:
 
 ```bash
-RELEASE_TAG=v2.8.0-rnl.1 \
+git fetch origin main
+git switch main
+git pull --ff-only origin main
+
+F="$(git rev-parse HEAD)"
+git merge-base --is-ancestor "$C" "$F"
+git diff --name-only "$C..$F"
+```
+
+The final tag points to `F`, not candidate code commit `C`. The validator proves
+that `F` differs from `C` only by permitted release material.
+
+## 8. Release Note Requirements
+
+Every final version must provide:
+
+```text
+docs/releases/v${VERSION}.md
+```
+
+Its first line must be:
+
+```markdown
+# v${VERSION}
+```
+
+The Release notes must contain at least these sections:
+
+```markdown
+## Compatibility
+## Acceptance Results
+## Known Risks
+## Installation and Upgrade
+```
+
+The compatibility section must state the project version, contract version,
+pinned official commit, target Panel, rw-core, and supported architectures
+separately. Acceptance results must include candidate commit `C`,
+`candidateImageDigest`, and the exact relative link required by the gate:
+
+```markdown
+[Acceptance manifest](../development/acceptance/v${VERSION}/manifest.json)
+```
+
+Release notes must not embed their own commit `F`, because that would require an
+impossible self-referential Git SHA. After publication, the final tag points to
+`F`; resolve it with `git rev-list -n 1 v${VERSION}` or the target commit of the
+GitHub Release. Do not replace an audit conclusion in Known Risks with a vague
+"none." Even when there are no open risks, document the acceptance boundary and
+anything not covered. The file must not contain placeholders such as `TODO`,
+`TBD`, `Unreleased`, or "in progress."
+
+## 9. Final Gate and Tag
+
+Run the final checks from a clean worktree at the latest `main`:
+
+```bash
+git fetch origin main --tags
+test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+
+VERSION="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
+TAG="v${VERSION}"
+
+RELEASE_TAG="$TAG" \
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
+```
 
-git tag -a acceptance-v2.8.0-rnl.1 -m "v2.8.0-rnl.1 release acceptance"
-git tag -a v2.8.0-rnl.1 -m "release v2.8.0-rnl.1"
+After confirming the version, evidence, and final commit, create an annotated
+tag:
 
-RELEASE_TAG=v2.8.0-rnl.1 \
+```bash
+git tag -a "$TAG" -m "release ${TAG}"
+
+RELEASE_TAG="$TAG" \
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 REQUIRE_GOVULNCHECK=1 \
 REQUIRE_TAG_AT_HEAD=1 \
   bash scripts/release-check.sh
+
+git push origin "$TAG"
 ```
 
-完成后只保留本地 commit/tag，不执行 `git push`。
+If the workflow fails for a non-transient reason after the tag is pushed, never
+force-move the original tag. A fix that changes source code requires a new
+project version and a new candidate cycle.
 
-## 5. 未来公开发布
+Keep `main` frozen from the moment `C` is selected until `latest` promotion and
+post-release verification finish. If `main` advances while the final workflow
+is running, the exact release remains an auditable artifact, but promotion
+refuses to make it `latest`. To recommend the newer mainline state, prepare a
+subsequent version from the new `main` HEAD; do not bypass the HEAD guard.
 
-只有明确授权 push 自有仓库与 release tag 后，才执行本节操作。仓库内 workflow 不依赖长期 Registry Secret：镜像发布 job 使用短期 `GITHUB_TOKEN` 和 `contents: read`、`packages: write`；独立 attestation job 额外申请 `id-token: write`、`attestations: write`。
+## 10. Tag-Triggered Release Automation
 
-首次公开发布前，在 GitHub 仓库/组织设置中确认：
+When [`.github/workflows/release.yml`](../.github/workflows/release.yml) receives
+`v${VERSION}`, it runs these steps in order:
 
-- GitHub Actions 允许 workflow 按 YAML 申请上述权限；若组织限制第三方 Action，显式允许 workflow 中已固定 SHA 的 Docker、GitHub 和 softprops Action。
-- 首次镜像 push 后，将 `ghcr.io/luxiaba/remnanode-lite` Package 设置为 Public，并确认 Package 关联到本仓库。Public Package 的生产服务器不需要登录。
-- 分支保护只要求不会因路径过滤而缺失的 `ci / gate` 检查通过；它汇总 Go、仓库、离线 installer 与 Linux 网络管理四组并行结果。`container` 是按路径运行的辅助构建，不得设为 required check。release tag 只能指向已完成 M8 验收的最终 commit。
+1. Verify that the tagged commit is the current `origin/main` HEAD, then rerun
+   version, evidence, code, supply-chain, and Linux namespace gates.
+2. Read `C` and the accepted digest from the acceptance manifest. Confirm that
+   the digest still exists and strictly verify its attestation repository,
+   signing workflow, source commit, and `refs/heads/main` source. The digest
+   does not have to be discoverable through one particular candidate alias.
+3. Build linux/amd64 and linux/arm64 binary archives, the compact ASN database,
+   standard Compose, single-file Compose, the environment template, and
+   `SHA256SUMS`. The evidence validator compares the Node binary digest for both
+   architectures.
+4. Create the GitHub Release from `docs/releases/v${VERSION}.md`, but do not yet
+   mark it as GitHub's Latest Release. Existing assets with the same names are
+   not overwritten.
+5. Do not rebuild the container. Publish the accepted and attested
+   `CANDIDATE_DIGEST` under the policy-immutable exact version:
 
-合入 `main` 后，`container` workflow 自动发布用于服务器验收的主线镜像：
+   ```text
+   ghcr.io/luxiaba/remnanode-lite:${VERSION}
+   ```
 
-```text
-ghcr.io/luxiaba/remnanode-lite:edge
-ghcr.io/luxiaba/remnanode-lite:sha-<commit>
-```
+6. Only after exact-version publication succeeds, and only while the tagged
+   commit remains the current `origin/main` HEAD, promote the same attested
+   digest to GHCR `latest` and mark the corresponding GitHub Release as Latest:
 
-候选镜像同样包含 amd64/arm64、SBOM、provenance 和 attestation，但不代表正式 Release，不得使用版本 tag。服务器必须以同一个完整 commit 从 raw GitHub 下载 `compose.yaml`、`.env.example`，并把 `REMNANODE_IMAGE` 指向不可变的 `sha-<commit>`；`edge` 仅用于观察当前主线。需要重发时可在 `main` 手动运行 workflow，它还会生成 `candidate-sha-<commit>` 别名。完整无源码命令见 [Docker Compose 部署](deployment-docker.md)。正式发布后再切换到精确版本或 manifest digest。
+   ```text
+   ghcr.io/luxiaba/remnanode-lite:latest
+   ```
 
-授权后先确保最终 commit 已通过受保护流程进入 `main`，再推送不可变 tag。Release workflow 会再次验证 tag commit 可从 `origin/main` 到达，拒绝从 `dev` 或临时分支直接发布：
+The final image's build provenance and OCI revision refer to candidate code
+commit `C`. The Git tag and GitHub Release refer to final commit `F`, which adds
+only release material to `C`. The acceptance manifest and Release notes record
+`C` and the digest, while the Git tag uniquely resolves `F`; commit-bound files
+cannot self-reference an `F` that has not yet been created. Never describe the
+exact-version image as a separate image rebuilt from `F`.
+
+Exact-version publication follows a "create if absent; otherwise require the
+same digest" rule. Re-running the complete workflow cannot move it to different
+content. Promoting `latest` only moves the floating tag and never rebuilds the
+image. The promotion job must independently fetch `origin/main` again and
+verify its HEAD; it must not rely solely on a check completed by an earlier
+job. An old tag must never update GHCR `latest` or GitHub's Latest Release. The
+release workflow uses a repository-wide concurrency group so two final
+releases cannot race to write registry state.
+
+Both plain `X.Y.Z` and `X.Y.Z-rnl.N` are stable Releases after passing the same
+final gates, and both are eligible for automatic promotion to `latest`. Do not
+publish experimental builds by weakening the GitHub Release prerelease flag;
+keep them in the candidate image channels.
+
+## 11. Post-Release Verification
+
+Let `C` be the candidate commit and `F` the final material commit:
 
 ```bash
-git fetch origin main
-git merge-base --is-ancestor v2.8.0-rnl.1 origin/main
-git push origin v2.8.0-rnl.1
+VERSION=X.Y.Z-rnl.N   # Or X.Y.Z.
+C=REPLACE_WITH_40_CHAR_CANDIDATE_COMMIT
+F="$(git rev-list -n 1 "v${VERSION}")"
+CANDIDATE_DIGEST=sha256:REPLACE_WITH_64_HEX_DIGEST
+IMAGE="ghcr.io/luxiaba/remnanode-lite:${VERSION}"
+CANDIDATE_IMAGE="ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}"
+LATEST_IMAGE="ghcr.io/luxiaba/remnanode-lite:latest"
 ```
 
-`.github/workflows/release.yml` 会先重新执行完整代码门禁、Linux namespace 集成测试并创建：
-
-- amd64/arm64 二进制归档、compact ASN 数据库。
-- `compose.yaml` 与 `remnanode.env.example` 无源码部署文件。
-- 覆盖上述文件的 `SHA256SUMS` 和 `docs/releases/v2.8.0-rnl.1.md` Release body。
-
-只有 `release` job 成功后，`publish-container` 才会向 GHCR 推送：
-
-```text
-ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
-ghcr.io/luxiaba/remnanode-lite:latest
-ghcr.io/luxiaba/remnanode-lite:sha-<commit>
-```
-
-镜像是 `linux/amd64`、`linux/arm64` manifest list，并附带 BuildKit SBOM/provenance。独立的 `attest-container` job 从 GHCR 按不可变 commit tag 解析已发布 manifest digest，再生成 GitHub build attestation；它不会重新构建或移动镜像 tag。项目把通过完整验收的 `v<官方版本>-rnl.<修订号>` 作为稳定发行版，workflow 会显式更新 `latest`。发布完成后验证：
+Inspect the multi-architecture manifests:
 
 ```bash
-docker buildx imagetools inspect \
-  ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
+docker buildx imagetools inspect "$IMAGE"
+docker buildx imagetools inspect "$CANDIDATE_IMAGE"
+```
 
+The output must contain both `linux/amd64` and `linux/arm64`. The exact version
+and the candidate reference in the acceptance manifest must resolve to the same
+manifest digest. The normal automatic candidate tag, `sha-${C}`, or the manual
+candidate tag actually used for acceptance should also resolve to that digest
+while it remains available.
+
+Verify the GitHub attestation:
+
+```bash
 gh attestation verify \
-  oci://ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1 \
-  --repo Luxiaba/remnanode-lite
+  "oci://ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}" \
+  --repo luxiaba/remnanode-lite \
+  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml \
+  --source-digest "$C" \
+  --source-ref refs/heads/main \
+  --deny-self-hosted-runners
 ```
 
-已成功发布的精确版本 tag 与 `sha-*` tag 不得移动或覆盖；`latest` 是明确的稳定版浮动别名，不用于回滚。workflow 部分失败时，先确认 GitHub Release、GHCR digest 和 attestation 哪一步已经产生；镜像发布成功而 attestation 失败时，只重试独立的 `attest-container`，不要重跑已经成功的 `publish-container`，也不要删除并重建 tag。`dev`/PR 的 `.github/workflows/container.yml` 会执行不推送的 linux/amd64 完整镜像构建，`main` 则自动发布主线候选，降低 tag 发布时才发现 Dockerfile 失效的风险。
+If this release was promoted to the stable channel, compare `latest`:
 
-Dockerfile frontend、Go、Debian、BuildKit、QEMU 和 SBOM scanner 均固定版本或 multi-arch manifest digest；rw-core、geo 与 `ipverse/as-ip-blocks` ASN 源码归档继续固定 commit 和 SHA-256。更新任一 digest 必须作为普通代码变更经过 `container` 与完整代码门禁，不能在 release tag 上临时覆盖 build args。
+```bash
+docker buildx imagetools inspect "$LATEST_IMAGE"
+```
 
-## 6. 回滚
+`latest`, the exact version, and the accepted candidate digest must all resolve
+to the same manifest digest. If final tag commit `F` stopped being the `main`
+HEAD during publication, it is expected that `latest` remains on the previous
+stable release.
 
-容器部署通过 `.env` 的 `REMNANODE_IMAGE` 回滚：改回上一个已验证的精确版本或 manifest digest，执行 `docker compose pull` 和 `docker compose up -d --no-build --force-recreate`。不得通过覆盖旧 GHCR tag 实现回滚。
+Verify the GitHub Release assets:
 
-`upgrade.sh` 在替换前备份 binary、service、support、`node.env`、`secret.key` 和可选 rw-core 资产，并记录升级前的 active 状态；install 委托可能修复开机注册时还会捕获 enabled 状态。所有变更型 installer 入口通过固定的 `/run/lock/remnanode-installer.lock` 串行执行，嵌套的 rw-core 安装继承同一锁；事务使用 root-only 的 `/var/lib/remnanode-installer`，并在下载、解压或任一目标文件系统的磁盘预算不足时提前失败。rw-core 子安装复用外层回滚记录，不创建第二份相同资产备份。对于升级前运行中或由 install 委托要求启动的服务，目标版本二进制必须实际持有配置端口，否则恢复旧文件、开机注册与运行状态；显式升级原本 stopped 的服务保持 stopped。回滚前若服务停止命令失败，或不能确认 Node/rw-core 全部退出，将保留备份并拒绝替换运行中的文件；任何恢复步骤失败同样保留唯一备份并以非零状态结束。
+```bash
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+mkdir -p "/tmp/remnanode-release-${VERSION}"
+cd "/tmp/remnanode-release-${VERSION}"
 
-共享内核 `flock` 消除并发 installer 写入，但不恢复已经被 `SIGKILL` 或掉电中断的事务。`2.8.0-rnl.1` 不实现持久 phase journal、开机 fence 或 OpenRC supervisor 崩溃后的自动恢复；遇到此类情况重新运行 installer、重启主机或重新创建容器即可，这些极端恢复能力不作为发布阻断。
+curl -fLO "$BASE_URL/SHA256SUMS"
+curl -fLO "$BASE_URL/remnanode-lite_linux_amd64.tar.gz"
+curl -fLO "$BASE_URL/remnanode-lite_linux_arm64.tar.gz"
+curl -fLO "$BASE_URL/asn-prefixes.bin"
+curl -fLO "$BASE_URL/compose.yaml"
+curl -fLO "$BASE_URL/docker-compose.single-file.yaml"
+curl -fLO "$BASE_URL/remnanode.env.example"
+sha256sum --check SHA256SUMS
+```
 
-版本回退只允许使用本项目确实发布过的旧 tag：`sudo RNL_TAG=vX.Y.Z-rnl.N bash upgrade.sh --yes`。
+`SHA256SUMS` proves that the downloaded files match the files produced by the
+workflow. The container's GitHub attestation independently proves its build
+origin. Unless the Release workflow later adds file-level artifact
+attestations, do not describe the container attestation as proof for the binary
+archives.
+
+## 12. Partial Failures and Recovery
+
+The release workflow creates external state in stages. After a failure, first
+identify which objects already exist, then choose the narrowest safe retry.
+
+| Failure point | Existing state | Recovery | State of `latest` |
+| --- | --- | --- | --- |
+| Gate, candidate digest, or attestation verification fails | No new Release or final image | Correct the evidence or candidate state; source changes require a new candidate and version | Unchanged |
+| GitHub Release succeeds but exact-version publication fails | Release assets may already exist | Re-run only the failed job; neither existing Release assets nor the target tag may be overwritten | Unchanged |
+| Exact version succeeds but GHCR `latest` promotion fails | Exact version, candidate proof, and Release assets are complete | Re-run only the promotion job and promote the same accepted digest | Unchanged until promotion succeeds |
+| GHCR `latest` is promoted but the GitHub Latest flag fails | GHCR stable channel is updated, but the GitHub Release is not yet marked Latest | Re-run the promotion job; the same-digest GHCR operation is idempotent, then apply the GitHub flag | GHCR is updated; the GitHub UI temporarily lags |
+| An unfinished job from an older run is retried | The historical Release or image may already exist in part | Repair only that exact version; promotion must fetch and check the current `main` HEAD again | Must not move backwards |
+
+Prefer GitHub Actions' **Re-run failed jobs** action. A full rerun preserves
+existing Release assets and permits the exact version only to remain on the
+same digest. If existing state disagrees with the acceptance manifest, the
+workflow must fail; do not delete or overwrite evidence to conceal the
+conflict. Record the relationship among the GitHub Release, GHCR manifest,
+attestation, and workflow run before deciding whether a new project version is
+required.
+
+If `latest` points to the wrong digest because of a workflow defect or manual
+operation, handle it as a release incident. Record the incorrect and previous
+stable digests, restore `latest` through a controlled promotion, and then fix
+the workflow. Never mutate a published exact-version tag to hide the incident.
+
+## 13. Rollback
+
+For container deployments, roll back to the previous stable exact tag or
+manifest digest:
+
+```bash
+docker compose pull
+docker compose up -d --no-build --force-recreate
+docker compose ps
+```
+
+Restore the matching Compose file and configuration at the same time. Do not
+move an old version tag or force `latest` to an arbitrary historical build as a
+substitute for node-level rollback.
+
+`latest` never replaces a running container automatically. Nodes that choose
+to follow the stable channel still have to run `docker compose pull` and
+recreate the service. Roll out fleet updates in batches and retain the previous
+exact version or digest as a rollback point. See
+[`deployment-docker.md`](deployment-docker.md) for complete container
+operations.
+
+Native systemd/OpenRC deployments may roll back only to tags actually published
+by this project:
+
+```bash
+sudo RNL_TAG=vX.Y.Z-rnl.N bash upgrade.sh --yes
+```
+
+The upgrader verifies Release checksums and binary versions, then restores the
+binary, service, support files, configuration, and runtime state according to
+its transaction rules.
+
+## 14. Synchronizing with Official Releases
+
+The `contract-sync` workflow periodically checks the latest official
+`remnawave/node` Release. When it detects a change, it opens a synchronization
+issue only. It never changes the contract, project version, code, tags, or
+images automatically.
+
+For a new official version:
+
+1. Record the official tag and full commit.
+2. Audit differences in routes, schemas, errors, plugins, and runtime behavior.
+3. Update contract evidence, implementation, and tests.
+4. Select an appropriate project version. It may be a new `rnl` version; an
+   immediate plain official version is not required.
+5. Update the contract version to the verified baseline only after completing
+   real-environment acceptance.
+6. Publish a plain `X.Y.Z` only after same-version official alignment is
+   complete.
+
+The project's own maintenance plan determines project-version progression. An
+official Release changes the compatibility work input, but cannot automatically
+determine the next `rnl.N`.
+
+## 15. Final Checklist
+
+Before pushing a final tag, confirm every item:
+
+- [ ] `VERSION` uses an allowed plain or `rnl` format.
+- [ ] A plain version equals the contract version; an `rnl` version's actual
+      contract is explicit in the documentation.
+- [ ] Version metadata, scripts, Compose files, probes, `CHANGELOG.md`, and tests
+      agree.
+- [ ] The code pull request has entered protected `main`, and candidate `C` is
+      the post-merge `main` commit.
+- [ ] Both `ci` and the candidate container workflow passed for `C`.
+- [ ] Every evidence file binds the same `C`, candidate tree, and
+      multi-architecture manifest digest actually accepted.
+- [ ] The target Panel, both init systems, both architectures, resource budget,
+      and fault scenarios passed acceptance.
+- [ ] `compose.json` binds the single-file Compose template from `C` and the
+      same digest. Its amd64 and arm64 runs each pass whole-host resources,
+      container limits, isolation, init/reaper, health, shutdown, PID/zombie,
+      logging, free-disk, and real rollback-start gates.
+- [ ] The release-material pull request changes only the finalization allowlist
+      and is squashed to exactly one single-parent commit.
+- [ ] README no longer contains a pre-release notice, and the roadmap marks this
+      version's M8 milestone complete.
+- [ ] Final commit `F` is the current `origin/main` HEAD.
+- [ ] `scripts/release-check.sh` passes from a clean worktree.
+- [ ] `v${VERSION}` is an annotated tag pointing to `F` and has never been
+      published before.
+- [ ] After the tag push, the GitHub Release, exact image, candidate attestation
+      verification, and `latest` promotion all succeed.
+- [ ] The exact version and `latest` equal the acceptance digest, the candidate
+      alias used in acceptance still resolves to that digest, and both amd64
+      and arm64 are present.
+- [ ] The production rollout records an exact version or digest and retains an
+      executable rollback target.

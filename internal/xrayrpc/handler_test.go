@@ -1,0 +1,157 @@
+package xrayrpc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"testing"
+
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc/wire"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+func TestGetInboundUsersMatchesOfficialPublicModel(t *testing.T) {
+	t.Parallel()
+
+	conn := &fakeInvokeConn{invoke: func(_ context.Context, method string, _, reply any, _ ...grpc.CallOption) error {
+		if method != handlerGetInboundUsersMethod {
+			return fmt.Errorf("method = %q", method)
+		}
+		reply.(*wire.GetInboundUserResponse).Users = []*wire.User{
+			{Email: "level-zero", Level: 0, Account: &wire.TypedMessage{Type: "xray.proxy.vless.Account"}},
+			{Email: "ss-user", Level: 2, Account: &wire.TypedMessage{Type: "xray.proxy.shadowsocks.Account"}},
+		}
+		return nil
+	}}
+	users, result := NewHandlerAPI(conn).GetInboundUsers(context.Background(), "in")
+	if !result.OK {
+		t.Fatalf("result = %+v", result)
+	}
+	want := []InboundUser{
+		{Username: "level-zero", Level: 0, Protocol: "vless"},
+		{Username: "ss-user", Level: 2, Protocol: "shadowsocks"},
+	}
+	if !slices.Equal(users, want) {
+		t.Fatalf("users = %+v, want %+v", users, want)
+	}
+	raw, err := json.Marshal(users[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Official Node model selects exactly username, level and protocol.
+	if got, wantJSON := string(raw), `{"username":"level-zero","level":0,"protocol":"vless"}`; got != wantJSON {
+		t.Fatalf("JSON = %s, want %s", got, wantJSON)
+	}
+}
+
+func TestInboundUserProtocolsMatchOfficialSDK(t *testing.T) {
+	t.Parallel()
+
+	// Oracle: @remnawave/xtls-sdk 0.16.0 ACCOUNT_TYPES.
+	tests := map[string]string{
+		"xray.proxy.trojan.Account":           "trojan",
+		"xray.proxy.vless.Account":            "vless",
+		"xray.proxy.shadowsocks.Account":      "shadowsocks",
+		"xray.proxy.shadowsocks_2022.Account": "shadowsocks2022",
+		"xray.proxy.socks.Account":            "socks",
+		"xray.proxy.http.Account":             "http",
+	}
+	for accountType, want := range tests {
+		got, ok := inboundUserProtocol(accountType)
+		if !ok || got != want {
+			t.Errorf("inboundUserProtocol(%q) = %q, %v; want %q, true", accountType, got, ok, want)
+		}
+	}
+}
+
+func TestGetInboundUsersRejectsUnknownAccountType(t *testing.T) {
+	t.Parallel()
+
+	conn := &fakeInvokeConn{invoke: func(_ context.Context, _ string, _, reply any, _ ...grpc.CallOption) error {
+		reply.(*wire.GetInboundUserResponse).Users = []*wire.User{{
+			Email: "unknown", Account: &wire.TypedMessage{Type: "example.UnknownAccount"},
+		}}
+		return nil
+	}}
+	users, result := NewHandlerAPI(conn).GetInboundUsers(context.Background(), "in")
+	if result.OK || users != nil {
+		t.Fatalf("users = %+v, result = %+v; want all-or-nothing decode failure", users, result)
+	}
+}
+
+func TestIsUserNotFound(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"not found code", status.Error(codes.NotFound, "user missing"), true},
+		{"not found message", status.Error(codes.Unknown, "user not found in inbound"), true},
+		{"other", status.Error(codes.Internal, "boom"), false},
+		{"plain", errors.New("not exist"), false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isUserNotFound(tc.err); got != tc.want {
+				t.Fatalf("isUserNotFound() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsUserExists(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"already exists", status.Error(codes.AlreadyExists, "user already exists"), true},
+		{"duplicate", status.Error(codes.Unknown, "duplicate user email"), true},
+		{"other", status.Error(codes.Internal, "boom"), false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := isUserExists(tc.err); got != tc.want {
+				t.Fatalf("isUserExists() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestAddUserTreatsExistingUserAsIdempotentSuccess(t *testing.T) {
+	t.Parallel()
+
+	conn := &fakeInvokeConn{invoke: func(_ context.Context, method string, _, _ any, _ ...grpc.CallOption) error {
+		if method != handlerAlterInboundMethod {
+			return fmt.Errorf("method = %q", method)
+		}
+		return status.Error(codes.Unknown, "User duplicate@example.com already exists.")
+	}}
+	result := NewHandlerAPI(conn).AddVlessUser(
+		context.Background(),
+		"inbound",
+		"duplicate@example.com",
+		"2a9fa391-41be-4207-9d63-df7ba48cb306",
+		"",
+		0,
+	)
+	if !result.OK || result.Message != "" {
+		t.Fatalf("result = %+v, want idempotent success matching official SDK", result)
+	}
+}

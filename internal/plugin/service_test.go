@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
 )
 
 type fakeFirewall struct {

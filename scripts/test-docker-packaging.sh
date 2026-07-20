@@ -27,7 +27,9 @@ for file in \
   .env.example \
   .github/workflows/container.yml \
   .github/workflows/release.yml \
-  docs/deployment-docker.md; do
+  scripts/promote-image-tag.sh \
+  docs/deployment-docker.md \
+  deploy/compose.single-file.yaml; do
   require_file "$file"
 done
 
@@ -67,6 +69,7 @@ if grep -Eq '^[[:space:]]+build:' compose.yaml; then
 fi
 
 require_text compose.yaml 'network_mode: host'
+require_text compose.yaml 'init: true'
 require_text compose.yaml 'NET_ADMIN'
 require_text compose.yaml 'NET_BIND_SERVICE'
 require_text compose.yaml 'mem_limit: 448m'
@@ -74,30 +77,72 @@ require_text compose.yaml 'memswap_limit: 448m'
 require_text compose.yaml 'cpus: 1.0'
 require_text compose.yaml 'pids_limit: 256'
 require_text compose.yaml 'read_only: true'
-require_text compose.yaml 'test -S /run/remnanode/internal.sock && kill -0 1'
+require_text compose.yaml '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]'
+
+require_text deploy/compose.single-file.yaml 'image: ghcr.io/luxiaba/remnanode-lite:latest'
+require_text deploy/compose.single-file.yaml 'SECRET_KEY: "REPLACE_WITH_THE_COMPLETE_PANEL_SECRET_KEY"'
+require_text deploy/compose.single-file.yaml 'network_mode: host'
+require_text deploy/compose.single-file.yaml 'init: true'
+require_text deploy/compose.single-file.yaml 'read_only: true'
+require_text deploy/compose.single-file.yaml 'mem_limit: 448m'
+release_single_file="$(sed \
+  "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${version}|" \
+  deploy/compose.single-file.yaml)"
+grep -Fq "image: ghcr.io/luxiaba/remnanode-lite:${version}" <<<"$release_single_file"
+if grep -Fq 'ghcr.io/luxiaba/remnanode-lite:latest' <<<"$release_single_file"; then
+  echo "release single-file Compose still contains latest" >&2
+  exit 1
+fi
+if grep -Eq '^[[:space:]]*-[[:space:]]*SECRET_KEY=' deploy/compose.single-file.yaml; then
+  echo "single-file Compose must use a mapping for SECRET_KEY" >&2
+  exit 1
+fi
+if grep -Eq '^[[:space:]]+volumes:' deploy/compose.single-file.yaml; then
+  echo "single-file Compose must keep runtime logs ephemeral" >&2
+  exit 1
+fi
 
 require_text .github/workflows/release.yml 'packages: write'
-require_text .github/workflows/release.yml 'attestations: write'
+require_text .github/workflows/release.yml 'attestations: read'
 github_expression_prefix='$'
 require_text .github/workflows/release.yml \
-  "git merge-base --is-ancestor \"${github_expression_prefix}GITHUB_SHA\" origin/main"
+  "if [ \"${github_expression_prefix}GITHUB_SHA\" != \"${github_expression_prefix}main_head\" ]; then"
 require_text .github/workflows/release.yml 'needs: release'
-require_text .github/workflows/release.yml 'attest-container:'
 require_text .github/workflows/release.yml 'needs: publish-container'
+require_text .github/workflows/release.yml 'Verify accepted candidate image'
+require_text .github/workflows/release.yml 'candidateImageDigest // empty'
+require_text .github/workflows/release.yml '--signer-workflow'
+require_text .github/workflows/release.yml '--source-digest'
+require_text .github/workflows/release.yml '--source-ref refs/heads/main'
+require_text .github/workflows/release.yml '--deny-self-hosted-runners'
 require_text .github/workflows/release.yml 'docker buildx imagetools inspect'
-require_text .github/workflows/release.yml "sha-${github_expression_prefix}{{ github.sha }}"
-require_text .github/workflows/release.yml "subject-digest: ${github_expression_prefix}{{ steps.digest.outputs.digest }}"
-require_text .github/workflows/release.yml 'platforms: linux/amd64,linux/arm64'
-require_text .github/workflows/release.yml 'provenance: mode=max'
-sbom_generator='generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68'
-require_text .github/workflows/release.yml "sbom: ${sbom_generator}"
-require_text .github/workflows/release.yml 'flavor: latest=false'
-require_text .github/workflows/release.yml 'type=semver,pattern={{version}}'
-require_text .github/workflows/release.yml 'type=raw,value=latest'
+require_text .github/workflows/release.yml \
+  "SOURCE_DIGEST: ${github_expression_prefix}{{ needs.release.outputs.candidate_digest }}"
+require_text .github/workflows/release.yml 'make_latest: false'
+require_text .github/workflows/release.yml 'overwrite_files: false'
 require_text .github/workflows/release.yml 'prerelease: false'
-require_text .github/workflows/release.yml 'image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0'
+require_text .github/workflows/release.yml 'promote-latest:'
+require_text .github/workflows/release.yml 'Publish accepted candidate as the exact release version'
+require_text .github/workflows/release.yml 'Promote attested image to GHCR latest'
+require_text .github/workflows/release.yml 'Mark GitHub release as latest'
+require_text .github/workflows/release.yml 'Revalidate main head before latest promotion'
+require_text .github/workflows/release.yml 'scripts/promote-image-tag.sh immutable'
+require_text .github/workflows/release.yml 'scripts/promote-image-tag.sh mutable'
+require_text .github/workflows/release.yml '-f make_latest=true'
+awk '
+  /^  promote-latest:$/ { in_job = 1; next }
+  in_job && /^  [A-Za-z0-9_-]+:$/ { exit }
+  in_job && /^      contents: write$/ { found = 1 }
+  END { exit(found ? 0 : 1) }
+' .github/workflows/release.yml || {
+  echo "release latest promotion requires contents: write" >&2
+  exit 1
+}
 require_text .github/workflows/release.yml 'image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a'
 require_text .github/workflows/release.yml 'dist/compose.yaml'
+require_text .github/workflows/release.yml 'dist/docker-compose.single-file.yaml'
+require_text .github/workflows/release.yml \
+  "release_version=\"${github_expression_prefix}{GITHUB_REF_NAME#v}\""
 require_text .github/workflows/release.yml 'dist/remnanode.env.example'
 require_text .github/workflows/container.yml 'outputs: type=cacheonly'
 require_text .github/workflows/container.yml 'push: false'
@@ -105,28 +150,63 @@ require_text .github/workflows/container.yml 'workflow_dispatch:'
 require_text .github/workflows/container.yml 'branches: [dev, main]'
 require_text .github/workflows/container.yml '      - ".env.example"'
 require_text .github/workflows/container.yml '      - "compose.yaml"'
+if [ "$(grep -Fc '      - "deploy/compose.single-file.yaml"' .github/workflows/container.yml)" -ne 2 ]; then
+  echo "container workflow must track the production single-file Compose on push and pull requests" >&2
+  exit 1
+fi
+if [ "$(grep -Fc '      - "scripts/promote-image-tag.sh"' .github/workflows/container.yml)" -ne 2 ]; then
+  echo "container workflow must track its image promotion helper on push and pull requests" >&2
+  exit 1
+fi
 require_text .github/workflows/container.yml "cancel-in-progress: \${{ github.event_name != 'workflow_dispatch' }}"
 require_text .github/workflows/container.yml "if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')"
 require_text .github/workflows/container.yml "if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
 require_text .github/workflows/container.yml "if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'"
 require_text .github/workflows/container.yml 'Reject non-main candidate dispatch'
 require_text .github/workflows/container.yml 'candidate publishing is only allowed from refs/heads/main'
-require_text .github/workflows/container.yml 'type=raw,value=edge'
-require_text .github/workflows/container.yml 'type=sha,prefix=sha-,format=long'
-require_text .github/workflows/container.yml 'candidate-sha-'
+require_text .github/workflows/container.yml 'Build and publish untagged main image'
+require_text .github/workflows/container.yml 'Read project version'
+require_text .github/workflows/container.yml \
+  "org.opencontainers.image.version=${github_expression_prefix}{{ steps.project-version.outputs.version }}"
+if grep -Fq "org.opencontainers.image.version=sha-${github_expression_prefix}{{ github.sha }}" \
+  .github/workflows/container.yml; then
+  echo "candidate OCI version must use the project version, not a commit tag alias" >&2
+  exit 1
+fi
+require_text .github/workflows/container.yml 'push-by-digest=true,name-canonical=true,push=true'
+require_text .github/workflows/container.yml 'promote-main:'
+require_text .github/workflows/container.yml 'needs: [publish-main, attest-main]'
+require_text .github/workflows/container.yml 'scripts/promote-image-tag.sh immutable'
+require_text .github/workflows/container.yml 'scripts/promote-image-tag.sh mutable'
+require_text .github/workflows/container.yml \
+  "tag=\"candidate-sha-${github_expression_prefix}{GITHUB_SHA}\""
+require_text .github/workflows/container.yml \
+  "tag=\"sha-${github_expression_prefix}{GITHUB_SHA}\""
+require_text .github/workflows/container.yml "current main is ${github_expression_prefix}main_head"
+sbom_generator='generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68'
 require_text .github/workflows/container.yml "sbom: ${sbom_generator}"
 require_text .github/workflows/container.yml 'packages: write'
 require_text .github/workflows/container.yml 'attestations: write'
 require_text .github/workflows/container.yml 'provenance: mode=max'
-require_text .github/workflows/container.yml 'push: true'
 require_text .github/workflows/container.yml 'push-to-registry: true'
 require_text .github/workflows/container.yml 'attest-main:'
 require_text .github/workflows/container.yml 'needs: publish-main'
-require_text .github/workflows/container.yml 'docker buildx imagetools inspect'
-require_text .github/workflows/container.yml "sha-${github_expression_prefix}{{ github.sha }}"
+require_text .github/workflows/container.yml \
+  "digest: ${github_expression_prefix}{{ steps.image.outputs.digest }}"
+require_text .github/workflows/container.yml \
+  "SOURCE_DIGEST: ${github_expression_prefix}{{ needs.publish-main.outputs.digest }}"
 require_text .github/workflows/container.yml "subject-digest: ${github_expression_prefix}{{ steps.digest.outputs.digest }}"
 require_text .github/workflows/container.yml 'image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0'
 require_text .github/workflows/container.yml 'image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a'
+for workflow in .github/workflows/container.yml .github/workflows/release.yml; do
+  require_text "$workflow" 'group: registry-publish'
+  require_text "$workflow" 'cancel-in-progress: false'
+done
+require_text scripts/promote-image-tag.sh 'refusing to move immutable tag'
+require_text scripts/promote-image-tag.sh 'could not determine whether immutable tag'
+require_text scripts/promote-image-tag.sh '--prefer-index=false'
+require_text scripts/promote-image-tag.sh \
+  "resolved to ${github_expression_prefix}promoted, expected ${github_expression_prefix}source_digest"
 require_text compose.yaml '/var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750'
 require_text compose.yaml 'max-size: 2m'
 require_text internal/xray/logrotate.go 'maxLogSize       = 4 << 20'
@@ -143,6 +223,20 @@ fi
 
 if grep -Eq 'type=raw[^[:space:]]*latest' .github/workflows/container.yml; then
   echo "candidate workflows must not publish latest" >&2
+  exit 1
+fi
+
+if grep -Fq 'docker/build-push-action@' .github/workflows/release.yml; then
+  echo "release workflow must promote the accepted candidate digest instead of rebuilding it" >&2
+  exit 1
+fi
+
+require_text .github/workflows/release.yml \
+  "candidate_ref=\"${github_expression_prefix}{image}@${github_expression_prefix}{candidate_digest}\""
+if grep -Fq \
+  "candidate_ref=\"${github_expression_prefix}{image}:sha-${github_expression_prefix}{candidate_commit}\"" \
+  .github/workflows/release.yml; then
+  echo "release workflow must not require one candidate tag alias" >&2
   exit 1
 fi
 
@@ -171,6 +265,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     docker compose -f compose.yaml config --quiet
   SECRET_KEY=packaging-check REMNANODE_IMAGE="$production_image" \
     docker compose -f compose.yaml -f compose.build.yaml config --quiet
+  docker compose -f deploy/compose.single-file.yaml config --quiet
 else
   echo "docker compose is unavailable; skipped Compose schema validation" >&2
 fi

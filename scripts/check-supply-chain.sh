@@ -32,7 +32,7 @@ grep -Fq 'ASN_SOURCE_SHA256: fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa97
 }
 
 for workflow in \
-  .github/workflows/test.yml \
+  .github/workflows/ci.yml \
   .github/workflows/release.yml \
   .github/workflows/security.yml; do
   grep -Fq 'run: bash scripts/install-ci-checks.sh' "$workflow" || {
@@ -40,7 +40,29 @@ for workflow in \
     exit 1
   }
 done
-grep -Fq 'branches: [dev, main]' .github/workflows/test.yml || {
+
+dependabot_config=.github/dependabot.yml
+[ -f "$dependabot_config" ] || {
+  echo "Dependabot configuration is missing" >&2
+  exit 1
+}
+for ecosystem in gomod github-actions docker; do
+  grep -Eq "^[[:space:]]*- package-ecosystem: ${ecosystem}$" "$dependabot_config" || {
+    echo "Dependabot does not maintain ${ecosystem} dependencies" >&2
+    exit 1
+  }
+done
+for expected_count in \
+  'target-branch: dev' \
+  'interval: weekly' \
+  'open-pull-requests-limit: 2'; do
+  if [ "$(grep -Ec "^[[:space:]]+${expected_count}$" "$dependabot_config")" -ne 3 ]; then
+    echo "every Dependabot ecosystem must use ${expected_count}" >&2
+    exit 1
+  fi
+done
+
+grep -Fq 'branches: [dev, main]' .github/workflows/ci.yml || {
   echo "CI must run after pushes to dev and main" >&2
   exit 1
 }
@@ -53,17 +75,26 @@ for expected in \
     exit 1
   }
 done
+for oracle_caller in \
+  .github/workflows/ci.yml \
+  .github/workflows/contract-sync.yml \
+  scripts/release-check.sh; do
+  grep -Fq 'go run ./cmd/contract-source-check' "$oracle_caller" || {
+    echo "$oracle_caller does not verify the pinned official source oracle" >&2
+    exit 1
+  }
+done
 for job in go repository installer netadmin gate; do
-  grep -Eq "^  ${job}:$" .github/workflows/test.yml || {
+  grep -Eq "^  ${job}:$" .github/workflows/ci.yml || {
     echo "CI workflow is missing the ${job} job" >&2
     exit 1
   }
 done
-grep -Fq 'run: bash scripts/check-go.sh' .github/workflows/test.yml || {
+grep -Fq 'run: bash scripts/check-go.sh' .github/workflows/ci.yml || {
   echo "CI does not use the Go check component" >&2
   exit 1
 }
-grep -Fq 'run: bash scripts/check-repository.sh' .github/workflows/test.yml || {
+grep -Fq 'run: bash scripts/check-repository.sh' .github/workflows/ci.yml || {
   echo "CI does not use the repository check component" >&2
   exit 1
 }
@@ -89,7 +120,7 @@ grep -Fq \
 }
 
 for invalid_tag in '../../../../../etc' '..'; do
-  if RNL_TAG="$invalid_tag" resolve_install_tag Luxiaba/remnanode-lite "$tag" >/dev/null 2>&1; then
+  if RNL_TAG="$invalid_tag" resolve_install_tag luxiaba/remnanode-lite "$tag" >/dev/null 2>&1; then
     echo "release tag $invalid_tag unexpectedly passed" >&2
     exit 1
   fi
@@ -158,10 +189,10 @@ chmod 0755 "$dry_run_path/curl"
 
 dry_run_output="$(PATH="$dry_run_path" RNL_CURL_CALLED="$curl_called" RNL_UPGRADE_XRAY=1 \
   bash "$trusted_scripts/upgrade.sh" --yes --dry-run)"
-grep -Fq '目标 Release 中已校验的 install-xray.sh' <<<"$dry_run_output"
+grep -Fq '[dry-run] Run the verified install-xray.sh from the target release' <<<"$dry_run_output"
 wrapper_dry_run_output="$(PATH="$dry_run_path" RNL_CURL_CALLED="$curl_called" \
   bash "$trusted_scripts/install-node.sh" --upgrade --yes --dry-run)"
-grep -Fq '[dry-run] 更新 /etc/systemd/system/remnawave-node.service' <<<"$wrapper_dry_run_output"
+grep -Fq '[dry-run] Update /etc/systemd/system/remnawave-node.service' <<<"$wrapper_dry_run_output"
 [ ! -e "$curl_called" ] || {
   echo "supply-chain dry-run attempted a network download" >&2
   exit 1

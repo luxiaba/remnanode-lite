@@ -59,28 +59,31 @@ var expectedAcceptancePaths = []string{
 	acceptanceDirectory + "/openrc.json",
 	acceptanceDirectory + "/panel.json",
 	acceptanceDirectory + "/resource-fault.json",
+	acceptanceDirectory + "/compose.json",
 }
 
 type validationResult struct {
-	ReleaseTag       string
-	CandidateCommit  string
-	NodeSHA256ByArch map[string]string
+	ReleaseTag           string
+	CandidateCommit      string
+	CandidateImageDigest string
+	NodeSHA256ByArch     map[string]string
 }
 
 type acceptanceManifest struct {
-	SchemaVersion   int                 `json:"schemaVersion"`
-	ReleaseVersion  string              `json:"releaseVersion"`
-	ReleaseTag      string              `json:"releaseTag"`
-	CandidateCommit string              `json:"candidateCommit"`
-	CandidateTree   string              `json:"candidateTree"`
-	AcceptedAt      string              `json:"acceptedAt"`
-	Decision        string              `json:"decision"`
-	OfficialNode    officialNodeTarget  `json:"officialNode"`
-	PanelTarget     panelTarget         `json:"panelTarget"`
-	RWCore          rwCoreTarget        `json:"rwCore"`
-	Policy          acceptancePolicy    `json:"policy"`
-	Evidence        []evidenceReference `json:"evidence"`
-	Risks           []releaseRisk       `json:"risks"`
+	SchemaVersion        int                 `json:"schemaVersion"`
+	ReleaseVersion       string              `json:"releaseVersion"`
+	ReleaseTag           string              `json:"releaseTag"`
+	CandidateCommit      string              `json:"candidateCommit"`
+	CandidateTree        string              `json:"candidateTree"`
+	CandidateImageDigest string              `json:"candidateImageDigest"`
+	AcceptedAt           string              `json:"acceptedAt"`
+	Decision             string              `json:"decision"`
+	OfficialNode         officialNodeTarget  `json:"officialNode"`
+	PanelTarget          panelTarget         `json:"panelTarget"`
+	RWCore               rwCoreTarget        `json:"rwCore"`
+	Policy               acceptancePolicy    `json:"policy"`
+	Evidence             []evidenceReference `json:"evidence"`
+	Risks                []releaseRisk       `json:"risks"`
 }
 
 type officialNodeTarget struct {
@@ -253,6 +256,7 @@ type validatedEvidence struct {
 	System   *systemEvidence
 	Panel    *panelEvidence
 	Resource *resourceFaultEvidence
+	Compose  *composeEvidence
 }
 
 func validateReleaseEvidence(ctx context.Context, repoDir, manifestPath, releaseTag string) (validationResult, error) {
@@ -303,7 +307,8 @@ func validateReleaseEvidenceAt(
 	if err != nil {
 		return validationResult{}, err
 	}
-	if err := repo.validatePostCandidateChanges(ctx, manifest.CandidateCommit); err != nil {
+	postCandidateCommits, err := repo.validatePostCandidateChanges(ctx, manifest.CandidateCommit)
+	if err != nil {
 		return validationResult{}, err
 	}
 
@@ -319,6 +324,7 @@ func validateReleaseEvidenceAt(
 			ctx,
 			reference,
 			manifest.CandidateCommit,
+			manifest.CandidateImageDigest,
 			candidateTime,
 			now,
 			headTime,
@@ -363,8 +369,14 @@ func validateReleaseEvidenceAt(
 	if err := validateResourceArtifactClosure(*resource, systemsByArch); err != nil {
 		return validationResult{}, fmt.Errorf("resource-fault artifact identity: %w", err)
 	}
+	if evidenceByKind["compose"].Compose == nil {
+		return validationResult{}, errors.New("missing validated compose evidence")
+	}
 	if acceptedAt.Before(latestEvidenceFinish) {
 		return validationResult{}, fmt.Errorf("acceptedAt %s is before evidence completion %s", acceptedAt.Format(time.RFC3339), latestEvidenceFinish.Format(time.RFC3339))
+	}
+	if postCandidateCommits != 1 {
+		return validationResult{}, fmt.Errorf("release finalization must contain exactly one single-parent commit after the candidate, found %d", postCandidateCommits)
 	}
 
 	nodeSHAByArch := make(map[string]string, len(systemsByArch))
@@ -372,9 +384,10 @@ func validateReleaseEvidenceAt(
 		nodeSHAByArch[arch] = system.Node.BinarySHA256
 	}
 	return validationResult{
-		ReleaseTag:       releaseTag,
-		CandidateCommit:  manifest.CandidateCommit,
-		NodeSHA256ByArch: nodeSHAByArch,
+		ReleaseTag:           releaseTag,
+		CandidateCommit:      manifest.CandidateCommit,
+		CandidateImageDigest: manifest.CandidateImageDigest,
+		NodeSHA256ByArch:     nodeSHAByArch,
 	}, nil
 }
 
@@ -429,6 +442,9 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 	if !isLowerHex(manifest.CandidateTree, 40) {
 		return time.Time{}, errors.New("manifest candidateTree must be 40 lowercase hexadecimal characters")
 	}
+	if !isSHA256Digest(manifest.CandidateImageDigest) {
+		return time.Time{}, errors.New("manifest candidateImageDigest must be sha256: followed by 64 lowercase hexadecimal characters")
+	}
 	acceptedAt, err := parseRFC3339("manifest acceptedAt", manifest.AcceptedAt)
 	if err != nil {
 		return time.Time{}, err
@@ -454,13 +470,13 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 	if err := validatePolicy(manifest.Policy); err != nil {
 		return time.Time{}, err
 	}
-	if len(manifest.Evidence) != 4 {
-		return time.Time{}, fmt.Errorf("manifest evidence count=%d, want 4", len(manifest.Evidence))
+	if len(manifest.Evidence) != 5 {
+		return time.Time{}, fmt.Errorf("manifest evidence count=%d, want 5", len(manifest.Evidence))
 	}
 	if manifest.Risks == nil {
 		return time.Time{}, errors.New("manifest risks must be an array, use [] when there are no risks")
 	}
-	wantedKinds := map[string]struct{}{"systemd": {}, "openrc": {}, "panel": {}, "resource-fault": {}}
+	wantedKinds := map[string]struct{}{"systemd": {}, "openrc": {}, "panel": {}, "resource-fault": {}, "compose": {}}
 	for _, reference := range manifest.Evidence {
 		if _, ok := wantedKinds[reference.Kind]; !ok {
 			return time.Time{}, fmt.Errorf("unsupported evidence kind %q", reference.Kind)
@@ -531,7 +547,7 @@ func validateRisks(risks []releaseRisk) error {
 func (repo gitRepository) validateEvidence(
 	ctx context.Context,
 	reference evidenceReference,
-	candidateCommit string,
+	candidateCommit, candidateImageDigest string,
 	candidateTime time.Time,
 	now time.Time,
 	headTime time.Time,
@@ -603,6 +619,23 @@ func (repo gitRepository) validateEvidence(
 			return validatedEvidence{}, err
 		}
 		return validatedEvidence{Kind: reference.Kind, Timing: timing, Resource: &evidence}, nil
+	case "compose":
+		var evidence composeEvidence
+		if err := decodeStrictJSON(raw, &evidence); err != nil {
+			return validatedEvidence{}, fmt.Errorf("decode: %w", err)
+		}
+		timing, err := validateCommonEvidence(evidence.evidenceCommon, reference.Kind, candidateCommit, candidateTime, now, headTime)
+		if err != nil {
+			return validatedEvidence{}, err
+		}
+		candidateComposeSHA, err := repo.candidateFileSHA256(ctx, candidateCommit, expectedComposeSourcePath)
+		if err != nil {
+			return validatedEvidence{}, err
+		}
+		if err := validateComposeEvidence(evidence, policy, candidateImageDigest, candidateComposeSHA); err != nil {
+			return validatedEvidence{}, err
+		}
+		return validatedEvidence{Kind: reference.Kind, Timing: timing, Compose: &evidence}, nil
 	default:
 		return validatedEvidence{}, fmt.Errorf("unsupported kind %q", reference.Kind)
 	}
@@ -900,19 +933,29 @@ func (repo gitRepository) validateCandidate(ctx context.Context, candidateCommit
 	return committedAt, nil
 }
 
-func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, candidateCommit string) error {
+func (repo gitRepository) candidateFileSHA256(ctx context.Context, candidateCommit, path string) (string, error) {
+	raw, err := repo.gitBytes(ctx, "show", candidateCommit+":"+path)
+	if err != nil {
+		return "", fmt.Errorf("read %s from candidate commit: %w", path, err)
+	}
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:]), nil
+}
+
+func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, candidateCommit string) (int, error) {
 	commitsRaw, err := repo.gitOutput(ctx, "rev-list", "--reverse", candidateCommit+"..HEAD")
 	if err != nil {
-		return fmt.Errorf("list post-candidate commits: %w", err)
+		return 0, fmt.Errorf("list post-candidate commits: %w", err)
 	}
-	for _, commit := range strings.Fields(commitsRaw) {
+	commits := strings.Fields(commitsRaw)
+	for _, commit := range commits {
 		parentsRaw, err := repo.gitOutput(ctx, "show", "-s", "--format=%P", commit)
 		if err != nil {
-			return fmt.Errorf("read parents for post-candidate commit %s: %w", commit, err)
+			return 0, fmt.Errorf("read parents for post-candidate commit %s: %w", commit, err)
 		}
 		parents := strings.Fields(parentsRaw)
 		if len(parents) != 1 {
-			return fmt.Errorf("post-candidate commit %s is a merge with %d parents; merges are not allowed during release finalization", commit, len(parents))
+			return 0, fmt.Errorf("post-candidate commit %s is a merge with %d parents; merges are not allowed during release finalization", commit, len(parents))
 		}
 		changedRaw, err := repo.gitBytes(
 			ctx,
@@ -925,28 +968,29 @@ func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, cand
 			"--",
 		)
 		if err != nil {
-			return fmt.Errorf("list changes for post-candidate commit %s: %w", commit, err)
+			return 0, fmt.Errorf("list changes for post-candidate commit %s: %w", commit, err)
 		}
 		for _, path := range splitNUL(changedRaw) {
 			if !isAllowedPostCandidatePath(path) {
-				return fmt.Errorf("post-candidate commit %s changes %q outside the release-finalization allowlist", commit, path)
+				return 0, fmt.Errorf("post-candidate commit %s changes %q outside the release-finalization allowlist", commit, path)
 			}
 		}
 	}
-	return nil
+	return len(commits), nil
 }
 
 func isAllowedPostCandidatePath(path string) bool {
 	switch path {
 	case "README.md",
-		"docs/CHANGELOG.md",
+		"CHANGELOG.md",
 		"docs/development/roadmap.md",
 		"docs/releases/v2.8.0-rnl.1.md",
 		manifestRepositoryPath,
 		acceptanceDirectory + "/systemd.json",
 		acceptanceDirectory + "/openrc.json",
 		acceptanceDirectory + "/panel.json",
-		acceptanceDirectory + "/resource-fault.json":
+		acceptanceDirectory + "/resource-fault.json",
+		acceptanceDirectory + "/compose.json":
 		return true
 	default:
 		return false
@@ -1366,6 +1410,11 @@ func isLowerHex(value string, length int) bool {
 	}
 	_, err := hex.DecodeString(value)
 	return err == nil
+}
+
+func isSHA256Digest(value string) bool {
+	const prefix = "sha256:"
+	return strings.HasPrefix(value, prefix) && isLowerHex(value[len(prefix):], 64)
 }
 
 func exactStringSliceSet(values, expected []string) bool {

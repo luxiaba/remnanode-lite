@@ -2,8 +2,6 @@ package xray
 
 import (
 	"testing"
-
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
 )
 
 func TestHashedSetMatchesReference(t *testing.T) {
@@ -128,31 +126,37 @@ func TestIsNeedRestartCore(t *testing.T) {
 func TestAddRemoveUserFromInboundHash(t *testing.T) {
 	t.Parallel()
 
-	manager := &Manager{state: lifecycleRunning, generation: 7}
-	result := xtls.HandlerResult{OK: true, Generation: 7}
-	if !manager.CommitUserAdded(result, "in-1", "uuid-1") ||
-		!manager.CommitUserAdded(result, "in-1", "uuid-2") {
-		t.Fatal("expected current generation hash commits to succeed")
+	process := &processState{epoch: 7}
+	manager := &Manager{state: lifecycleRunning, process: process, runtimeProcessEpoch: 7}
+	token := &mutationToken{manager: manager, process: process, epoch: 7}
+	token.active.Store(true)
+	if !manager.commitUserAdded(token, "in-1", "uuid-1") ||
+		!manager.commitUserAdded(token, "in-1", "uuid-2") {
+		t.Fatal("expected current process epoch hash commits to succeed")
 	}
 	if len(manager.InboundTags()) != 1 {
 		t.Fatalf("expected one inbound tag, got %v", manager.InboundTags())
 	}
 
-	if !manager.CommitUserRemoved(result, "in-1", "uuid-1") ||
-		!manager.CommitUserRemoved(result, "in-1", "uuid-2") {
-		t.Fatal("expected current generation hash commits to succeed")
+	if !manager.commitUserRemoved(token, "in-1", "uuid-1") ||
+		!manager.commitUserRemoved(token, "in-1", "uuid-2") {
+		t.Fatal("expected current process epoch hash commits to succeed")
 	}
 	if len(manager.InboundTags()) != 0 {
 		t.Fatalf("expected inbound cleared, got %v", manager.InboundTags())
 	}
 }
 
-func TestHashCommitRejectsStaleGeneration(t *testing.T) {
+func TestHashCommitRejectsStaleProcessEpoch(t *testing.T) {
 	t.Parallel()
 
-	manager := &Manager{state: lifecycleRunning, generation: 8}
-	if manager.CommitUserAdded(xtls.HandlerResult{OK: true, Generation: 7}, "in-1", "uuid-1") {
-		t.Fatal("stale generation must not update hash state")
+	current := &processState{epoch: 8}
+	stale := &processState{epoch: 7}
+	manager := &Manager{state: lifecycleRunning, process: current, runtimeProcessEpoch: 8}
+	token := &mutationToken{manager: manager, process: stale, epoch: 7}
+	token.active.Store(true)
+	if manager.commitUserAdded(token, "in-1", "uuid-1") {
+		t.Fatal("stale process epoch must not update hash state")
 	}
 	if len(manager.InboundTags()) != 0 {
 		t.Fatalf("stale commit published inbound tags: %v", manager.InboundTags())

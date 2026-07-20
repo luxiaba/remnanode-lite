@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type stubProvider struct {
@@ -17,39 +17,36 @@ type stubProvider struct {
 func (s *stubProvider) AddInboundTag(tag string) {
 	s.inboundTags = append(s.inboundTags, tag)
 }
+func (s *stubProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
 func (s *stubProvider) InboundTags() []string { return s.inboundTags }
-func (s *stubProvider) CommitUserAdded(xtls.HandlerResult, string, string) bool {
-	return true
-}
-func (s *stubProvider) CommitUserRemoved(xtls.HandlerResult, string, string) bool {
-	return true
-}
-func (s *stubProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
+func (s *stubProvider) GetUserIPList(context.Context, string, bool) ([]xrayrpc.IPEntry, error) {
 	return nil, nil
 }
-func (s *stubProvider) HandlerRemoveUser(context.Context, string, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (s *stubProvider) HandlerRemoveUser(context.Context, string, string, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: false, Message: "boom"}
+func (s *stubProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: false, Message: "boom"}
 }
-func (s *stubProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (s *stubProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (s *stubProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (s *stubProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (s *stubProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerGetInboundUsers(context.Context, string) ([]xtls.InboundUser, xtls.HandlerResult) {
-	return nil, xtls.HandlerResult{OK: true}
+func (s *stubProvider) HandlerGetInboundUsers(context.Context, string) ([]xrayrpc.InboundUser, xrayrpc.HandlerResult) {
+	return nil, xrayrpc.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xtls.HandlerResult) {
-	return 0, xtls.HandlerResult{OK: true}
+func (s *stubProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xrayrpc.HandlerResult) {
+	return 0, xrayrpc.HandlerResult{OK: true}
 }
 
 func TestAddUsersReportsHandlerFailure(t *testing.T) {
@@ -77,8 +74,8 @@ type failingInboundProvider struct {
 	stubProvider
 }
 
-func (failingInboundProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xtls.HandlerResult) {
-	return 0, xtls.HandlerResult{OK: false, Message: "xray is not online"}
+func (failingInboundProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xrayrpc.HandlerResult) {
+	return 0, xrayrpc.HandlerResult{OK: false, Message: "xray is not online"}
 }
 
 func TestGetInboundUsersCountGRPCFailure(t *testing.T) {
@@ -130,9 +127,9 @@ type shadowsocksTrackingProvider struct {
 	ivChecks []bool
 }
 
-func (p *shadowsocksTrackingProvider) HandlerAddShadowsocksUser(_ context.Context, _, _, _ string, _ int, ivCheck bool, _ uint32) xtls.HandlerResult {
+func (p *shadowsocksTrackingProvider) HandlerAddShadowsocksUser(_ context.Context, _, _, _ string, _ int, ivCheck bool, _ uint32, _ string) xrayrpc.HandlerResult {
 	p.ivChecks = append(p.ivChecks, ivCheck)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
 func TestAddUserMatchesOfficialShadowsocksIVCheckBehavior(t *testing.T) {

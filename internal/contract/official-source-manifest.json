@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/remnawave/node.git",
+  "packageName": "@remnawave/node",
+  "version": "2.8.0",
+  "commit": "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b",
+  "files": [
+    {
+      "path": "libs/contract/api/controllers/handler.ts",
+      "sha256": "aae61fff29afd3cb4a009ba3bc37fd3a1123f361264852e7f570e2781d0d6d18"
+    },
+    {
+      "path": "libs/contract/api/controllers/plugin.ts",
+      "sha256": "aa95a3c18e7d8197d0f9e9e7af5749af03c35d2caaaafa5aadb4ebaf1e5f9bb7"
+    },
+    {
+      "path": "libs/contract/api/controllers/stats.ts",
+      "sha256": "2deb0d1b35fe9dd251fdc35c0224fc676173686402c180b28696ca015d61acb0"
+    },
+    {
+      "path": "libs/contract/api/controllers/xray.ts",
+      "sha256": "fae38434b275258ba7743c578f68e6009c421491953660f1be8751e962752fca"
+    },
+    {
+      "path": "libs/contract/api/routes.ts",
+      "sha256": "4e4370345ad1c581656da37a97a99cb2476c11a3e9e0998e36a765f77d4e1230"
+    },
+    {
+      "path": "libs/contract/commands/handler/add-user.command.ts",
+      "sha256": "ac85e27b485235ba84c38f094c09a14050c3e704569c6d2ed080d92e5ff7aa12"
+    },
+    {
+      "path": "libs/contract/commands/handler/add-users.command.ts",
+      "sha256": "e42f7d0f287dfd2e63a30b3a5d079b067e4f002e62e0d4199d8fc1bed6527bc0"
+    },
+    {
+      "path": "libs/contract/commands/handler/drop-ips.command.ts",
+      "sha256": "fe48b198ae1faf02a3d5031780da921818a077327a2037b2543fe6086b99922d"
+    },
+    {
+      "path": "libs/contract/commands/handler/drop-users-connections.command.ts",
+      "sha256": "07158f5e53b05943f34c299e86db0d51d635f3b305ea7be6cb95d0a824a99df5"
+    },
+    {
+      "path": "libs/contract/commands/handler/get-inbound-users-count.command.ts",
+      "sha256": "1cc15573811fa37c43e9f87ede955ad8232b9ceeed27aa3e7b8f14352975cac8"
+    },
+    {
+      "path": "libs/contract/commands/handler/get-inbound-users.command.ts",
+      "sha256": "ac194f82632b95d1da99d86027181584c0e24949dc4b335e9643246becb01f88"
+    },
+    {
+      "path": "libs/contract/commands/handler/remove-user.command.ts",
+      "sha256": "2ebd08e6d2b489618d0715b3c552e829d8af0c4d53764958fc5f1a2e7fecce19"
+    },
+    {
+      "path": "libs/contract/commands/handler/remove-users.command.ts",
+      "sha256": "0b1518511ce1e395e0594a00de1d55de3ef9bd5ab3a1397100900a62af351ab3"
+    },
+    {
+      "path": "libs/contract/commands/plugin/nftables/block-ips.schema.ts",
+      "sha256": "8ea1fd2fd630e1f1aa7ae6757f59f0357c3a380a17b11453d2917d03a11dce33"
+    },
+    {
+      "path": "libs/contract/commands/plugin/nftables/recreate-tables.schema.ts",
+      "sha256": "f303a4bf874d707e79ea3fd146a27f91cbd2790817f32613ede20aed4aa30e6b"
+    },
+    {
+      "path": "libs/contract/commands/plugin/nftables/unblock-ips.schema.ts",
+      "sha256": "a2d03c53b032b101b8e6aa2bdbf9f49c19ca41069081f058e79f5b5556e746bb"
+    },
+    {
+      "path": "libs/contract/commands/plugin/sync.command.ts",
+      "sha256": "025e1feb29508e44367074c9f023438316e8ab7afe77ad3d73d79db052c6dcbf"
+    },
+    {
+      "path": "libs/contract/commands/plugin/torrent-blocker/collect-reports.schema.ts",
+      "sha256": "834c1a71c82ec9142abac73555db58b9d907c3f2c3e0c89aa83cd68c2291250e"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-all-inbounds-stats.command.ts",
+      "sha256": "4c5b6e2a26f4571e0371ab09738c609237504e96821699c1bee7c209c827b570"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-all-outbounds-stats.command.ts",
+      "sha256": "d48d5e67cdab9ff9e6e68e32c30c3d7f7e2a85e15e89c9e7a9fd4f63ad9218ff"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-combined-stats.command.ts",
+      "sha256": "f29d198121b807dac4f18edb535d12db3ca7754544252ad64d813967dd14906a"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-inbound-stats.command.ts",
+      "sha256": "148e479301ac620c4d8a2d8991fdbf5cd4180eedac70e7e8f37ca6cf8d4e6211"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-outbound-stats.command.ts",
+      "sha256": "035b4416c90342bdef4c6924a7a834d09ec30c4dd961da8b77d9ea137c5cb1e7"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-system-stats.command.ts",
+      "sha256": "0a665b34c01f81016310424deb7311301d843bffed3ec6ec62dc0bf82608c67d"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-user-ip-list.command.ts",
+      "sha256": "a8ac34ef06f0fe5d456ed9794c55d5f3697e29be4e81054d96b6f0ca77fdc71f"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-user-online-status.command.ts",
+      "sha256": "c9270ab35bba4324e2a8de4ce78311557a66c2fcb7b2f501e6f1b8a28eb0bcc5"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-users-ip-list.command.ts",
+      "sha256": "71b9182f4aaec1b6bcbb1c96b215adb909dbf6ea53099d31f876c586bdebc644"
+    },
+    {
+      "path": "libs/contract/commands/stats/get-users-stats.command.ts",
+      "sha256": "ee60cf8a847565c4efbc1cf50ef95983aa0273d0f75d375da26812d277fa13dd"
+    },
+    {
+      "path": "libs/contract/commands/xray/get-node-health-check.command.ts",
+      "sha256": "2552aa4eee4e0e8fcf9f21c0526ac44c049015bc65bb24a06c65595e3cb15d7c"
+    },
+    {
+      "path": "libs/contract/commands/xray/start.command.ts",
+      "sha256": "74f1ac60e4f81b4cd7a7c5c538cc9e8b725076b3a3eb14fa51b9243336dcd492"
+    },
+    {
+      "path": "libs/contract/commands/xray/stop.command.ts",
+      "sha256": "6024bfac9653117cdf68e583f6464bb480e73df955d84eb48fc33bf3ddcce152"
+    },
+    {
+      "path": "libs/contract/constants/errors/errors.ts",
+      "sha256": "468fffca59ff1313072aebf95b1158060ff365bb3df115b5796a09a4bbbf1aa1"
+    },
+    {
+      "path": "libs/contract/constants/errors/known-errors.ts",
+      "sha256": "dbd9eedc8c9c81c330fcb1c63555c1a1943d68e1bdcbdf5b70962f64b7cd26fe"
+    },
+    {
+      "path": "libs/contract/constants/internal/internal.constants.ts",
+      "sha256": "799ef663b0a21bda97b833fd6eaed661e6baff55701ae7a4310b3ac1f0e39c81"
+    },
+    {
+      "path": "libs/contract/models/node-system.schema.ts",
+      "sha256": "11bc9cf07e6c895866a7c1311ee97b31f52714cbc2256766667e95d2499968a3"
+    },
+    {
+      "path": "libs/contract/models/torrent-blocker.report.schema.ts",
+      "sha256": "2ff113eb06f1295a90b30b205d6f627aa92c6efd9ea689ef9ff380b79cadd7b8"
+    },
+    {
+      "path": "libs/contract/models/xray-webhook.schema.ts",
+      "sha256": "41239616cfd2de74f8892be5463f18cea96b6d4d8e50f6ad8c1c9160b415ab51"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "bb4d8825b99cdc49ad9af2d4dfaf66f8ea16bde19c51db0b3eac1459f7d4dd82"
+    },
+    {
+      "path": "package.json",
+      "sha256": "026300061a6bf4a1205677d20e0d7d1d2f6d1d7597ee1da35eec10fbb9616e66"
+    },
+    {
+      "path": "src/app.module.ts",
+      "sha256": "a8357732dff06463a3a2421d726187f2f3aee8f6722d9d24e9b4f48bbb0307a4"
+    },
+    {
+      "path": "src/common/exception/http-exception.filter.ts",
+      "sha256": "1bffaa7e3e223071eb1606ac6c46e5aa3f0dba6483f6e9dcf74de9ebe24ba4e3"
+    },
+    {
+      "path": "src/common/exception/not-found-exception.filter.ts",
+      "sha256": "898b26be60e36b5844dab7c8b0aad72948f2fb17c5bfeb352ce4d8fbd900b5ad"
+    },
+    {
+      "path": "src/common/helpers/error-handler.helper.ts",
+      "sha256": "e172148f31132b136ea725377ab055f95e249cacf8c5f7b3b2b924d3d2ce178c"
+    },
+    {
+      "path": "src/main.ts",
+      "sha256": "8b9ab3b2872775438116d2e8c51f01c56e16483e9af55ff506d6338278b51ae3"
+    },
+    {
+      "path": "src/modules/_plugin/plugin.controller.ts",
+      "sha256": "7370ac3c7476a6b5f07474d2e2610d0928c5ec4a868b9a970d99ce66ea242a69"
+    },
+    {
+      "path": "src/modules/_plugin/plugin.module.ts",
+      "sha256": "455e1f6626ad66460ebea3eddc97defe238926395a0f4a86d1f1093ec5dab1f8"
+    },
+    {
+      "path": "src/modules/asn-lmdb/asn-lmdb.module.ts",
+      "sha256": "2631d7ba5b63016941864127660ea0814218e8a55f21caad294cf279018a57fe"
+    },
+    {
+      "path": "src/modules/handler/handler.controller.ts",
+      "sha256": "ad69d88217ce99d595711aa7ba9aab40de0b777481bdf8d251178f340ab00460"
+    },
+    {
+      "path": "src/modules/handler/handler.module.ts",
+      "sha256": "5642b0100ba2839e3e8089a3e1f799abcfd2342ee9fd0b0fda843455b3d31a0b"
+    },
+    {
+      "path": "src/modules/internal/internal.controller.ts",
+      "sha256": "6dc49f6ea1f519f6da8c6b5a1790a336bdce1bc351b7fea02b5c1e84045820cd"
+    },
+    {
+      "path": "src/modules/internal/internal.module.ts",
+      "sha256": "b1ff7315a6ec8f619bda8a1af1bd2456e78893257a44a0b529c15344aa90097d"
+    },
+    {
+      "path": "src/modules/network-stats/network-stats.module.ts",
+      "sha256": "1f92ce272ecce4b5a04a2732b7ed74d3cecdf8b16b4541a947809b774ae854fa"
+    },
+    {
+      "path": "src/modules/remnawave-node.modules.ts",
+      "sha256": "914511b3d3eeca78c0d576e2d79e00d034075c110f8e1bbbdac33d50b30b77e5"
+    },
+    {
+      "path": "src/modules/stats/stats.controller.ts",
+      "sha256": "094308b77c508a99bf4bc683a0ab1b175cd4693f5d331f78195387779f82cd54"
+    },
+    {
+      "path": "src/modules/stats/stats.module.ts",
+      "sha256": "8c258d79379d1e566d8e5dc84210e3cae3f12ffd840ef06a4a698765b8033905"
+    },
+    {
+      "path": "src/modules/xray-core/xray.controller.ts",
+      "sha256": "a020358fa465b0009b91024479977da25c2594e50b4ecfc73a23e2ba5e0c49b5"
+    },
+    {
+      "path": "src/modules/xray-core/xray.module.ts",
+      "sha256": "e96e92886ca167a6314492173e4885b98a975dfbbd7f333ee700bdc83b0ecc37"
+    },
+    {
+      "path": "src/modules/xray-core/xray.service.ts",
+      "sha256": "cfc39b3301109c85bb6ab9b24493c31eb0410013d1609d9e28b460f268a953f7"
+    }
+  ],
+  "routes": [
+    {
+      "method": "POST",
+      "path": "/node/handler/add-user",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.ADD_USER (REST_API.HANDLER.ADD_USER)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/handler/add-users",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.ADD_USERS (REST_API.HANDLER.ADD_USERS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/handler/drop-ips",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.DROP_IPS (REST_API.HANDLER.DROP_IPS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/handler/drop-users-connections",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.DROP_USERS_CONNECTIONS (REST_API.HANDLER.DROP_USERS_CONNECTIONS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/handler/get-inbound-users",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.GET_INBOUND_USERS (REST_API.HANDLER.GET_INBOUND_USERS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/handler/get-inbound-users-count",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.GET_INBOUND_USERS_COUNT (REST_API.HANDLER.GET_INBOUND_USERS_COUNT)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/handler/remove-user",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.REMOVE_USER (REST_API.HANDLER.REMOVE_USER)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/handler/remove-users",
+      "controllerSource": "src/modules/handler/handler.controller.ts",
+      "decorator": "HANDLER_ROUTES.REMOVE_USERS (REST_API.HANDLER.REMOVE_USERS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/plugin/nftables/block-ips",
+      "controllerSource": "src/modules/_plugin/plugin.controller.ts",
+      "decorator": "PLUGIN_ROUTES.NFTABLES.BLOCK_IPS (REST_API.PLUGIN.NFTABLES.BLOCK_IPS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/plugin/nftables/recreate-tables",
+      "controllerSource": "src/modules/_plugin/plugin.controller.ts",
+      "decorator": "PLUGIN_ROUTES.NFTABLES.RECREATE_TABLES (REST_API.PLUGIN.NFTABLES.RECREATE_TABLES)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/plugin/nftables/unblock-ips",
+      "controllerSource": "src/modules/_plugin/plugin.controller.ts",
+      "decorator": "PLUGIN_ROUTES.NFTABLES.UNBLOCK_IPS (REST_API.PLUGIN.NFTABLES.UNBLOCK_IPS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/plugin/sync",
+      "controllerSource": "src/modules/_plugin/plugin.controller.ts",
+      "decorator": "PLUGIN_ROUTES.SYNC (REST_API.PLUGIN.SYNC)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/plugin/torrent-blocker/collect",
+      "controllerSource": "src/modules/_plugin/plugin.controller.ts",
+      "decorator": "PLUGIN_ROUTES.TORRENT_BLOCKER.COLLECT (REST_API.PLUGIN.TORRENT_BLOCKER.COLLECT)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-all-inbounds-stats",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_ALL_INBOUNDS_STATS (REST_API.STATS.GET_ALL_INBOUNDS_STATS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-all-outbounds-stats",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_ALL_OUTBOUNDS_STATS (REST_API.STATS.GET_ALL_OUTBOUNDS_STATS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-combined-stats",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_COMBINED_STATS (REST_API.STATS.GET_COMBINED_STATS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-inbound-stats",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_INBOUND_STATS (REST_API.STATS.GET_INBOUND_STATS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-outbound-stats",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_OUTBOUND_STATS (REST_API.STATS.GET_OUTBOUND_STATS)"
+    },
+    {
+      "method": "GET",
+      "path": "/node/stats/get-system-stats",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_SYSTEM_STATS (REST_API.STATS.GET_SYSTEM_STATS)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-user-ip-list",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_USER_IP_LIST (REST_API.STATS.GET_USER_IP_LIST)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-user-online-status",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_USER_ONLINE_STATUS (REST_API.STATS.GET_USER_ONLINE_STATUS)"
+    },
+    {
+      "method": "GET",
+      "path": "/node/stats/get-users-ip-list",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_USERS_IP_LIST (REST_API.STATS.GET_USERS_IP_LIST)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/stats/get-users-stats",
+      "controllerSource": "src/modules/stats/stats.controller.ts",
+      "decorator": "STATS_ROUTES.GET_USERS_STATS (REST_API.STATS.GET_USERS_STATS)"
+    },
+    {
+      "method": "GET",
+      "path": "/node/xray/healthcheck",
+      "controllerSource": "src/modules/xray-core/xray.controller.ts",
+      "decorator": "XRAY_ROUTES.NODE_HEALTH_CHECK (REST_API.XRAY.NODE_HEALTH_CHECK)"
+    },
+    {
+      "method": "POST",
+      "path": "/node/xray/start",
+      "controllerSource": "src/modules/xray-core/xray.controller.ts",
+      "decorator": "XRAY_ROUTES.START (REST_API.XRAY.START)"
+    },
+    {
+      "method": "GET",
+      "path": "/node/xray/stop",
+      "controllerSource": "src/modules/xray-core/xray.controller.ts",
+      "decorator": "XRAY_ROUTES.STOP (REST_API.XRAY.STOP)"
+    }
+  ]
+}

@@ -14,8 +14,8 @@ const (
 )
 
 // xrayLifecycleGate lets concurrent start requests reach Manager, which owns
-// the official "already in progress" response, while keeping plugin and stop
-// mutations exclusive with every admitted start.
+// the official "already in progress" response, while keeping stop, plugin,
+// handler, and reset-capable stats mutations exclusive with admitted starts.
 type xrayLifecycleGate struct {
 	mu               sync.Mutex
 	changed          chan struct{}

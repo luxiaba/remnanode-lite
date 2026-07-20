@@ -55,6 +55,12 @@ func runInRepository(repoDir string, args []string, stdout, stderr io.Writer) in
 		}
 	}
 
-	fmt.Fprintf(stdout, "release evidence check passed for %s (candidate %s)\n", result.ReleaseTag, result.CandidateCommit)
+	fmt.Fprintf(
+		stdout,
+		"release evidence check passed for %s (candidate %s, image %s)\n",
+		result.ReleaseTag,
+		result.CandidateCommit,
+		result.CandidateImageDigest,
+	)
 	return 0
 }

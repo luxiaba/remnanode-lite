@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/bodylimit"
+	"github.com/luxiaba/remnanode-lite/internal/bodylimit"
 )
 
 func TestEveryRegisteredRouteHasExpectedRequestBodyBudget(t *testing.T) {
@@ -73,15 +73,12 @@ func TestEveryRegisteredRouteHasExpectedRequestBodyBudget(t *testing.T) {
 }
 
 func TestNodeRequestBodyBudgetHonorsConfiguredCeiling(t *testing.T) {
-	if err := bodylimit.Configure(false, 1); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = bodylimit.Configure(false, 0) })
+	budget := newHTTPTestBudget(t, false, 1)
 
 	for _, definition := range nodeRouteDefinitions {
 		var got int64
-		handler := withNodeRequestBodyLimit(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			got = bodylimit.RequestLimit(r)
+		handler := withNodeRequestBodyLimit(budget, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			got = budget.RequestLimit(r)
 		}))
 		handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(definition.Method, definition.Path, nil))
 
@@ -96,13 +93,11 @@ func TestNodeRequestBodyBudgetHonorsConfiguredCeiling(t *testing.T) {
 }
 
 func TestUnknownRouteNeverReceivesElevatedRequestBudget(t *testing.T) {
-	if err := bodylimit.Configure(false, 0); err != nil {
-		t.Fatal(err)
-	}
+	budget := newHTTPTestBudget(t, false, 0)
 
 	var got int64
-	withNodeRequestBodyLimit(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		got = bodylimit.RequestLimit(r)
+	withNodeRequestBodyLimit(budget, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		got = budget.RequestLimit(r)
 	})).ServeHTTP(
 		httptest.NewRecorder(),
 		httptest.NewRequest(http.MethodPost, "/node/unknown", nil),
@@ -113,9 +108,7 @@ func TestUnknownRouteNeverReceivesElevatedRequestBudget(t *testing.T) {
 }
 
 func TestRouteRequestBodyLimitsAreEnforcedByClass(t *testing.T) {
-	if err := bodylimit.Configure(false, 0); err != nil {
-		t.Fatal(err)
-	}
+	budget := newHTTPTestBudget(t, false, 0)
 
 	for _, test := range []struct {
 		name      string
@@ -130,7 +123,7 @@ func TestRouteRequestBodyLimitsAreEnforcedByClass(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var readErr error
-			handler := withNodeRequestBodyLimit(bodylimit.LimitMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			handler := withNodeRequestBodyLimit(budget, budget.LimitMiddleware(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 				_, readErr = io.Copy(io.Discard, r.Body)
 			})))
 			handler.ServeHTTP(
@@ -144,4 +137,13 @@ func TestRouteRequestBodyLimitsAreEnforcedByClass(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newHTTPTestBudget(t *testing.T, lowMemory bool, configuredMB int) *bodylimit.Budget {
+	t.Helper()
+	budget, err := bodylimit.New(lowMemory, configuredMB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return budget
 }

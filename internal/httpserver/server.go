@@ -15,15 +15,14 @@ import (
 
 	"golang.org/x/net/netutil"
 
-	"github.com/Luxiaba/remnanode-lite/internal/auth"
-	"github.com/Luxiaba/remnanode-lite/internal/bodylimit"
-	"github.com/Luxiaba/remnanode-lite/internal/config"
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/plugin"
-	"github.com/Luxiaba/remnanode-lite/internal/secret"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
-	"github.com/Luxiaba/remnanode-lite/internal/xray"
+	"github.com/luxiaba/remnanode-lite/internal/auth"
+	"github.com/luxiaba/remnanode-lite/internal/bodylimit"
+	"github.com/luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
+	"github.com/luxiaba/remnanode-lite/internal/secret"
+	"github.com/luxiaba/remnanode-lite/internal/stats"
+	"github.com/luxiaba/remnanode-lite/internal/xray"
 )
 
 type Server struct {
@@ -34,6 +33,7 @@ type Server struct {
 	statsService   *stats.Service
 	handlerService *nodehandler.Service
 	pluginService  pluginController
+	bodyBudget     *bodylimit.Budget
 }
 
 const (
@@ -62,21 +62,56 @@ type pluginController interface {
 	ReportsCount() int
 }
 
-func New(cfg config.Config, payload secret.Payload, validator *auth.JWTValidator, manager *xray.Manager, pluginService *plugin.Service, dropper *connections.Dropper) (*Server, error) {
+type Dependencies struct {
+	Validator *auth.JWTValidator
+	Xray      xrayController
+	Stats     *stats.Service
+	Handler   *nodehandler.Service
+	Plugins   pluginController
+	Body      *bodylimit.Budget
+}
+
+func (d Dependencies) validate() error {
+	if d.Validator == nil {
+		return errors.New("httpserver: JWT validator is required")
+	}
+	if d.Xray == nil {
+		return errors.New("httpserver: Xray controller is required")
+	}
+	if d.Stats == nil {
+		return errors.New("httpserver: stats service is required")
+	}
+	if d.Handler == nil {
+		return errors.New("httpserver: handler service is required")
+	}
+	if d.Plugins == nil {
+		return errors.New("httpserver: plugin controller is required")
+	}
+	if d.Body == nil {
+		return errors.New("httpserver: request body budget is required")
+	}
+	return nil
+}
+
+func New(cfg config.Config, payload secret.Payload, dependencies Dependencies) (*Server, error) {
+	if err := dependencies.validate(); err != nil {
+		return nil, err
+	}
 	tlsConfig, err := buildTLSConfig(payload)
 	if err != nil {
 		return nil, err
 	}
 
 	server := &Server{
-		manager:        manager,
-		statsService:   stats.NewService(manager, pluginService),
-		handlerService: nodehandler.NewService(manager, dropper),
-		pluginService:  pluginService,
+		manager:        dependencies.Xray,
+		statsService:   dependencies.Stats,
+		handlerService: dependencies.Handler,
+		pluginService:  dependencies.Plugins,
+		bodyBudget:     dependencies.Body,
 	}
 
 	maxConnections, maxHandlers := serverCapacity(cfg.LowMemory)
-	protected := requireJWT(validator, requireKnownNodeRoute(withRequestTimeout(maxRequestDuration, server.nodeRequestHandler(maxHandlers))))
+	protected := requireJWT(dependencies.Validator, requireKnownNodeRoute(withRequestTimeout(maxRequestDuration, server.nodeRequestHandler(maxHandlers))))
 
 	server.maxConnections = maxConnections
 	server.httpServer = &http.Server{
@@ -96,7 +131,10 @@ func New(cfg config.Config, payload secret.Payload, validator *auth.JWTValidator
 }
 
 func (s *Server) nodeRequestHandler(maxHandlers int) http.Handler {
-	nodeRoutes := withNodeRequestBodyLimit(bodylimit.DecompressMiddleware(bodylimit.LimitMiddleware(http.HandlerFunc(s.handleNodeRoutes))))
+	nodeRoutes := withNodeRequestBodyLimit(
+		s.bodyBudget,
+		s.bodyBudget.DecompressMiddleware(s.bodyBudget.LimitMiddleware(http.HandlerFunc(s.handleNodeRoutes))),
+	)
 	limited := limitActiveHandlers(maxHandlers, nodeRoutes)
 	startLimited := limitXrayStartRoutes(maxXrayStartHandlers, limited)
 	return limitBulkNodeRoutes(maxBulkHandlers, startLimited)
@@ -130,13 +168,13 @@ func requireKnownNodeRoute(next http.Handler) http.Handler {
 	})
 }
 
-func withNodeRequestBodyLimit(next http.Handler) http.Handler {
+func withNodeRequestBodyLimit(budget *bodylimit.Budget, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		route, known := lookupNodeRoute(r.Method, r.URL.Path)
 		if !known {
 			route = 0
 		}
-		next.ServeHTTP(w, bodylimit.WithRequestLimit(r, nodeRouteRequestBodyLimit(route)))
+		next.ServeHTTP(w, budget.WithRequestLimit(r, nodeRouteRequestBodyLimit(route)))
 	})
 }
 
@@ -328,7 +366,7 @@ func (s *Server) handleNodeRoutes(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		panic(http.ErrAbortHandler)
 	}
-	if !nodeRouteHasRequestDTO(route) && !validateNodeJSONDocument(w, r) {
+	if !nodeRouteHasRequestDTO(route) && !s.validateNodeJSONDocument(w, r) {
 		return
 	}
 

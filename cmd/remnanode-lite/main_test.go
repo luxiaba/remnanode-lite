@@ -38,6 +38,7 @@ func TestRunCLIRejectsUnknownMalformedAndExtraArguments(t *testing.T) {
 	tests := [][]string{
 		{"help", "extra"},
 		{"version", "extra"},
+		{"healthcheck", "extra"},
 		{"--version", "extra"},
 		{"doctor", "--unknown"},
 		{"doctor", "--env"},
@@ -162,6 +163,24 @@ func TestRunCLIPreservesCommandDispatch(t *testing.T) {
 	})
 }
 
+func TestRunCLIRejectsUnsafeReleaseURLInputs(t *testing.T) {
+	for _, args := range [][]string{
+		{"release-url", "../main", "amd64"},
+		{"release-url", "v2.8.0", "../amd64"},
+		{"install-script-url", "main", "install-node.sh"},
+		{"install-script-url", "v2.8.0", "../install-node.sh"},
+	} {
+		var stderr bytes.Buffer
+		code := runCLI(args, strings.NewReader(""), &bytes.Buffer{}, &stderr, func() error {
+			t.Fatal("daemon called")
+			return nil
+		}, func([]string) int { return 0 }, socketKillerNotCalled(t))
+		if code != 2 || stderr.Len() == 0 {
+			t.Fatalf("runCLI(%q) = %d, stderr = %q", args, code, stderr.String())
+		}
+	}
+}
+
 func TestRunCLIKillSocketsAliases(t *testing.T) {
 	for _, command := range []string{"kill-sockets", "--kill-sockets", "-k"} {
 		t.Run(command, func(t *testing.T) {
@@ -189,8 +208,8 @@ func TestRunCLIKillSocketsAliases(t *testing.T) {
 			if code != 0 || killedIP != "2001:db8::1" {
 				t.Fatalf("runCLI(%q) = %d, killed IP = %q", command, code, killedIP)
 			}
-			if got := stdout.String(); !strings.Contains(got, "Enter IP address") ||
-				!strings.Contains(got, "Killing sockets for IP: 2001:db8::1") ||
+			if got := stdout.String(); !strings.Contains(got, "Enter local or remote IP address") ||
+				!strings.Contains(got, "local or remote IP matches: 2001:db8::1") ||
 				!strings.Contains(got, "Sockets killed successfully") {
 				t.Fatalf("stdout = %q", got)
 			}

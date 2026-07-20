@@ -41,10 +41,16 @@ func (r Result) AnyTruncated() bool {
 // stream. The writers report every input byte as consumed so discarded output
 // cannot block the child process on a full pipe.
 func Run(ctx context.Context, stdin io.Reader, maxOutputBytes int, name string, args ...string) (Result, error) {
-	return run(ctx, stdin, maxOutputBytes, DefaultWaitDelay, name, args...)
+	return run(ctx, stdin, maxOutputBytes, DefaultWaitDelay, nil, name, args...)
 }
 
-func run(ctx context.Context, stdin io.Reader, maxOutputBytes int, waitDelay time.Duration, name string, args ...string) (Result, error) {
+// RunWithEnv is Run with an explicit child environment. Passing a non-nil
+// environment prevents the command from inheriting process secrets.
+func RunWithEnv(ctx context.Context, stdin io.Reader, maxOutputBytes int, environment []string, name string, args ...string) (Result, error) {
+	return run(ctx, stdin, maxOutputBytes, DefaultWaitDelay, environment, name, args...)
+}
+
+func run(ctx context.Context, stdin io.Reader, maxOutputBytes int, waitDelay time.Duration, environment []string, name string, args ...string) (Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -55,6 +61,10 @@ func run(ctx context.Context, stdin io.Reader, maxOutputBytes int, waitDelay tim
 	stdout := &boundedBuffer{limit: maxOutputBytes}
 	stderr := &boundedBuffer{limit: maxOutputBytes}
 	cmd := exec.CommandContext(ctx, name, args...)
+	if environment != nil {
+		cmd.Env = make([]string, len(environment))
+		copy(cmd.Env, environment)
+	}
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr

@@ -20,6 +20,7 @@ fi
 
 git diff --check
 git diff --cached --check
+go run ./cmd/docs-check
 shellcheck -x scripts/*.sh deploy/remnawave-node.openrc
 for script in scripts/*.sh; do
   bash -n "$script"
