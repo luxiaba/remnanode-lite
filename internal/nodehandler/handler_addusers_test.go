@@ -14,11 +14,6 @@ type hashTrackingProvider struct {
 	hashAdds []string
 }
 
-func (p *hashTrackingProvider) CommitUserAdded(_ xtls.HandlerResult, tag, uuid string) bool {
-	p.hashAdds = append(p.hashAdds, tag+":"+uuid)
-	return true
-}
-
 func TestAddUsersSkipsHashOnHandlerFailure(t *testing.T) {
 	t.Parallel()
 
@@ -38,13 +33,9 @@ type successVlessProvider struct {
 	hashAdds []string
 }
 
-func (p *successVlessProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
+func (p *successVlessProvider) HandlerAddVlessUser(_ context.Context, tag, _, _, _ string, _ uint32, hashUUID string) xtls.HandlerResult {
+	p.hashAdds = append(p.hashAdds, tag+":"+hashUUID)
 	return xtls.HandlerResult{OK: true}
-}
-
-func (p *successVlessProvider) CommitUserAdded(_ xtls.HandlerResult, tag, uuid string) bool {
-	p.hashAdds = append(p.hashAdds, tag+":"+uuid)
-	return true
 }
 
 func TestAddUsersAddsHashOnHandlerSuccess(t *testing.T) {

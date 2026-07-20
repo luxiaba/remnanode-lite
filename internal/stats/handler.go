@@ -9,6 +9,7 @@ import (
 )
 
 type Provider interface {
+	BeginMutation(ctx context.Context) (context.Context, func(), error)
 	GetSysStats(ctx context.Context) (*xtls.SysStats, error)
 	GetAllUsersStats(ctx context.Context, reset bool) ([]xtls.UserTraffic, error)
 	GetUserOnlineStatus(ctx context.Context, username string) (bool, error)
@@ -24,13 +25,22 @@ type ReportsCounter interface {
 	ReportsCount() int
 }
 
+type SystemStatsProvider interface {
+	Stats() system.Stats
+}
+
 type Service struct {
 	provider       Provider
 	reportsCounter ReportsCounter
+	systemStats    SystemStatsProvider
 }
 
-func NewService(provider Provider, reportsCounter ReportsCounter) *Service {
-	return &Service{provider: provider, reportsCounter: reportsCounter}
+func NewService(provider Provider, reportsCounter ReportsCounter, systemStats SystemStatsProvider) *Service {
+	return &Service{
+		provider:       provider,
+		reportsCounter: reportsCounter,
+		systemStats:    systemStats,
+	}
 }
 
 type SystemStatsResponse struct {
@@ -104,7 +114,7 @@ type GetUsersIPListResponse struct {
 }
 
 func (s *Service) GetSystemStats(ctx context.Context) (SystemStatsResponse, error) {
-	if s.provider == nil {
+	if s.provider == nil || s.systemStats == nil {
 		return SystemStatsResponse{}, errFailedSystemStats
 	}
 
@@ -118,7 +128,7 @@ func (s *Service) GetSystemStats(ctx context.Context) (SystemStatsResponse, erro
 	if s.reportsCounter != nil {
 		response.Plugins.TorrentBlocker.ReportsCount = s.reportsCounter.ReportsCount()
 	}
-	response.System.Stats = system.GetStats()
+	response.System.Stats = s.systemStats.Stats()
 	return response, nil
 }
 
@@ -204,6 +214,12 @@ func (s *Service) GetCombinedStats(ctx context.Context, reset bool) (CombinedSta
 	if s.provider == nil {
 		return CombinedStatsResponse{}, errFailedCombinedStats
 	}
+	leaseContext, release, err := s.provider.BeginMutation(ctx)
+	if err != nil {
+		return CombinedStatsResponse{}, errFailedCombinedStats
+	}
+	defer release()
+	ctx = leaseContext
 	inbounds, err := s.provider.GetAllInboundsStats(ctx, reset)
 	if err != nil {
 		return CombinedStatsResponse{}, errFailedCombinedStats

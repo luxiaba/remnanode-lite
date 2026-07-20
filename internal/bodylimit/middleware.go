@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/zstd"
@@ -26,56 +25,61 @@ const (
 	maxConfiguredMB        = 1024
 )
 
-var maxBytes atomic.Int64
-var decoderSlots = make(chan struct{}, maxConcurrentDecoders)
+// Budget applies an immutable body-size limit and owns its decoder capacity.
+type Budget struct {
+	maxBytes     int64
+	decoderSlots chan struct{}
+}
 
 type requestLimitKey struct{}
 
-func init() {
-	maxBytes.Store(defaultMaxBytes)
+// New creates an independent request-body budget.
+func New(lowMemory bool, configuredMB int) (*Budget, error) {
+	if configuredMB < 0 || configuredMB > maxConfiguredMB {
+		return nil, fmt.Errorf("BODY_LIMIT_MB must be between 1 and %d MiB, or 0 for the default", maxConfiguredMB)
+	}
+	if lowMemory && configuredMB > lowMemoryMaxBytes>>20 {
+		return nil, fmt.Errorf("BODY_LIMIT_MB must not exceed %d MiB when LOW_MEMORY=1", lowMemoryMaxBytes>>20)
+	}
+
+	limit := int64(defaultMaxBytes)
+	if configuredMB > 0 {
+		limit = int64(configuredMB) << 20
+	} else if lowMemory {
+		limit = lowMemoryMaxBytes
+	}
+	return &Budget{
+		maxBytes:     limit,
+		decoderSlots: make(chan struct{}, maxConcurrentDecoders),
+	}, nil
 }
 
-func Configure(lowMemory bool, bodyLimitMB int) error {
-	if bodyLimitMB < 0 || bodyLimitMB > maxConfiguredMB {
-		return fmt.Errorf("BODY_LIMIT_MB must be between 1 and %d MiB, or 0 for the default", maxConfiguredMB)
-	}
-	if lowMemory && bodyLimitMB > lowMemoryMaxBytes>>20 {
-		return fmt.Errorf("BODY_LIMIT_MB must not exceed %d MiB when LOW_MEMORY=1", lowMemoryMaxBytes>>20)
-	}
-	if bodyLimitMB > 0 {
-		maxBytes.Store(int64(bodyLimitMB) << 20)
-		return nil
-	}
-	if lowMemory {
-		maxBytes.Store(lowMemoryMaxBytes)
-		return nil
-	}
-	maxBytes.Store(defaultMaxBytes)
-	return nil
-}
-
-func MaxBytesLimit() int64 {
-	return maxBytes.Load()
+// MaxBytes returns the budget's configured body-size ceiling.
+func (b *Budget) MaxBytes() int64 {
+	return b.maxBytes
 }
 
 // WithRequestLimit attaches a route-specific ceiling to r. The configured
-// process-wide limit remains authoritative when it is smaller.
-func WithRequestLimit(r *http.Request, limit int64) *http.Request {
+// budget limit remains authoritative when it is smaller.
+func (b *Budget) WithRequestLimit(r *http.Request, limit int64) *http.Request {
 	if limit <= 0 {
 		limit = 1
+	}
+	if limit > b.maxBytes {
+		limit = b.maxBytes
 	}
 	return r.WithContext(context.WithValue(r.Context(), requestLimitKey{}, limit))
 }
 
 // RequestLimit returns the effective request ceiling after applying both the
-// route-specific and process-wide limits.
-func RequestLimit(r *http.Request) int64 {
-	limit := maxBytes.Load()
+// route-specific and budget limits.
+func (b *Budget) RequestLimit(r *http.Request) int64 {
+	limit := b.maxBytes
 	if r == nil {
 		return limit
 	}
-	if routeLimit, ok := r.Context().Value(requestLimitKey{}).(int64); ok && routeLimit > 0 && routeLimit < limit {
-		return routeLimit
+	if requestLimit, ok := r.Context().Value(requestLimitKey{}).(int64); ok && requestLimit > 0 {
+		return requestLimit
 	}
 	return limit
 }
@@ -139,19 +143,19 @@ func (d *decodedReadCloser) Close() error {
 	return d.closeErr
 }
 
-func acquireDecoder(ctx context.Context) (func(), error) {
+func (b *Budget) acquireDecoder(ctx context.Context) (func(), error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	select {
-	case decoderSlots <- struct{}{}:
+	case b.decoderSlots <- struct{}{}:
 		if err := ctx.Err(); err != nil {
-			<-decoderSlots
+			<-b.decoderSlots
 			return nil, err
 		}
 		var once sync.Once
 		return func() {
-			once.Do(func() { <-decoderSlots })
+			once.Do(func() { <-b.decoderSlots })
 		}, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -176,8 +180,8 @@ func zstdWindowLimit(requestLimit int64) int64 {
 	return requestLimit
 }
 
-func decodeBody(w http.ResponseWriter, r *http.Request, encoding string, limit int64) (*decodedReadCloser, error) {
-	release, err := acquireDecoder(r.Context())
+func (b *Budget) decodeBody(w http.ResponseWriter, r *http.Request, encoding string, limit int64) (*decodedReadCloser, error) {
+	release, err := b.acquireDecoder(r.Context())
 	if err != nil {
 		return nil, err
 	}
@@ -234,57 +238,67 @@ func decodeBody(w http.ResponseWriter, r *http.Request, encoding string, limit i
 	return decoded, nil
 }
 
-func DecompressMiddleware(next http.Handler) http.Handler {
+// DecompressMiddleware decodes supported compressed request bodies within the budget.
+func (b *Budget) DecompressMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Body == nil || r.Body == http.NoBody {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		encoding := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Encoding")))
-		if encoding == "" || encoding == "identity" {
-			next.ServeHTTP(w, r)
-			return
-		}
-		switch encoding {
-		case "gzip", "deflate", "br", "zstd":
-		default:
-			writeHTTPError(w, http.StatusUnsupportedMediaType, fmt.Sprintf("unsupported content encoding %q", encoding))
-			return
-		}
-
-		decoded, err := decodeBody(w, r, encoding, RequestLimit(r))
-		if errors.Is(err, context.Canceled) {
-			panic(http.ErrAbortHandler)
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			writeCapacityUnavailable(w, r)
-			return
-		}
-		if err != nil {
-			var limitError *http.MaxBytesError
-			if errors.As(err, &limitError) {
-				writeHTTPError(w, http.StatusRequestEntityTooLarge, "request entity too large")
-				return
-			}
-			writeHTTPError(w, http.StatusBadRequest, "invalid "+encoding+" body")
-			return
-		}
-		defer decoded.Close()
-		r.Body = decoded
-		r.Header.Del("Content-Encoding")
-		r.ContentLength = -1
-		next.ServeHTTP(w, r)
+		b.serveDecompress(next, w, r)
 	})
 }
 
-func LimitMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Body != nil && r.Body != http.NoBody {
-			r.Body = http.MaxBytesReader(w, r.Body, RequestLimit(r))
-		}
+func (b *Budget) serveDecompress(next http.Handler, w http.ResponseWriter, r *http.Request) {
+	if r.Body == nil || r.Body == http.NoBody {
 		next.ServeHTTP(w, r)
+		return
+	}
+
+	encoding := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Encoding")))
+	if encoding == "" || encoding == "identity" {
+		next.ServeHTTP(w, r)
+		return
+	}
+	switch encoding {
+	case "gzip", "deflate", "br", "zstd":
+	default:
+		writeHTTPError(w, http.StatusUnsupportedMediaType, fmt.Sprintf("unsupported content encoding %q", encoding))
+		return
+	}
+
+	decoded, err := b.decodeBody(w, r, encoding, b.RequestLimit(r))
+	if errors.Is(err, context.Canceled) {
+		panic(http.ErrAbortHandler)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		writeCapacityUnavailable(w, r)
+		return
+	}
+	if err != nil {
+		var limitError *http.MaxBytesError
+		if errors.As(err, &limitError) {
+			writeHTTPError(w, http.StatusRequestEntityTooLarge, "request entity too large")
+			return
+		}
+		writeHTTPError(w, http.StatusBadRequest, "invalid "+encoding+" body")
+		return
+	}
+	defer decoded.Close()
+	r.Body = decoded
+	r.Header.Del("Content-Encoding")
+	r.ContentLength = -1
+	next.ServeHTTP(w, r)
+}
+
+// LimitMiddleware bounds the number of bytes read from request bodies.
+func (b *Budget) LimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b.serveLimit(next, w, r)
 	})
+}
+
+func (b *Budget) serveLimit(next http.Handler, w http.ResponseWriter, r *http.Request) {
+	if r.Body != nil && r.Body != http.NoBody {
+		r.Body = http.MaxBytesReader(w, r.Body, b.RequestLimit(r))
+	}
+	next.ServeHTTP(w, r)
 }
 
 func writeCapacityUnavailable(w http.ResponseWriter, r *http.Request) {

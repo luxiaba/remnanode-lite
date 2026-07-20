@@ -11,11 +11,14 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/Luxiaba/remnanode-lite/internal/auth"
 	"github.com/Luxiaba/remnanode-lite/internal/config"
+	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
 	"github.com/Luxiaba/remnanode-lite/internal/secret"
 )
 
@@ -60,11 +63,50 @@ func newSecurityTestServer(t *testing.T) *Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := New(config.Config{}, payload, validator, nil, nil, nil)
+	server, err := New(config.Config{}, payload, securityTestDependencies(t, validator))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return server
+}
+
+func securityTestDependencies(t *testing.T, validator *auth.JWTValidator) Dependencies {
+	t.Helper()
+	var calls atomic.Int64
+	return Dependencies{
+		Validator: validator,
+		Xray:      &recordingXrayController{},
+		Stats:     newTestStatsService(countingStatsProvider{calls: &calls}),
+		Handler:   nodehandler.NewService(countingHandlerProvider{calls: &calls}, nil),
+		Plugins:   &recordingPluginController{},
+		Body:      newHTTPTestBudget(t, false, 0),
+	}
+}
+
+func TestNewRejectsMissingDependencies(t *testing.T) {
+	payload := testTLSPayload(t)
+	validator, err := auth.NewJWTValidator(payload.JWTPublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := map[string]func(*Dependencies){
+		"JWT validator":       func(d *Dependencies) { d.Validator = nil },
+		"Xray controller":     func(d *Dependencies) { d.Xray = nil },
+		"stats service":       func(d *Dependencies) { d.Stats = nil },
+		"handler service":     func(d *Dependencies) { d.Handler = nil },
+		"plugin controller":   func(d *Dependencies) { d.Plugins = nil },
+		"request body budget": func(d *Dependencies) { d.Body = nil },
+	}
+	for name, remove := range tests {
+		t.Run(name, func(t *testing.T) {
+			dependencies := securityTestDependencies(t, validator)
+			remove(&dependencies)
+			if _, err := New(config.Config{}, payload, dependencies); err == nil || !strings.Contains(err.Error(), name) {
+				t.Fatalf("New error = %v, want missing %s", err, name)
+			}
+		})
+	}
 }
 
 func testTLSPayload(t *testing.T) secret.Payload {

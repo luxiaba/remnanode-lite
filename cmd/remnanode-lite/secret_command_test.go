@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/config"
 	"github.com/Luxiaba/remnanode-lite/internal/secret"
 	"golang.org/x/sys/unix"
 )
@@ -146,25 +145,6 @@ type errorWriter struct{}
 
 func (errorWriter) Write([]byte) (int, error) {
 	return 0, errors.New("write failed")
-}
-
-func TestApplyRuntimeOverridesUsesValidatedConfigValues(t *testing.T) {
-	t.Setenv("NODE_CONTRACT_VERSION", "")
-	t.Setenv("XRAY_CORE_VERSION", "")
-
-	cfg := config.Config{
-		NodeContractVersion: "2.8.0-test",
-		XrayCoreVersion:     "v26.6.27",
-	}
-	if err := applyRuntimeOverrides(cfg); err != nil {
-		t.Fatal(err)
-	}
-	if got := os.Getenv("NODE_CONTRACT_VERSION"); got != cfg.NodeContractVersion {
-		t.Fatalf("NODE_CONTRACT_VERSION = %q, want %q", got, cfg.NodeContractVersion)
-	}
-	if got := os.Getenv("XRAY_CORE_VERSION"); got != cfg.XrayCoreVersion {
-		t.Fatalf("XRAY_CORE_VERSION = %q, want %q", got, cfg.XrayCoreVersion)
-	}
 }
 
 func TestRuntimeEnvPathHonorsFixedLauncherPath(t *testing.T) {

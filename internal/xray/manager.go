@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,11 +15,11 @@ import (
 
 	"github.com/Luxiaba/remnanode-lite/internal/executil"
 	"github.com/Luxiaba/remnanode-lite/internal/system"
-	nodeversion "github.com/Luxiaba/remnanode-lite/internal/version"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
 )
 
 type Options struct {
+	// Lifetime bounds initial and background version probes. A nil value uses context.Background.
+	Lifetime           context.Context
 	XrayBin            string
 	GeoDir             string
 	LogDir             string
@@ -26,6 +27,14 @@ type Options struct {
 	InternalRESTToken  string
 	DisableHashCheck   bool
 	LowMemory          bool
+	NodeVersion        string
+	CoreVersion        string
+	System             SystemSnapshotter
+	TorrentBlocker     TorrentBlockerConfigProvider
+}
+
+type SystemSnapshotter interface {
+	Snapshot() system.Snapshot
 }
 
 type TorrentBlockerConfigProvider interface {
@@ -36,26 +45,30 @@ type TorrentBlockerConfigProvider interface {
 type Manager struct {
 	// lifecycleMu serializes process ownership. State publication and
 	// lifecycleMu acquisition/release are performed while mu is held.
-	lifecycleMu       sync.Mutex
-	logRotateMu       sync.Mutex
-	mu                sync.RWMutex
-	xrayBin           string
-	geoDir            string
-	logDir            string
-	socketPath        string
-	token             string
-	xtlsSocket        string
-	disableHashCheck  bool
-	lowMemory         bool
-	torrentBlocker    TorrentBlockerConfigProvider
-	statsCapabilities xtls.StatsCapabilities
+	lifecycleMu      sync.Mutex
+	logRotateMu      sync.Mutex
+	mu               sync.RWMutex
+	xrayBin          string
+	geoDir           string
+	logDir           string
+	socketPath       string
+	token            string
+	socketPrefix     string
+	disableHashCheck bool
+	lowMemory        bool
+	nodeVersion      string
+	coreVersion      string
+	system           SystemSnapshotter
+	torrentBlocker   TorrentBlockerConfigProvider
 
-	xrayVersion *string
-	state       lifecycleState
-	generation  uint64
-	startCancel context.CancelFunc
-	stopOp      *stopOperation
-	process     *processState
+	xrayVersion         *string
+	state               lifecycleState
+	operationEpoch      uint64
+	nextProcessEpoch    uint64
+	runtimeProcessEpoch uint64
+	startCancel         context.CancelFunc
+	stopOp              *stopOperation
+	process             *processState
 
 	// pendingConfigJSON is the only full config retained by the manager. It is
 	// served while rw-core starts and released as soon as the gRPC API is ready.
@@ -135,48 +148,65 @@ type HealthResponse struct {
 }
 
 func NewManager(opts Options) (*Manager, error) {
+	return newManager(opts, nil)
+}
+
+func newManager(opts Options, versionProbe func(context.Context) (string, error)) (*Manager, error) {
+	if strings.TrimSpace(opts.NodeVersion) == "" {
+		return nil, errors.New("xray: node version is required")
+	}
+	if opts.System == nil {
+		return nil, errors.New("xray: system snapshotter is required")
+	}
+	coreVersion := coerceSemver(opts.CoreVersion)
+	if strings.TrimSpace(opts.CoreVersion) != "" && coreVersion == "" {
+		return nil, errors.New("xray: core version override is invalid")
+	}
 	socket, err := generateXtlsSocketName()
 	if err != nil {
 		return nil, fmt.Errorf("generate xtls api socket name: %w", err)
 	}
-	versionProbeContext, versionProbeCancel := context.WithCancel(context.Background())
+	lifetime := opts.Lifetime
+	if lifetime == nil {
+		lifetime = context.Background()
+	}
+	versionProbeContext, versionProbeCancel := context.WithCancel(lifetime)
 	manager := &Manager{
 		xrayBin:                  opts.XrayBin,
 		geoDir:                   opts.GeoDir,
 		logDir:                   opts.LogDir,
 		socketPath:               opts.InternalSocketPath,
 		token:                    opts.InternalRESTToken,
-		xtlsSocket:               socket,
+		socketPrefix:             socket,
 		disableHashCheck:         opts.DisableHashCheck,
 		lowMemory:                opts.LowMemory,
+		nodeVersion:              strings.TrimSpace(opts.NodeVersion),
+		coreVersion:              coreVersion,
+		system:                   opts.System,
+		torrentBlocker:           opts.TorrentBlocker,
 		readinessInterval:        defaultReadinessInterval,
 		interruptTimeout:         defaultInterruptTimeout,
 		killTimeout:              defaultKillTimeout,
 		processWaitDelay:         defaultProcessWaitDelay,
 		processGroupCleanup:      cleanupOwnedProcessGroup,
+		versionProbe:             versionProbe,
 		versionProbeContext:      versionProbeContext,
 		versionProbeCancel:       versionProbeCancel,
 		versionProbeShutdownDone: make(chan struct{}),
 	}
-	manager.refreshVersion(context.Background())
+	manager.refreshVersion(versionProbeContext)
 	return manager, nil
 }
 
-// generateXtlsSocketName returns a process-unique abstract socket name for the
-// Xray gRPC API. The random suffix mirrors upstream 2.8.0 and avoids collisions
-// when several nodes share a host.
+// generateXtlsSocketName returns a node-process-unique prefix for Xray gRPC
+// sockets. Each rw-core process appends its own epoch so a lazy client for an
+// old core can never connect to its replacement.
 func generateXtlsSocketName() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
 	return "remnanode-xtls-" + hex.EncodeToString(buf), nil
-}
-
-func (m *Manager) SetTorrentBlockerProvider(provider TorrentBlockerConfigProvider) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.torrentBlocker = provider
 }
 
 func (m *Manager) torrentBlockerOptions() TorrentBlockerOptions {
@@ -201,8 +231,7 @@ func (m *Manager) Health() HealthResponse {
 	m.mu.Lock()
 	running := m.state == lifecycleRunning
 	version := m.xrayVersion
-	probeGeneration := m.generation
-	retryVersion := !m.versionProbeShutdown && version == nil && m.state != lifecycleStarting && !m.versionProbeBusy &&
+	retryVersion := !m.versionProbeShutdown && m.versionProbeContext.Err() == nil && version == nil && m.state != lifecycleStarting && !m.versionProbeBusy &&
 		!time.Now().Before(m.nextVersionProbe)
 	var probeContext context.Context
 	if retryVersion {
@@ -215,7 +244,7 @@ func (m *Manager) Health() HealthResponse {
 	if retryVersion {
 		go func() {
 			defer m.versionProbeWG.Done()
-			m.refreshUnknownVersion(probeContext, probeGeneration)
+			m.refreshUnknownVersion(probeContext)
 		}()
 	}
 
@@ -223,7 +252,7 @@ func (m *Manager) Health() HealthResponse {
 		IsAlive:                  true,
 		XrayInternalStatusCached: running,
 		XrayVersion:              version,
-		NodeVersion:              nodeversion.ReportedNodeVersion(),
+		NodeVersion:              m.nodeVersion,
 	}
 }
 
@@ -243,6 +272,7 @@ func (m *Manager) CurrentConfigJSON() []byte {
 
 func (m *Manager) clearRuntimeLocked() {
 	m.pendingConfigJSON = nil
+	m.runtimeProcessEpoch = 0
 	m.clearHashStateLocked()
 	m.clearInboundTagsLocked()
 }
@@ -280,7 +310,10 @@ func (m *Manager) refreshVersion(parent context.Context) {
 }
 
 func (m *Manager) probeVersion(parent context.Context) *string {
-	if override := coerceSemver(os.Getenv("XRAY_CORE_VERSION")); override != "" {
+	m.mu.RLock()
+	override := m.coreVersion
+	m.mu.RUnlock()
+	if override != "" {
 		return &override
 	}
 	if parent == nil {
@@ -300,7 +333,14 @@ func (m *Manager) probeVersion(parent context.Context) *string {
 		version, err = probe(ctx)
 	} else {
 		var result executil.Result
-		result, err = executil.Run(ctx, nil, versionOutputMaxSize, xrayBin, "version")
+		result, err = executil.RunWithEnv(
+			ctx,
+			nil,
+			versionOutputMaxSize,
+			sanitizedChildEnvironment(os.Environ()),
+			xrayBin,
+			"version",
+		)
 		if err == nil {
 			version = parseVersionLine(string(result.Stdout))
 		}
@@ -323,10 +363,10 @@ func (m *Manager) publishVersionLocked(version *string) {
 	}
 }
 
-func (m *Manager) refreshUnknownVersion(parent context.Context, generation uint64) {
+func (m *Manager) refreshUnknownVersion(parent context.Context) {
 	version := m.probeVersion(parent)
 	m.mu.Lock()
-	if !m.versionProbeShutdown && m.generation == generation && m.state != lifecycleStarting && m.xrayVersion == nil && version != nil {
+	if !m.versionProbeShutdown && m.xrayVersion == nil && version != nil {
 		m.publishVersionLocked(version)
 	}
 	m.versionProbeBusy = false
@@ -363,13 +403,8 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 
 var xraySemverRe = regexp.MustCompile(`\d+\.\d+\.\d+`)
 
-// parseVersionLine returns semver like "26.3.27", matching official node (XRAY_CORE_VERSION / semver.coerce).
+// parseVersionLine returns semver like "26.3.27", matching official node semver coercion.
 func parseVersionLine(output string) string {
-	if env := strings.TrimSpace(os.Getenv("XRAY_CORE_VERSION")); env != "" {
-		if v := coerceSemver(env); v != "" {
-			return v
-		}
-	}
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -405,9 +440,9 @@ func (m *Manager) startResponse(isStarted bool, message *string) StartResponse {
 		Version:   version,
 		Error:     message,
 		NodeInformation: NodeInformation{
-			Version: stringPtr(nodeversion.ReportedNodeVersion()),
+			Version: stringPtr(m.nodeVersion),
 		},
-		System: system.GetSnapshot(),
+		System: m.system.Snapshot(),
 	}
 }
 

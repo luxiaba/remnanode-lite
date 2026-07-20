@@ -9,7 +9,7 @@ import (
 
 func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.XrayStartRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 

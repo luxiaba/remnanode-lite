@@ -17,21 +17,20 @@ func TestContractVersionMatchesBaselineFile(t *testing.T) {
 	}
 }
 
-func TestReportedNodeVersionEnvOverride(t *testing.T) {
-	t.Setenv("NODE_CONTRACT_VERSION", "3.0.0")
-	if got := ReportedNodeVersion(); got != "3.0.0" {
-		t.Fatalf("ReportedNodeVersion() = %q, want 3.0.0", got)
+func TestResolveContractVersionConfigured(t *testing.T) {
+	if got := ResolveContractVersion(" 3.0.0 "); got != "3.0.0" {
+		t.Fatalf("ResolveContractVersion() = %q, want 3.0.0", got)
 	}
 }
 
-func TestReportedNodeVersionDefault(t *testing.T) {
-	t.Setenv("NODE_CONTRACT_VERSION", "")
-	if got := ReportedNodeVersion(); got != ContractVersion {
-		t.Fatalf("ReportedNodeVersion() = %q, want default %q", got, ContractVersion)
+func TestResolveContractVersionDefault(t *testing.T) {
+	if got := ResolveContractVersion(" "); got != ContractVersion {
+		t.Fatalf("ResolveContractVersion() = %q, want default %q", got, ContractVersion)
 	}
 }
 
 func TestStringIncludesBothVersions(t *testing.T) {
+	t.Setenv("NODE_CONTRACT_VERSION", "9.9.9")
 	got := String()
 	if got == "" {
 		t.Fatal("String() returned empty")
@@ -41,6 +40,9 @@ func TestStringIncludesBothVersions(t *testing.T) {
 	}
 	if !strings.Contains(got, ContractVersion) {
 		t.Fatalf("String() missing contract version: %q", got)
+	}
+	if strings.Contains(got, "9.9.9") {
+		t.Fatalf("String() read mutable runtime environment: %q", got)
 	}
 }
 

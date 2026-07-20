@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Luxiaba/remnanode-lite/internal/system"
 	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
 )
 
@@ -89,11 +90,12 @@ func TestRWCoreEnvironmentStripsNodeSecrets(t *testing.T) {
 		"XRAY_LOCATION_ASSET=/old/assets",
 		unixconfig.InternalTokenEnvVar + "=old-token",
 		"GOMEMLIMIT=180MiB",
+		"NODE_CONTRACT_VERSION=2.8.0",
+		"XRAY_CORE_VERSION=v26.6.27",
 	}, "/new/assets", "new-token")
 
 	want := []string{
 		"PATH=/usr/bin",
-		"GOMEMLIMIT=180MiB",
 		"XRAY_LOCATION_ASSET=/new/assets",
 		unixconfig.InternalTokenEnvVar + "=new-token",
 	}
@@ -120,6 +122,8 @@ func newLifecycleManager(t *testing.T, mode string) (*Manager, *testProcess) {
 		LogDir:             t.TempDir(),
 		InternalSocketPath: "/run/remnawave-test.sock",
 		InternalRESTToken:  "token",
+		NodeVersion:        "2.8.0",
+		System:             system.NewCollector(nil),
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
@@ -392,33 +396,33 @@ func TestShutdownCancelsAndWaitsForHealthVersionProbe(t *testing.T) {
 	}
 }
 
-func TestStaleHealthVersionProbeCannotCrossStartGeneration(t *testing.T) {
+func TestHealthVersionProbeDoesNotOverwriteNewerPublishedVersion(t *testing.T) {
 	manager, _ := newLifecycleManager(t, "hold")
 	manager.readinessProbe = func(context.Context) bool { return true }
-	staleProbeEntered := make(chan struct{})
-	releaseStaleProbe := make(chan struct{})
+	backgroundProbeEntered := make(chan struct{})
+	releaseBackgroundProbe := make(chan struct{})
 	manager.mu.Lock()
 	manager.xrayVersion = nil
 	manager.nextVersionProbe = time.Time{}
 	manager.versionProbe = func(context.Context) (string, error) {
-		close(staleProbeEntered)
-		<-releaseStaleProbe
+		close(backgroundProbeEntered)
+		<-releaseBackgroundProbe
 		return "1.2.3", nil
 	}
 	manager.mu.Unlock()
 	_ = manager.Health()
-	awaitSignal(t, staleProbeEntered, "stale health version probe")
+	awaitSignal(t, backgroundProbeEntered, "background health version probe")
 
 	manager.mu.Lock()
 	manager.versionProbe = func(context.Context) (string, error) {
-		return "", errors.New("fresh probe failed")
+		return "4.5.6", nil
 	}
 	manager.mu.Unlock()
 	response := manager.Start(context.Background(), lifecycleStartRequest("client-a"))
-	if !response.IsStarted || response.Version != nil {
+	if !response.IsStarted || response.Version == nil || *response.Version != "4.5.6" {
 		t.Fatalf("start response = %#v", response)
 	}
-	close(releaseStaleProbe)
+	close(releaseBackgroundProbe)
 	deadline := time.Now().Add(time.Second)
 	for {
 		manager.mu.RLock()
@@ -426,13 +430,60 @@ func TestStaleHealthVersionProbeCannotCrossStartGeneration(t *testing.T) {
 		version := manager.xrayVersion
 		manager.mu.RUnlock()
 		if !busy {
-			if version != nil {
-				t.Fatalf("stale probe overwrote fresh start result: %q", *version)
+			if version == nil || *version != "4.5.6" {
+				t.Fatalf("background probe overwrote start result: %v", version)
 			}
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("stale health probe did not finish")
+			t.Fatal("background health probe did not finish")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestHealthVersionProbeMayPublishAcrossLifecycleEpochWhenStillUnknown(t *testing.T) {
+	manager, _ := newLifecycleManager(t, "hold")
+	manager.readinessProbe = func(context.Context) bool { return true }
+	probeEntered := make(chan struct{})
+	releaseProbe := make(chan struct{})
+	manager.mu.Lock()
+	manager.xrayVersion = nil
+	manager.nextVersionProbe = time.Time{}
+	manager.versionProbe = func(context.Context) (string, error) {
+		close(probeEntered)
+		<-releaseProbe
+		return "1.2.3", nil
+	}
+	manager.mu.Unlock()
+	_ = manager.Health()
+	awaitSignal(t, probeEntered, "background health version probe")
+
+	manager.mu.Lock()
+	manager.versionProbe = func(context.Context) (string, error) {
+		return "", errors.New("start probe failed")
+	}
+	manager.mu.Unlock()
+	response := manager.Start(context.Background(), lifecycleStartRequest("client-a"))
+	if !response.IsStarted || response.Version != nil {
+		t.Fatalf("start response = %#v", response)
+	}
+
+	close(releaseProbe)
+	deadline := time.Now().Add(time.Second)
+	for {
+		manager.mu.RLock()
+		busy := manager.versionProbeBusy
+		version := manager.xrayVersion
+		manager.mu.RUnlock()
+		if !busy {
+			if version == nil || *version != "1.2.3" {
+				t.Fatalf("valid background version was not published: %v", version)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("background health probe did not finish")
 		}
 		time.Sleep(time.Millisecond)
 	}

@@ -32,9 +32,8 @@ const (
 )
 
 type HandlerResult struct {
-	OK         bool
-	Message    string
-	Generation uint64
+	OK      bool
+	Message string
 }
 
 type InboundUser struct {

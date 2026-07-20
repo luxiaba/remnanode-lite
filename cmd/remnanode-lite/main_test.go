@@ -38,6 +38,7 @@ func TestRunCLIRejectsUnknownMalformedAndExtraArguments(t *testing.T) {
 	tests := [][]string{
 		{"help", "extra"},
 		{"version", "extra"},
+		{"healthcheck", "extra"},
 		{"--version", "extra"},
 		{"doctor", "--unknown"},
 		{"doctor", "--env"},

@@ -13,10 +13,15 @@ import (
 
 	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
 	"github.com/Luxiaba/remnanode-lite/internal/stats"
+	"github.com/Luxiaba/remnanode-lite/internal/system"
 	"github.com/Luxiaba/remnanode-lite/internal/xtls"
 )
 
 type failingUsersStatsProvider struct{}
+
+func (failingUsersStatsProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
 
 func (failingUsersStatsProvider) GetSysStats(context.Context) (*xtls.SysStats, error) {
 	return &xtls.SysStats{}, nil
@@ -50,7 +55,8 @@ func TestHandleNodeRoutesUsersStatsError(t *testing.T) {
 	t.Parallel()
 
 	server := &Server{
-		statsService: stats.NewService(failingUsersStatsProvider{}, nil),
+		statsService: newTestStatsService(failingUsersStatsProvider{}),
+		bodyBudget:   newHTTPTestBudget(t, false, 0),
 	}
 	req := newJSONRequest(http.MethodPost, "/node/stats/get-users-stats", strings.NewReader(`{"reset":false}`))
 	rec := httptest.NewRecorder()
@@ -80,6 +86,30 @@ func TestHandleNodeRoutesUsersStatsError(t *testing.T) {
 
 type countingStatsProvider struct {
 	calls *atomic.Int64
+}
+
+func (p countingStatsProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
+
+func newTestStatsService(provider stats.Provider) *stats.Service {
+	return stats.NewService(provider, nil, system.NewCollector(nil))
+}
+
+type blockingResetStatsProvider struct {
+	countingStatsProvider
+	entered chan struct{}
+	release <-chan struct{}
+}
+
+func (p *blockingResetStatsProvider) GetAllInboundsStats(ctx context.Context, _ bool) ([]xtls.TagTraffic, error) {
+	close(p.entered)
+	select {
+	case <-p.release:
+		return []xtls.TagTraffic{}, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 func (p countingStatsProvider) hit() { p.calls.Add(1) }
@@ -147,7 +177,10 @@ func TestStatsValidationPrecedesProviderCalls(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			var calls atomic.Int64
-			server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
+			server := &Server{
+				statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+				bodyBudget:   newHTTPTestBudget(t, false, 0),
+			}
 			req := newJSONRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 			rec := httptest.NewRecorder()
 
@@ -174,11 +207,68 @@ func TestStatsValidationPrecedesProviderCalls(t *testing.T) {
 	}
 }
 
+func TestStatsResetRouteExcludesXrayStart(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	provider := &blockingResetStatsProvider{
+		countingStatsProvider: countingStatsProvider{calls: &atomic.Int64{}},
+		entered:               entered,
+		release:               release,
+	}
+	manager := &recordingXrayController{}
+	server := &Server{
+		manager:      manager,
+		statsService: newTestStatsService(provider),
+		bodyBudget:   newHTTPTestBudget(t, false, 0),
+	}
+	statsRoute, _ := contractspec.FindRouteByPath("/node/stats/get-combined-stats")
+	statsResult := serveNodeRouteAsync(server, newJSONRequest(
+		statsRoute.Method,
+		statsRoute.Path,
+		strings.NewReader(`{"reset":true}`),
+	))
+	awaitTestSignal(t, entered, "stats reset")
+
+	startRoute, _ := contractspec.FindRouteByPath("/node/xray/start")
+	startWaitContext, cancelStartWait := context.WithCancel(context.Background())
+	defer cancelStartWait()
+	startWaiting := make(chan struct{})
+	startRequest := newJSONRequest(
+		startRoute.Method,
+		startRoute.Path,
+		bytes.NewReader(startRoute.ValidRequest),
+	).WithContext(&observedDoneContext{Context: startWaitContext, observed: startWaiting})
+	startResult := serveNodeRouteAsync(server, startRequest)
+	awaitTestSignal(t, startWaiting, "Xray start lifecycle wait")
+	if manager.startCalls.Load() != 0 {
+		t.Fatal("Xray start entered while stats reset held the lifecycle gate")
+	}
+
+	close(release)
+	for name, result := range map[string]<-chan asyncRouteResult{
+		"stats reset": statsResult,
+		"Xray start":  startResult,
+	} {
+		outcome := awaitRouteResult(t, result, name)
+		if outcome.panicValue != nil || outcome.response.Code != http.StatusOK {
+			t.Fatalf("%s result: panic=%v status=%d body=%s", name, outcome.panicValue, outcome.response.Code, outcome.response.Body.String())
+		}
+	}
+	if manager.startCalls.Load() != 1 {
+		t.Fatalf("Xray start calls = %d, want 1 after stats reset", manager.startCalls.Load())
+	}
+}
+
 func TestStatsRequestAllowsUnknownFieldsAndEmptyStrings(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
-	server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
+	server := &Server{
+		statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+		bodyBudget:   newHTTPTestBudget(t, false, 0),
+	}
 	req := newJSONRequest(
 		http.MethodPost,
 		"/node/stats/get-user-online-status",
@@ -218,7 +308,10 @@ func TestDTOParsingRequiresOfficialJSONContentType(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			var calls atomic.Int64
-			server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
+			server := &Server{
+				statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+				bodyBudget:   newHTTPTestBudget(t, false, 0),
+			}
 			request := httptest.NewRequest(
 				http.MethodPost,
 				"/node/stats/get-users-stats",
@@ -274,7 +367,10 @@ func TestStatsRoutesProduceOfficialResponseShapes(t *testing.T) {
 				t.Fatalf("contract route %s is missing", path)
 			}
 			var calls atomic.Int64
-			server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
+			server := &Server{
+				statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+				bodyBudget:   newHTTPTestBudget(t, false, 0),
+			}
 			req := newJSONRequest(route.Method, route.Path, bytes.NewReader(route.ValidRequest))
 			rec := httptest.NewRecorder()
 

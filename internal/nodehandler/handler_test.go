@@ -17,32 +17,29 @@ type stubProvider struct {
 func (s *stubProvider) AddInboundTag(tag string) {
 	s.inboundTags = append(s.inboundTags, tag)
 }
+func (s *stubProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
 func (s *stubProvider) InboundTags() []string { return s.inboundTags }
-func (s *stubProvider) CommitUserAdded(xtls.HandlerResult, string, string) bool {
-	return true
-}
-func (s *stubProvider) CommitUserRemoved(xtls.HandlerResult, string, string) bool {
-	return true
-}
 func (s *stubProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
 	return nil, nil
 }
-func (s *stubProvider) HandlerRemoveUser(context.Context, string, string) xtls.HandlerResult {
+func (s *stubProvider) HandlerRemoveUser(context.Context, string, string, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
+func (s *stubProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: false, Message: "boom"}
 }
-func (s *stubProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (s *stubProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32) xtls.HandlerResult {
+func (s *stubProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (s *stubProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: true}
 }
-func (s *stubProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (s *stubProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: true}
 }
 func (s *stubProvider) HandlerGetInboundUsers(context.Context, string) ([]xtls.InboundUser, xtls.HandlerResult) {
@@ -130,7 +127,7 @@ type shadowsocksTrackingProvider struct {
 	ivChecks []bool
 }
 
-func (p *shadowsocksTrackingProvider) HandlerAddShadowsocksUser(_ context.Context, _, _, _ string, _ int, ivCheck bool, _ uint32) xtls.HandlerResult {
+func (p *shadowsocksTrackingProvider) HandlerAddShadowsocksUser(_ context.Context, _, _, _ string, _ int, ivCheck bool, _ uint32, _ string) xtls.HandlerResult {
 	p.ivChecks = append(p.ivChecks, ivCheck)
 	return xtls.HandlerResult{OK: true}
 }

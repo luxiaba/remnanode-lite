@@ -19,10 +19,10 @@ import (
 
 const (
 	DefaultEnvPath            = "/etc/remnanode/node.env"
+	DefaultInternalSocketPath = "/run/remnanode/internal.sock"
 	defaultXrayBin            = "/usr/local/lib/remnanode/rw-core"
 	defaultGeoDir             = "/usr/local/share/remnanode/xray"
 	defaultLogDir             = "/var/log/remnanode"
-	defaultInternalSocketPath = "/run/remnanode/internal.sock"
 	defaultASNDBPath          = "/usr/local/share/remnanode/asn/asn-prefixes.bin"
 	maxDotEnvBytes            = 1 << 20
 	maxDotEnvLines            = 4096
@@ -117,7 +117,7 @@ func Load(dotenvPath string) (Config, error) {
 		return Config{}, errors.New("SECRET_KEY or SECRET_KEY_FILE is required")
 	}
 
-	internalSocketPath := optionalString(values, "INTERNAL_SOCKET_PATH", defaultInternalSocketPath)
+	internalSocketPath := optionalString(values, "INTERNAL_SOCKET_PATH", DefaultInternalSocketPath)
 
 	internalRESTToken := optionalString(values, "INTERNAL_REST_TOKEN", "")
 	if internalRESTToken == "" {

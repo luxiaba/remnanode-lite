@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Luxiaba/remnanode-lite/internal/system"
 	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
 )
 
@@ -45,6 +46,8 @@ func TestLowMemoryRealCore(t *testing.T) {
 		InternalSocketPath: filepath.Join(root, "internal.sock"),
 		InternalRESTToken:  "resource-test-token",
 		LowMemory:          true,
+		NodeVersion:        "2.8.0",
+		System:             system.NewCollector(nil),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,15 +101,15 @@ func TestLowMemoryRealCore(t *testing.T) {
 	resourceMemorySample(t, fmt.Sprintf("start-%dk", users/1_000))
 
 	hotID := "ffffffff-ffff-4fff-8fff-ffffffffffff"
-	added := manager.HandlerAddVlessUser(ctx, "resource-in", "hot-user", hotID, "", 0)
-	if !added.OK || !manager.CommitUserAdded(added, "resource-in", hotID) {
+	added := manager.HandlerAddVlessUser(ctx, "resource-in", "hot-user", hotID, "", 0, hotID)
+	if !added.OK {
 		t.Fatalf("hot add failed: %+v", added)
 	}
 	if count, result := manager.HandlerGetInboundUsersCount(ctx, "resource-in"); !result.OK || count != int64(users+1) {
 		t.Fatalf("count after hot add = %d result=%+v", count, result)
 	}
-	removed := manager.HandlerRemoveUser(ctx, "resource-in", "hot-user")
-	if !removed.OK || !manager.CommitUserRemoved(removed, "resource-in", hotID) {
+	removed := manager.HandlerRemoveUser(ctx, "resource-in", "hot-user", hotID)
+	if !removed.OK {
 		t.Fatalf("hot remove failed: %+v", removed)
 	}
 	if _, err := manager.GetUsersIPList(ctx); err != nil {

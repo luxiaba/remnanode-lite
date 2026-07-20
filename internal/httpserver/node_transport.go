@@ -12,16 +12,15 @@ import (
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 
-	"github.com/Luxiaba/remnanode-lite/internal/bodylimit"
 	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
 )
 
-func decodeNodeRequest(w http.ResponseWriter, r *http.Request, target any) bool {
+func (s *Server) decodeNodeRequest(w http.ResponseWriter, r *http.Request, target any) bool {
 	if !requestHasBody(r) {
 		writeJSON(w, http.StatusBadRequest, nodeapi.NewValidationError(nodeapi.MissingIssue(nil, "object")))
 		return false
 	}
-	parseJSON, supportedCharset := prepareNodeJSONBody(w, r)
+	parseJSON, supportedCharset := s.prepareNodeJSONBody(w, r)
 	if !supportedCharset {
 		writeUnsupportedCharset(w, r)
 		return false
@@ -38,11 +37,11 @@ func decodeNodeRequest(w http.ResponseWriter, r *http.Request, target any) bool 
 	return false
 }
 
-func validateNodeJSONDocument(w http.ResponseWriter, r *http.Request) bool {
+func (s *Server) validateNodeJSONDocument(w http.ResponseWriter, r *http.Request) bool {
 	if !requestHasBody(r) {
 		return true
 	}
-	parseJSON, supportedCharset := prepareNodeJSONBody(w, r)
+	parseJSON, supportedCharset := s.prepareNodeJSONBody(w, r)
 	if !supportedCharset {
 		writeUnsupportedCharset(w, r)
 		return false
@@ -58,7 +57,7 @@ func validateNodeJSONDocument(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
-func prepareNodeJSONBody(w http.ResponseWriter, r *http.Request) (parseJSON, supportedCharset bool) {
+func (s *Server) prepareNodeJSONBody(w http.ResponseWriter, r *http.Request) (parseJSON, supportedCharset bool) {
 	mediaType, parameters, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || !strings.EqualFold(mediaType, "application/json") {
 		return false, true
@@ -73,7 +72,7 @@ func prepareNodeJSONBody(w http.ResponseWriter, r *http.Request) (parseJSON, sup
 			Reader: transform.NewReader(r.Body, decoder),
 			Closer: r.Body,
 		}
-		r.Body = http.MaxBytesReader(w, transcoded, bodylimit.RequestLimit(r))
+		r.Body = http.MaxBytesReader(w, transcoded, s.bodyBudget.RequestLimit(r))
 		r.ContentLength = -1
 	}
 	return true, true

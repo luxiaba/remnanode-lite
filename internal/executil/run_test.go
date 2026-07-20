@@ -98,5 +98,5 @@ func runHelperWithWaitDelay(ctx context.Context, limit int, waitDelay time.Durat
 			_ = os.Unsetenv("GORACE")
 		}
 	}()
-	return run(ctx, nil, limit, waitDelay, os.Args[0], "-test.run=^TestCommandHelper$", "--")
+	return run(ctx, nil, limit, waitDelay, nil, os.Args[0], "-test.run=^TestCommandHelper$", "--")
 }

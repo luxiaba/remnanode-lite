@@ -2,7 +2,6 @@ package version
 
 import (
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 )
@@ -19,18 +18,17 @@ const releaseRepo = "Luxiaba/remnanode-lite"
 
 var releaseTagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-rnl\.[1-9][0-9]*)?$`)
 
-// ReportedNodeVersion returns the nodeVersion sent to Panel.
-// Priority: NODE_CONTRACT_VERSION env > ContractVersion (build-time default).
-// Mirrors upstream reading package.json version at bootstrap.
-func ReportedNodeVersion() string {
-	if v := strings.TrimSpace(os.Getenv("NODE_CONTRACT_VERSION")); v != "" {
-		return v
+// ResolveContractVersion returns the immutable nodeVersion for one daemon
+// instance. The composition root resolves configuration once at startup.
+func ResolveContractVersion(configured string) string {
+	if version := strings.TrimSpace(configured); version != "" {
+		return version
 	}
 	return ContractVersion
 }
 
 func String() string {
-	return fmt.Sprintf("remnanode-lite %s (contract %s)", Version, ReportedNodeVersion())
+	return fmt.Sprintf("remnanode-lite %s (contract %s)", Version, ContractVersion)
 }
 
 func ReleaseAssetURL(tag, arch string) (string, error) {

@@ -41,7 +41,7 @@ func (p *connectionCleanupProvider) GetUserIPList(_ context.Context, userID stri
 	return entries, nil
 }
 
-func (p *connectionCleanupProvider) HandlerRemoveUser(_ context.Context, tag, _ string) xtls.HandlerResult {
+func (p *connectionCleanupProvider) HandlerRemoveUser(_ context.Context, tag, _, _ string) xtls.HandlerResult {
 	p.removeCalls.Add(1)
 	if message := p.removeErr[tag]; message != "" {
 		return xtls.HandlerResult{OK: false, Message: message}

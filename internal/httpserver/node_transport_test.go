@@ -12,9 +12,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
-
-	"github.com/Luxiaba/remnanode-lite/internal/bodylimit"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
 )
 
 func newJSONRequest(method, target string, body io.Reader) *http.Request {
@@ -39,7 +36,10 @@ func TestDTOParsingTranscodesUTF16(t *testing.T) {
 				t.Fatal(err)
 			}
 			var calls atomic.Int64
-			server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
+			server := &Server{
+				statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+				bodyBudget:   newHTTPTestBudget(t, false, 0),
+			}
 			request := httptest.NewRequest(http.MethodPost, "/node/stats/get-users-stats", bytes.NewReader(encoded))
 			request.Header.Set("Content-Type", "application/json; charset="+test.charset)
 			response := httptest.NewRecorder()
@@ -57,7 +57,10 @@ func TestDTOParsingRejectsFalseUTF16Declaration(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
-	server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
+	server := &Server{
+		statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+		bodyBudget:   newHTTPTestBudget(t, false, 0),
+	}
 	request := httptest.NewRequest(http.MethodPost, "/node/stats/get-users-stats", strings.NewReader(`{"reset":false}`))
 	request.Header.Set("Content-Type", "application/json; charset=utf-16le")
 	response := httptest.NewRecorder()
@@ -70,10 +73,7 @@ func TestDTOParsingRejectsFalseUTF16Declaration(t *testing.T) {
 }
 
 func TestNodeTransportReturns413AtEveryBodyExpansionLayer(t *testing.T) {
-	if err := bodylimit.Configure(false, 1); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = bodylimit.Configure(false, 0) })
+	budget := newHTTPTestBudget(t, false, 1)
 
 	largeUTF8 := `{"reset":false,"ignored":"` + strings.Repeat("x", 2<<20) + `"}`
 	largeTranscoded := `{"reset":false,"ignored":"` + strings.Repeat("汉", 360_000) + `"}`
@@ -103,8 +103,14 @@ func TestNodeTransportReturns413AtEveryBodyExpansionLayer(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var calls atomic.Int64
-			server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
-			handler := bodylimit.DecompressMiddleware(bodylimit.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes)))
+			server := &Server{
+				statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+				bodyBudget:   budget,
+			}
+			handler := withNodeRequestBodyLimit(
+				budget,
+				budget.DecompressMiddleware(budget.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes))),
+			)
 			request := httptest.NewRequest(http.MethodPost, "/node/stats/get-users-stats", bytes.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			if test.contentEncoding != "" {
@@ -128,9 +134,7 @@ func TestNodeTransportReturns413AtEveryBodyExpansionLayer(t *testing.T) {
 }
 
 func TestSmallRouteBudgetAppliesAtEveryBodyExpansionLayer(t *testing.T) {
-	if err := bodylimit.Configure(false, 0); err != nil {
-		t.Fatal(err)
-	}
+	budget := newHTTPTestBudget(t, false, 0)
 
 	largeUTF8 := `{"reset":false,"ignored":"` + strings.Repeat("x", 128<<10) + `"}`
 	largeTranscoded := `{"reset":false,"ignored":"` + strings.Repeat("汉", 30_000) + `"}`
@@ -160,8 +164,14 @@ func TestSmallRouteBudgetAppliesAtEveryBodyExpansionLayer(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			var calls atomic.Int64
-			server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
-			handler := withNodeRequestBodyLimit(bodylimit.DecompressMiddleware(bodylimit.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes))))
+			server := &Server{
+				statsService: newTestStatsService(countingStatsProvider{calls: &calls}),
+				bodyBudget:   budget,
+			}
+			handler := withNodeRequestBodyLimit(
+				budget,
+				budget.DecompressMiddleware(budget.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes))),
+			)
 			request := httptest.NewRequest(http.MethodPost, "/node/stats/get-users-stats", bytes.NewReader(test.body))
 			request.Header.Set("Content-Type", "application/json")
 			if test.contentEncoding != "" {
@@ -188,8 +198,12 @@ func TestUnknownContentEncodingPrecedesNoDTOHandler(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int64
-	server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
-	handler := withNodeRequestBodyLimit(bodylimit.DecompressMiddleware(bodylimit.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes))))
+	budget := newHTTPTestBudget(t, false, 0)
+	server := &Server{statsService: newTestStatsService(countingStatsProvider{calls: &calls}), bodyBudget: budget}
+	handler := withNodeRequestBodyLimit(
+		budget,
+		budget.DecompressMiddleware(budget.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes))),
+	)
 	request := httptest.NewRequest(http.MethodGet, "/node/stats/get-system-stats", strings.NewReader(`{}`))
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Content-Encoding", "snappy")
@@ -211,8 +225,12 @@ func TestDTOParsingAcceptsDecompressedBodyWithUnknownLength(t *testing.T) {
 	encoder.Close()
 
 	var calls atomic.Int64
-	server := &Server{statsService: stats.NewService(countingStatsProvider{calls: &calls}, nil)}
-	handler := withNodeRequestBodyLimit(bodylimit.DecompressMiddleware(bodylimit.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes))))
+	budget := newHTTPTestBudget(t, false, 0)
+	server := &Server{statsService: newTestStatsService(countingStatsProvider{calls: &calls}), bodyBudget: budget}
+	handler := withNodeRequestBodyLimit(
+		budget,
+		budget.DecompressMiddleware(budget.LimitMiddleware(http.HandlerFunc(server.handleNodeRoutes))),
+	)
 	request := newJSONRequest(
 		http.MethodPost,
 		"/node/stats/get-users-stats",

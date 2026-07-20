@@ -9,18 +9,28 @@ import (
 
 func (s *Server) handleAddUser(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.AddUserRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
+	if !s.acquireXrayLifecycle(r.Context()) {
+		handleRequestWaitFailure(w, r)
+		return
+	}
+	defer s.releaseXrayLifecycle()
 	response, err := s.handlerService.AddUser(r.Context(), mapAddUserRequest(request))
 	writeNodeResult(w, r, response, err)
 }
 
 func (s *Server) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.RemoveUserRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
+	if !s.acquireXrayLifecycle(r.Context()) {
+		handleRequestWaitFailure(w, r)
+		return
+	}
+	defer s.releaseXrayLifecycle()
 	response, err := s.handlerService.RemoveUser(r.Context(), nodehandler.RemoveUserRequest{
 		Username:  *request.Username,
 		VlessUUID: *request.HashData.VlessUUID,
@@ -30,7 +40,7 @@ func (s *Server) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetInboundUsersCount(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.TagRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 	response, err := s.handlerService.GetInboundUsersCount(r.Context(), *request.Tag)
@@ -39,7 +49,7 @@ func (s *Server) handleGetInboundUsersCount(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleGetInboundUsers(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.TagRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 	response, err := s.handlerService.GetInboundUsers(r.Context(), *request.Tag)
@@ -48,18 +58,28 @@ func (s *Server) handleGetInboundUsers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAddUsers(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.AddUsersRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
+	if !s.acquireXrayLifecycle(r.Context()) {
+		handleRequestWaitFailure(w, r)
+		return
+	}
+	defer s.releaseXrayLifecycle()
 	response, err := s.handlerService.AddUsers(r.Context(), mapAddUsersRequest(request))
 	writeNodeResult(w, r, response, err)
 }
 
 func (s *Server) handleRemoveUsers(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.RemoveUsersRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
+	if !s.acquireXrayLifecycle(r.Context()) {
+		handleRequestWaitFailure(w, r)
+		return
+	}
+	defer s.releaseXrayLifecycle()
 	users := make([]nodehandler.RemoveUsersItem, 0, len(*request.Users))
 	for _, user := range *request.Users {
 		users = append(users, nodehandler.RemoveUsersItem{
@@ -73,7 +93,7 @@ func (s *Server) handleRemoveUsers(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDropUsersConnections(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.DropUsersConnectionsRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 	writeNodeResponse(w, s.handlerService.DropUsersConnections(r.Context(), stringValues(*request.UserIDs)))
@@ -81,7 +101,7 @@ func (s *Server) handleDropUsersConnections(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleDropIPs(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.DropIPsRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 	writeNodeResponse(w, s.handlerService.DropIPs(r.Context(), stringValues(*request.IPs)))

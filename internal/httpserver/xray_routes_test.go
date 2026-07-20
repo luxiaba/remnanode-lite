@@ -42,7 +42,7 @@ func (x *concurrentStartController) Start(ctx context.Context, _ xray.StartReque
 		return xray.StartResponse{
 			Error:           &message,
 			NodeInformation: xray.NodeInformation{},
-			System:          system.GetSnapshot(),
+			System:          testSystemSnapshot(),
 		}
 	}
 	defer x.active.Store(false)
@@ -51,12 +51,12 @@ func (x *concurrentStartController) Start(ctx context.Context, _ xray.StartReque
 	case <-x.releaseFirst:
 	case <-ctx.Done():
 		message := ctx.Err().Error()
-		return xray.StartResponse{Error: &message, System: system.GetSnapshot()}
+		return xray.StartResponse{Error: &message, System: testSystemSnapshot()}
 	}
 	return xray.StartResponse{
 		IsStarted:       true,
 		NodeInformation: xray.NodeInformation{},
-		System:          system.GetSnapshot(),
+		System:          testSystemSnapshot(),
 	}
 }
 
@@ -78,7 +78,7 @@ func (x *recordingXrayController) Start(ctx context.Context, request xray.StartR
 		case <-x.startWait:
 		case <-ctx.Done():
 			message := ctx.Err().Error()
-			return xray.StartResponse{Error: &message, System: system.GetSnapshot()}
+			return xray.StartResponse{Error: &message, System: testSystemSnapshot()}
 		}
 	}
 	x.request = request
@@ -87,8 +87,12 @@ func (x *recordingXrayController) Start(ctx context.Context, request xray.StartR
 		Version:         nil,
 		Error:           nil,
 		NodeInformation: xray.NodeInformation{Version: nil},
-		System:          system.GetSnapshot(),
+		System:          testSystemSnapshot(),
 	}
+}
+
+func testSystemSnapshot() system.Snapshot {
+	return system.NewCollector(nil).Snapshot()
 }
 
 func (x *recordingXrayController) Stop() xray.StopResponse {
@@ -127,7 +131,7 @@ func TestXrayStartValidationPrecedesManagerCall(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			manager := &recordingXrayController{}
-			server := &Server{manager: manager}
+			server := &Server{manager: manager, bodyBudget: newHTTPTestBudget(t, false, 0)}
 			req := newJSONRequest(http.MethodPost, "/node/xray/start", strings.NewReader(test.body))
 			rec := httptest.NewRecorder()
 
@@ -148,7 +152,7 @@ func TestXrayStartRouteProducesOfficialResponseShape(t *testing.T) {
 
 	route, _ := contractspec.FindRouteByPath("/node/xray/start")
 	manager := &recordingXrayController{}
-	server := &Server{manager: manager}
+	server := &Server{manager: manager, bodyBudget: newHTTPTestBudget(t, false, 0)}
 	req := newJSONRequest(route.Method, route.Path, bytes.NewReader(route.ValidRequest))
 	rec := httptest.NewRecorder()
 
@@ -173,7 +177,7 @@ func TestConcurrentXrayStartsReachManagerThroughRequestMiddleware(t *testing.T) 
 	var releaseOnce sync.Once
 	t.Cleanup(func() { releaseOnce.Do(func() { close(releaseFirst) }) })
 	manager := &concurrentStartController{firstEntered: firstEntered, releaseFirst: releaseFirst}
-	server := &Server{manager: manager}
+	server := &Server{manager: manager, bodyBudget: newHTTPTestBudget(t, false, 0)}
 	handler := requireKnownNodeRoute(withRequestTimeout(maxRequestDuration, server.nodeRequestHandler(defaultMaxHandlers)))
 	route, _ := contractspec.FindRouteByPath("/node/xray/start")
 
@@ -218,7 +222,7 @@ func TestXrayStopResetsPluginsAfterStoppingProcess(t *testing.T) {
 	events := []string{}
 	manager := &recordingXrayController{events: &events}
 	plugins := &recordingPluginController{events: &events}
-	server := &Server{manager: manager, pluginService: plugins}
+	server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 	req := httptest.NewRequest(route.Method, route.Path, nil)
 	rec := httptest.NewRecorder()
 
@@ -244,7 +248,7 @@ func TestXrayStopFailurePreservesPluginRules(t *testing.T) {
 	stopped := xray.StopResponse{IsStopped: false}
 	manager := &recordingXrayController{stopResult: &stopped}
 	plugins := &recordingPluginController{}
-	server := &Server{manager: manager, pluginService: plugins}
+	server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 	req := httptest.NewRequest(http.MethodGet, "/node/xray/stop", nil)
 	rec := httptest.NewRecorder()
 
@@ -268,7 +272,7 @@ func TestXrayStartWaitsUntilStopFinishesPluginReset(t *testing.T) {
 	startCalled := make(chan struct{})
 	manager := &recordingXrayController{startEvent: startCalled}
 	plugins := &recordingPluginController{resetStart: resetStarted, resetWait: releaseReset}
-	server := &Server{manager: manager, pluginService: plugins}
+	server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 
 	stopDone := make(chan struct{})
 	go func() {
@@ -337,7 +341,7 @@ func TestXrayStopWaitsUntilStartFinishes(t *testing.T) {
 		startWait:  releaseStart,
 	}
 	plugins := &recordingPluginController{events: &events}
-	server := &Server{manager: manager, pluginService: plugins}
+	server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
 	startRoute, _ := contractspec.FindRouteByPath("/node/xray/start")
 	startResult := serveNodeRouteAsync(server, newJSONRequest(
 		startRoute.Method,
@@ -385,7 +389,7 @@ func TestXrayStartTransportAppliesDefaultsWithoutCopyingSemantics(t *testing.T) 
 		"xrayConfig":{"marker":{"value":42}}
 	}`
 	manager := &recordingXrayController{}
-	server := &Server{manager: manager}
+	server := &Server{manager: manager, bodyBudget: newHTTPTestBudget(t, false, 0)}
 	req := newJSONRequest(http.MethodPost, "/node/xray/start", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 	server.handleNodeRoutes(rec, req)

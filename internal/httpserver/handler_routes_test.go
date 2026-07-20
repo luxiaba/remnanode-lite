@@ -21,43 +21,39 @@ type countingHandlerProvider struct {
 
 func (p countingHandlerProvider) hit() { p.calls.Add(1) }
 
+func (p countingHandlerProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	p.hit()
+	return ctx, func() {}, nil
+}
 func (p countingHandlerProvider) InboundTags() []string {
 	p.hit()
 	return []string{"inbound-1"}
-}
-func (p countingHandlerProvider) CommitUserAdded(xtls.HandlerResult, string, string) bool {
-	p.hit()
-	return true
-}
-func (p countingHandlerProvider) CommitUserRemoved(xtls.HandlerResult, string, string) bool {
-	p.hit()
-	return true
 }
 func (p countingHandlerProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
 	p.hit()
 	return []xtls.IPEntry{}, nil
 }
-func (p countingHandlerProvider) HandlerRemoveUser(context.Context, string, string) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerRemoveUser(context.Context, string, string, string) xtls.HandlerResult {
 	p.hit()
 	return xtls.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
 	p.hit()
 	return xtls.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	p.hit()
 	return xtls.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xtls.HandlerResult {
 	p.hit()
 	return xtls.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	p.hit()
 	return xtls.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	p.hit()
 	return xtls.HandlerResult{OK: true}
 }
@@ -72,6 +68,22 @@ func (p countingHandlerProvider) HandlerGetInboundUsersCount(context.Context, st
 
 type countingDropper struct {
 	calls *atomic.Int64
+}
+
+type blockingHandlerProvider struct {
+	countingHandlerProvider
+	entered chan struct{}
+	release <-chan struct{}
+}
+
+func (p *blockingHandlerProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	close(p.entered)
+	select {
+	case <-p.release:
+		return ctx, func() {}, nil
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
 }
 
 func (d countingDropper) DropIPs(context.Context, []string) bool {
@@ -118,7 +130,7 @@ func TestHandlerValidationPrecedesAllSideEffects(t *testing.T) {
 			server := &Server{handlerService: nodehandler.NewService(
 				countingHandlerProvider{calls: &providerCalls},
 				countingDropper{calls: &dropperCalls},
-			)}
+			), bodyBudget: newHTTPTestBudget(t, false, 0)}
 			req := newJSONRequest(http.MethodPost, test.path, strings.NewReader(test.body))
 			rec := httptest.NewRecorder()
 
@@ -131,6 +143,60 @@ func TestHandlerValidationPrecedesAllSideEffects(t *testing.T) {
 				t.Fatalf("side effects provider=%d dropper=%d, want zero", providerCalls.Load(), dropperCalls.Load())
 			}
 		})
+	}
+}
+
+func TestHandlerMutationRouteExcludesXrayStart(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	provider := &blockingHandlerProvider{
+		countingHandlerProvider: countingHandlerProvider{calls: &atomic.Int64{}},
+		entered:                 entered,
+		release:                 release,
+	}
+	manager := &recordingXrayController{}
+	server := &Server{
+		manager:        manager,
+		handlerService: nodehandler.NewService(provider, nil),
+		bodyBudget:     newHTTPTestBudget(t, false, 0),
+	}
+	handlerRoute, _ := contractspec.FindRouteByPath("/node/handler/add-user")
+	handlerResult := serveNodeRouteAsync(server, newJSONRequest(
+		handlerRoute.Method,
+		handlerRoute.Path,
+		bytes.NewReader(handlerRoute.ValidRequest),
+	))
+	awaitTestSignal(t, entered, "handler mutation")
+
+	startRoute, _ := contractspec.FindRouteByPath("/node/xray/start")
+	startWaitContext, cancelStartWait := context.WithCancel(context.Background())
+	defer cancelStartWait()
+	startWaiting := make(chan struct{})
+	startRequest := newJSONRequest(
+		startRoute.Method,
+		startRoute.Path,
+		bytes.NewReader(startRoute.ValidRequest),
+	).WithContext(&observedDoneContext{Context: startWaitContext, observed: startWaiting})
+	startResult := serveNodeRouteAsync(server, startRequest)
+	awaitTestSignal(t, startWaiting, "Xray start lifecycle wait")
+	if manager.startCalls.Load() != 0 {
+		t.Fatal("Xray start entered while a handler mutation held the lifecycle gate")
+	}
+
+	close(release)
+	for name, result := range map[string]<-chan asyncRouteResult{
+		"handler mutation": handlerResult,
+		"Xray start":       startResult,
+	} {
+		outcome := awaitRouteResult(t, result, name)
+		if outcome.panicValue != nil || outcome.response.Code != http.StatusOK {
+			t.Fatalf("%s result: panic=%v status=%d body=%s", name, outcome.panicValue, outcome.response.Code, outcome.response.Body.String())
+		}
+	}
+	if manager.startCalls.Load() != 1 {
+		t.Fatalf("Xray start calls = %d, want 1 after mutation", manager.startCalls.Load())
 	}
 }
 
@@ -161,7 +227,7 @@ func TestHandlerRoutesProduceOfficialResponseShapes(t *testing.T) {
 			server := &Server{handlerService: nodehandler.NewService(
 				countingHandlerProvider{calls: &providerCalls},
 				countingDropper{calls: &dropperCalls},
-			)}
+			), bodyBudget: newHTTPTestBudget(t, false, 0)}
 			req := newJSONRequest(route.Method, route.Path, bytes.NewReader(route.ValidRequest))
 			rec := httptest.NewRecorder()
 
@@ -194,7 +260,7 @@ func TestHandlerApplicationErrorUsesOfficialCodeAndPath(t *testing.T) {
 	server := &Server{handlerService: nodehandler.NewService(
 		failingInboundUsersProvider{countingHandlerProvider{calls: &providerCalls}},
 		countingDropper{calls: &dropperCalls},
-	)}
+	), bodyBudget: newHTTPTestBudget(t, false, 0)}
 	req := newJSONRequest(
 		http.MethodPost,
 		"/node/handler/get-inbound-users-count",

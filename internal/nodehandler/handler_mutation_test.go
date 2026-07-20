@@ -16,19 +16,15 @@ type cleanupFailureProvider struct {
 	removedCommits []string
 }
 
-func (p *cleanupFailureProvider) HandlerRemoveUser(_ context.Context, tag, _ string) xtls.HandlerResult {
+func (p *cleanupFailureProvider) HandlerRemoveUser(_ context.Context, tag, _, hashUUID string) xtls.HandlerResult {
 	if tag == "in-2" {
 		return xtls.HandlerResult{OK: false, Message: "remove failed"}
 	}
+	p.removedCommits = append(p.removedCommits, tag+":"+hashUUID)
 	return xtls.HandlerResult{OK: true}
 }
 
-func (p *cleanupFailureProvider) CommitUserRemoved(_ xtls.HandlerResult, tag, uuid string) bool {
-	p.removedCommits = append(p.removedCommits, tag+":"+uuid)
-	return true
-}
-
-func (p *cleanupFailureProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
+func (p *cleanupFailureProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
 	p.addCalls.Add(1)
 	return xtls.HandlerResult{OK: true}
 }
@@ -58,17 +54,13 @@ type partialAddProvider struct {
 	addedCommits []string
 }
 
-func (p *partialAddProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
+func (p *partialAddProvider) HandlerAddVlessUser(_ context.Context, tag, _, _, _ string, _ uint32, hashUUID string) xtls.HandlerResult {
+	p.addedCommits = append(p.addedCommits, tag+":"+hashUUID)
 	return xtls.HandlerResult{OK: true}
 }
 
-func (p *partialAddProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (p *partialAddProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: false, Message: "trojan failed"}
-}
-
-func (p *partialAddProvider) CommitUserAdded(_ xtls.HandlerResult, tag, uuid string) bool {
-	p.addedCommits = append(p.addedCommits, tag+":"+uuid)
-	return true
 }
 
 func TestAddUserReportsPartialFailureAndCommitsOnlySuccess(t *testing.T) {
@@ -98,15 +90,11 @@ type rejectedCommitProvider struct {
 	stubProvider
 }
 
-func (p *rejectedCommitProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (p *rejectedCommitProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
+	return xtls.HandlerResult{OK: false, Message: "Xray lifecycle changed before user state commit"}
 }
 
-func (p *rejectedCommitProvider) CommitUserAdded(xtls.HandlerResult, string, string) bool {
-	return false
-}
-
-func TestAddUserReportsGenerationCommitRejection(t *testing.T) {
+func TestAddUserReportsProcessCommitRejection(t *testing.T) {
 	t.Parallel()
 
 	service := nodehandler.NewService(&rejectedCommitProvider{}, nil)
@@ -120,7 +108,7 @@ func TestAddUserReportsGenerationCommitRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if response.Success || response.Error == nil || *response.Error != "Xray lifecycle changed before user state commit" {
-		t.Fatalf("response = %+v, want generation commit failure", response)
+		t.Fatalf("response = %+v, want process commit failure", response)
 	}
 }
 
@@ -131,7 +119,7 @@ type blockingMutationProvider struct {
 	calls   atomic.Int64
 }
 
-func (p *blockingMutationProvider) HandlerRemoveUser(ctx context.Context, _, _ string) xtls.HandlerResult {
+func (p *blockingMutationProvider) HandlerRemoveUser(ctx context.Context, _, _, _ string) xtls.HandlerResult {
 	if p.calls.Add(1) == 1 {
 		close(p.entered)
 		select {

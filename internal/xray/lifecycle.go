@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
+	"github.com/Luxiaba/remnanode-lite/internal/xtls"
 )
 
 const (
@@ -72,14 +73,17 @@ type processOutcome struct {
 }
 
 type processState struct {
-	cmd         *exec.Cmd
-	reap        func() error
-	generation  uint64
-	done        chan struct{}
-	leaderDone  chan struct{}
-	monitorDone chan struct{}
-	stdout      io.WriteCloser
-	stderr      io.WriteCloser
+	cmd               *exec.Cmd
+	reap              func() error
+	epoch             uint64
+	socket            string
+	mutationGate      sync.RWMutex
+	statsCapabilities xtls.StatsCapabilities
+	done              chan struct{}
+	leaderDone        chan struct{}
+	monitorDone       chan struct{}
+	stdout            io.WriteCloser
+	stderr            io.WriteCloser
 
 	finalizeMu      sync.Mutex
 	mu              sync.Mutex
@@ -99,31 +103,52 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 		return m.startFailure("create Xray log directory", err)
 	}
 
-	ctx, cancel, generation, previous, ok := m.beginStart(parent)
+	ctx, cancel, operationEpoch, previous, ok := m.beginStart(parent)
 	if !ok {
 		message := "Request already in progress"
 		log.Printf("xray/start rejected: %s", message)
 		return m.startResponse(false, &message)
 	}
+	m.mu.RLock()
+	previousProcess := m.process
+	m.mu.RUnlock()
 
 	if err := ctx.Err(); err != nil {
 		cancel()
-		m.completeStart(generation, previous, nil)
+		m.restorePreviousStart(operationEpoch, previous, previousProcess)
+		return m.startFailure("xray start canceled", err)
+	}
+
+	previousGateHeld := previousProcess != nil
+	if previousGateHeld {
+		previousProcess.mutationGate.Lock()
+	}
+	releasePreviousGate := func() {
+		if previousGateHeld {
+			previousProcess.mutationGate.Unlock()
+			previousGateHeld = false
+		}
+	}
+	defer releasePreviousGate()
+
+	if err := ctx.Err(); err != nil {
+		cancel()
+		m.restorePreviousStart(operationEpoch, previous, previousProcess)
 		return m.startFailure("xray start canceled", err)
 	}
 
 	if previous == lifecycleRunning && !m.disableHashCheck && !req.Internals.ForceRestart {
-		if m.probeReadiness(ctx) {
+		if previousProcess != nil && m.probeProcessReadiness(ctx, previousProcess) {
 			if err := ctx.Err(); err != nil {
 				cancel()
-				m.completeStart(generation, previous, nil)
+				m.restorePreviousStart(operationEpoch, previous, previousProcess)
 				return m.startFailure("xray start canceled", err)
 			}
 			m.mu.RLock()
 			needRestart := m.isNeedRestartCoreLocked(req.Internals.Hashes)
 			m.mu.RUnlock()
 			if !needRestart {
-				completed, owned := m.completeUnchangedStart(generation)
+				completed, owned := m.completeUnchangedStart(operationEpoch)
 				if completed {
 					cancel()
 					log.Printf("xray/start skipped: core already online and config unchanged")
@@ -137,58 +162,62 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 		}
 		if err := ctx.Err(); err != nil {
 			cancel()
-			m.completeStart(generation, previous, nil)
+			m.restorePreviousStart(operationEpoch, previous, previousProcess)
 			return m.startFailure("xray start canceled", err)
 		}
 	}
 
-	prepared, err := prepareRuntimeConfig(req.XrayConfig, req.Internals.Hashes, m.xtlsSocket, m.torrentBlockerOptions())
+	processEpoch, socket, reserved := m.reserveProcessIdentity(operationEpoch)
+	if !reserved {
+		cancel()
+		m.restorePreviousStart(operationEpoch, previous, previousProcess)
+		return m.startFailure("xray start canceled", context.Canceled)
+	}
+	prepared, err := prepareRuntimeConfig(req.XrayConfig, req.Internals.Hashes, socket, m.torrentBlockerOptions())
 	// The prepared value contains only canonical JSON plus compact hash state;
 	// release the decoded request tree before waiting for low-memory rw-core.
 	req.XrayConfig = nil
 	if err != nil {
 		cancel()
-		m.completeStart(generation, previous, nil)
+		m.restorePreviousStart(operationEpoch, previous, previousProcess)
 		return m.startFailure("prepare Xray config", err)
 	}
 	if err := ctx.Err(); err != nil {
 		cancel()
-		m.completeStart(generation, previous, nil)
+		m.restorePreviousStart(operationEpoch, previous, previousProcess)
 		return m.startFailure("xray start canceled", err)
 	}
 
-	m.mu.RLock()
-	previousProcess := m.process
-	m.mu.RUnlock()
 	if err := m.terminateProcess(previousProcess); err != nil {
 		cancel()
-		m.completeStart(generation, lifecycleStopping, nil)
+		m.completeStart(operationEpoch, lifecycleStopping, nil)
 		return m.startFailure("stop previous rw-core", err)
 	}
 
 	if err := ctx.Err(); err != nil {
 		cancel()
-		m.completeStart(generation, lifecycleStopped, func() {
+		m.completeStart(operationEpoch, lifecycleStopped, func() {
 			m.process = nil
 			m.clearRuntimeLocked()
 		})
 		return m.startFailure("xray start canceled", err)
 	}
 
-	if !m.stagePendingConfig(generation, previousProcess, prepared.json) {
+	if !m.stagePendingConfig(operationEpoch, previousProcess, prepared.json) {
 		cancel()
-		m.completeStart(generation, lifecycleStopped, nil)
+		m.completeStart(operationEpoch, lifecycleStopped, nil)
 		return m.startFailure("xray start canceled", context.Canceled)
 	}
+	releasePreviousGate()
 
-	process, err := m.startProcess(generation)
+	process, err := m.startProcess(processEpoch, socket)
 	if err != nil {
 		cancel()
-		m.completeStart(generation, lifecycleStopped, m.clearRuntimeLocked)
+		m.completeStart(operationEpoch, lifecycleStopped, m.clearRuntimeLocked)
 		return m.startFailure("spawn rw-core", err)
 	}
 
-	if !m.assignProcess(generation, process) {
+	if !m.assignProcess(operationEpoch, process) {
 		stopErr := m.terminateProcess(process)
 		finalState := lifecycleStopped
 		if stopErr != nil {
@@ -196,7 +225,7 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 			m.retainUncleanProcess(process)
 		}
 		cancel()
-		m.completeStart(generation, finalState, nil)
+		m.completeStart(operationEpoch, finalState, nil)
 		return m.startFailure("xray start canceled", errors.Join(context.Canceled, stopErr))
 	}
 
@@ -208,10 +237,10 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 		if err := ctx.Err(); err != nil {
 			readyErr = err
 		} else {
-			committed, owned, exitErr := m.commitRunningStart(generation, process, prepared.hashState, version)
+			committed, owned, exitErr := m.commitRunningStart(operationEpoch, process, prepared.hashState, version)
 			if committed {
 				cancel()
-				log.Printf("xray/start succeeded: rw-core online on gRPC @%s", m.xtlsSocket)
+				log.Printf("xray/start succeeded: rw-core online on gRPC @%s", process.socket)
 				return m.startResponse(true, nil)
 			}
 			if !owned {
@@ -232,7 +261,7 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 		finalState = lifecycleStopping
 		cleanup = nil
 	}
-	m.completeStart(generation, finalState, cleanup)
+	m.completeStart(operationEpoch, finalState, cleanup)
 	cancel()
 
 	message := m.readinessFailureMessage(readyErr, process, startupTimeout)
@@ -267,18 +296,29 @@ func (m *Manager) beginStart(parent context.Context) (context.Context, context.C
 	}
 
 	previous := m.state
-	m.generation++
+	m.operationEpoch++
 	ctx, cancel := context.WithCancel(parent)
 	m.state = lifecycleStarting
 	m.startCancel = cancel
-	return ctx, cancel, m.generation, previous, true
+	return ctx, cancel, m.operationEpoch, previous, true
+}
+
+func (m *Manager) reserveProcessIdentity(operationEpoch uint64) (uint64, string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.operationEpoch != operationEpoch || m.state != lifecycleStarting {
+		return 0, "", false
+	}
+	m.nextProcessEpoch++
+	epoch := m.nextProcessEpoch
+	return epoch, fmt.Sprintf("%s-%x", m.socketPrefix, epoch), true
 }
 
 // completeStart publishes the final state and releases lifecycle ownership as
 // one atomic action with respect to new Start and Stop calls.
-func (m *Manager) completeStart(generation uint64, finalState lifecycleState, apply func()) bool {
+func (m *Manager) completeStart(operationEpoch uint64, finalState lifecycleState, apply func()) bool {
 	m.mu.Lock()
-	owned := m.generation == generation
+	owned := m.operationEpoch == operationEpoch
 	if owned {
 		if apply != nil {
 			apply()
@@ -291,13 +331,54 @@ func (m *Manager) completeStart(generation uint64, finalState lifecycleState, ap
 	return owned
 }
 
+// restorePreviousStart closes a pre-termination Start failure without reviving
+// a process that exited while Start was waiting or preparing its replacement.
+func (m *Manager) restorePreviousStart(operationEpoch uint64, previous lifecycleState, process *processState) bool {
+	m.mu.Lock()
+	owned := m.operationEpoch == operationEpoch
+	if owned {
+		finalState := previous
+		if previous == lifecycleRunning {
+			switch {
+			case process == nil || m.process != process:
+				m.clearRuntimeLocked()
+				finalState = lifecycleStopped
+			case channelClosed(process.done):
+				m.process = nil
+				m.clearRuntimeLocked()
+				finalState = lifecycleStopped
+			case channelClosed(process.leaderDone):
+				m.clearRuntimeLocked()
+				finalState = lifecycleStopping
+			}
+		}
+		m.state = finalState
+		m.startCancel = nil
+	}
+	m.lifecycleMu.Unlock()
+	m.mu.Unlock()
+	return owned
+}
+
+func channelClosed(channel <-chan struct{}) bool {
+	if channel == nil {
+		return false
+	}
+	select {
+	case <-channel:
+		return true
+	default:
+		return false
+	}
+}
+
 // completeUnchangedStart keeps the existing process and config. The process
 // liveness check and state publication share the manager lock, so an exit
 // callback cannot be lost between the two operations.
-func (m *Manager) completeUnchangedStart(generation uint64) (completed, owned bool) {
+func (m *Manager) completeUnchangedStart(operationEpoch uint64) (completed, owned bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.generation != generation {
+	if m.operationEpoch != operationEpoch {
 		m.lifecycleMu.Unlock()
 		return false, false
 	}
@@ -314,10 +395,10 @@ func (m *Manager) completeUnchangedStart(generation uint64) (completed, owned bo
 	return true, true
 }
 
-func (m *Manager) stagePendingConfig(generation uint64, previous *processState, raw []byte) bool {
+func (m *Manager) stagePendingConfig(operationEpoch uint64, previous *processState, raw []byte) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.generation != generation || m.state != lifecycleStarting {
+	if m.operationEpoch != operationEpoch || m.state != lifecycleStarting {
 		return false
 	}
 	if m.process == previous {
@@ -328,10 +409,10 @@ func (m *Manager) stagePendingConfig(generation uint64, previous *processState, 
 	return true
 }
 
-func (m *Manager) assignProcess(generation uint64, process *processState) bool {
+func (m *Manager) assignProcess(operationEpoch uint64, process *processState) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.generation != generation || m.state != lifecycleStarting {
+	if m.operationEpoch != operationEpoch || m.state != lifecycleStarting {
 		return false
 	}
 	m.process = process
@@ -347,10 +428,10 @@ func (m *Manager) retainUncleanProcess(process *processState) {
 	m.state = lifecycleStopping
 }
 
-func (m *Manager) commitRunningStart(generation uint64, process *processState, hashState runtimeHashState, version *string) (committed, owned bool, exitErr error) {
+func (m *Manager) commitRunningStart(operationEpoch uint64, process *processState, hashState runtimeHashState, version *string) (committed, owned bool, exitErr error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.generation != generation || m.state != lifecycleStarting {
+	if m.operationEpoch != operationEpoch || m.state != lifecycleStarting {
 		m.lifecycleMu.Unlock()
 		return false, false, nil
 	}
@@ -363,6 +444,7 @@ func (m *Manager) commitRunningStart(generation uint64, process *processState, h
 
 	m.pendingConfigJSON = nil
 	m.applyRuntimeHashStateLocked(hashState)
+	m.runtimeProcessEpoch = process.epoch
 	m.publishVersionLocked(version)
 	m.state = lifecycleRunning
 	m.startCancel = nil
@@ -386,6 +468,10 @@ func (m *Manager) Stop() StopResponse {
 	m.mu.RLock()
 	process := m.process
 	m.mu.RUnlock()
+	if process != nil {
+		process.mutationGate.Lock()
+		defer process.mutationGate.Unlock()
+	}
 	var err error
 	if retryCleanup {
 		err = m.retryProcessCleanup(process)
@@ -431,7 +517,7 @@ func (m *Manager) reserveStop() (op *stopOperation, cancelStart context.CancelFu
 	op = &stopOperation{done: make(chan struct{})}
 	retryCleanup = m.state == lifecycleStopping
 	if m.state == lifecycleStarting {
-		m.generation++
+		m.operationEpoch++
 		m.state = lifecycleStopping
 		m.stopOp = op
 		cancelStart = m.startCancel
@@ -443,7 +529,7 @@ func (m *Manager) reserveStop() (op *stopOperation, cancelStart context.CancelFu
 	if !m.lifecycleMu.TryLock() {
 		// State and lifecycle ownership are normally published together. Keep
 		// the defensive path cancelable in case a future caller violates it.
-		m.generation++
+		m.operationEpoch++
 		m.state = lifecycleStopping
 		m.stopOp = op
 		cancelStart = m.startCancel
@@ -452,21 +538,21 @@ func (m *Manager) reserveStop() (op *stopOperation, cancelStart context.CancelFu
 		return op, cancelStart, false, true, retryCleanup
 	}
 
-	m.generation++
+	m.operationEpoch++
 	m.state = lifecycleStopping
 	m.stopOp = op
 	m.mu.Unlock()
 	return op, nil, false, false, retryCleanup
 }
 
-func (m *Manager) probeReadiness(ctx context.Context) bool {
+func (m *Manager) probeProcessReadiness(ctx context.Context, process *processState) bool {
 	m.mu.RLock()
 	probe := m.readinessProbe
 	m.mu.RUnlock()
 	if probe != nil {
 		return probe(ctx)
 	}
-	return m.PingXrayGRPC(ctx)
+	return m.pingProcess(ctx, process)
 }
 
 func (m *Manager) waitForGRPC(parent context.Context, process *processState, timeout time.Duration) error {
@@ -484,7 +570,7 @@ func (m *Manager) waitForGRPC(parent context.Context, process *processState, tim
 		if exited, err := process.leaderUnavailable(); exited {
 			return processExitedError(err)
 		}
-		if m.probeReadiness(ctx) {
+		if m.probeProcessReadiness(ctx, process) {
 			if err := parent.Err(); err != nil {
 				return err
 			}
@@ -546,7 +632,11 @@ func (m *Manager) readinessFailureMessage(err error, process *processState, time
 	case errors.Is(err, errProcessExited):
 		message = "rw-core exited before the Xray gRPC API became ready"
 	case errors.Is(err, errGRPCStartupTimeout):
-		message = fmt.Sprintf("xray gRPC API on @%s did not become reachable within %s (see %s/xray.err.log)", m.xtlsSocket, timeout, m.logDir)
+		socket := "unknown"
+		if process != nil && process.socket != "" {
+			socket = process.socket
+		}
+		message = fmt.Sprintf("xray gRPC API on @%s did not become reachable within %s (see %s/xray.err.log)", socket, timeout, m.logDir)
 	default:
 		message = "xray start failed: " + err.Error()
 	}
@@ -565,7 +655,7 @@ func (m *Manager) startFailure(action string, err error) StartResponse {
 	return m.startResponse(false, &message)
 }
 
-func (m *Manager) startProcess(generation uint64) (*processState, error) {
+func (m *Manager) startProcess(processEpoch uint64, socket string) (*processState, error) {
 	stdout, err := openCappedLogWriter(filepath.Join(m.logDir, "xray.out.log"), maxLogSize)
 	if err != nil {
 		return nil, fmt.Errorf("open xray stdout log: %w", err)
@@ -620,7 +710,8 @@ func (m *Manager) startProcess(generation uint64) (*processState, error) {
 	process := &processState{
 		cmd:         cmd,
 		reap:        cmd.Wait,
-		generation:  generation,
+		epoch:       processEpoch,
+		socket:      socket,
 		done:        make(chan struct{}),
 		leaderDone:  make(chan struct{}),
 		monitorDone: make(chan struct{}),
@@ -632,16 +723,27 @@ func (m *Manager) startProcess(generation uint64) (*processState, error) {
 }
 
 func rwCoreEnvironment(base []string, geoDir, token string) []string {
+	environment := sanitizedChildEnvironment(base)
+	return append(environment,
+		"XRAY_LOCATION_ASSET="+geoDir,
+		unixconfig.InternalTokenEnvVar+"="+token,
+	)
+}
+
+func sanitizedChildEnvironment(base []string) []string {
 	managed := map[string]struct{}{
 		"SECRET_KEY":                   {},
 		"SECRET_KEY_FILE":              {},
 		"INTERNAL_REST_TOKEN":          {},
 		"REMNANODE_ENV":                {},
+		"GOMEMLIMIT":                   {},
+		"NODE_CONTRACT_VERSION":        {},
+		"XRAY_CORE_VERSION":            {},
 		"XRAY_LOCATION_ASSET":          {},
 		unixconfig.InternalTokenEnvVar: {},
 	}
 
-	environment := make([]string, 0, len(base)+2)
+	environment := make([]string, 0, len(base))
 	for _, assignment := range base {
 		key, _, ok := strings.Cut(assignment, "=")
 		if ok {
@@ -651,10 +753,7 @@ func rwCoreEnvironment(base []string, geoDir, token string) []string {
 		}
 		environment = append(environment, assignment)
 	}
-	return append(environment,
-		"XRAY_LOCATION_ASSET="+geoDir,
-		unixconfig.InternalTokenEnvVar+"="+token,
-	)
+	return environment
 }
 
 func (m *Manager) monitorProcess(process *processState) {
@@ -668,10 +767,10 @@ func (m *Manager) monitorProcess(process *processState) {
 
 	outcome := process.outcome()
 	if outcome.observationErr != nil {
-		log.Printf("rw-core leader observation failed (generation=%d): %v", process.generation, outcome.observationErr)
+		log.Printf("rw-core leader observation failed (process_epoch=%d): %v", process.epoch, outcome.observationErr)
 	}
 	if cleanupErr != nil {
-		log.Printf("rw-core process-group cleanup failed (generation=%d): %v", process.generation, cleanupErr)
+		log.Printf("rw-core process-group cleanup failed (process_epoch=%d): %v", process.epoch, cleanupErr)
 	}
 
 	m.mu.Lock()
@@ -818,7 +917,7 @@ func (m *Manager) finalizeExitedProcess(process *processState, timeout time.Dura
 	process.markFinalized(leaderErr)
 	close(process.done)
 	if leaderErr != nil {
-		log.Printf("rw-core leader exited (generation=%d): %v", process.generation, leaderErr)
+		log.Printf("rw-core leader exited (process_epoch=%d): %v", process.epoch, leaderErr)
 	}
 	return nil
 }

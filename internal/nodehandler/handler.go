@@ -10,16 +10,15 @@ import (
 )
 
 type Provider interface {
+	BeginMutation(ctx context.Context) (context.Context, func(), error)
 	InboundTags() []string
-	CommitUserAdded(result xtls.HandlerResult, inboundTag, userUUID string) bool
-	CommitUserRemoved(result xtls.HandlerResult, inboundTag, userUUID string) bool
 	GetUserIPList(ctx context.Context, userID string, reset bool) ([]xtls.IPEntry, error)
-	HandlerRemoveUser(ctx context.Context, tag, username string) xtls.HandlerResult
-	HandlerAddVlessUser(ctx context.Context, tag, username, uuid, flow string, level uint32) xtls.HandlerResult
-	HandlerAddTrojanUser(ctx context.Context, tag, username, password string, level uint32) xtls.HandlerResult
-	HandlerAddShadowsocksUser(ctx context.Context, tag, username, password string, cipherType int, ivCheck bool, level uint32) xtls.HandlerResult
-	HandlerAddShadowsocks2022User(ctx context.Context, tag, username, key string, level uint32) xtls.HandlerResult
-	HandlerAddHysteriaUser(ctx context.Context, tag, username, auth string, level uint32) xtls.HandlerResult
+	HandlerRemoveUser(ctx context.Context, tag, username, hashUUID string) xtls.HandlerResult
+	HandlerAddVlessUser(ctx context.Context, tag, username, uuid, flow string, level uint32, hashUUID string) xtls.HandlerResult
+	HandlerAddTrojanUser(ctx context.Context, tag, username, password string, level uint32, hashUUID string) xtls.HandlerResult
+	HandlerAddShadowsocksUser(ctx context.Context, tag, username, password string, cipherType int, ivCheck bool, level uint32, hashUUID string) xtls.HandlerResult
+	HandlerAddShadowsocks2022User(ctx context.Context, tag, username, key string, level uint32, hashUUID string) xtls.HandlerResult
+	HandlerAddHysteriaUser(ctx context.Context, tag, username, auth string, level uint32, hashUUID string) xtls.HandlerResult
 	HandlerGetInboundUsers(ctx context.Context, tag string) ([]xtls.InboundUser, xtls.HandlerResult)
 	HandlerGetInboundUsersCount(ctx context.Context, tag string) (int64, xtls.HandlerResult)
 }
@@ -34,16 +33,18 @@ type connectionDropperAvailability interface {
 }
 
 type Service struct {
-	provider     Provider
-	dropper      ConnectionDropper
-	mutationGate chan struct{}
+	provider      Provider
+	dropper       ConnectionDropper
+	mutationGate  chan struct{}
+	panicReporter *panicReporter
 }
 
 func NewService(provider Provider, dropper ConnectionDropper) *Service {
 	return &Service{
-		provider:     provider,
-		dropper:      dropper,
-		mutationGate: make(chan struct{}, 1),
+		provider:      provider,
+		dropper:       dropper,
+		mutationGate:  make(chan struct{}, 1),
+		panicReporter: newPanicReporter(nil),
 	}
 }
 
@@ -124,7 +125,7 @@ type RemoveUsersItem struct {
 }
 
 func (s *Service) AddUser(ctx context.Context, request AddUserRequest) (response GenericResponse, err error) {
-	defer recoverServiceError(&err)
+	defer s.recoverServiceError(mutationAddUser, &err)
 	ctx = nonNilContext(ctx)
 	if s.provider == nil {
 		return GenericResponse{}, errInternalServer
@@ -136,6 +137,11 @@ func (s *Service) AddUser(ctx context.Context, request AddUserRequest) (response
 		return GenericResponse{}, errInternalServer
 	}
 	defer s.releaseMutation()
+	ctx, releaseCore, err := s.provider.BeginMutation(ctx)
+	if err != nil {
+		return mutationLeaseFailure(err), nil
+	}
+	defer releaseCore()
 
 	hashUUID := request.HashData.VlessUUID
 	if request.HashData.PrevVlessUUID != nil {
@@ -148,8 +154,8 @@ func (s *Service) AddUser(ctx context.Context, request AddUserRequest) (response
 		if cleanup.StopForContext(ctx) {
 			return cleanup.Response(), nil
 		}
-		result := s.provider.HandlerRemoveUser(ctx, tag, username)
-		cleanup.Add(s.commitRemoved(result, tag, hashUUID))
+		result := s.provider.HandlerRemoveUser(ctx, tag, username, hashUUID)
+		cleanup.Add(result)
 	}
 	if response := cleanup.Response(); !response.Success {
 		return response, nil
@@ -160,14 +166,14 @@ func (s *Service) AddUser(ctx context.Context, request AddUserRequest) (response
 		if results.StopForContext(ctx) {
 			return results.Response(), nil
 		}
-		result := s.addSingleUser(ctx, item)
-		results.Add(s.commitAdded(result, item.Tag, request.HashData.VlessUUID))
+		result := s.addSingleUser(ctx, item, request.HashData.VlessUUID)
+		results.Add(result)
 	}
 	return results.Response(), nil
 }
 
 func (s *Service) RemoveUser(ctx context.Context, request RemoveUserRequest) (response GenericResponse, err error) {
-	defer recoverServiceError(&err)
+	defer s.recoverServiceError(mutationRemoveUser, &err)
 	ctx = nonNilContext(ctx)
 	if s.provider == nil {
 		return GenericResponse{}, errInternalServer
@@ -176,6 +182,11 @@ func (s *Service) RemoveUser(ctx context.Context, request RemoveUserRequest) (re
 		return GenericResponse{}, errInternalServer
 	}
 	defer s.releaseMutation()
+	ctx, releaseCore, err := s.provider.BeginMutation(ctx)
+	if err != nil {
+		return mutationLeaseFailure(err), nil
+	}
+	defer releaseCore()
 
 	tags := s.provider.InboundTags()
 	if len(tags) == 0 {
@@ -193,8 +204,7 @@ func (s *Service) RemoveUser(ctx context.Context, request RemoveUserRequest) (re
 		if results.StopForContext(ctx) {
 			return results.Response(), nil
 		}
-		result := s.provider.HandlerRemoveUser(ctx, tag, request.Username)
-		result = s.commitRemoved(result, tag, request.VlessUUID)
+		result := s.provider.HandlerRemoveUser(ctx, tag, request.Username, request.VlessUUID)
 		results.Add(result)
 		removeOK = removeOK && result.OK
 	}
@@ -206,15 +216,23 @@ func (s *Service) RemoveUser(ctx context.Context, request RemoveUserRequest) (re
 }
 
 func (s *Service) AddUsers(ctx context.Context, request AddUsersRequest) (response GenericResponse, err error) {
-	defer recoverServiceError(&err)
+	defer s.recoverServiceError(mutationAddUsers, &err)
 	ctx = nonNilContext(ctx)
 	if s.provider == nil {
 		return GenericResponse{}, errInternalServer
+	}
+	if len(request.Users) == 0 {
+		return GenericResponse{Success: true, Error: nil}, nil
 	}
 	if !s.acquireMutation(ctx) {
 		return GenericResponse{}, errInternalServer
 	}
 	defer s.releaseMutation()
+	ctx, releaseCore, err := s.provider.BeginMutation(ctx)
+	if err != nil {
+		return mutationLeaseFailure(err), nil
+	}
+	defer releaseCore()
 
 	tags := batchMutationTags(s.provider.InboundTags(), request.AffectedInboundTags, request.Users)
 	var results resultAccumulator
@@ -227,8 +245,7 @@ func (s *Service) AddUsers(ctx context.Context, request AddUsersRequest) (respon
 			if results.StopForContext(ctx) {
 				return results.Response(), nil
 			}
-			result := s.provider.HandlerRemoveUser(ctx, tag, user.UserData.UserID)
-			result = s.commitRemoved(result, tag, user.UserData.HashUUID)
+			result := s.provider.HandlerRemoveUser(ctx, tag, user.UserData.UserID, user.UserData.HashUUID)
 			results.Add(result)
 			cleanupOK = cleanupOK && result.OK
 		}
@@ -239,23 +256,31 @@ func (s *Service) AddUsers(ctx context.Context, request AddUsersRequest) (respon
 			if results.StopForContext(ctx) {
 				return results.Response(), nil
 			}
-			result := s.addBatchUser(ctx, inbound, user.UserData)
-			results.Add(s.commitAdded(result, inbound.Tag, user.UserData.VlessUUID))
+			result := s.addBatchUser(ctx, inbound, user.UserData, user.UserData.VlessUUID)
+			results.Add(result)
 		}
 	}
 	return results.Response(), nil
 }
 
 func (s *Service) RemoveUsers(ctx context.Context, request RemoveUsersRequest) (response GenericResponse, err error) {
-	defer recoverServiceError(&err)
+	defer s.recoverServiceError(mutationRemoveUsers, &err)
 	ctx = nonNilContext(ctx)
 	if s.provider == nil {
 		return GenericResponse{}, errInternalServer
+	}
+	if len(request.Users) == 0 {
+		return GenericResponse{Success: true, Error: nil}, nil
 	}
 	if !s.acquireMutation(ctx) {
 		return GenericResponse{}, errInternalServer
 	}
 	defer s.releaseMutation()
+	ctx, releaseCore, err := s.provider.BeginMutation(ctx)
+	if err != nil {
+		return mutationLeaseFailure(err), nil
+	}
+	defer releaseCore()
 
 	tags := s.provider.InboundTags()
 	if len(tags) == 0 {
@@ -278,8 +303,7 @@ func (s *Service) RemoveUsers(ctx context.Context, request RemoveUsersRequest) (
 			if results.StopForContext(ctx) {
 				return results.Response(), nil
 			}
-			result := s.provider.HandlerRemoveUser(ctx, tag, user.UserID)
-			result = s.commitRemoved(result, tag, user.HashUUID)
+			result := s.provider.HandlerRemoveUser(ctx, tag, user.UserID, user.HashUUID)
 			results.Add(result)
 			removeOK = removeOK && result.OK
 		}
@@ -337,36 +361,36 @@ func (s *Service) DropIPs(ctx context.Context, ips []string) SuccessResponse {
 	return SuccessResponse{Success: success}
 }
 
-func (s *Service) addSingleUser(ctx context.Context, item AddUserItem) xtls.HandlerResult {
+func (s *Service) addSingleUser(ctx context.Context, item AddUserItem, hashUUID string) xtls.HandlerResult {
 	switch item.Type {
 	case "vless":
-		return s.provider.HandlerAddVlessUser(ctx, item.Tag, item.Username, item.UUID, item.Flow, 0)
+		return s.provider.HandlerAddVlessUser(ctx, item.Tag, item.Username, item.UUID, item.Flow, 0, hashUUID)
 	case "trojan":
-		return s.provider.HandlerAddTrojanUser(ctx, item.Tag, item.Username, item.Password, 0)
+		return s.provider.HandlerAddTrojanUser(ctx, item.Tag, item.Username, item.Password, 0, hashUUID)
 	case "shadowsocks":
-		return s.provider.HandlerAddShadowsocksUser(ctx, item.Tag, item.Username, item.Password, item.CipherType, false, 0)
+		return s.provider.HandlerAddShadowsocksUser(ctx, item.Tag, item.Username, item.Password, item.CipherType, false, 0, hashUUID)
 	case "shadowsocks22":
-		return s.provider.HandlerAddShadowsocks2022User(ctx, item.Tag, item.Username, item.Password, 0)
+		return s.provider.HandlerAddShadowsocks2022User(ctx, item.Tag, item.Username, item.Password, 0, hashUUID)
 	case "hysteria":
-		return s.provider.HandlerAddHysteriaUser(ctx, item.Tag, item.Username, item.Password, 0)
+		return s.provider.HandlerAddHysteriaUser(ctx, item.Tag, item.Username, item.Password, 0, hashUUID)
 	default:
 		return xtls.HandlerResult{OK: false, Message: "unsupported user type: " + item.Type}
 	}
 }
 
-func (s *Service) addBatchUser(ctx context.Context, inbound BatchInbound, user BatchUserData) xtls.HandlerResult {
+func (s *Service) addBatchUser(ctx context.Context, inbound BatchInbound, user BatchUserData, hashUUID string) xtls.HandlerResult {
 	switch inbound.Type {
 	case "vless":
-		return s.provider.HandlerAddVlessUser(ctx, inbound.Tag, user.UserID, user.VlessUUID, inbound.Flow, 0)
+		return s.provider.HandlerAddVlessUser(ctx, inbound.Tag, user.UserID, user.VlessUUID, inbound.Flow, 0, hashUUID)
 	case "trojan":
-		return s.provider.HandlerAddTrojanUser(ctx, inbound.Tag, user.UserID, user.TrojanPassword, 0)
+		return s.provider.HandlerAddTrojanUser(ctx, inbound.Tag, user.UserID, user.TrojanPassword, 0, hashUUID)
 	case "shadowsocks":
-		return s.provider.HandlerAddShadowsocksUser(ctx, inbound.Tag, user.UserID, user.SSPassword, 0, false, 0)
+		return s.provider.HandlerAddShadowsocksUser(ctx, inbound.Tag, user.UserID, user.SSPassword, 0, false, 0, hashUUID)
 	case "shadowsocks22":
 		key := base64.StdEncoding.EncodeToString([]byte(user.SSPassword))
-		return s.provider.HandlerAddShadowsocks2022User(ctx, inbound.Tag, user.UserID, key, 0)
+		return s.provider.HandlerAddShadowsocks2022User(ctx, inbound.Tag, user.UserID, key, 0, hashUUID)
 	case "hysteria":
-		return s.provider.HandlerAddHysteriaUser(ctx, inbound.Tag, user.UserID, user.VlessUUID, 0)
+		return s.provider.HandlerAddHysteriaUser(ctx, inbound.Tag, user.UserID, user.VlessUUID, 0, hashUUID)
 	default:
 		return xtls.HandlerResult{OK: false, Message: "unsupported user type: " + inbound.Type}
 	}
@@ -453,18 +477,12 @@ func (a resultAccumulator) Response() GenericResponse {
 	return GenericResponse{Success: true, Error: nil}
 }
 
-func (s *Service) commitAdded(result xtls.HandlerResult, tag, hashUUID string) xtls.HandlerResult {
-	if result.OK && !s.provider.CommitUserAdded(result, tag, hashUUID) {
-		return xtls.HandlerResult{OK: false, Message: "Xray lifecycle changed before user state commit"}
+func mutationLeaseFailure(err error) GenericResponse {
+	message := "xray is not online"
+	if err != nil && err.Error() != "" {
+		message = err.Error()
 	}
-	return result
-}
-
-func (s *Service) commitRemoved(result xtls.HandlerResult, tag, hashUUID string) xtls.HandlerResult {
-	if result.OK && !s.provider.CommitUserRemoved(result, tag, hashUUID) {
-		return xtls.HandlerResult{OK: false, Message: "Xray lifecycle changed before user state commit"}
-	}
-	return result
+	return GenericResponse{Success: false, Error: &message}
 }
 
 func (s *Service) acquireMutation(ctx context.Context) bool {
@@ -543,12 +561,6 @@ func batchMutationTags(providerTags, affectedTags []string, users []BatchUser) [
 		}
 	}
 	return result
-}
-
-func recoverServiceError(err *error) {
-	if recover() != nil {
-		*err = errInternalServer
-	}
 }
 
 func stringPtr(value string) *string {

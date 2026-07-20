@@ -3,12 +3,51 @@ package stats_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
 	"github.com/Luxiaba/remnanode-lite/internal/stats"
+	"github.com/Luxiaba/remnanode-lite/internal/system"
 	"github.com/Luxiaba/remnanode-lite/internal/xtls"
 )
+
+type combinedLeaseContextKey struct{}
+
+type combinedLeaseProvider struct {
+	*mockProvider
+	beginCalls   atomic.Int32
+	releaseCalls atomic.Int32
+	rpcCalls     atomic.Int32
+}
+
+type fixedSystemStats struct {
+	value system.Stats
+}
+
+func (s fixedSystemStats) Stats() system.Stats { return s.value }
+
+func (p *combinedLeaseProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	p.beginCalls.Add(1)
+	return context.WithValue(ctx, combinedLeaseContextKey{}, p), func() { p.releaseCalls.Add(1) }, nil
+}
+
+func (p *combinedLeaseProvider) GetAllInboundsStats(ctx context.Context, _ bool) ([]xtls.TagTraffic, error) {
+	if ctx.Value(combinedLeaseContextKey{}) != p {
+		return nil, errors.New("missing combined lease context")
+	}
+	p.rpcCalls.Add(1)
+	return []xtls.TagTraffic{}, nil
+}
+
+func (p *combinedLeaseProvider) GetAllOutboundsStats(ctx context.Context, _ bool) ([]xtls.TagTraffic, error) {
+	if ctx.Value(combinedLeaseContextKey{}) != p {
+		return nil, errors.New("missing combined lease context")
+	}
+	p.rpcCalls.Add(1)
+	return []xtls.TagTraffic{}, nil
+}
 
 type mockProvider struct {
 	usersStats       []xtls.UserTraffic
@@ -18,6 +57,10 @@ type mockProvider struct {
 	userIPListCalls  int
 	onlineUsername   string
 	userIPListUserID string
+}
+
+func (m *mockProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	return ctx, func() {}, m.usersErr
 }
 
 func (m *mockProvider) GetSysStats(context.Context) (*xtls.SysStats, error) {
@@ -55,9 +98,23 @@ func (m *mockProvider) GetUsersIPList(context.Context) ([]xtls.UserIPEntry, erro
 func TestGetSystemStatsReturnsErrorWhenOffline(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersErr: errors.New("xray is not online")}, nil)
+	service := stats.NewService(&mockProvider{usersErr: errors.New("xray is not online")}, nil, system.NewCollector(nil))
 	_, err := service.GetSystemStats(context.Background())
 	assertServiceError(t, err, "A010")
+}
+
+func TestGetSystemStatsUsesInjectedSystemCollector(t *testing.T) {
+	t.Parallel()
+	want := system.Stats{MemoryFree: 123, MemoryUsed: 456, Uptime: 789}
+	service := stats.NewService(&mockProvider{}, nil, fixedSystemStats{value: want})
+	response, err := service.GetSystemStats(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := response.System.Stats
+	if got.MemoryFree != want.MemoryFree || got.MemoryUsed != want.MemoryUsed || got.Uptime != want.Uptime {
+		t.Fatalf("system stats = %+v, want %+v", got, want)
+	}
 }
 
 func TestGetUsersStatsFiltersZeroTraffic(t *testing.T) {
@@ -66,7 +123,7 @@ func TestGetUsersStatsFiltersZeroTraffic(t *testing.T) {
 	service := stats.NewService(&mockProvider{usersStats: []xtls.UserTraffic{
 		{Username: "idle", Uplink: 0, Downlink: 0},
 		{Username: "active", Uplink: 10, Downlink: 5},
-	}}, nil)
+	}}, nil, system.NewCollector(nil))
 
 	response, err := service.GetUsersStats(context.Background(), false)
 	if err != nil {
@@ -80,7 +137,7 @@ func TestGetUsersStatsFiltersZeroTraffic(t *testing.T) {
 func TestGetUsersStatsGRPCError(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil)
+	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil, system.NewCollector(nil))
 	_, err := service.GetUsersStats(context.Background(), false)
 	assertServiceError(t, err, "A011")
 }
@@ -88,7 +145,7 @@ func TestGetUsersStatsGRPCError(t *testing.T) {
 func TestSingleTagStatsErrorsUseOfficialCodes(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersErr: errors.New("stats not found")}, nil)
+	service := stats.NewService(&mockProvider{usersErr: errors.New("stats not found")}, nil, system.NewCollector(nil))
 	_, inboundErr := service.GetInboundStats(context.Background(), "missing", false)
 	assertServiceError(t, inboundErr, "A012")
 	_, outboundErr := service.GetOutboundStats(context.Background(), "missing", false)
@@ -98,7 +155,7 @@ func TestSingleTagStatsErrorsUseOfficialCodes(t *testing.T) {
 func TestGetUserOnlineStatusGRPCError(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil)
+	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil, system.NewCollector(nil))
 	response := service.GetUserOnlineStatus(context.Background(), "u1")
 	if response.IsOnline {
 		t.Fatal("expected isOnline=false when provider returns error")
@@ -109,7 +166,7 @@ func TestEmptyStringRequestsReachProvider(t *testing.T) {
 	t.Parallel()
 
 	provider := &mockProvider{}
-	service := stats.NewService(provider, nil)
+	service := stats.NewService(provider, nil, system.NewCollector(nil))
 	service.GetUserOnlineStatus(context.Background(), "")
 	service.GetUserIPList(context.Background(), "")
 
@@ -124,7 +181,7 @@ func TestEmptyStringRequestsReachProvider(t *testing.T) {
 func TestGetUserIPListGRPCError(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil)
+	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil, system.NewCollector(nil))
 	response := service.GetUserIPList(context.Background(), "u1")
 	if len(response.IPs) != 0 {
 		t.Fatalf("ips = %+v, want empty", response.IPs)
@@ -134,7 +191,7 @@ func TestGetUserIPListGRPCError(t *testing.T) {
 func TestGetUsersIPListGRPCError(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil)
+	service := stats.NewService(&mockProvider{usersErr: errors.New("grpc down")}, nil, system.NewCollector(nil))
 	response := service.GetUsersIPList(context.Background())
 	if len(response.Users) != 0 {
 		t.Fatalf("users = %+v, want empty", response.Users)
@@ -146,10 +203,26 @@ func TestGetUsersIPListPreservesNativeUsersWithEmptyIPs(t *testing.T) {
 
 	service := stats.NewService(&mockProvider{usersIPList: []xtls.UserIPEntry{
 		{UserID: "u1", IPs: []xtls.IPEntry{}},
-	}}, nil)
+	}}, nil, system.NewCollector(nil))
 	response := service.GetUsersIPList(context.Background())
 	if len(response.Users) != 1 || response.Users[0].UserID != "u1" || len(response.Users[0].IPs) != 0 {
 		t.Fatalf("users = %+v, want native empty-IP entry preserved", response.Users)
+	}
+}
+
+func TestGetCombinedStatsUsesOneLeaseForBothRPCs(t *testing.T) {
+	for _, reset := range []bool{false, true} {
+		t.Run(fmt.Sprintf("reset=%v", reset), func(t *testing.T) {
+			provider := &combinedLeaseProvider{mockProvider: &mockProvider{}}
+			service := stats.NewService(provider, nil, system.NewCollector(nil))
+			if _, err := service.GetCombinedStats(context.Background(), reset); err != nil {
+				t.Fatal(err)
+			}
+			if provider.beginCalls.Load() != 1 || provider.releaseCalls.Load() != 1 || provider.rpcCalls.Load() != 2 {
+				t.Fatalf("lease/RPC calls = %d/%d/%d, want 1/1/2",
+					provider.beginCalls.Load(), provider.releaseCalls.Load(), provider.rpcCalls.Load())
+			}
+		})
 	}
 }
 

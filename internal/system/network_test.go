@@ -2,6 +2,7 @@ package system
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -65,20 +66,73 @@ func TestNetworkMonitorFollowsDefaultInterfaceChanges(t *testing.T) {
 func TestNetworkMonitorStopIsConcurrentAndIdempotent(t *testing.T) {
 	t.Parallel()
 
-	monitor := &NetworkMonitor{stop: make(chan struct{})}
+	pollStarted := make(chan struct{})
+	releasePoll := make(chan struct{})
+	var reads atomic.Int64
+	monitor := newNetworkMonitor(networkMonitorConfig{
+		available:    true,
+		pollInterval: time.Millisecond,
+		readSamples: func() map[string]interfaceSample {
+			if reads.Add(1) == 2 {
+				close(pollStarted)
+				<-releasePoll
+			}
+			return map[string]interfaceSample{
+				"eth0": {rxBytes: uint64(reads.Load()), txBytes: uint64(reads.Load())},
+			}
+		},
+		resolveIface: func() string { return "eth0" },
+		now:          time.Now,
+	})
+	select {
+	case <-pollStarted:
+	case <-time.After(time.Second):
+		close(releasePoll)
+		monitor.Stop()
+		t.Fatal("network poll did not start")
+	}
+
 	var callers sync.WaitGroup
+	returned := make(chan struct{}, 8)
 	for range 8 {
 		callers.Add(1)
 		go func() {
 			defer callers.Done()
 			monitor.Stop()
+			returned <- struct{}{}
 		}()
 	}
-	callers.Wait()
+
+	// The first caller closes stop, but every caller must wait for the active
+	// poll to return and the loop to close done.
 	select {
 	case <-monitor.stop:
+	case <-time.After(time.Second):
+		close(releasePoll)
+		t.Fatal("Stop did not signal the poller")
+	}
+	select {
+	case <-returned:
+		close(releasePoll)
+		t.Fatal("Stop returned while a poll was still running")
 	default:
-		t.Fatal("Stop did not close the channel")
+	}
+	close(releasePoll)
+
+	finished := make(chan struct{})
+	go func() {
+		callers.Wait()
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("concurrent Stop callers did not return after poll exit")
+	}
+	select {
+	case <-monitor.done:
+	default:
+		t.Fatal("Stop returned before the poller closed done")
 	}
 }
 
@@ -87,6 +141,39 @@ func TestZeroValueNetworkMonitorStopDoesNotPanic(t *testing.T) {
 	var monitor NetworkMonitor
 	monitor.Stop()
 	monitor.Stop()
+	var nilMonitor *NetworkMonitor
+	nilMonitor.Stop()
+}
+
+func TestUnavailableNetworkMonitorDoesNotStartPoller(t *testing.T) {
+	t.Parallel()
+
+	var reads atomic.Int64
+	var resolves atomic.Int64
+	monitor := newNetworkMonitor(networkMonitorConfig{
+		available: false,
+		readSamples: func() map[string]interfaceSample {
+			reads.Add(1)
+			return nil
+		},
+		resolveIface: func() string {
+			resolves.Add(1)
+			return "eth0"
+		},
+	})
+
+	select {
+	case <-monitor.done:
+	default:
+		t.Fatal("unavailable monitor did not close done during construction")
+	}
+	monitor.Stop()
+	if got := reads.Load(); got != 0 {
+		t.Fatalf("sample reads = %d, want 0", got)
+	}
+	if got := resolves.Load(); got != 0 {
+		t.Fatalf("interface resolutions = %d, want 0", got)
+	}
 }
 
 func TestParseDefaultInterfaceChoosesLowestMetric(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
 	"github.com/Luxiaba/remnanode-lite/internal/plugin"
 	"github.com/Luxiaba/remnanode-lite/internal/stats"
+	"github.com/Luxiaba/remnanode-lite/internal/system"
 	"github.com/Luxiaba/remnanode-lite/internal/xray"
 	"github.com/Luxiaba/remnanode-lite/internal/xraywebhook"
 	"github.com/Luxiaba/remnanode-lite/internal/xtls"
@@ -85,6 +86,8 @@ func testManager(t *testing.T) *xray.Manager {
 		LogDir:             t.TempDir(),
 		InternalSocketPath: "/run/remnawave.sock",
 		InternalRESTToken:  "token",
+		NodeVersion:        "2.8.0",
+		System:             system.NewCollector(nil),
 	})
 	if err != nil {
 		t.Fatalf("NewManager: %v", err)
@@ -120,7 +123,7 @@ func testXrayHealthcheckResponseShape(t *testing.T) []byte {
 
 func statsService(t *testing.T) *stats.Service {
 	t.Helper()
-	return stats.NewService(stubStatsProvider{}, stubReportsCounter{})
+	return stats.NewService(stubStatsProvider{}, stubReportsCounter{}, system.NewCollector(nil))
 }
 
 func testGetUserOnlineStatusResponseShape(t *testing.T) []byte {
@@ -356,6 +359,10 @@ func testPluginRecreateTablesResponseShape(t *testing.T) []byte {
 }
 
 type stubStatsProvider struct{}
+
+func (stubStatsProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
 
 func (stubStatsProvider) GetSysStats(context.Context) (*xtls.SysStats, error) {
 	return &xtls.SysStats{NumGoroutine: 1, Uptime: 10}, nil

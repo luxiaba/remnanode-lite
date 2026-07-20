@@ -10,32 +10,29 @@ import (
 
 type stubHandlerProvider struct{}
 
+func (stubHandlerProvider) BeginMutation(ctx context.Context) (context.Context, func(), error) {
+	return ctx, func() {}, nil
+}
 func (stubHandlerProvider) InboundTags() []string { return nil }
-func (stubHandlerProvider) CommitUserAdded(xtls.HandlerResult, string, string) bool {
-	return true
-}
-func (stubHandlerProvider) CommitUserRemoved(xtls.HandlerResult, string, string) bool {
-	return true
-}
 func (stubHandlerProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
 	return nil, nil
 }
-func (stubHandlerProvider) HandlerRemoveUser(context.Context, string, string) xtls.HandlerResult {
+func (stubHandlerProvider) HandlerRemoveUser(context.Context, string, string, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: true}
 }
-func (stubHandlerProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32) xtls.HandlerResult {
+func (stubHandlerProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: false, Message: "offline"}
 }
-func (stubHandlerProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (stubHandlerProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: false}
 }
-func (stubHandlerProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32) xtls.HandlerResult {
+func (stubHandlerProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: false}
 }
-func (stubHandlerProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (stubHandlerProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: false}
 }
-func (stubHandlerProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32) xtls.HandlerResult {
+func (stubHandlerProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
 	return xtls.HandlerResult{OK: false}
 }
 func (stubHandlerProvider) HandlerGetInboundUsers(context.Context, string) ([]xtls.InboundUser, xtls.HandlerResult) {

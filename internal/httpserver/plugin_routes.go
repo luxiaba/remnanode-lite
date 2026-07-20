@@ -9,7 +9,7 @@ import (
 
 func (s *Server) handlePluginSync(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.PluginSyncRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 
@@ -35,7 +35,7 @@ func (s *Server) handlePluginCollectReports(w http.ResponseWriter) {
 
 func (s *Server) handlePluginBlockIPs(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.BlockIPsRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 	items := make([]plugin.BlockIP, 0, len(*request.IPs))
@@ -47,7 +47,7 @@ func (s *Server) handlePluginBlockIPs(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePluginUnblockIPs(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.UnblockIPsRequest
-	if !decodeNodeRequest(w, r, &request) {
+	if !s.decodeNodeRequest(w, r, &request) {
 		return
 	}
 	writeNodeResponse(w, s.pluginService.UnblockIPsContext(r.Context(), *request.IPs))
