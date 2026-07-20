@@ -3,7 +3,7 @@
 # shellcheck source-path=SCRIPTDIR
 set -Eeuo pipefail
 
-VERSION="2.8.0-rnl.1"
+VERSION="2.8.0"
 PREFIX="/usr/local/bin"
 ETC_DIR="/etc/remnanode"
 DATA_DIR="/var/lib/remnanode"

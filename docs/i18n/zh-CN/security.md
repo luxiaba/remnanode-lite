@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=717029c900d168dab91ea91d5fa3a389d35332c114e9d848d81dc70c17a4fff5 -->
+<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=3c6712d903c3fbfccae1837f2ae2348601323e6157d91cd3516b80ba4b176c5b -->
 
 # 安全策略
 
@@ -22,7 +22,7 @@
 
 ## 支持范围
 
-首个正式 Release 发布前，`edge`、`sha-*` 与 `candidate-sha-*` 都属于候选构建，不承诺长期安全维护。正式发布后：
+安全支持只适用于已经发布的正式版本。`edge`、`sha-*` 与 `candidate-sha-*` 都属于候选构建，不承诺长期安全维护。任何时候都遵循以下策略：
 
 | 版本 | 安全修复策略 |
 | --- | --- |

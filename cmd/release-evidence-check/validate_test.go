@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	projectversion "github.com/luxiaba/remnanode-lite/internal/version"
 )
 
 var (
@@ -29,6 +31,51 @@ type releaseFixture struct {
 	manifest             string
 	candidate            string
 	candidateImageDigest string
+}
+
+func TestReleaseProfileMatchesProjectIdentity(t *testing.T) {
+	if expectedReleaseVersion != projectversion.Version {
+		t.Fatalf("release profile version = %q, project version = %q", expectedReleaseVersion, projectversion.Version)
+	}
+	if expectedOfficialNodeVersion != projectversion.ContractVersion {
+		t.Fatalf("release profile contract = %q, project contract = %q", expectedOfficialNodeVersion, projectversion.ContractVersion)
+	}
+	if expectedReleaseTag != "v"+projectversion.Version {
+		t.Fatalf("release profile tag = %q, want v%s", expectedReleaseTag, projectversion.Version)
+	}
+	if expectedVersionOutput != projectversion.String() {
+		t.Fatalf("release profile version output = %q, want %q", expectedVersionOutput, projectversion.String())
+	}
+	if acceptanceDirectory != "docs/development/acceptance/"+expectedReleaseTag {
+		t.Fatalf("acceptance directory = %q, want versioned directory", acceptanceDirectory)
+	}
+	if releaseNoteRepositoryPath != "docs/releases/"+expectedReleaseTag+".md" {
+		t.Fatalf("release note path = %q, want versioned path", releaseNoteRepositoryPath)
+	}
+}
+
+func TestReleaseFinalizationAllowlistIncludesLocalizedStatusDocuments(t *testing.T) {
+	for _, path := range []string{
+		"README.md",
+		"README.ru.md",
+		"README.zh-CN.md",
+		"docs/development/roadmap.md",
+		"docs/i18n/zh-CN/development/roadmap.md",
+		releaseNoteRepositoryPath,
+	} {
+		if !isAllowedPostCandidatePath(path) {
+			t.Errorf("release finalization path %q is not allowed", path)
+		}
+	}
+	for _, path := range []string{
+		"internal/version/version.go",
+		"docs/i18n/zh-CN/development/release-acceptance.md",
+		acceptanceDirectory + "/raw-output.json",
+	} {
+		if isAllowedPostCandidatePath(path) {
+			t.Errorf("non-finalization path %q is allowed", path)
+		}
+	}
 }
 
 func TestValidateReleaseEvidence(t *testing.T) {
@@ -531,7 +578,7 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 		{
 			name: "post-candidate code rename",
 			mutate: func(fixture *releaseFixture) {
-				destination := "docs/releases/v2.8.0-rnl.1.md"
+				destination := releaseNoteRepositoryPath
 				fixture.git("rm", "--", destination)
 				if err := os.MkdirAll(filepath.Join(fixture.root, filepath.Dir(destination)), 0o755); err != nil {
 					fixture.t.Fatalf("recreate release-note directory: %v", err)
@@ -733,7 +780,7 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	fixture.writeFile("README.md", []byte("# release\n"))
 	fixture.writeFile("CHANGELOG.md", []byte("# changelog\n"))
 	fixture.writeFile("docs/development/roadmap.md", []byte("# roadmap\n"))
-	fixture.writeFile("docs/releases/v2.8.0-rnl.1.md", []byte("# v2.8.0-rnl.1\n"))
+	fixture.writeFile(releaseNoteRepositoryPath, []byte("# "+expectedReleaseTag+"\n"))
 	fixture.commitAll("record release acceptance")
 	return fixture
 }
@@ -1015,7 +1062,7 @@ func (fixture *releaseFixture) makeIndexConflict(path string) {
 func (fixture *releaseFixture) replaceAcceptanceDirectoryWithSymlink() {
 	fixture.t.Helper()
 	original := filepath.Join(fixture.root, filepath.FromSlash(acceptanceDirectory))
-	destination := filepath.Join(fixture.t.TempDir(), "acceptance-v2.8.0-rnl.1")
+	destination := filepath.Join(fixture.t.TempDir(), filepath.Base(acceptanceDirectory))
 	if err := os.Rename(original, destination); err != nil {
 		fixture.t.Fatalf("move acceptance directory: %v", err)
 	}

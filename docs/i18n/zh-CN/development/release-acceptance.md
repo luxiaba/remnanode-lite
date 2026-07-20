@@ -1,11 +1,11 @@
-<!-- translation: locale=zh-CN; source=docs/development/release-acceptance.md; source-sha256=213f5cab0d6fee3a3b4be51c4de5cb1d62a8eb0dc3369f450a509a7991d1a7e8 -->
+<!-- translation: locale=zh-CN; source=docs/development/release-acceptance.md; source-sha256=7f19223ccf4b11ca0cb9b057a487a76329137c5c212e283d51f79df7be9132c0 -->
 # M8 发布验收证据协议
 
 > **翻译说明：** [英文原文](../../../development/release-acceptance.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
 
 [返回开发文档](README.md) · [通用发布流程](../release.md)
 
-本协议定义 `2.8.0-rnl.1` 的机器可校验验收记录。它不替代真实测试；它保证所有结果绑定同一个代码候选，并防止验收后代码漂移。当前尚未冻结候选、未生成 evidence，本文件是协议而不是验收结果。
+本协议定义 `2.8.0` 的机器可校验验收记录。它不替代真实测试；它保证所有结果绑定同一个代码候选，并防止验收后代码漂移。协议本身不代表已经验收；实际状态只能由完整的版本化 evidence 目录和对应正式 Release 共同证明。
 
 这是首个版本线的版本化验收 profile，不是所有未来版本都可直接复用的通用模板。项目版本、官方契约、Panel、rw-core、路由数量、系统和资源策略变化时，必须在普通代码 PR 中同步更新验证器和本协议，再冻结新的候选。
 
@@ -15,14 +15,14 @@
 
 用于验收的 Node 二进制必须由 `scripts/build-release-binaries.sh` 从干净的 `C` 构建。该脚本要求本地工具链精确为 `go1.26.5`，关闭 workspace 与自动工具链漂移，清空会改变产物的 Go 构建选项，并固定 `CGO_ENABLED=0`、架构级别、`-trimpath`、release ldflags 和 `-buildvcs=false`；最终 release gate 会用同一脚本重建两种架构并比较 SHA-256。
 
-验收后只允许修改 README、CHANGELOG、roadmap、`docs/development/acceptance/v2.8.0-rnl.1/` 和 `docs/releases/v2.8.0-rnl.1.md`。验证器要求 `C` 是最终 HEAD 的祖先，逐 commit、逐 parent 检查白名单，并拒绝发布最终化阶段的 merge；修改代码后再 revert 也不能绕过。
+验收后只允许修改根 README 及其中俄译文、CHANGELOG、开发 roadmap 及其中文译文、`docs/development/acceptance/v2.8.0/` 和 `docs/releases/v2.8.0.md`。验证器要求 `C` 是最终 HEAD 的祖先，逐 commit、逐 parent 检查白名单，并拒绝发布最终化阶段的 merge；修改代码后再 revert 也不能绕过。
 
 受保护分支下应先将全部代码通过 PR 合入 `main`，以合入后的 `main` commit 作为 `C`。验收资料从 `C` 创建独立分支，验收期间冻结 `main`；最终资料 PR 必须使用 squash merge，使 `C` 之后恰好产生一个 single-parent、仅包含白名单路径的提交。验证器会同时拒绝零个或多个最终化提交、普通 merge commit 和白名单外变化。
 
 ## 文件布局
 
 ```text
-docs/development/acceptance/v2.8.0-rnl.1/
+docs/development/acceptance/v2.8.0/
   manifest.json
   systemd.json
   openrc.json
@@ -37,7 +37,7 @@ docs/development/acceptance/v2.8.0-rnl.1/
 
 Manifest 固定以下发布边界：
 
-- `releaseVersion=2.8.0-rnl.1`、`releaseTag=v2.8.0-rnl.1`、`decision=pass`。
+- `releaseVersion=2.8.0`、`releaseTag=v2.8.0`、`decision=pass`。
 - `candidateCommit`、`candidateTree`、RFC3339 `acceptedAt`。
 - `candidateImageDigest` 必须是 registry 返回的候选容器 manifest digest，格式严格为 `sha256:` 加 64 位小写十六进制字符。它把验收结论绑定到实际测试的多架构镜像；tag 名称或单个架构镜像的配置/层摘要不能替代该字段。
 - 官方 Node `2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`。
@@ -251,8 +251,8 @@ docker events --filter container=remnanode
 
 ```bash
 go run ./cmd/release-evidence-check \
-  -manifest docs/development/acceptance/v2.8.0-rnl.1/manifest.json \
-  -tag v2.8.0-rnl.1
+  -manifest docs/development/acceptance/v2.8.0/manifest.json \
+  -tag v2.8.0
 ```
 
 `scripts/release-check.sh` 会调用同一验证器，并继续检查 release note、版本、完整 Go 门禁、供应链和 tag 位置。在真实证据尚未生成前，release gate 失败是预期行为。

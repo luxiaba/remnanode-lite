@@ -162,7 +162,7 @@ Changing `Version`, merging into `main`, or building a candidate image does not 
 6. a Release note with the actual compatibility scope and known risks;
 7. successful promotion of that digest to GHCR `latest` and marking the corresponding GitHub Release as Latest.
 
-A version string in the repository may describe a development target. Use actual Git tags, GitHub Releases, and exact GHCR tags to determine what has been published. The current source version is `2.8.0-rnl.1`, and its first formal Release has not yet been published.
+A version string in the repository may describe a development target. Use actual Git tags, GitHub Releases, and exact GHCR tags to determine what has been published. The current source version is `2.8.0`; the source string alone is never publication evidence.
 
 ## Synchronizing an official version
 

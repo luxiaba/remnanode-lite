@@ -6,7 +6,7 @@
 
 This repository maintains an independent Go implementation, codebase, and release history. The official `remnawave/node` project is a behavioral and contract reference, not a Git upstream. The long-term goals, audience, and non-goals are defined in the [project overview](../project.md); this page tracks milestone status and future direction.
 
-The first release line starts at `2.8.0-rnl.1` with these goals:
+The first release line starts at `2.8.0` with these goals:
 
 - Behavioral compatibility with official Node `2.8.0@596f015`.
 - Real integration validation against Panel `2.8.1`.
@@ -60,7 +60,7 @@ The static implementation, CI, candidate-image pipeline, and code-level 512 MiB 
 - **Next:** Evaluate the next official release detected by automation. Pin its source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
-The following are accepted limitations or later enhancements and do not block `2.8.0-rnl.1`:
+The following are accepted limitations or later enhancements and do not block `2.8.0`:
 
 - The installer has no persistent phase journal. Rerun it after `SIGKILL` or power loss; recreate a container deployment.
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
@@ -138,7 +138,7 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Under systemd and OpenRC, verify an independent rw-core process group, normal stop, timeout escalation, and descendant cleanup after natural leader exit. Automatic recovery after the Node or supervisor itself is forcibly killed is not required.
 - Pass Go tests, race tests, vet, static checks, script checks, and multi-platform builds.
 - Complete long-running and fault-recovery tests under the target resource limits.
-- Update the compatibility matrix, risk register, operations documentation, root `CHANGELOG.md`, and `2.8.0-rnl.1` release material.
+- Update the compatibility matrix, risk register, operations documentation, root `CHANGELOG.md`, and `2.8.0` release material.
 - Freeze the code candidate first. Bind every acceptance record to `C` and permit only the finalization allowlist afterward.
 - Validate strict JSON, file digests, Git ancestry, the two architecture-specific Compose runs, and the candidate image manifest digest. See [`release-acceptance.md`](release-acceptance.md).
 

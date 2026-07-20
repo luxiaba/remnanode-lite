@@ -88,7 +88,10 @@ printf '%s\n' "$evidence_summary"
 
 artifact_dir="$(mktemp -d)"
 trap 'rm -rf "$artifact_dir"' EXIT
-REMNANODE_OFFICIAL_SOURCE='' CHECK_ARTIFACT_DIR="$artifact_dir" bash scripts/check.sh
+REMNANODE_DOCS_STRICT_TRANSLATIONS=1 \
+  REMNANODE_OFFICIAL_SOURCE='' \
+  CHECK_ARTIFACT_DIR="$artifact_dir" \
+  bash scripts/check.sh
 go run ./cmd/release-evidence-check \
   -manifest "$manifest" \
   -tag "$release_tag" \

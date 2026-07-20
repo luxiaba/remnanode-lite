@@ -141,7 +141,7 @@ func TestValidateTranslationsAcceptsSupportedLocalesAndRootReadmes(t *testing.T)
 		t.Fatalf("parse problems = %v", parseProblems)
 	}
 
-	problems, warnings := validateTranslations(root, documents)
+	problems, warnings := validateTranslations(root, documents, false)
 	if len(problems) != 0 || len(warnings) != 0 {
 		t.Fatalf("validateTranslations() problems = %v, warnings = %v", problems, warnings)
 	}
@@ -159,12 +159,45 @@ func TestValidateTranslationsTreatsSourceHashMismatchAsWarning(t *testing.T) {
 		t.Fatalf("parse problems = %v", parseProblems)
 	}
 
-	problems, warnings := validateTranslations(root, documents)
+	problems, warnings := validateTranslations(root, documents, false)
 	if len(problems) != 0 {
 		t.Fatalf("validateTranslations() problems = %v", problems)
 	}
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "translation may be stale") {
 		t.Fatalf("validateTranslations() warnings = %v", warnings)
+	}
+}
+
+func TestValidateTranslationsRejectsSourceHashMismatchInStrictMode(t *testing.T) {
+	root := t.TempDir()
+	source := "# Canonical\n"
+	files := map[string]string{
+		"docs/guide.md":         source,
+		"docs/i18n/ru/guide.md": translationTestDocument("ru", "docs/guide.md", strings.Repeat("0", 64), "../../guide.md", "Перевод"),
+	}
+	documents, parseProblems := parseTestDocuments(t, root, files)
+	if len(parseProblems) != 0 {
+		t.Fatalf("parse problems = %v", parseProblems)
+	}
+
+	problems, warnings := validateTranslations(root, documents, true)
+	if len(problems) != 1 || !strings.Contains(problems[0], "translation may be stale") {
+		t.Fatalf("validateTranslations() problems = %v", problems)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("validateTranslations() warnings = %v", warnings)
+	}
+}
+
+func TestStrictTranslationValidation(t *testing.T) {
+	t.Setenv(strictTranslationsEnv, "")
+	if strictTranslationValidation() {
+		t.Fatal("strict translation validation enabled for an empty value")
+	}
+
+	t.Setenv(strictTranslationsEnv, "1")
+	if !strictTranslationValidation() {
+		t.Fatal("strict translation validation not enabled for value 1")
 	}
 }
 
@@ -266,7 +299,7 @@ func TestValidateTranslationsRejectsInvalidContracts(t *testing.T) {
 			if len(parseProblems) != 0 {
 				t.Fatalf("parse problems = %v", parseProblems)
 			}
-			problems, _ := validateTranslations(root, documents)
+			problems, _ := validateTranslations(root, documents, false)
 			if !containsProblem(problems, test.want) {
 				t.Fatalf("validateTranslations() problems = %v, want substring %q", problems, test.want)
 			}

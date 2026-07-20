@@ -11,7 +11,7 @@ This document and `internal/contract` jointly define the project's compatibility
 - Repository: `https://github.com/remnawave/node.git`
 - Version: `2.8.0`
 - Commit: `596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`
-- Panel integration target: `2.8.1`
+- Panel version used for integration acceptance: `2.8.1` (independent of the project version)
 
 Route methods come from the four official controllers. Requests and responses come from Zod schemas under `libs/contract/commands`; application errors come from `libs/contract/constants/errors` and `HttpExceptionFilter`. `internal/contract/official-source-manifest.json` records the SHA-256 of every registered evidence blob and the 26 method/path/controller-decorator entries extracted by tooling.
 

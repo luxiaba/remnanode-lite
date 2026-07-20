@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=b2743b0bdb20f6669bb44970ef7f1feb0ca35348af8bdf3ea02a3adc3ce4c517 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=72cc3d52b2645b57ccdf134d9ef35eea64aaab252892635ac516389a1d7b8004 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > **翻译说明：** [英文原文](../../../development/contract-2.8.0.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
@@ -14,7 +14,7 @@
 - 仓库：`https://github.com/remnawave/node.git`
 - 版本：`2.8.0`
 - 提交：`596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`
-- Panel 集成目标：`2.8.1`
+- 集成验收使用的 Panel 版本：`2.8.1`（与项目版本号相互独立）
 
 路由方法取自四个官方 controller；请求和响应取自 `libs/contract/commands` 下的 Zod schema；应用错误取自 `libs/contract/constants/errors` 和 `HttpExceptionFilter`。`internal/contract/official-source-manifest.json` 记录全部登记证据 blob 的 SHA-256，并保存由工具提取的 26 条 method/path/controller decorator。提取器直接读取上述固定 commit 的原始 Git object，禁用 replace refs，且不读取 index、worktree 或 HEAD；它同时解析 `ROOT`、`REST_API`、controller/route 常量和 NestJS HTTP decorator，从 Git tree 独立枚举 controller/module，并确认 `main.ts` 确实以 `NestFactory.create(AppModule)` 启动、module/controller 使用无 alias 的静态 import、metadata 只包含受支持的明确项、route decorator 归属唯一导出 controller class，且 controller 只由可达 module 注册。内部 controller 的两个路径还必须与同一次 `setGlobalPrefix` 调用的 exclusions 精确对应。条件表达式、spread、未知 dynamic module、复合/别名/qualified decorator 或其它未支持语法会 fail closed，要求升级者先扩展并评审 parser；两套官方路由清单最终必须与本地 Go 契约完全一致。
 

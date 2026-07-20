@@ -47,9 +47,11 @@ func TestStringIncludesBothVersions(t *testing.T) {
 }
 
 func TestReleaseAssetURLValidatesInputs(t *testing.T) {
-	got, err := ReleaseAssetURL("v2.8.0-rnl.1", "arm64")
-	if err != nil || !strings.HasSuffix(got, "/v2.8.0-rnl.1/remnanode-lite_linux_arm64.tar.gz") {
-		t.Fatalf("ReleaseAssetURL() = %q, %v", got, err)
+	for _, tag := range []string{"v2.8.0", "v9.8.7-rnl.3"} {
+		got, err := ReleaseAssetURL(tag, "arm64")
+		if err != nil || !strings.HasSuffix(got, "/"+tag+"/remnanode-lite_linux_arm64.tar.gz") {
+			t.Fatalf("ReleaseAssetURL(%q) = %q, %v", tag, got, err)
+		}
 	}
 	for _, test := range []struct {
 		tag  string

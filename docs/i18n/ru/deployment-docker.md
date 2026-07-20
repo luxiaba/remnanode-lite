@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-docker.md; source-sha256=2802d090182c9c568927852742856d6e7f42557c78d70bd0930603ff43fdda59 -->
+<!-- translation: locale=ru; source=docs/deployment-docker.md; source-sha256=7077eede152cfd5d81c81041095586ed9060f67b88e0a35589fadeeb654b4c9f -->
 # Развёртывание Docker Compose
 
 > English is the only authoritative source. If this translation differs from the [canonical English Docker deployment guide](../../deployment-docker.md), follow the English document.
@@ -255,7 +255,7 @@ docker compose logs --tail=100 remnanode
 
 Откат не зависит от перемещения тега registry. Восстановите для каждого узла записанный предыдущий Compose или digest, выполните `pull` и `up --force-recreate`, затем снова проверьте соединение с Panel и реальный трафик. Пока причина не получила ясного объяснения, не продолжайте обновление нетронутых узлов и не удаляйте предыдущий образ с canary.
 
-В репозитории ещё не зафиксированы завершённые доказательства M8 для первого формального Release. Образы-кандидаты остаются входными данными приёмки, а не разрешением на массовое развёртывание без наблюдения.
+Каждый формальный Release должен содержать в release note ссылку на завершённый manifest приёмки M8. Если такой записи нет, считайте образ входными данными приёмки, а не разрешением на массовое развёртывание без наблюдения.
 
 ## Необязательная схема `.env`
 

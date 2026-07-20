@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=515919eae3b755da327b5859cbf4c5325174a0c178c6c53384ee1030eb205ab5 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=4803d9b11e8b118d4fba089408f1429349f9e687a7e9dd41bdfac800777ea377 -->
 
 <div align="center">
 
@@ -45,9 +45,9 @@ Remnanode Lite 负责接收 Remnawave Panel 的节点指令，管理 rw-core 生
 
 | 项目 | 当前值 |
 | --- | --- |
-| 项目版本 | `2.8.0-rnl.1`，首个正式 Release 尚未发布 |
+| 项目版本 | `2.8.0`；正式可用性以不可变 Git tag 和 GitHub Release 为准 |
 | 官方契约 | `remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b` |
-| Panel 验收目标 | `2.8.1` |
+| 集成验收使用的 Panel 版本 | `2.8.1`；它不决定项目版本号 |
 | rw-core | `v26.6.27` |
 | 架构 | `linux/amd64`、`linux/arm64` |
 | M7 原生工程快照 | Ubuntu 24.04 arm64/systemd；Alpine 3.22 arm64/OpenRC 容器（不是 M8 冻结候选验收） |
@@ -59,7 +59,7 @@ Remnanode Lite 负责接收 Remnawave Panel 的节点指令，管理 rw-core 生
 
 生产推荐 Docker Compose。仓库提供一份完整的[单文件部署样本](deploy/compose.single-file.yaml)，无需源码或 `.env`。
 
-当前首个正式 Release 尚未发布。先从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实存在的 `sha-<40位提交>`，再用同一个提交下载 Compose，保证部署文件和镜像来自完全相同的代码：
+在正式 Release 可用之前，或每次验收新候选时，先从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实存在的 `sha-<40位提交>`，再用同一个提交下载 Compose，保证部署文件和镜像来自完全相同的代码：
 
 ```bash
 (
