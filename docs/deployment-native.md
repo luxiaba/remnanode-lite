@@ -2,22 +2,20 @@
 
 [Back to the documentation index](README.md)
 
-This guide installs Remnanode Lite from GitHub Release binaries on a systemd or OpenRC host. For a very small node that only needs a container runtime, start with [Docker Compose deployment](deployment-docker.md). Native deployment avoids Docker daemon overhead and lets the host service manager own the processes directly.
+This guide installs Remnanode Lite from GitHub Release binaries on a systemd or OpenRC host. Native deployment avoids Docker daemon overhead and lets the host service manager run the Node directly. If Docker is already available, [Docker Compose](deployment-docker.md) remains the simpler option.
 
-The display name is `Remnanode Lite`, and the binary is `remnanode-lite`. The native service name and the repository's unit and init files retain `remnawave-node` to preserve compatibility with existing upgrades, monitoring, and operational commands. This is a stable system interface; it does not imply an upstream code relationship with the official project.
+The binary is `remnanode-lite`. Native packages keep the service name `remnawave-node` so existing upgrade, monitoring, and service-management commands continue to work.
 
 ## Support boundary
 
-Builds and CI cover Linux `amd64` and `arm64`. The currently documented real installation and service-management engineering snapshots are:
+Release binaries are built for Linux `amd64` and `arm64`. The installer supports systemd and OpenRC; the installations recorded during development used:
 
 | Platform | Service manager | Architecture |
 | --- | --- | --- |
 | Ubuntu 24.04 | systemd | arm64 |
 | Alpine 3.22 | OpenRC | arm64 |
 
-CI cross-compiles amd64 and arm64 and runs Linux network-administration tests on an Ubuntu runner. Build availability does not imply runtime acceptance. The `v2.8.0` blocking runtime profile is the canonical Docker Compose smoke on a real `x86_64` (`linux/amd64`) host; `native-systemd-install` and `native-openrc-install`, on either architecture, are deferred and non-blocking. The two rows above remain real engineering snapshots, not a requirement to repeat both init systems or both architectures before releasing `v2.8.0`.
-
-Real `arm64` runtime, a candidate-specific 50k-user load run, a 24-hour soak, fault injection, and rollback injection are also deferred follow-up validation for `v2.8.0`. Missing follow-up evidence must be described as deferred, not passed. Other modern systemd distributions are expected to work but are not a verified baseline. On non-Debian/Ubuntu systems, install the commands required by the scripts in advance.
+CI cross-compiles both architectures and runs Linux network-administration tests on Ubuntu. For `v2.8.0`, the blocking production smoke covers Docker on a real low-memory `linux/amd64` host; native systemd and OpenRC installs, real `arm64` runtime, the 50,000-user load test, 24-hour soak, and fault and rollback injection remain follow-up validation. Test a native installation on your target distribution before rolling it out widely. On systems other than Debian or Ubuntu, install the commands required by the scripts first.
 
 The target tag must have a published GitHub Release containing binary archives, support files, `SHA256SUMS`, and the ASN database. An `edge` or `sha-*` GHCR candidate image cannot substitute for native Release assets.
 
@@ -150,7 +148,7 @@ The installer:
 6. Validates and stores the Secret, and installs the service definition and log helper commands.
 7. Starts the service and confirms that exactly one target Node process owns the configured TCP port.
 
-When `--install` is run again and detects a complete installation, it delegates a transactional upgrade to `upgrade.sh` and synchronizes rw-core, geo, and ASN assets from the target Release by default. Explicit `--upgrade` updates only Node, service, and support files by default, retaining existing core assets; add `--upgrade-xray` to synchronize them. If only a partial installation exists, `--install` follows the installation-recovery path and does not misclassify the incomplete state as a normal upgrade.
+Running `--install` again on a complete installation switches to the transactional upgrade path and refreshes rw-core, geo, and ASN assets from the target Release. An explicit `--upgrade` keeps those assets by default; add `--upgrade-xray` to refresh them. A partial installation follows the recovery path instead of being treated as a normal upgrade.
 
 ## Filesystem layout
 
@@ -245,7 +243,7 @@ The upgrade transaction:
 5. Restores the running state only if the service was running before upgrade or delegated install requires it to start.
 6. Verifies the binary version and commits only after exactly one target process owns the configured port.
 
-An explicit upgrade keeps a previously stopped service stopped. Any validation failure attempts to restore the original files, boot registration, and running state. If rollback is incomplete, the backup remains in the root-only installer directory and the operation exits nonzero.
+An explicit upgrade leaves a previously stopped service stopped. If validation fails, the script tries to restore the original files, boot registration, and service state. If it cannot finish the rollback, it leaves the backup in the root-only installer directory and exits with an error.
 
 Changing `node.env` or the Secret does not require reinstallation. Update the correctly permissioned files as described in the [configuration reference](configuration.md), then restart the service.
 
@@ -288,7 +286,7 @@ Even with `--full`, these system-level items remain:
 - general system packages installed by the installer;
 - the root-only marker directory at `/var/lib/remnanode-installer`.
 
-These retained items support safe reinstallation. They also mean that `--full` does not return the host to a state in which this project was never installed.
+These items are kept to make a later reinstall safer. As a result, `--full` removes all project files but does not return the host to exactly its pre-install state.
 
 ## Ongoing operations
 

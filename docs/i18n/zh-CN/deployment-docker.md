@@ -1,9 +1,8 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=c18e61e5be4a3154332013b3b8e37c72d1370150b20541eede3e98265faf8362 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=b320cff90cf77b20ce5e32d2c0988c60f3f6fb160eb43a7549ef9ad9e3c70e43 -->
 
 # Docker Compose 部署
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../deployment-docker.md)为准。
+> 这是中文译文；涉及部署规则时，请以[英文原文](../../deployment-docker.md)为准。
 
 [返回文档首页](README.md)
 
@@ -57,11 +56,42 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
 
 ## 单文件部署
 
-先按当前发布阶段选择入口。首个正式 Release 尚未发布，或正在做候选验收时，必须把
-部署文件和候选镜像绑定到同一个完整 commit；正式版本发布后则优先使用 Release
-附带且经 `SHA256SUMS` 覆盖的 Compose 资产。
+生产部署应使用与镜像来自同一个 Release 的 Compose 文件。这个文件包含在该 Release 的 `SHA256SUMS` 中，并且已经指向精确版本。
 
-### 首发前或候选验收
+从同一个 GitHub Release 下载单文件资产和摘要：
+
+```bash
+VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
+mkdir -p /opt/remnanode
+cd /opt/remnanode
+curl -fL "${BASE_URL}/docker-compose.single-file.yaml" -o docker-compose.yaml
+curl -fLO "${BASE_URL}/SHA256SUMS"
+grep -F ' docker-compose.single-file.yaml' SHA256SUMS \
+  | sed 's|docker-compose.single-file.yaml|docker-compose.yaml|' \
+  | sha256sum --check --strict
+chmod 600 docker-compose.yaml
+```
+
+示例使用受支持 Linux 主机自带的 GNU `sha256sum`。校验完成后，只需填写 Node 端口和 Secret。只有确定要跟随稳定通道时，才把镜像改为 `latest`。
+
+编辑以下字段：
+
+```yaml
+image: ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
+
+environment:
+  NODE_PORT: "38329"
+  SECRET_KEY: "粘贴 Panel 提供的完整 base64 内容"
+  LOW_MEMORY: "1"
+```
+
+示例版本只用于展示格式，请替换为 GHCR 中真实存在的精确版本、`sha-*` 或 digest。
+
+### 测试候选版本
+
+首个正式版本发布前，或需要测试新候选时，从镜像对应的同一 commit 下载 Compose 模板：
 
 ```bash
 (
@@ -86,42 +116,7 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
 )
 ```
 
-从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实存在的完整 `sha-<40位commit>` 自动候选，或 `candidate-sha-<40位commit>` 手动候选，把完整 tag 填入变量。占位符、缩写 commit 或其他 tag 会在下载前失败。这样 Compose 内容和镜像始终来自同一个提交；开始验收后还必须记录并固定实际 manifest digest，验收完成前不要自行重标记为正式版本。
-
-### 正式版本
-
-从同一个 GitHub Release 下载单文件资产和摘要：
-
-```bash
-VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
-
-mkdir -p /opt/remnanode
-cd /opt/remnanode
-curl -fL "${BASE_URL}/docker-compose.single-file.yaml" -o docker-compose.yaml
-curl -fLO "${BASE_URL}/SHA256SUMS"
-grep -F ' docker-compose.single-file.yaml' SHA256SUMS \
-  | sed 's|docker-compose.single-file.yaml|docker-compose.yaml|' \
-  | sha256sum --check --strict
-chmod 600 docker-compose.yaml
-```
-
-macOS 的 `shasum` 命令不是生产 Linux 部署路径；服务器示例以 GNU `sha256sum` 为准。
-
-Release workflow 会把该资产中的 `image:` 固定为对应的精确版本，而不是 `latest`。下载后只需要填写节点端口和 Secret；希望主动跟随稳定通道时再显式改成 `latest`。
-
-编辑以下字段：
-
-```yaml
-image: ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-
-environment:
-  NODE_PORT: "38329"
-  SECRET_KEY: "粘贴 Panel 提供的完整 base64 内容"
-  LOW_MEMORY: "1"
-```
-
-示例版本只用于展示格式，请替换为 GHCR 中真实存在的精确版本、`sha-*` 或 digest。
+从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择完整的 `sha-<40位commit>` 或 `candidate-sha-<40位commit>` 标签。正式验收时，还要把它解析为 manifest digest，并在 Compose 中使用 `ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>`。候选镜像只是测试构建，不能当作正式版本发布。
 
 ### Secret 写法
 
@@ -161,7 +156,7 @@ ss -H -lnt "sport = :38329"
 
 不要在自动化日志中运行不带 `--quiet` 的 `docker compose config`，它会展开内联 Secret。
 
-容器变为 `healthy` 证明 healthcheck 已在 2 秒内主动连接内部配置 Unix socket，即 Node 正在接受内部连接；它不证明：
+容器显示 `healthy`，表示 Node 已经接受内部 Unix socket 连接。仍需检查 Panel 和真实流量，因为该健康检查不覆盖：
 
 - Panel 能通过网络访问节点；
 - mTLS、JWT 或 Secret 正确；
@@ -192,19 +187,13 @@ docker compose logs --tail=100 remnanode
 
 不需要迁移容器内运行状态或 Xray 配置卷：Panel 会重新下发配置。回滚时恢复备份 Compose 和原官方精确镜像，再执行同样的 pull/recreate；不要删除备份，直到新容器完成观察期。
 
-## 候选镜像的自动化语义
+## 候选镜像
 
-合入 `main` 且命中容器构建输入时，`container` workflow 会构建 `linux/amd64` 和 `linux/arm64` 平台镜像、发布多架构 manifest，并生成 build provenance 与 attestation。两种平台构建成功且 attestation 可验证，仍是正式发布的构建与供应链要求；它们只确认产物身份和构建来源，不代表任一架构已经通过真实运行验收。
+`main` 中影响容器的内容发生变化后，`container` workflow 会构建 `linux/amd64` 和 `linux/arm64` 镜像、发布多架构 manifest，并记录构建来源。全部成功后，它会发布 `sha-<commit>`；如果该提交仍是 `main` 最新提交，还会更新 `edge`。这些检查说明镜像如何构建，但不能证明它运行正常。
 
-上述步骤全部成功后，workflow 才发布按策略不移动的 `sha-<commit>`；只有该提交仍是当前 `main` HEAD 时才移动 `edge`。候选镜像没有 GitHub Release 资产，也不代表正式发布。部署命令见前文“首发前或候选验收”。
+`v2.8.0` 发布前需要在一台真实的小内存 `linux/amd64` 主机上完成至少 600 秒的 smoke test，并使用规范 Compose 和 manifest digest。测试包括容器限制与健康状态、内存和 PID 观测、Panel 连接、rw-core 启动、真实代理流量、OOM 状态和重启次数。`arm64-production-runtime`、原生 systemd/OpenRC 安装、5 万用户负载、24 小时持续运行，以及故障与回滚注入属于后续工作，不阻断 `v2.8.0`。完整要求和记录格式见[发布验收协议](development/release-acceptance.md#docker-生产-smoke)。
 
-## v2.8.0 运行验收范围
-
-`v2.8.0` 唯一阻断性的运行验收范围，有意限定为一台真实的小内存 Linux `x86_64`（`linux/amd64`）主机。使用同一 commit 中规范的 `deploy/compose.single-file.yaml` 运行候选，并把 `image:` 固定到精确的多架构 manifest digest。记录模板 SHA-256 与镜像 digest，然后确认 Compose 校验和启动、上报版本、容器 running/healthy、规范限制下的实际 memory/PID current/peak、Panel 连接、rw-core 启动、具有代表性的真实代理流量、`OOMKilled=false`，以及容器 restart 为零。smoke 必须持续至少 600 秒，并满足[验收协议](development/release-acceptance.md#docker-生产-smoke)中的全部精确宿主、容器限制、health 和 readiness 要求。
-
-`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 和 `fault-and-rollback-injection` 均作为后续验证推迟，不阻断 `v2.8.0` 发布。缺少这些结果时必须写明 deferred，不得写成 passed。
-
-由 operator 确认的运行记录有助于追溯和评审，但不是运行观察确实发生过的不可伪造证明。build attestation 覆盖构建链，不覆盖这些运行声明。Release notes 必须如实说明实际观察范围，不能把任一类 evidence 提升为更强的结论。
+候选镜像没有 GitHub Release 资产，不是正式版本。构建 attestation 说明构建链，运行记录说明运维人员实际观察到的结果，两者不能互相替代。
 
 ## 固定 digest 与验证证明
 
@@ -258,17 +247,17 @@ docker compose logs --tail=100 remnanode
 
 ## 批量上线
 
-批量上线全程使用同一个已验证 manifest digest。`v2.8.0` 是否可发布由前述运行验收范围决定；下面的分阶段流程是上线运维建议，不扩大发布门禁。精确版本 tag 便于阅读，实际下发记录仍应保存 `name@sha256:...`；不要把 `latest` 或 `edge` 直接推送到全部节点。
+批量上线全程使用同一个已验证的 manifest digest，并保留上一 digest 以便回滚。精确版本 tag 更容易阅读，但部署记录仍应保存 `name@sha256:...`。不要把 `latest` 或 `edge` 直接推送到全部节点。
 
 1. 按架构、发行版、地区和主要流量类型划分节点组，并为每台机器记录当前 digest、目标 digest 和回滚 Compose。
-2. 先更新覆盖主要网络环境的少量 canary；异构 fleet 还应覆盖真实 `amd64` 与 `arm64` 节点。至少跨过一个业务高峰，确认 Panel 持续在线、rw-core 成功重同步、真实代理流量正常，且没有 OOM、异常重启、zombie、磁盘或日志持续增长。
+2. 先更新一小组能代表主要网络和架构的 canary。至少跨过一个业务高峰，检查 Panel 连接、rw-core 同步、真实代理流量、内存、重启、进程、磁盘和日志。
 3. 依次扩大到约 `5%`、`25%`、`50%`，最后完成余量。每一阶段都必须结束观察后再继续；单个批次不要大到无法在同一维护窗口内恢复上一 digest。
-4. 每个阶段抽查容器 health、Panel 状态、代理流量、restart/OOM 计数、内存、PID、磁盘和 Xray/nft 错误。部署系统应保存节点与 digest 的对应关系，而不是只记录可移动 tag。
-5. 任一阶段出现无法解释的节点离线、代理失败、反复 Xray 启动失败、OOM、异常重启、zombie、资源越界或同类错误集中增长时，立即停止扩批；先回滚该批次，再保留日志和 digest 关联用于定位。
+4. 每个阶段抽查容器健康、Panel 状态、代理流量、restart/OOM 计数、内存、PID、磁盘和 Xray/nft 错误，并记录每个节点实际使用的 digest。
+5. 如果出现无法解释的节点离线、代理失败、反复 Xray 启动失败、OOM、异常重启、进程卡住、资源越界或同类错误集中增长，立即停止扩批。先回滚该批次，再保留日志和 digest 对应关系用于排查。
 
 回滚不依赖 Registry 移动 tag：恢复每台节点已记录的上一 Compose/digest，执行 `pull` 与 `up --force-recreate`，并重新确认 Panel 与真实流量。问题没有形成明确结论前，不要继续更新尚未触及的节点，也不要清理 canary 上的上一镜像。
 
-Release notes 应链接运行验收记录以便追溯，并列明已测试范围和所有 deferred 项。该记录用于说明发布决策，不代表可以跳过观察直接全量上线；批量部署仍应遵循上述分阶段建议。
+发布验收不能代替分阶段上线。Release notes 应链接验收记录，生产扩批仍需逐阶段观察。
 
 ## `.env` 可选模式
 
@@ -352,4 +341,4 @@ docker image prune
 - 从固定 `ipverse/as-ip-blocks` commit 构建的 compact ASN 数据库；
 - Debian bookworm slim 运行环境、CA 证书和 nftables 依赖。
 
-基础镜像、rw-core 和 ASN 来源固定了 digest 或摘要，但 Debian `apt` 软件包当前未固定到 snapshot 和具体包版本，因此不能宣称字节级完全可复现。每个正式产物应通过 manifest digest、SBOM、provenance 和 attestation 共同识别。
+基础镜像、rw-core 和 ASN 来源都固定了 digest 或摘要。Debian `apt` 软件包没有固定到 package snapshot，因此两次构建不保证字节级完全相同。识别正式产物时，应同时保留 manifest digest、SBOM、provenance 和 attestation。

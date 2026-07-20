@@ -1,15 +1,14 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=7f05ec8445307a5876b795f47e7d131094277501c3e574040a6b558f6c7dc3d5 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=9457ca8b036b5e11a7694e50f667c833ca9f5ee94d8766b38266e8e059f7d150 -->
 
 # 贡献指南
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../../CONTRIBUTING.md)为准。
+> 这是中文译文；涉及贡献规则时，请以[英文原文](../../../CONTRIBUTING.md)为准。
 
-感谢你改进 Remnanode Lite。本项目维护一个面向低资源 Linux 节点的 Go 实现，外部
-行为以固定版本的官方 Remnawave Node 为契约，同时保持独立的代码、架构和发行节奏。
+Remnanode Lite 是面向低资源 Linux 节点的 Remnawave Node 独立 Go 实现。对外行为
+遵循固定版本的官方 Node，代码、架构和发布节奏则由本仓库独立维护。
 
-贡献的首要目标是：行为可证明、状态所有权清晰、资源有界、失败可恢复，并让下一位
-维护者能够理解和验证这次变化。
+提交改动时，请让行为便于验证，也让下一位维护者能够顺畅地读懂设计。新增状态要有
+明确归属，资源消耗要有上限，失败后也要能恢复。
 
 ## 开始之前
 
@@ -26,7 +25,7 @@
 
 ## 分支模型
 
-- `main` 是受保护的发布分支，只接收从 `dev` 提升且已通过代码门禁的候选；该提交合入后才冻结为 M8 发布候选，验收完成后允许发布资料专用分支按发布白名单进入。
+- `main` 是受保护的发布分支。经过测试的 `dev` 提升合入后才成为 M8 候选；验收通过后，发布专用分支只能补充白名单内的发布资料。
 - `dev` 是稳定开发与集成分支，普通功能和修复最终合入这里。
 - 日常工作使用从最新 `dev` 创建的短生命周期主题分支。
 
@@ -181,7 +180,7 @@ netlink、capability 或进程组成功。
 
 ## 文档与变更日志
 
-代码与文档是同一个变更的一部分。以下变化必须同步文档：
+以下内容发生变化时，请在同一个 PR 中更新对应的权威文档：
 
 - 用户可见配置、默认值、资源限制或部署步骤。
 - API、官方契约版本或已知差异。
@@ -277,25 +276,26 @@ Review 重点依次是正确性与契约、状态/并发、资源边界、安全
 
 ## 发布边界
 
-普通贡献完成于合入 `dev`，不负责自行发布。`dev -> main` 提升、候选镜像、正式 tag、
-`latest`、Release 资产和 acceptance evidence 由维护者按[版本策略](versioning.md)
-与[发布流程](release.md)统一处理。
+普通贡献合入 `dev` 后即告完成，不由贡献者自行发布。`dev -> main` 提升、候选镜像、
+正式 tag、`latest`、Release 资产和验收资料都由维护者按[版本策略](versioning.md)
+和[发布流程](release.md)统一处理。
 
-发布门禁要求冻结候选、干净工作树、固定官方源码和当前版本 profile 要求的验收资料。
-不要修改检查以绕过缺失的必需 evidence，也不要将 `edge`、`sha-*` 或
-`candidate-sha-*` 镜像描述为正式版。
+发布文档把 `main` 上冻结的代码候选称为 `C`。M8 验收通过后，只能通过一个 squash
+merge 的最终化 PR 加入白名单内的发布资料，并生成 `F`。Git tag 指向 `F`；容器版本
+tag 则提升从 `C` 构建且已经验收的 manifest。候选 tag 和 commit-SHA 镜像都不是正式版。
 
-`v2.8.0` 的 M8 门禁要求冻结镜像 digest 在正式发布前通过生产 `amd64` 主机上的
-`docker-production-smoke-v1`。阻塞性记录覆盖生产 Compose 模板、预期版本、
-真实 Panel 连接、真实代理流量、cgroup 内存/PID 观测、容器持续运行且健康、无 OOM
-kill 与 restart 都为零。
-`arm64` 运行、`native-systemd-install`、`native-openrc-install`、当前候选
-50,000 用户负载、24 小时 soak、
-故障/回滚注入均明确延期且不阻塞发布，并须如实披露。
+发布门禁要求干净工作树、固定官方源码、冻结候选，以及当前版本 profile 规定的证据。
+不要为了绕过缺失证据而放宽检查，也不要把 `edge`、`sha-*` 或
+`candidate-sha-*` 描述为正式版。
 
-由 operator 签注的运行观测是可追责的审计声明。校验可以把记录绑定到候选 commit 与
-digest，并检查 schema 和内部一致性，但不能让底层观测变得不可伪造，也无法独立证明
-运行确实发生。不得编造或夸大此类 evidence。
+`v2.8.0` 发布前，冻结镜像的 digest 必须在生产 `amd64` 主机上通过
+`docker-production-smoke-v1`。记录要覆盖生产 Compose 模板、预期版本、真实 Panel
+连接与代理流量、cgroup 内存和 PID 观测、持续健康运行的容器、无 OOM kill，以及零
+restart。`arm64` 运行、`native-systemd-install`、`native-openrc-install`、当前候选的
+50,000 用户负载、24 小时 soak 和故障/回滚注入都已延期，不阻塞发布，也必须如实披露。
+
+运行观测由操作人员签字确认。校验器能把记录绑定到候选 commit 和 digest，并检查
+schema 与内部一致性，但无法独立证明实际运行确实发生。不得编造或夸大此类证据。
 
 ## 许可证
 

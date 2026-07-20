@@ -2,10 +2,9 @@
 
 [Documentation home](README.md) | [Versioning model](versioning.md)
 
-This guide defines the long-term release process for maintainers, from routine
-development and candidate freezing through real-environment acceptance, GitHub
-Releases, and GHCR image publication. It is the repository's authoritative
-release procedure, not a one-time checklist for a particular version.
+This is the maintainer's release guide. It covers the path from routine
+development to a frozen candidate, real-environment acceptance, a GitHub
+Release, and the final GHCR tags. The same process applies to every version.
 
 See [`versioning.md`](versioning.md) for the normative version and image-channel
 rules. This guide explains how to turn those rules into a verifiable release.
@@ -124,9 +123,9 @@ git push -u origin chore/prepare-next-release
 # Merge it after CI succeeds and the review is complete.
 ```
 
-Even with a single maintainer, use the same pull-request path so that changes,
-CI conclusions, and review context on `dev` remain traceable. Permission to
-push directly is not the normal development entry point.
+Use this pull-request path even when one person maintains the repository. It
+keeps the change, CI result, and review context together on `dev`; direct pushes
+are not part of the normal release path.
 
 Before release, update all version metadata on `dev`. Define the intended
 project version as:
@@ -218,14 +217,12 @@ gh attestation verify \
   --deny-self-hosted-runners
 ```
 
-A manual run of the candidate workflow from `main` publishes only the
-policy-immutable `candidate-sha-${C}` alias. It does not overwrite an automatic
-`sha-${C}` created by a push. This is a discovery alias for manually requested
-candidates, and its digest is not guaranteed to match the automatic
-candidate's digest. Either candidate may enter acceptance, but the same full
-commit and manifest digest must remain fixed from the start of acceptance
-through final publication. The final Release verifies the chosen digest and
-its attestation directly; it does not depend on which candidate alias was used.
+A manual candidate run from `main` publishes the policy-immutable
+`candidate-sha-${C}` tag without overwriting an automatic `sha-${C}`. The two
+tags may resolve to different digests even though they share a source commit.
+Either image may enter acceptance, but its full commit and manifest digest must
+remain fixed through publication. The final release verifies that digest and
+its attestation directly, regardless of which tag first exposed it.
 
 The `docker-production-smoke-v1` profile must use
 [`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml) from
@@ -287,22 +284,22 @@ docs/development/acceptance/v${VERSION}/
   docker-smoke.json
 ```
 
-The current `cmd/release-evidence-check` pins schema version 2, the acceptance
-profile, version, official commit, Panel, rw-core, exact deferred list, smoke
-thresholds, and signoff identity. For another project or contract version,
-update and test its profile in a normal code pull request before freezing
-`C`. Never loosen it ad hoc in the tag workflow, and never rename and reuse
-evidence from an older release.
+`cmd/release-evidence-check` pins schema version 2, the acceptance profile,
+version, official commit, Panel, rw-core, deferred list, smoke thresholds, and
+signoff identity. A later project or contract version must update and test its
+profile in a normal code pull request before `C` is frozen. Do not relax the
+profile in the tag workflow or reuse evidence from an older release.
 
-`manifest.json` records `C`, the candidate tree, `CANDIDATE_DIGEST`, both
-Node binary hashes, project/tag/contract identities, deferred validation,
-risks, and the complete-file SHA-256 of `docker-smoke.json`. The smoke record
-binds the canonical Compose blob in `C`, the same image digest, the amd64 Node
-binary, actual limits and observations, Panel/traffic results, a sanitized raw
-bundle digest, and operator signoff. It must not record final commit `F`,
-which does not exist yet. Never commit a Secret Key, JWT, CA, certificate,
-private key, IP address, hostname, Panel URL, raw response body, or
-reconstructable user data.
+`manifest.json` records `C`, its tree, `CANDIDATE_DIGEST`, both Node binary
+hashes, the project/tag/contract identities, deferred validation, risks, and the
+SHA-256 of the complete `docker-smoke.json` file. The smoke record binds the
+canonical Compose blob in `C` to the same image digest, the amd64 Node binary,
+the observed limits and resource use, Panel and traffic results, the sanitized
+raw-bundle digest, and operator signoff.
+
+Do not put `F` in the manifest; it does not exist yet. Never commit a Secret
+Key, JWT, CA, certificate, private key, IP address, hostname, Panel URL, raw
+response body, or data that could identify a user.
 
 ## 7. Commit Release Material under Protected `main`
 
@@ -342,8 +339,8 @@ git commit -m "docs(release): record v${VERSION} acceptance"
 git push -u origin "release/v${VERSION}-docs"
 ```
 
-Open a pull request from this branch to `main`. One constraint is mandatory:
-**the release-material pull request must use squash merge**.
+Open a pull request from this branch to `main` and merge it with **squash
+merge**. Other merge methods do not satisfy the release gate.
 
 The evidence validator examines every commit in `C..HEAD` and rejects:
 
@@ -405,11 +402,11 @@ separately from runtime-validated architectures. Acceptance results must name
 [Acceptance manifest](../development/acceptance/v${VERSION}/manifest.json)
 ```
 
-Release notes must not embed their own commit `F`, because that would require an
-impossible self-referential Git SHA. After publication, the final tag points to
-`F`; resolve it with `git rev-list -n 1 v${VERSION}` or the target commit of the
-GitHub Release. Do not replace an audit conclusion in Known Risks with a vague
-"none." Use one line per deferred token in this machine-checkable form:
+A Release note cannot contain its own commit `F`: that SHA does not exist until
+the note has been committed. After publication, resolve `F` from
+`git rev-list -n 1 v${VERSION}` or from the GitHub Release target. The Known
+Risks section must list every deferred check instead of saying only "none." Use
+one line per token in this machine-checkable form:
 
 ```markdown
 - `arm64-production-runtime`: deferred; not validated by `docker-production-smoke-v1`.
@@ -501,21 +498,18 @@ When [`.github/workflows/release.yml`](../.github/workflows/release.yml) receive
    ghcr.io/luxiaba/remnanode-lite:latest
    ```
 
-The final image's build provenance and OCI revision refer to candidate code
-commit `C`. The Git tag and GitHub Release refer to final commit `F`, which adds
-only release material to `C`. The acceptance manifest and Release notes record
-`C` and the digest, while the Git tag uniquely resolves `F`; commit-bound files
-cannot self-reference an `F` that has not yet been created. Never describe the
-exact-version image as a separate image rebuilt from `F`.
+The image provenance and OCI revision refer to candidate commit `C`. The Git tag
+and GitHub Release refer to `F`, which adds only release material. The
+acceptance manifest and Release notes record `C` and the digest; the Git tag
+identifies `F`. The exact-version image is the accepted image from `C`, not a
+second image rebuilt from `F`.
 
-Exact-version publication follows a "create if absent; otherwise require the
-same digest" rule. Re-running the complete workflow cannot move it to different
-content. Promoting `latest` only moves the floating tag and never rebuilds the
-image. The promotion job must independently fetch `origin/main` again and
-verify its HEAD; it must not rely solely on a check completed by an earlier
-job. An old tag must never update GHCR `latest` or GitHub's Latest Release. The
-release workflow uses a repository-wide concurrency group so two final
-releases cannot race to write registry state.
+Exact-version publication creates the tag when absent and otherwise requires
+the same digest, so a rerun cannot replace its content. Promoting `latest` moves
+only that floating tag. Before doing so, the promotion job fetches
+`origin/main` again and checks its HEAD; an old tag cannot update GHCR `latest`
+or GitHub's Latest Release. A repository-wide concurrency group prevents two
+releases from racing to update the registry.
 
 Both plain `X.Y.Z` and `X.Y.Z-rnl.N` are stable Releases after passing the same
 final gates, and both are eligible for automatic promotion to `latest`. Do not
@@ -588,11 +582,10 @@ curl -fLO "$BASE_URL/remnanode.env.example"
 sha256sum --check SHA256SUMS
 ```
 
-`SHA256SUMS` proves that the downloaded files match the files produced by the
-workflow. The container's GitHub attestation independently proves its build
-origin. Unless the Release workflow later adds file-level artifact
-attestations, do not describe the container attestation as proof for the binary
-archives.
+`SHA256SUMS` checks that the downloads match the files produced by the workflow.
+The GitHub attestation covers the container build only; it does not attest the
+binary archives unless the release workflow later adds file-level
+attestations.
 
 ## 12. Partial Failures and Recovery
 
@@ -672,9 +665,9 @@ For a new official version:
 6. Publish a plain `X.Y.Z` only after same-version official alignment is
    complete.
 
-The project's own maintenance plan determines project-version progression. An
-official Release changes the compatibility work input, but cannot automatically
-determine the next `rnl.N`.
+The project's maintenance plan still determines its next version. A new
+official Release starts compatibility work; it does not choose the next
+`rnl.N` automatically.
 
 ## 15. Final Checklist
 

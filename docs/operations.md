@@ -2,7 +2,7 @@
 
 [Back to the documentation index](README.md)
 
-This guide is for deployed nodes. It explains how to distinguish Node, Panel, and rw-core state; inspect bounded logs; update or roll back safely; and diagnose common failures.
+This guide covers the day-to-day work of running a node: checking its state, reading logs, updating or rolling back, and finding the cause of common failures.
 
 ## Runtime state model
 
@@ -41,7 +41,7 @@ Replace `38329` with the configured `NODE_PORT`. The Compose healthcheck runs th
 remnanode-lite healthcheck
 ```
 
-The command actively connects to the Unix socket at `INTERNAL_SOCKET_PATH` with a two-second timeout. It proves that the Node is accepting internal connections rather than merely checking whether a socket file exists. It does not validate the external Panel-to-Node network path, mTLS/JWT, or Panel registration. If the container is healthy while the Panel reports it offline, continue with the port, firewall, Secret, and Panel checks below.
+The command connects to the Unix socket at `INTERNAL_SOCKET_PATH` with a two-second timeout. This shows that the Node is accepting internal connections, not just that the socket file exists. It does not test the Panel network path, mTLS/JWT, or registration. If Compose reports `healthy` while the Panel shows the node offline, check the port, firewall, Secret, and Panel settings below.
 
 ### systemd
 
@@ -91,7 +91,9 @@ Display the argument summary:
 remnanode-lite --help
 ```
 
-Do not manually start a second no-argument instance inside a running production container. Process and nftables ownership assume one daemon instance. `kill-sockets` is not a routine health command either: the underlying operation matches the local **or** remote address across the entire network namespace, without filtering by PID or container ownership. Supplying a host-local IP can close connections owned by unrelated processes. Run it only on an isolated node and only for an address already confirmed not to be local.
+Do not start a second daemon inside a running production container; process and nftables ownership assume one instance.
+
+`kill-sockets` is an administrative tool, not a health check. It matches the local **or** remote address across the whole network namespace and does not filter by PID or container. A host-local address can therefore close unrelated connections. Use it only on an isolated node and only after confirming that the address is not local.
 
 ## Logs
 
@@ -136,9 +138,9 @@ remnanode-xlogs
 remnanode-xerrors
 ```
 
-For each rw-core stream, the current file and `.1` file are each limited to 4 MiB. The steady-state budget for both streams is 16 MiB; during rotation, two fixed `.tmp` files can add approximately 8 MiB.
+Each rw-core stream keeps a current file and one `.1` file, both limited to 4 MiB. Temporary rotation files can briefly add about 8 MiB beyond the normal 16 MiB total.
 
-Docker places `/var/log/remnanode` on a 28 MiB tmpfs, without a log volume. Recreating the container clears it and does not consume persistent disk. OpenRC additionally writes `openrc.log` and `openrc.err.log`. They are checked every 10 seconds and copy-truncated at a 4 MiB threshold. A current file can exceed the threshold between checks, so this is not a strict byte-level hard cap.
+Docker stores `/var/log/remnanode` on a 28 MiB tmpfs, so recreating the container clears the logs without using persistent disk. OpenRC also writes `openrc.log` and `openrc.err.log`; it checks them every 10 seconds and copy-truncates at 4 MiB. A file may grow slightly past that threshold between checks.
 
 ## Start, stop, and recreate
 

@@ -1,8 +1,8 @@
 # Security Policy
 
-This document defines how to report vulnerabilities in Remnanode Lite, which
-releases receive security support, and the trust boundaries operators must
-understand. For deployment hardening and implementation details, see
+Use this policy to report a vulnerability, check which releases receive
+security fixes, and understand the privileges a node requires. For deployment
+hardening and implementation details, see
 [Architecture](docs/architecture.md) and [Operations](docs/operations.md).
 
 ## Reporting a Vulnerability
@@ -30,9 +30,9 @@ other copies.
 
 ## Supported Versions
 
-Security support applies only to published formal releases. `edge`, `sha-*`,
-and `candidate-sha-*` are candidate builds and carry no long-term security
-maintenance commitment. At any point, support follows this policy:
+Only published releases receive security support. `edge`, `sha-*`, and
+`candidate-sha-*` are candidate builds without a long-term maintenance
+commitment. The standing policy is:
 
 | Version | Security support |
 | --- | --- |
@@ -112,10 +112,10 @@ The repository currently applies these controls:
 - Release binaries, the Compose asset, and data assets are covered by
   `SHA256SUMS`.
 
-These controls do not make builds byte-for-byte reproducible. Debian packages
-installed by the Dockerfile are not yet pinned to a snapshot and exact package
-versions. Identify a final artifact by its registry manifest digest, SBOM,
-provenance, and attestation together; do not trust a tag name alone.
+These controls do not make builds byte-for-byte reproducible. The Debian
+packages installed by the Dockerfile are not yet pinned to a snapshot and exact
+versions. For a final image, check the registry manifest digest together with
+its SBOM, provenance, and attestation instead of trusting the tag alone.
 
 Repository CI is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 The root [`CHANGELOG.md`](CHANGELOG.md) records user-visible release changes.
@@ -135,12 +135,12 @@ posture or release status.
 - Own only this project's rw-core process, internal sockets, and fixed nftables
   tables. Do not take over the host's general firewall policy.
 - Treat connection destruction as a host-network operation. It scans the host
-  network namespace for TCP connections matching a target IP and may close a
-  connection owned by another process when that process uses the same IP.
-  Production nodes should therefore be dedicated network execution
-  environments. The Panel path filters local and special addresses, but the
-  administrative `remnanode-lite kill-sockets` command calls the kernel adapter
-  directly and does not provide that business-layer protection.
+  namespace for connected TCP sockets whose local or remote address equals the
+  target IP, without filtering by PID, and may close another process's socket.
+  Production nodes should therefore be dedicated to this workload. Requests
+  from Panel filter local and special addresses; the administrative
+  `remnanode-lite kill-sockets` command calls the kernel adapter directly and
+  bypasses that application-level filter.
 - Keep release acceptance data sanitized. Evidence and raw capture bundles must
   not contain data from which users or production environments can be
   reconstructed.

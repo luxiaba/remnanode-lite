@@ -2,7 +2,7 @@
 
 [Back to the documentation index](README.md)
 
-This reference describes where Remnanode Lite reads configuration, how precedence works, and what each setting actually controls. Node runtime settings, Docker Compose interpolation, and installer options are separate configuration surfaces. Similar names do not imply that the same program consumes them.
+This page covers every supported setting and where it is read. Node settings, Docker Compose variables, and installer options belong to different parts of the system, even when their names look similar.
 
 ## Sources and precedence
 
@@ -12,9 +12,9 @@ At startup, the Node selects a configuration file in this order:
 2. `/etc/remnanode/node.env`, if it exists.
 3. `.env` in the current working directory.
 
-The file is read first. Known, non-empty values from the process environment then override file values. An empty environment variable does not clear a file value. A non-empty `SECRET_KEY` takes precedence over `SECRET_KEY_FILE`.
+The Node reads the file first, then applies known, non-empty values from the process environment. An empty environment variable does not clear a value from the file. If both Secret settings are present, `SECRET_KEY` takes precedence over `SECRET_KEY_FILE`.
 
-systemd and OpenRC always set `REMNANODE_ENV=/etc/remnanode/node.env`, but they do not source or export the complete file. The Node parses it as a restricted data file, so unknown keys and the Secret are not automatically copied into the process environment. Docker Compose instead passes the selected runtime variables directly into the container.
+systemd and OpenRC point the Node to `/etc/remnanode/node.env` through `REMNANODE_ENV`. They do not source the file or export all of its contents. The Node parses it as data, which keeps unknown keys and the Secret out of the process environment. Docker Compose passes the selected runtime variables directly to the container instead.
 
 Restart the Node or recreate the container after changing configuration. Runtime configuration reload is not supported.
 
@@ -190,9 +190,9 @@ The shell scripts consume the following variables; they are not daemon runtime s
 
 A custom core still uses geo data from the selected rw-core Release, then replaces the core binary with the verified custom binary. Every custom URL must have a corresponding SHA-256; a missing digest fails before any target path is written.
 
-Entry-point semantics are intentionally different. Re-running `install-node*.sh --install` on a complete installation synchronizes rw-core, geo, and ASN assets from the target Release by default. Explicit `--upgrade` and direct `upgrade.sh` runs preserve those assets unless `--upgrade-xray` or `RNL_UPGRADE_XRAY=1` is supplied.
+The install and upgrade paths behave differently on purpose. Running `install-node*.sh --install` again on a complete installation refreshes rw-core, geo, and ASN assets from the target Release. An explicit `--upgrade`, or a direct `upgrade.sh` run, keeps the installed assets unless `--upgrade-xray` or `RNL_UPGRADE_XRAY=1` is set.
 
-## Version configuration is not version implementation
+## Version overrides
 
 The project version, official contract version, and rw-core version are separate concepts:
 

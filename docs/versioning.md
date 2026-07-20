@@ -2,7 +2,9 @@
 
 [Back to the documentation index](README.md)
 
-Remnanode Lite has its own release cadence, an official Node contract baseline, a Panel integration target, and an rw-core runtime version. These dimensions change independently and must not be collapsed into one ambiguous "current version."
+Remnanode Lite tracks four versions: the project release, the official Node
+contract, the Panel used for integration testing, and the bundled rw-core. They
+do not always move together, so a single "current version" would be ambiguous.
 
 This document is the authoritative naming and image-channel policy. The operational procedure is defined in the [Release process](release.md).
 
@@ -81,12 +83,16 @@ Git tag:       v2.8.1-rnl.9
 Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.1-rnl.9
 ```
 
-Neither may be rewritten under project policy, but they identify different objects:
+Project policy makes both tags immutable, but they identify different objects:
 
 - The formal Git tag points to final Release-record commit `F`, which is the current `main` head at publication.
 - The exact image tag points to the accepted manifest digest built from frozen candidate commit `C`.
 
-The validator requires `F` to contain exactly one allowed Release-document commit after `C`. The Release workflow refuses tags from `dev`, a temporary branch, or a stale `main` commit, and it does not rebuild a second container from `F`. The acceptance manifest and Release note bind the image digest to `C`; the Git tag resolves `F`.
+The validator requires exactly one single-parent release-document commit between
+`C` and `F`.
+The release workflow accepts only the current `main` head and does not rebuild
+the container from `F`. The acceptance manifest and Release note bind the image
+digest to `C`; the Git tag identifies `F`.
 
 ## Image channels
 
@@ -100,7 +106,10 @@ The validator requires `F` to contain exactly one allowed Release-document commi
 | `latest` | Moving | Most recent formal Release that completed the stable workflow | Opt-in tracking of the recommended stable build |
 | `name@sha256:...` | Content addressed | Registry manifest digest | Strongest production pin and supply-chain verification |
 
-A manual run on `main` publishes only `candidate-sha-<commit>` and never overwrites an automatic `sha-<commit>`. Both may represent builds from the same source commit, but a manual rebuild is not guaranteed to have the same manifest digest as an earlier build. The tag is only a discovery alias. The accepted commit and the exact manifest digest are the canonical identities used for acceptance and promotion.
+A manual run on `main` publishes `candidate-sha-<commit>` without overwriting the
+automatic `sha-<commit>`. The two builds may come from the same source commit
+and still have different manifest digests. Treat either tag as a way to find a
+candidate; acceptance and promotion use the source commit and exact digest.
 
 ### Meaning of `latest`
 
@@ -148,7 +157,11 @@ This is suitable only when operators read the Release note and deliberately pull
 
 ### Candidate acceptance
 
-Automatic server acceptance normally starts from a complete `sha-<40-character-commit>` tag. Use `candidate-sha-<40-character-commit>` for a manual rebuild. Before testing, resolve the selected alias to its manifest digest. Run the deployment, record evidence, and perform formal promotion against that same digest, while obtaining the deployment file from the same commit. Do not record acceptance against `edge`, because its meaning changes with a later `main` build.
+Acceptance normally starts with `sha-<40-character-commit>`, or
+`candidate-sha-<40-character-commit>` for a manual rebuild. Resolve the tag to a
+manifest digest before testing, use deployment files from the same commit, and
+keep that digest fixed through evidence collection and promotion. Do not accept
+`edge`; a later `main` build can move it.
 
 ## Publication and stability
 
@@ -162,7 +175,9 @@ Changing `Version`, merging into `main`, or building a candidate image does not 
 6. a Release note with the actual compatibility scope and known risks;
 7. successful promotion of that digest to GHCR `latest` and marking the corresponding GitHub Release as Latest.
 
-A version string in the repository may describe a development target. Use actual Git tags, GitHub Releases, and exact GHCR tags to determine what has been published. The current source version is `2.8.0`; the source string alone is never publication evidence.
+A version string in the repository may be only a development target. Check the
+Git tag, GitHub Release, and exact GHCR tag to see whether it has been published.
+The source currently says `2.8.0`, but that string alone is not a release.
 
 ## Synchronizing an official version
 
@@ -199,4 +214,7 @@ Every formal Release note must record at least:
 - known differences and rollback procedure;
 - image manifest digest and verification command.
 
-The runtime `NODE_CONTRACT_VERSION` override exists only for controlled diagnostics or emergency compatibility experiments. It does not change the implemented behavior, source evidence, binary identity, or Release claim and must never be used to manufacture a compatibility statement.
+The `NODE_CONTRACT_VERSION` override is for controlled diagnostics and emergency
+compatibility tests only. It changes none of the implemented behavior, source
+evidence, binary identity, or Release claims and must never be used to claim
+compatibility that the code has not earned.

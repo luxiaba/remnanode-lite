@@ -2,20 +2,16 @@
 
 [Back to development documentation](README.md) | [General release process](../release.md)
 
-This document defines schema version 2 and the
-`docker-production-smoke-v1` acceptance profile used to accept `v2.8.0`. It is
-a version-specific release gate, not a reusable
-claim that every packaged platform or deployment mode has completed production
-runtime validation.
+This is the version-specific acceptance protocol for `v2.8.0`. It defines
+schema version 2 and the `docker-production-smoke-v1` profile; it does not claim
+that every packaged platform or deployment method has run in production.
 
-The profile keeps the release decision bound to one frozen source candidate,
-one attested multi-architecture image digest, and one real low-memory Docker
-smoke on native amd64/x86_64. Its runtime observations are attested by the
-Release Owner. The validator can check JSON structure, Git ancestry, hashes,
-artifact closure, measured thresholds, and the operator signoff, but it cannot
-independently prove that a reported Panel session or traffic observation
-occurred. The evidence is an auditable, candidate-bound record, not an
-unforgeable proof.
+Acceptance is tied to one frozen source candidate, one attested
+multi-architecture image digest, and one real low-memory Docker smoke on native
+amd64/x86_64. The Release Owner signs off the runtime observations. The
+validator checks the record, Git history, hashes, artifacts, thresholds, and
+signoff, but cannot independently prove that the reported Panel session or
+traffic occurred. This makes the evidence auditable, not unforgeable.
 
 ## Candidate freeze
 
@@ -157,12 +153,11 @@ the image reference. The image must be pinned as
 template's resource, capability, filesystem, init, healthcheck, or logging
 settings.
 
-The final inspection must show that the same container has run for at least
-600 seconds: the evidence `startedAt` must exactly equal the container's
-Docker `.State.StartedAt`, and `finishedAt - startedAt` must be at least 600
-seconds. A previous run with
-`health=none`, a movable image tag, a non-canonical Compose file, or a
-different candidate does not satisfy this profile.
+The final inspection must show that the same container ran for at least 600
+seconds. Evidence `startedAt` must exactly match Docker `.State.StartedAt`, and
+`finishedAt - startedAt` must be at least 600 seconds. A previous run with
+`health=none`, a movable image tag, a non-canonical Compose file, or a different
+candidate does not satisfy this profile.
 
 `docker-smoke.json` records:
 
@@ -326,15 +321,16 @@ The normative evidence shape is:
 }
 ```
 
-Record the container fields from the final Docker state; do not copy expected
-values from the Compose source. Normalize Docker's nanosecond healthcheck
-durations to seconds, parse `.HostConfig.Tmpfs` into the exact mount entries
-above, and retain only a sanitized, allowlisted projection of the inspected
-fields in the raw bundle. Never retain the complete `docker inspect` document
-or `.Config.Env`, because an inline deployment exposes `SECRET_KEY` there.
+Read container fields from the final Docker state instead of copying expected
+values from Compose. Convert Docker's nanosecond healthcheck durations to
+seconds, parse `.HostConfig.Tmpfs` into the exact mounts above, and keep only the
+allowlisted fields in the sanitized raw bundle. Never retain the complete
+`docker inspect` document or `.Config.Env`; an inline deployment exposes
+`SECRET_KEY` there.
+
 Read `initProcess` from PID 1 inside the container. The container ID,
-digest-pinned `.Config.Image`, and `.State.StartedAt` jointly identify the
-container observed through the complete 600-second window.
+digest-pinned `.Config.Image`, and `.State.StartedAt` together identify the
+container observed for the full 600-second window.
 
 ## Evidence and data boundaries
 
@@ -347,11 +343,10 @@ restricted file descriptor or a local `0600` file.
 
 The committed JSON and retained raw bundle must not contain a Secret Key, JWT,
 CA, client certificate, private key, IP address, hostname, Panel URL, raw
-request or response, or reversible user data. The bundle digest allows a
-reviewer to bind a sanitized collection to the signoff; it does not make the
-operator's account cryptographically self-proving. Build the bundle from
-explicitly selected fields; redacting a complete inspect dump after collection
-is not an acceptable substitute.
+request or response, or reversible user data. Its digest binds the sanitized
+bundle to the signoff but does not prove the operator's observations. Build the
+bundle from an allowlist of fields; collecting a complete inspect dump and
+redacting it later is not acceptable.
 
 ## Validation
 

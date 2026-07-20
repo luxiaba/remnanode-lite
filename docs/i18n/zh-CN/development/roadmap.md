@@ -1,13 +1,13 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=1e4ec24054b170f125b0b4a925c7eaa7f32069d958eaa06aa8b5c36d367d37fe -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=936241caa3457807958e09f1f347995823fba946bb821bf94fcaf277d45ec7f9 -->
 # Remnanode Lite 路线图
 
-> **翻译说明：** [英文原文](../../../development/roadmap.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
+> 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
 
 [返回开发文档](README.md) · [项目说明](../project.md) · [版本模型](../versioning.md)
 
 ## 项目目标
 
-本仓库维护独立 Go 实现、代码基线和发布历史。官方 `remnawave/node` 只作为行为与契约兼容参考，不是 Git 上游。长期目标、受众和非目标以[项目说明](../project.md)为准；本页只记录阶段状态和后续方向。
+本仓库维护一套独立的 Go 实现和自己的发布历史。官方 `remnawave/node` 只作为行为与契约参考，不是 Git 上游。[项目说明](../project.md)定义长期目标、受众和非目标；本页记录里程碑和后续工作。
 
 首个版本线从 `2.8.0` 开始，目标如下：
 
@@ -15,19 +15,19 @@
 - 与 Panel `2.8.1` 完成真实集成验证。
 - 修复已知生命周期、插件、防火墙、契约和安装供应链问题。
 - 在 `512 MiB RAM / 1 vCPU / 2 GB disk` 的 Linux 节点稳定运行。
-- 发布 Linux `amd64` 与 `arm64` 产物；`2.8.0` 的运行期验收范围收敛为生产 `amd64` Docker profile。
+- 提供 Linux `amd64` 与 `arm64` 产物，`2.8.0` 的运行时验收范围限定为生产 `amd64` Docker 方案。
 - 保留 Debian/systemd 与 Alpine/OpenRC 安装路径，原生运行期验收延后到首个版本之后。
 
-项目版本与官方契约版本彼此独立。`X.Y.Z-rnl.N` 是本项目自己的迭代标识，可以提前开发下一条版本线，也可以继续完善某个官方版本；纯 `X.Y.Z` 只有完成对应官方契约对齐后才能发布。官方发布监测只创建同步 Issue，不会自动修改契约或发布。完整规则见[版本模型](../versioning.md)。
+项目版本与官方契约版本彼此独立。`X.Y.Z-rnl.N` 是项目自己的迭代标识，既可以用于提前开发下一条版本线，也可以继续完善已有的官方基线。纯 `X.Y.Z` 只有在对应官方契约完成对齐后才能发布。官方发布监测只会创建同步 Issue，不会自动修改契约或发布任何内容。完整规则见[版本模型](../versioning.md)。
 
 ## 设计原则
 
-1. 官方 Contract 和可观测行为是兼容依据，官方 TypeScript 架构不是照搬对象。
+1. 兼容性以官方契约和外部可观测行为为准，不以复刻官方 TypeScript 架构为目标。
 2. 所有请求必须在产生副作用前完成完整校验。
 3. 外部副作用必须通过可替换接口执行，并返回可传播的错误。
 4. 状态只在外部操作成功后提交；失败必须允许同一请求安全重试。
 5. 所有并发、队列、请求体和缓存都必须有明确上限。
-6. Node 只拥有自己的 rw-core 进程、内部 socket 和 nftables 私有表，不接管宿主机整体防火墙策略；按 IP 执行的 socket destroy 是明确记录的宿主 network namespace 副作用。
+6. Node 只管理自己启动的 rw-core 进程、内部 socket 和 nftables 私有表，不接管整机防火墙。按 IP 执行 socket destroy 可能影响宿主 network namespace，属于必须明确记录的副作用。
 7. `dev` 是稳定开发与集成分支，主题分支通过 PR 和 CI 进入；`main` 是发布分支，只从 `dev` 接收已通过代码门禁的候选。
 8. 候选合入 `main` 后才冻结为 M8 发布候选 `C`；此后不再混入功能修改，真实验收结果必须绑定该 commit。
 
@@ -53,25 +53,25 @@
 | M7 系统与供应链 | 已完成 |
 | M8 发布验收 | 推进中 |
 
-带日期的 M6 50,000 用户测量（2026-07-15）与 M7 init/发行环境快照（2026-07-19）继续作为工程基线保留。它们早于候选 `C`，不是当前 M8 候选的运行期证据；重复这些 profile 已延后，不阻塞 `2.8.0`。
+2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们早于候选 `C`，因此不是当前 M8 候选的运行时证据，也不需要为 `2.8.0` 重新执行。
 
-`2.8.0` 仍未发布，M8 仍在推进中。当前静态实现、CI、候选镜像和代码级 512 MiB 约束已经落地。唯一阻塞验收 profile 是冻结候选上的 `docker-production-smoke-v1`：将 candidate tag 解析为不可变 manifest digest，通过生产 Compose 模板在 `amd64` 运行该 digest，观察真实 Panel 连接与代理流量，并确认容器持续运行且健康、OOM kill 与 restart 都为零。`main` 的 `sha-*` tag 只用于定位候选，本身既不是验收身份也不是正式 Release。
+`2.8.0` 仍未发布，M8 正在推进。实现、CI、候选镜像流水线和代码级 512 MiB 约束已经落地。现在只有一个验收方案会阻塞发布：冻结候选上的 `docker-production-smoke-v1`。运行时先把候选 tag 解析为不可变的 manifest 摘要，再用生产 Compose 模板在 `amd64` 上运行该摘要；期间必须观察到真实 Panel 连接和代理流量，并确认容器持续健康运行，未发生 OOM kill 或重启。`main` 上的 `sha-*` tag 只用于定位候选，既不是验收身份，也不是正式 Release。
 
 ## 当前重点
 
-- **Now**：完成冻结候选的 `amd64` Docker 生产 smoke，记录关闭 M8 所需的真实 Panel、流量、进程状态、内存、OOM 与重启观测。
-- **Next**：根据官方 Release 监测结果评估下一份契约，先固定源码和差分，再决定项目版本线。
-- **Later**：在不牺牲 512 MiB 目标的前提下改进可观测性、自动化升级和更多发行环境验证。
+- **当前**：完成冻结候选的 `amd64` Docker 生产 smoke，记录完成 M8 验收所需的 Panel、流量、进程状态、内存、OOM 和重启观测。
+- **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码和差分，再决定项目版本线。
+- **后续**：在不牺牲 512 MiB 目标的前提下改进可观测性、自动化升级和更多发行环境验证。
 
 以下事项作为已接受限制或后续增强，不阻塞 `2.8.0`：
 
-- `arm64-production-runtime`、`native-systemd-install` 与 `native-openrc-install` 延后执行；
-- 候选级 50,000 用户负载、24 小时 soak 以及故障/回滚注入作为扩展验证延后执行；
-- installer 不实现持久 phase journal；被 `SIGKILL` 或掉电中断后重新运行 installer，容器部署则重新创建容器；
-- OpenRC 正常 `stop_post` 继续清理专用 cgroup；`supervise-daemon` 自身异常退出后通过重启主机或重新部署恢复；
-- active config 常驻副本与运行期 `dump-config` 的内存取舍；
+- `arm64-production-runtime`、`native-systemd-install` 与 `native-openrc-install` 延后执行。
+- 候选级 50,000 用户负载、24 小时 soak 以及故障/回滚注入作为扩展验证延后执行。
+- 安装器不维护持久化阶段日志。被 `SIGKILL` 或掉电中断后重新运行安装器；容器部署则重新创建容器。
+- OpenRC 正常执行 `stop_post` 时会清理专用 cgroup。`supervise-daemon` 异常退出后，通过重启主机或重新部署恢复。
+- 只有出现实测需求时，才重新评估活动配置常驻副本与运行时 `dump-config` 的内存取舍。
 - P3 测试补强：`runNode` 顶层失败收敛，以及 Unix server 活动 handler 取消。
-- 首轮真实生产 soak 后，再按实际变更压力从 `xray.Manager` 内部渐进提取 process supervisor、runtime state 和 version tracker，外部保留 Manager facade 与当前并发不变式；
+- 首轮真实生产 soak 完成后，再根据实际变更压力，逐步从 `xray.Manager` 中拆分进程监管、运行时状态和版本跟踪职责；对外仍保留 Manager facade 和当前并发不变式。
 - 已将实际职责是 rw-core gRPC wire adapter 的包规范为 `internal/xrayrpc`；只有在有真实解耦收益时才引入中性应用类型。
 
 ## 里程碑
@@ -131,8 +131,10 @@
 - 对齐 Debian/systemd 与 Alpine/OpenRC 的目录权限和生命周期。
 - 所有 Release、rw-core、ASN 与辅助脚本都必须固定版本并校验摘要。
 - 安装、升级、失败回滚和卸载不得影响不属于本项目的进程或 nftables 表。
-- Ubuntu 24.04/systemd 与 Alpine 3.22/OpenRC 已真实通过安装、重复安装、成功升级、坏 service 回滚、启停与卸载隔离；两边的非 root 服务进程均只保留 `NET_ADMIN`/`NET_BIND_SERVICE` effective 与 ambient capability。
-- 固定 rw-core、ASN 与 Release 归档均在写盘前校验 SHA-256；rw-core 资产组和 Node 升级事务均通过写入后故障注入与逐文件摘要恢复测试。
+- Ubuntu 24.04/systemd 与 Alpine 3.22/OpenRC 已通过真实的全新安装、重复安装、升级、错误 service 回滚、启停和隔离卸载测试。
+- 两边的非 root 服务进程都只保留 `NET_ADMIN` 和 `NET_BIND_SERVICE` 的 effective 与 ambient capability。
+- 固定的 rw-core、ASN 与 Release 归档都会在安装前校验。
+- 故障注入测试覆盖写入后失败，以及 rw-core 资产和 Node 升级事务的逐文件摘要恢复。
 
 ### M8 - 发布验收
 

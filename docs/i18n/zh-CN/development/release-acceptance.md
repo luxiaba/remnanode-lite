@@ -1,19 +1,18 @@
-<!-- translation: locale=zh-CN; source=docs/development/release-acceptance.md; source-sha256=deab25559e2d405b0784add0e918c69322098729203d6b2eed21d1b9b091502b -->
+<!-- translation: locale=zh-CN; source=docs/development/release-acceptance.md; source-sha256=926ff50d2b1a9cbf3b0bd4942d3f2262d0ea1e98df149cf5b5c28d279dab554e -->
 # v2.8.0 发布验收证据协议
 
-> **翻译说明：** [英文原文](../../../development/release-acceptance.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
+> 这是中文译文；验收字段和规则以[英文原文](../../../development/release-acceptance.md)为准。
 
 [返回开发文档](README.md) | [通用发布流程](../release.md)
 
-本文定义用于验收 `v2.8.0` 的 schema version 2 和
-`docker-production-smoke-v1` 验收 profile。它是版本专用发布门禁，不表示每个已打包
-平台或部署方式都已经完成生产运行时验证。
+这是 `v2.8.0` 专用的验收协议，定义 schema version 2 和
+`docker-production-smoke-v1` profile。它不表示每个已打包平台或部署方式都已经在生产
+环境运行过。
 
-该 profile 将发布决策绑定到一个冻结源码候选、一个带 attestation 的多架构镜像
-digest，以及一次在原生 amd64/x86_64 上运行的真实低内存 Docker smoke。运行时观测
-由 Release Owner 签注。验证器可以检查 JSON 结构、Git ancestry、摘要、产物闭环、
-实测阈值和操作员签注，但不能独立证明所记录的 Panel 会话或流量观测确实发生。该
-evidence 是可审计、绑定候选的记录，不是不可伪造的证明。
+验收绑定一个冻结源码候选、一个带 attestation 的多架构镜像 digest，以及一次在原生
+amd64/x86_64 上运行的真实低内存 Docker smoke。运行时观测由 Release Owner 签字
+确认。验证器可以检查记录、Git 历史、摘要、产物、阈值和签注，但不能独立证明所记录的
+Panel 会话或流量确实发生。因此，这份证据可以审计，但并非不可伪造。
 
 ## 候选冻结
 
@@ -146,10 +145,10 @@ Manifest 的规范结构如下：
 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}`。不得放宽模板中的资源、
 capability、文件系统、init、healthcheck 或日志设置。
 
-最终检查必须证明同一个容器已经运行至少 600 秒：evidence 的 `startedAt` 必须与
-Docker 容器的 `.State.StartedAt` 完全相同，且 `finishedAt - startedAt` 至少为
-600 秒。此前 `health=none`、使用可移动镜像 tag、非规范 Compose 文件或不同候选的
-运行都不满足本 profile。
+最终检查必须证明同一个容器已经运行至少 600 秒。evidence 的 `startedAt` 必须与
+Docker `.State.StartedAt` 完全相同，且 `finishedAt - startedAt` 至少为 600 秒。
+此前 `health=none`、使用可移动镜像 tag、非规范 Compose 文件或不同候选的运行都不
+满足本 profile。
 
 `docker-smoke.json` 记录：
 
@@ -305,12 +304,13 @@ Evidence 的规范结构如下：
 }
 ```
 
-容器字段必须来自最终 Docker 状态，不能从 Compose 源文件抄入预期值。将 Docker 的
-healthcheck 纳秒 duration 规范化为秒，把 `.HostConfig.Tmpfs` 解析成上面的精确
-mount entry，并在原始采集包中只保留经过脱敏的 inspect 字段白名单投影。不得保存
-完整 `docker inspect` 文档或 `.Config.Env`，因为内联部署会在其中暴露
-`SECRET_KEY`。`initProcess` 从容器内 PID 1 读取。container ID、固定到 digest 的 `.Config.Image` 与
-`.State.StartedAt` 共同标识覆盖完整 600 秒窗口的同一个容器。
+容器字段必须读取最终 Docker 状态，不能从 Compose 抄入预期值。把 Docker 的
+healthcheck 纳秒 duration 转成秒，将 `.HostConfig.Tmpfs` 解析为上面的精确 mount，
+并在脱敏的原始采集包中只保留白名单字段。不得保存完整 `docker inspect` 文档或
+`.Config.Env`，因为内联部署会在其中暴露 `SECRET_KEY`。
+
+`initProcess` 从容器内 PID 1 读取。container ID、固定到 digest 的 `.Config.Image`
+与 `.State.StartedAt` 共同标识完整 600 秒窗口内接受观测的容器。
 
 ## Evidence 与数据边界
 
@@ -321,10 +321,9 @@ command 数组不得包含控制字符或空参数。每个参数的大小写不
 受限文件描述符或本机 `0600` 文件注入。
 
 提交的 JSON 和保留的原始采集包不得包含 Secret Key、JWT、CA、客户端证书、私钥、
-IP、hostname、Panel URL、原始请求/响应或可逆用户数据。bundle digest 可以让审阅者
-把一份脱敏采集材料绑定到签注，但不会让操作员陈述自动成为密码学意义上的自证事实。
-采集包必须从明确选择的字段构造；先保存完整 inspect dump 再做脱敏并不是可接受的
-替代方式。
+IP、hostname、Panel URL、原始请求/响应或可逆用户数据。bundle digest 会把脱敏采集
+材料绑定到签注，但不能证明操作员的观测内容。采集包必须按字段白名单构造，不能先保存
+完整 inspect dump 再脱敏。
 
 ## 验证
 

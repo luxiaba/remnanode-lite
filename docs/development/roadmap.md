@@ -4,7 +4,7 @@
 
 ## Project goals
 
-This repository maintains an independent Go implementation, codebase, and release history. The official `remnawave/node` project is a behavioral and contract reference, not a Git upstream. The long-term goals, audience, and non-goals are defined in the [project overview](../project.md); this page tracks milestone status and future direction.
+This repository maintains an independent Go implementation with its own release history. The official `remnawave/node` project is a behavioral and contract reference, not a Git upstream. The [project overview](../project.md) defines the long-term goals, audience, and non-goals; this page tracks milestones and future work.
 
 The first release line starts at `2.8.0` with these goals:
 
@@ -12,10 +12,10 @@ The first release line starts at `2.8.0` with these goals:
 - Real integration validation against Panel `2.8.1`.
 - Resolution of known lifecycle, plugin, firewall, contract, and installation supply-chain defects.
 - Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk`.
-- Publish Linux `amd64` and `arm64` artifacts; runtime acceptance for `2.8.0` is scoped to the production `amd64` Docker profile.
+- Linux `amd64` and `arm64` artifacts, with `2.8.0` runtime acceptance scoped to the production `amd64` Docker profile.
 - Keep Debian/systemd and Alpine/OpenRC installation paths available, with native runtime acceptance deferred beyond the first release.
 
-The project version and official contract version are independent. `X.Y.Z-rnl.N` identifies a project-specific iteration and may be used either to develop the next version line early or to improve an existing official-version baseline. A plain `X.Y.Z` release is allowed only after alignment with that official contract is complete. Official release monitoring creates an issue; it never changes the contract or publishes automatically. See the [versioning model](../versioning.md).
+The project version and official contract version move independently. `X.Y.Z-rnl.N` identifies a project-specific iteration, whether it develops the next version line early or improves an existing official baseline. A plain `X.Y.Z` release is allowed only after alignment with that official contract is complete. Monitoring a new official release creates an issue; it never changes the contract or publishes anything automatically. See the [versioning model](../versioning.md).
 
 ## Design principles
 
@@ -24,7 +24,7 @@ The project version and official contract version are independent. `X.Y.Z-rnl.N`
 3. Perform external side effects through replaceable interfaces and propagate their errors.
 4. Commit state only after external operations succeed; failures must permit a safe retry of the same request.
 5. Every concurrency limit, queue, request body, and cache must have an explicit bound.
-6. The Node owns only its rw-core process, internal sockets, and private nftables table. It does not own the host firewall policy. IP-based socket destruction is an explicit and documented host-network-namespace side effect.
+6. The Node owns only its rw-core process, internal sockets, and private nftables table; it does not own the host firewall policy. Destroying sockets by IP can affect the host network namespace and is treated as an explicit, documented side effect.
 7. `dev` is the stable development and integration branch. Topic branches enter it through PR and CI. `main` is the release branch and accepts only candidates that have passed the code gate on `dev`.
 8. A candidate becomes the frozen M8 candidate `C` only after it reaches `main`. No feature work is mixed into `C` after that point, and all real acceptance results bind to its commit.
 
@@ -50,13 +50,13 @@ The project version and official contract version are independent. `X.Y.Z-rnl.N`
 | M7 System integration and supply chain | Complete |
 | M8 Release acceptance | In progress |
 
-The dated M6 50,000-user measurement (2026-07-15) and M7 init/distribution snapshots (2026-07-19) remain engineering baselines. They predate candidate `C` and are not runtime evidence for the current M8 candidate. Repeating those profiles is deferred and does not block `2.8.0`.
+The M6 50,000-user measurement from 2026-07-15 and the M7 init/distribution snapshots from 2026-07-19 remain useful engineering baselines. They predate candidate `C`, so they are not runtime evidence for the current M8 candidate and do not need to be repeated for `2.8.0`.
 
-`2.8.0` remains unreleased and M8 remains in progress. The static implementation, CI, candidate-image pipeline, and code-level 512 MiB controls are in place. The only blocking acceptance profile is `docker-production-smoke-v1` on the frozen candidate: resolve the candidate tag to an immutable manifest digest, run that digest through the production Compose template on `amd64`, observe a real Panel connection and proxy traffic, and confirm that the container remains running and healthy with zero OOM kills and restarts. A `sha-*` tag from `main` locates a candidate but is not itself an acceptance identity or a formal release.
+`2.8.0` is still unreleased, with M8 in progress. The implementation, CI, candidate-image pipeline, and code-level 512 MiB controls are in place. One acceptance profile still blocks release: `docker-production-smoke-v1` on the frozen candidate. The run must resolve the candidate tag to an immutable manifest digest, use that digest with the production Compose template on `amd64`, carry a real Panel connection and proxy traffic, and finish with a healthy container, zero OOM kills, and zero restarts. A `sha-*` tag from `main` only locates a candidate; it is neither the acceptance identity nor a formal release.
 
 ## Current focus
 
-- **Now:** Complete the frozen candidate's `amd64` Docker production smoke and record the real Panel, traffic, process-state, memory, OOM, and restart observations needed to close M8.
+- **Now:** Complete the frozen candidate's `amd64` Docker production smoke and record the Panel, traffic, process state, memory, OOM, and restart observations required to finish M8.
 - **Next:** Evaluate the next official release detected by automation. Pin its source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
@@ -64,11 +64,11 @@ The following are accepted limitations or later enhancements and do not block `2
 
 - `arm64-production-runtime`, `native-systemd-install`, and `native-openrc-install` are deferred.
 - Candidate-scale 50,000-user load, a 24-hour soak, and fault/rollback injection are deferred extended-validation profiles.
-- The installer has no persistent phase journal. Rerun it after `SIGKILL` or power loss; recreate a container deployment.
+- The installer has no persistent phase journal. Rerun it after `SIGKILL` or power loss; recreate the container for a container deployment.
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
 - Revisit the memory tradeoff of a resident active-config copy and runtime `dump-config` only with measured need.
 - P3 test additions remain for top-level `runNode` failure convergence and cancellation of active Unix-server handlers.
-- After the first real production soak, extract a process supervisor, runtime state, or version tracker from `xray.Manager` only in response to demonstrated change pressure. Preserve the Manager facade and current concurrency invariants.
+- After the first real production soak, split process supervision, runtime state, or version tracking from `xray.Manager` only when actual change pressure justifies it. Keep the Manager facade and current concurrency invariants.
 - The rw-core gRPC adapter now has the explicit package path `internal/xrayrpc`. Introduce neutral application types only when they create real decoupling value.
 
 The historical remediation record is archived at [`docs/archive/2026-07-audit-remediation.md`](../archive/2026-07-audit-remediation.md).
@@ -130,8 +130,10 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Align directory permissions and lifecycle behavior between Debian/systemd and Alpine/OpenRC.
 - Pin every Release, rw-core, ASN, and helper-script asset and verify its digest.
 - Ensure installation, upgrade, rollback, and uninstall do not affect processes or nftables tables outside this project.
-- Ubuntu 24.04/systemd and Alpine 3.22/OpenRC have passed real fresh install, repeat install, successful upgrade, invalid-service rollback, start/stop, and isolated uninstall exercises. Both non-root service processes retain only effective and ambient `NET_ADMIN` and `NET_BIND_SERVICE`.
-- Pinned rw-core, ASN, and release archives are verified before installation. Fault-injection tests cover post-write failures and per-file digest restoration for both rw-core assets and Node upgrade transactions.
+- Ubuntu 24.04/systemd and Alpine 3.22/OpenRC have passed real fresh-install, repeat-install, upgrade, invalid-service rollback, start/stop, and isolated-uninstall exercises.
+- Both non-root service processes retain only effective and ambient `NET_ADMIN` and `NET_BIND_SERVICE`.
+- Pinned rw-core, ASN, and release archives are verified before installation.
+- Fault-injection tests cover post-write failures and per-file digest restoration for rw-core assets and Node upgrade transactions.
 
 ### M8 - Release acceptance
 

@@ -1,12 +1,12 @@
 # Remnanode Lite Documentation
 
-This is the documentation entry point for Remnanode Lite. The root README gives a concise introduction and deployment path; this directory contains the authoritative project scope, architecture, operations, development, compatibility, and Release guidance.
+Use this page to find the right guide for what you are doing. The root README covers the project and the quickest Docker path; the documents here go deeper into deployment, operations, architecture, development, compatibility, and Releases.
 
-English files in the repository root and `docs/` are the canonical source. Translations are maintained for convenience and may lag behind. See the [localization policy](i18n/README.md) before translating or relying on a localized document.
+English files in the repository root and `docs/` are the canonical source. Chinese and Russian translations are provided for convenience and may occasionally lag behind. See the [localization policy](i18n/README.md) for details.
 
-When documentation conflicts with code, Release assets, or observed behavior, use the truth-source table at the end of this page and correct the documentation in the same change.
+If a document disagrees with the code, a published Release asset, or observed behavior, use the [source-of-truth table](#sources-of-truth) below and fix the document alongside the code.
 
-## Start by role
+## Where to start
 
 ### I want to deploy a node
 
@@ -92,17 +92,17 @@ You do not need to read every design document first:
 
 ## Essential concepts
 
-### Project version is not contract version
+### Build and contract versions are different
 
-`Version` identifies a Remnanode Lite build. `ContractVersion` identifies the official Node behavior currently implemented and reported to Panel. Development can enter a future `rnl.N` line without claiming an unfinished official contract. See [Versioning and image tags](versioning.md).
+`Version` identifies the Remnanode Lite build. `ContractVersion` identifies the official Node behavior that build implements and reports to the Panel. They move independently: development can begin on a new `rnl.N` build without claiming support for an unfinished official contract. See [Versioning and image tags](versioning.md).
 
-### Candidate image is not a Release
+### A candidate is not a Release
 
-`edge`, automatic `sha-*`, and manual `candidate-sha-*` images are built from `main` for observation and server acceptance. A formal Release requires an immutable-by-policy Git tag, a GitHub Release, and an exact GHCR version tag that actually exist. Use the multi-architecture manifest digest when technical content addressing is required. A version string in source or documentation is not proof of publication.
+`edge`, `sha-*`, and `candidate-sha-*` images are test builds from `main`. A version becomes a formal Release only when its Git tag, GitHub Release, and exact GHCR tag have been published. Pin the multi-architecture manifest digest when you need an exact, content-addressed image.
 
-### Compatibility conclusions need a scope
+### Compatibility has more than one layer
 
-Static contract tests, a successful Panel connection, long-running resource tests, and distribution acceptance prove different things. Documentation must distinguish implementation, automated verification, environment acceptance, and publication instead of using one as evidence for all four.
+Contract tests, a successful Panel connection, resource testing, and distribution testing answer different questions. No single result proves all of them, so compatibility notes should always say what was actually tested.
 
 ## Terminology
 

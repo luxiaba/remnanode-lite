@@ -1,13 +1,12 @@
-<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=e2c12fcc01830d089a6ac33b1086f8a513f7b589fecb55b25223f470232cdeaa -->
+<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=7324aaf69d698661d40b0bc0b7d4caccd466719c50b222ab4a41367a050b1bb1 -->
 
 # 配置参考
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../configuration.md)为准。
+> 这是中文译文；涉及配置规则时，请以[英文原文](../../configuration.md)为准。
 
 [返回文档索引](README.md)
 
-本文说明 Remnanode Lite 的配置来源、优先级和每个配置项的真实用途。配置分为 Node 运行时配置、Docker Compose 插值和安装器参数三类。名称相近不代表由同一个程序消费，不应混在同一张“环境变量”表中理解。
+本文列出 Remnanode Lite 支持的配置，以及每项配置由哪里读取。Node 运行参数、Docker Compose 变量和安装器选项属于不同部分，即使名称相似，也不一定由同一个程序处理。
 
 ## 来源与优先级
 
@@ -17,9 +16,9 @@ Node 启动时按以下顺序选择配置文件：
 2. 已存在的 `/etc/remnanode/node.env`。
 3. 当前工作目录中的 `.env`。
 
-配置文件先被读取，随后进程环境中已知且非空的变量覆盖文件值。空环境变量不会清除文件值；`SECRET_KEY` 非空时优先于 `SECRET_KEY_FILE`。
+Node 先读取配置文件，再用进程环境中已知且非空的变量覆盖它。空环境变量不会清除文件中的值；两个 Secret 配置同时存在时，`SECRET_KEY` 优先于 `SECRET_KEY_FILE`。
 
-systemd/OpenRC 固定使用 `REMNANODE_ENV=/etc/remnanode/node.env`，但不会 source 或导出整份文件。Node 将它作为受限数据文件自行解析，因此未知键和 Secret 不会自动进入进程环境。Docker Compose 则直接将选定的运行变量传入容器。
+systemd 和 OpenRC 通过 `REMNANODE_ENV` 指向 `/etc/remnanode/node.env`，但不会 source 或导出整份文件。Node 把它当作数据文件解析，因此未知键和 Secret 不会自动进入进程环境。Docker Compose 则直接把选定的运行变量传给容器。
 
 修改配置后必须重启 Node 或重新创建容器；当前不支持配置热加载。
 
@@ -193,9 +192,9 @@ docker compose up -d --no-build --force-recreate
 
 自定义 core 仍使用所选 rw-core Release 中的 geo 数据，然后以已校验的自定义二进制替换 core。所有自定义 URL 必须同时提供 SHA-256；缺少摘要时会在写入目标路径前失败。
 
-入口语义需要特别区分：在完整安装上重复执行 `install-node*.sh --install` 会默认同步目标 Release 的 rw-core/geo/ASN；显式 `--upgrade` 和直接运行 `upgrade.sh` 默认保留这些资产，只有 `--upgrade-xray` 或 `RNL_UPGRADE_XRAY=1` 才同步。
+安装和升级的行为有意不同。在完整安装上再次执行 `install-node*.sh --install`，会刷新目标 Release 中的 rw-core、geo 和 ASN；显式 `--upgrade` 或直接运行 `upgrade.sh` 则默认保留现有资产，只有指定 `--upgrade-xray` 或 `RNL_UPGRADE_XRAY=1` 才会刷新。
 
-## 版本配置不是版本实现
+## 版本覆盖
 
 项目版本、官方契约版本和 rw-core 版本是三个独立概念：
 

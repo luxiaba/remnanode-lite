@@ -2,42 +2,78 @@
 
 [Back to developer documentation](../development/README.md) · [Current roadmap](../development/roadmap.md) · [Architecture](../architecture.md)
 
-This document preserves the static-audit scope and remediation principles applied to the first independent release line in July 2026. It is a decision record, not a current backlog or an onboarding entry point. The original audit predates the repository history reset, so its local baseline commit is not part of the current independent Git history. Facts that must remain traceable now live in code and tests, the [2.8.0 contract baseline](../development/contract-2.8.0.md), the [resource budget](../development/resource-budget.md), and the [release acceptance protocol](../development/release-acceptance.md).
+This is the record of the static audit and remediation work completed for the
+first independent release line in July 2026. It is historical context, not a
+backlog or an onboarding guide. The audit predates the repository history
+reset, so its original baseline commit is no longer present. Current facts live
+in the code and tests, the [2.8.0 contract baseline](../development/contract-2.8.0.md),
+the [resource budget](../development/resource-budget.md), and the
+[release acceptance protocol](../development/release-acceptance.md).
 
-The strict native, dual-runtime, 50,000-user, and 24-hour M8 plan recorded below
-is historical. It has been superseded for the still-unpublished `v2.8.0`
-candidate by schema version 2 and the
-`docker-production-smoke-v1` profile. The current profile records those old
-runtime scenarios as deferred, non-blocking validation; follow the current
-acceptance protocol rather than treating the archived plan as a release gate.
+The M8 plan below originally required native and dual-runtime testing, a
+50,000-user run, and a 24-hour soak. For the unpublished `v2.8.0` candidate, it
+has been replaced by schema version 2 and `docker-production-smoke-v1`. Those
+older scenarios are now deferred and non-blocking. Use the current acceptance
+protocol as the release gate.
 
-At the time of this record, M0-M7 static remediation was complete and M8 owned
-real Panel/Linux, resource, fault-recovery, and long-running evidence for a
-frozen candidate. Automatic recovery from power loss or a forcibly terminated
-installer or supervisor remains an accepted operational limitation. Recovery
-consists of rerunning the installer, rebooting the host, or recreating the
-container as appropriate.
+When this record was written, M0-M7 remediation was complete and M8 covered the
+real Panel/Linux, resource, recovery, and long-running tests for a frozen
+candidate. Automatic recovery from power loss or a forcibly terminated
+installer or supervisor was out of scope. Operators recover by rerunning the
+installer, rebooting the host, or recreating the container as appropriate.
 
 ## Engineering Principles
 
-- The official implementation defines the external compatibility target, not this project's internal architecture. Its fail-open behavior, swallowed errors, unbounded resources, or non-retryable operations must not be copied.
-- Every lifecycle, process, rule set, and state domain must have one owner. Manager and Plugin each own their internal state, while the HTTP lifecycle coordinator orders cross-component entry points. Callers must not maintain scattered, competing locking conventions.
-- Every successfully spawned process must have its ownership registered before control returns. The system may report `stopped` or remove firewall rules only after confirming that the leader and descendants have been cleaned up.
-- Every mutation must bind to an explicit rw-core process identity. The RPC effect and local hash/state commit must occur under the same process lease.
-- Firewall updates follow fail-closed plan/apply/reconcile/commit semantics. Failures must be visible, reversible where promised, and safe to retry idempotently.
-- All data received from HTTP, Panel, plugin configuration, rw-core webhooks, files, and external commands must have byte, item-count, depth, concurrency, time, and output bounds. Errors and logs are also part of the resource budget.
-- `512 MiB RAM / 1 vCPU / 2 GiB disk` is a whole-machine target. A Go runtime soft memory limit does not replace a whole-system budget for rw-core, cgroups, kernel nftables state, page cache, installer temporary files, and logs.
-- The compatibility oracle must be generated independently of the Go implementation. Copying implementation constants or comparing a handwritten schema with itself is not evidence.
+- The official implementation defines compatibility, not this project's
+  internal architecture. Do not copy fail-open behavior, swallowed errors,
+  unbounded resources, or operations that cannot be retried.
+- Every process, lifecycle, rule set, and state domain has one owner. Manager
+  and Plugin own their internal state; the HTTP lifecycle coordinator orders
+  work that crosses those boundaries.
+- Register ownership before returning from a successful process spawn. Report
+  `stopped` or remove firewall rules only after the leader and descendants are
+  confirmed gone.
+- Bind each mutation to one rw-core process identity. Its RPC work and local
+  hash or state commit run under the same process lease.
+- Firewall updates use fail-closed plan/apply/reconcile/commit behavior.
+  Failures stay visible, restore prior state where promised, and remain safe to
+  retry.
+- Bound all input from HTTP, Panel, plugin configuration, rw-core webhooks,
+  files, and external commands by bytes, item count, depth, concurrency, time,
+  and output size. Errors and logs count toward the same resource budget.
+- `512 MiB RAM / 1 vCPU / 2 GiB disk` is a whole-machine target. Go's soft
+  memory limit is only one part of the budget alongside rw-core, cgroups,
+  nftables state, page cache, installer files, and logs.
+- Generate the compatibility oracle independently of the Go implementation.
+  Comparing implementation constants with a handwritten copy of the same
+  schema proves nothing.
 
 ## Completed Remediation Stages
 
-1. **Input and deployment safety:** removed root shell sourcing from OpenRC; validated Secrets; bounded request arrays, validation issues, JSON depth, plugin expansion, and log fields.
-2. **Xray lifecycle:** implemented atomic spawn ownership registration, descendant-cleanup success conditions, and operation/process epoch leases. The HTTP coordinator allows shared starts to enter Manager while giving stop and plugin mutations exclusive, writer-preferred access.
-3. **Plugin and connection correctness:** fixed webhook overload feedback, idempotent nft deletion, preservation of dynamic blocks, core-first cleanup, and retryable socket dropping. Disabling torrent blocking without tags hot-removes the outbound rule; healthy `recreate-tables` rebuilds only nftables, and core stops only when recovery from degraded mode makes torrent blocking effective again.
-4. **Official behavior alignment:** fixed confirmed differences in stats reset, protobuf wire encoding, HTTP parsing, response models, system information, JWT handling, and the Unix configuration target.
-5. **Operational resource boundaries:** completed OpenRC cgroup enforcement, low-memory upgrade migration, download/extraction/disk preflight checks, reliable shutdown, rollback, and process-identity health checks.
-6. **Trusted test chain:** derived the static contract from pinned official source and SDK evidence. Full scenario runners and per-case evidence are bound to exit codes, log digests, and binary digests during the later release stage.
-7. **Code freeze and acceptance preparation:** complete test, race, vet, static-analysis, and dual-architecture build checks as one batch before freezing the commit; then run systemd, OpenRC, Panel 2.8.1, real rw-core, 50k-user, and at least 24-hour whole-machine soak acceptance.
+1. **Input and deployment safety:** removed root shell sourcing from OpenRC,
+   validated Secrets, and bounded request arrays, validation issues, JSON depth,
+   plugin expansion, and log fields.
+2. **Xray lifecycle:** registered process ownership atomically, required complete
+   descendant cleanup, and added operation and process leases. The HTTP
+   coordinator lets starts share access while stops and plugin mutations remain
+   exclusive and writer-preferred.
+3. **Plugin and connection correctness:** made overloads visible, nft deletion
+   idempotent, dynamic blocks durable, cleanup core-first, and socket drops
+   retryable. Torrent-rule changes and `recreate-tables` now update only the
+   parts that need to change.
+4. **Official behavior alignment:** fixed verified differences in stats reset,
+   protobuf encoding, HTTP parsing, response models, system information, JWT
+   handling, and the Unix configuration target.
+5. **Resource boundaries:** added OpenRC cgroup enforcement, low-memory upgrade
+   migration, disk and archive preflight checks, reliable shutdown and rollback,
+   and process-identity health checks.
+6. **Trusted test chain:** derived the static contract from pinned official
+   source and SDK evidence. Later release tests bind scenario results to exit
+   codes, log digests, and binary digests.
+7. **Freeze and acceptance preparation:** run tests, race detection, vet, static
+   analysis, and both architecture builds before freezing the candidate. The
+   original plan then called for systemd, OpenRC, Panel 2.8.1, real rw-core,
+   50,000-user, and 24-hour soak tests.
 
 ## Commit Strategy Used at the Time
 

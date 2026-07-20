@@ -1,28 +1,25 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=b226928707e7d24793185dae0284459b04e720fee4c3ddb0a241199b1b4258d3 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=791dbf53538385f44345c2103197c965d186b14458f462db70c57feff757e8b4 -->
 
 # 原生 Linux 部署
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../deployment-native.md)为准。
+> 这是中文译文；涉及部署规则时，请以[英文原文](../../deployment-native.md)为准。
 
 [返回文档索引](README.md)
 
-本文说明如何通过 GitHub Release 二进制在 systemd 或 OpenRC 主机上安装 Remnanode Lite。资源很小、只需要容器运行的节点优先参考 [Docker Compose 部署](deployment-docker.md)；原生部署适合希望避免 Docker daemon 开销，或希望由宿主服务管理器直接管理进程的环境。
+本文说明如何使用 GitHub Release 二进制，在 systemd 或 OpenRC 主机上安装 Remnanode Lite。原生部署可以省去 Docker daemon 的开销，并由宿主机服务管理器直接运行 Node。如果机器已经安装 Docker，[Docker Compose](deployment-docker.md) 仍是更简单的选择。
 
-项目展示名和二进制名分别是 `Remnanode Lite`、`remnanode-lite`。原生 service 名及仓库中的 unit/init 文件仍保留 `remnawave-node`，用于兼容已经部署的升级、监控和运维命令；这只是稳定的系统接口，不表示本仓库与官方项目存在代码上游关系。
+二进制名称是 `remnanode-lite`。原生安装继续使用 `remnawave-node` 服务名，以兼容已有的升级、监控和服务管理命令。
 
 ## 支持边界
 
-项目构建和 CI 支持 Linux `amd64`、`arm64`。现有文档化的真实安装与服务管理工程快照为：
+Release 二进制支持 Linux `amd64` 和 `arm64`。安装器支持 systemd 与 OpenRC；开发期间实际记录过以下安装：
 
 | 平台 | 服务管理器 | 架构 |
 | --- | --- | --- |
 | Ubuntu 24.04 | systemd | arm64 |
 | Alpine 3.22 | OpenRC | arm64 |
 
-CI 会交叉构建 amd64/arm64，并在 Ubuntu runner 执行 Linux 网络管理测试，但可构建不等于已通过运行验收。`v2.8.0` 唯一阻断性的运行验收范围，是在真实 `x86_64`（`linux/amd64`）主机上执行规范 Docker Compose smoke；任一架构上的 `native-systemd-install` 与 `native-openrc-install` 均推迟且不阻断发布。上表两项仍是真实工程快照，不要求在发布 `v2.8.0` 前重复覆盖两种 init 或两种架构。
-
-真实 `arm64` 运行、针对候选的 50k 用户负载、24 小时持续运行、故障注入和回滚注入，也属于 `v2.8.0` 的后续验证项。缺少后续 evidence 时必须写明 deferred，不得写成 passed。其它现代 systemd 发行版预期可用，但并非已验证基线。非 Debian/Ubuntu 系统需要提前自行安装脚本所需命令。
+CI 会交叉构建两种架构，并在 Ubuntu 上运行 Linux 网络管理测试。`v2.8.0` 的阻断性生产 smoke 覆盖真实小内存 `linux/amd64` 主机上的 Docker；原生 systemd/OpenRC 安装、真实 `arm64` 运行、5 万用户负载、24 小时持续运行，以及故障和回滚注入仍是后续验证。大规模部署前，请先在目标发行版上测试原生安装。Debian/Ubuntu 之外的系统还需要提前安装脚本所需命令。
 
 目标 tag 必须已经发布 GitHub Release，并包含二进制归档、support 文件、`SHA256SUMS` 和 ASN 数据库。`edge` 或 `sha-*` GHCR 候选镜像不能替代原生 Release 资产。
 
@@ -155,7 +152,7 @@ remnanode-lite doctor
 6. 验证并保存 Secret，安装 service 文件与日志辅助命令。
 7. 启动服务，确认唯一目标 Node 进程实际持有配置的 TCP 端口。
 
-重复执行 `--install` 时，如果发现完整安装，会委托 `upgrade.sh` 完成事务升级，并默认同步目标 Release 的 rw-core、geo 和 ASN。显式 `--upgrade` 则默认只升级 Node/service/support、保留现有 core 资产；需要同步时追加 `--upgrade-xray`。如果只发现部分文件，`--install` 按安装恢复流程补齐，不把不完整状态误判为正常升级。
+在完整安装上再次执行 `--install`，会进入事务升级流程，并刷新目标 Release 的 rw-core、geo 和 ASN。显式 `--upgrade` 默认保留这些资产；需要刷新时再加 `--upgrade-xray`。如果只发现部分安装文件，脚本会进入恢复流程，而不是把它当作正常升级。
 
 ## 文件布局
 
@@ -248,7 +245,7 @@ curl -fsSL \
 5. 只在升级前运行中或 install 委托要求启动时恢复运行。
 6. 验证二进制版本，并确认唯一目标进程实际持有配置端口后提交。
 
-显式升级一个原本 stopped 的服务会保持 stopped。任何验证失败都会尝试恢复原文件、开机注册和运行状态；回滚不完整时备份保留在 root-only installer 目录，并以非零状态结束。
+显式升级不会启动原本已经停止的服务。如果验证失败，脚本会尝试恢复原文件、开机注册和服务状态。回滚无法完成时，备份会保留在仅 root 可访问的 installer 目录中，脚本以错误退出。
 
 修改 `node.env` 或 Secret 不需要重新安装。按 [配置参考](configuration.md) 修改权限正确的文件后重启服务即可。
 
@@ -291,7 +288,7 @@ sudo bash /usr/local/lib/remnanode/support-current/scripts/uninstall.sh
 - 安装器安装的通用系统软件包。
 - `/var/lib/remnanode-installer` 的 root-only marker 目录。
 
-这些保留项便于安全重装，也意味着 `--full` 不等于恢复一台从未安装过本项目的主机。
+保留这些项目可以让以后重装更安全。因此，`--full` 会删除所有项目文件，但不会把主机完全恢复到安装前的状态。
 
 ## 后续运维
 
