@@ -113,12 +113,16 @@ git clone --depth 1 --branch "$contract_version" \
   https://github.com/remnawave/node.git "$official_dir"
 
 export REMNANODE_OFFICIAL_SOURCE="$(cd "$official_dir" && pwd)"
+go run ./cmd/contract-source-check
 go test -count=1 ./internal/contract
 ```
 
-`internal/contract/source_evidence_test.go` 会校验 checkout 的精确 commit、包名、
-版本，并确认所有登记的证据路径存在且文件非空；它不会比较每个源码文件的内容摘要，
-也不会自动下载外部插件 schema。仅有同名 tag 但 commit 不匹配时，测试仍会失败。
+`cmd/contract-source-check` 不读取 checkout 文件，而是直接从固定 commit 的 Git object
+重建 `official-source-manifest.json`：校验包名/版本、所有证据 blob 的 SHA-256，并从
+`REST_API` 与 NestJS controller decorator 独立提取 method/path；Git tree 中的 controller
+和 module inventory、从 `AppModule` 开始的注册可达性也会校验。dirty worktree、暂存区、
+replace refs 或不同 HEAD 不会污染证据；固定 object 缺失、内容摘要变化或本地路由人工漂移都会失败。
+它不尝试自动翻译完整 Zod，也不会下载外部插件 schema。
 该目录应放在仓库之外；`.official-source/` 即使意外放进仓库也会被忽略，不应提交。
 
 ## 代码地图
@@ -129,6 +133,7 @@ go test -count=1 ./internal/contract
 | --- | --- |
 | `cmd/remnanode-lite` | CLI、配置装配、HTTPS 与内部 socket 启动、信号和有界关闭 |
 | `cmd/contract-probe` | 对官方节点和候选节点执行 mTLS 黑盒契约比较 |
+| `cmd/contract-source-check` | 从固定官方 Git object 重建并核验源码证据 manifest |
 | `cmd/asn-builder` | 将固定 ASN 数据源构建为紧凑的只读前缀数据库 |
 | `cmd/release-evidence-check` | 校验发布验收 manifest、Git ancestry 与发行资产摘要 |
 
@@ -219,7 +224,7 @@ git diff
 | Docker 镜像 | `Dockerfile`、`compose*.yaml`、`.dockerignore`、container workflow | 资产固定摘要、多架构、资源限制与非持久日志 |
 | 安装、升级、卸载 | `scripts/`、`deploy/` | 锁、原子替换、回滚、权限和 systemd/OpenRC 对称性 |
 | 项目版本 | `internal/version`、安装脚本、Compose、发布 workflow | 不要把项目版本与契约版本重新耦合 |
-| 官方契约升级 | `contract.version`、`internal/contract`、CI 固定 ref、契约文档 | 固定源码 commit，先取证再实现，不自动宣称兼容 |
+| 官方契约升级 | `contract.version`、`internal/contract`、source manifest、CI 固定 ref、契约文档 | 固定源码 commit，先机器提取并评审 diff 再实现，不自动宣称完整 Zod 等价 |
 
 每类修改的最低测试集合见[测试指南](testing.md#按改动选择测试)。
 

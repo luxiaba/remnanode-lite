@@ -14,7 +14,7 @@
 ### 新增
 
 - 将开发门禁拆为可并行诊断的 Go、仓库、离线 installer 与 Linux 网络管理任务，由稳定的 `ci / gate` 汇总；漏洞扫描改为独立定时任务，所有 GitHub runner 固定为 Ubuntu 24.04。
-- 新增 GHCR 多架构镜像发布链：`main` 先构建无业务 tag 的 manifest，生成 SBOM、BuildKit provenance 与 GitHub build attestation，再发布不可移动的 `sha-*` 候选和浮动 `edge`；tag Release 验证 acceptance digest 后直接晋升同一镜像为精确版本与 `latest`，不重新构建；`dev`/PR 独立验证容器构建。
+- 新增 GHCR 多架构镜像发布链：`main` 先构建无业务 tag 的 manifest，生成 SBOM、BuildKit provenance 与 GitHub build attestation，再发布不可移动的 `sha-*` 候选和浮动 `edge`；量产单文件 Compose 变更同样触发候选构建。tag Release 直接验证 acceptance digest 及其源码 attestation，不依赖自动或手动候选 tag 的命名，再把同一镜像晋升为精确版本与 `latest`，全程不重新构建；`dev`/PR 独立验证容器构建。
 - 新增官方 Node Release 定时监测；发现兼容基线变化时创建同步 Issue，但不会自动修改代码或发布镜像。
 - 新增 amd64/arm64 多阶段 Docker 镜像与生产 Compose：固定并校验 rw-core/geo/ASN 资产，采用官方 host network 与能力模型，同时落实 448 MiB/no-swap/1 CPU/256 PID、只读 rootfs、健康检查和日志上限。
 - 容器部署不再创建持久日志卷；rw-core 日志使用有界 tmpfs，Docker 日志严格轮转，容器重建即可回收全部运行日志。
@@ -24,6 +24,7 @@
 - 新增 Linux network namespace nftables 与 socket-kill 集成门禁，真实覆盖双栈规则替换、封禁、解封、重建、退出清理和 TCP 连接关闭。
 - 新增固定 `ipverse/as-ip-blocks` commit 与归档摘要的流式 ASN 构建链，Release 同时发布 compact `asn-prefixes.bin` 与 `SHA256SUMS`。
 - 新增 `448 MiB / 1 CPU / no-swap` 真实 rw-core 资源门禁；M6 工程基线的 50k 用户场景峰值为 `143.9 MiB`，M8 冻结候选仍须重跑。
+- M8 发布证据新增 Compose 实测记录，绑定候选 manifest digest 与候选 Git object 中的部署模板；amd64/arm64 必须各自通过整机资源、cgroup、init/reaping、capability、tmpfs、health、优雅停止、zombie、日志轮转、磁盘余量和实际回滚镜像启动门禁。
 
 ### 安全
 
@@ -52,12 +53,13 @@
 - nftables 初始化、双栈批处理、ingress/torrent 解封、recreate 重放、错误传播和退出清表统一收口；缺失元素的多种 nft 错误文案均按幂等成功处理。
 - nft 不可用时合法配置仍按官方语义接受，但 torrent effective state 保持禁用；reset 不再丢弃未 collect reports，ASN/shared list 降级会写入明确日志。
 - listener 异常不再从 goroutine 调用 `log.Fatalf` 跳过清理；统一关闭路径先停止 rw-core，再删除本项目 nftables 表。
-- 用户热更新改为可取消的串行 mutation；只有 rw-core RPC 成功且 Xray generation 未变化时才提交 inbound hash，清理失败不再继续添加该用户，批量部分失败会返回真实错误并保持可重试。
+- 用户热更新改为可取消的串行 mutation；整个请求持有绑定具体 rw-core 的 process lease，RPC、连接清理和 inbound hash 提交不会跨进程，清理失败不再继续添加该用户，批量部分失败会返回真实错误并保持可重试。
 - 连接踢除会规范化并去重 IP，保护非法、特殊、本机和白名单地址；缺少 capability、IP 查询失败或任一 `NETLINK_SOCK_DIAG` socket destroy 失败不再伪报成功。
 - `get-users-ip-list` 优先使用单次批量 RPC；旧 core 只在 `UNIMPLEMENTED` 时降级到最多 8 个固定 worker，并缓存 capability，消除 N+1 无界 goroutine。
 - 所有内部 Handler/Stats unary gRPC 调用增加取消传播和有界 deadline；默认 5 秒，健康探测 3 秒，批量 legacy 查询共享总预算。
 - Xray webhook 改为 64 条有界等待队列和单 worker；容量超时、取消或关闭会明确返回 503，插件关闭使用不可逆 admission fence，超时或 nft 清理失败后拒绝新 mutation 并允许 Close 重试。
 - 整机退出改为共享 25 秒预算；后台版本探测可取消并等待，rw-core 确认停止后才清理 nft 表，避免独立 timeout 累加越过 service manager 的 TERM grace。
+- 用户 mutation 的 panic 不再静默降级：客户端继续收到官方 A001，受限日志记录 operation、panic 类型、有界 value 和 stack；process lease 与 mutation gate 仍保证释放，后续请求可继续执行。
 - 公开 `xray/stop` 串行化 start/stop，并只在 core 停止成功后 reset 插件；停止失败不再提前撤销 nft 过滤。
 - 重复执行安装脚本会进入同一可回滚升级事务；坏 systemd/OpenRC service、binary/support/node.env/rw-core 写入失败均恢复升级前文件、开机注册和运行状态，恢复不完整时保留唯一备份并明确失败。
 - rw-core 安装按 installer、core、geo 与 ASN 的实际目标文件系统分别聚合 staging/备份峰值；任一挂载空间不足会在替换资产前失败。
@@ -76,9 +78,10 @@
 - 候选镜像 OCI version 使用项目版本而不是 commit 别名；发布资料严格 squash 为一个提交，Release note 记录候选和 digest，最终提交由 Git tag 解析，避免不可实现的 commit 自引用。
 - Go module、安装脚本、发布地址和文档归属切换到本仓库。
 - 建立行为兼容、架构修复和 512 MiB 小内存验收路线。
-- 契约 CI 验证固定官方提交、包名/版本，以及所有登记源码证据路径存在且非空；内容差分仍由契约升级评审负责。
+- 契约 CI 直接读取固定官方 commit 的 Git object，校验 58 个登记 blob（含依赖锁文件）的 SHA-256，并以 fail-closed 规则绑定 Nest bootstrap、静态 import、module/controller metadata、decorator ownership、global prefix exclusions 和 26 条路由；升级官方 pin 时仍须人工评审提取结果与不支持的新语法。
 - 发布门禁绑定冻结候选 commit、严格 JSON 验收证据、兼容/资源/故障结果和只允许发布文档变化的两阶段流程。
 - HTTP transport 与 stats、用户 handler、plugin 业务服务分离，业务层不再依赖 `net/http` 或自行解码 JSON。
+- `main` 成为单一组合根，显式创建并注入网络监控器、系统采集器、版本、请求体预算和应用服务；删除 import 即启动 goroutine、进程级可变 body limit 和环境变量回写等隐藏全局状态。
 - 固定并校准外部 `@remnawave/node-plugins@0.4.5` schema 证据，覆盖显式 null、AS number、`ext:` 与数值边界。
 - 用最小 rw-core protobuf wire client 替换完整 Xray Go module，双架构二进制缩小约 30%。
 - M7 已在 Ubuntu 24.04/systemd 与 Alpine 3.22/OpenRC 完成全新安装、升级回滚、启停、专用用户/capability、日志、磁盘和卸载隔离工程基线；它不替代冻结候选的 M8 验收。

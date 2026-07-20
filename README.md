@@ -29,7 +29,7 @@ Remnanode Lite 负责接收 Remnawave Panel 的节点指令，管理 rw-core 生
 | --- | --- |
 | Panel 兼容 | 固定官方源码证据，将 26 条 `/node` 路由、请求、响应与错误转换为可执行契约 |
 | 资源边界 | `LOW_MEMORY=1`、有界请求/队列/并发、448 MiB cgroup；Docker 模板不创建持久日志卷 |
-| 生命周期 | Node 是 rw-core 唯一所有者；显式状态机、generation、防并发竞态和有界关闭 |
+| 生命周期 | Node 是 rw-core 唯一所有者；显式状态机、operation/process epoch、进程 lease 和有界关闭 |
 | 网络能力 | 私有 nftables 表、双栈 socket destroy，只保留 `NET_ADMIN` 与 `NET_BIND_SERVICE` |
 | 交付 | amd64/arm64 GHCR 镜像、SBOM、provenance、build attestation 与校验过的原生安装资产 |
 
@@ -113,13 +113,14 @@ flowchart LR
     Core -->|"torrent webhook"| Plugin
 ```
 
-关键原则是“状态有唯一所有者”：HTTP 层只做认证、校验、容量控制和协调；业务服务不依赖 `net/http`；Xray Manager 独占进程与 generation；Plugin Service 独占插件快照和 nftables 事务。详细流程、锁序和包职责见[架构说明](docs/architecture.md)。
+关键原则是“状态有唯一所有者”：HTTP 层只做认证、校验、容量控制和协调；业务服务不依赖 `net/http`；Xray Manager 独占进程、生命周期状态与 process lease；Plugin Service 独占插件快照和 nftables 事务。详细流程、锁序和包职责见[架构说明](docs/architecture.md)。
 
 ## 镜像标签
 
 | 标签 | 含义 | 建议用途 |
 | --- | --- | --- |
 | `sha-<commit>` | 某个 `main` 提交的候选镜像 | 服务器验收；更强固定请记录 manifest digest |
+| `candidate-sha-<commit>` | 从 `main` 手动触发的独立候选镜像 | 自动候选缺失或需要重建时定位候选 |
 | `edge` | 当前 `main` 的浮动候选 | 临时观察，不用于稳定回滚 |
 | `X.Y.Z-rnl.N` | 本项目独立迭代版本 | 精确部署和回滚 |
 | `X.Y.Z` | 完成对应官方版本对齐后的正式版本 | 精确部署和回滚 |

@@ -81,20 +81,21 @@ Git tag:       v2.8.1-rnl.9
 Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.1-rnl.9
 ```
 
-两类正式 tag 都必须指向发布时最新的、已经验证的 `main` 头提交，并且一经发布不得重写。当前 release workflow 会拒绝从 `dev`、临时分支或旧的 `main` 提交直接发布。
+两者都按项目政策不可重写，但指向的对象不同：正式 Git tag 指向发布资料最终提交 `F`，而精确容器 tag 指向已从候选提交 `C` 构建并完成验收的 manifest digest。`F` 是发布时最新的 `main` HEAD，验证器要求它只比 `C` 多一个白名单内的发布资料提交；release workflow 会拒绝从 `dev`、临时分支或旧的 `main` 提交发布，也不会从 `F` 重新构建另一份容器。
 
 ## 镜像渠道
 
 | 标签 | 可变性 | 来源 | 适用场景 |
 | --- | --- | --- | --- |
 | `sha-<40位提交>` | 首次发布后拒绝移动 | `main` 的具体 commit 和已证明 manifest digest | 候选验收、精确复现和问题定位 |
+| `candidate-sha-<40位提交>` | 首次发布后拒绝移动 | 从 `main` 手动触发的独立候选构建 | 自动候选缺失或需要重新构建时的验收入口 |
 | `edge` | 可变 | 最新的 `main` 容器构建 | 观察主线，不作为稳定性承诺 |
 | `X.Y.Z-rnl.N` | 按政策不移动 | 对应自主迭代 Release | 固定部署已验证的项目版本 |
 | `X.Y.Z` | 按政策不移动 | 对应官方对齐 Release | 固定部署已验证的官方对齐里程碑 |
 | `latest` | 可变 | 最近一次完整成功的正式 Release | 希望主动跟随稳定版本的节点 |
 | `name@sha256:...` | 内容寻址 | Registry manifest digest | 最严格的生产固定与供应链核验 |
 
-手动从 `main` 触发候选发布时，workflow 只生成 `candidate-sha-<commit>`，不会覆盖自动 push 已发布的 `sha-<commit>`。两者都表示同一源码提交的候选构建，但手工重建的 manifest digest 不保证与此前构建相同；验收记录应同时保存 commit 和实际 digest。
+手动从 `main` 触发候选发布时，workflow 只生成 `candidate-sha-<commit>`，不会覆盖自动 push 已发布的 `sha-<commit>`。两者都表示同一源码提交的候选构建，但手工重建的 manifest digest 不保证与此前构建相同。tag 只负责定位候选；验收记录中的 commit 与实际 manifest digest 才是正式发布验证和晋升的规范身份。
 
 ### `latest` 的准确含义
 
@@ -142,7 +143,7 @@ ghcr.io/luxiaba/remnanode-lite:latest
 
 ### 候选验收
 
-服务器验收应使用完整的 `sha-<40位提交>`，同时从同一 commit 获取部署文件。不要使用 `edge` 记录验收证据，因为它会随下一次 `main` 构建移动。
+服务器验收通常从完整的 `sha-<40位提交>` 定位自动候选；需要手动重建时可以从 `candidate-sha-<40位提交>` 定位。开始验收前必须把所选 tag 解析为 manifest digest，后续运行、证据和正式晋升全部固定该 digest，同时从同一 commit 获取部署文件。不要使用 `edge` 记录验收证据，因为它会随下一次 `main` 构建移动。
 
 ## 发布与稳定性的关系
 

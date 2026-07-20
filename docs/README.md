@@ -95,7 +95,7 @@
 
 ### 候选镜像不等于正式发布
 
-`edge` 和 `sha-*` 来自 `main` 构建，用于主线观察与服务器验收。只有实际存在且按发布政策不移动的 Git tag、GitHub Release 和精确 GHCR 标签才构成正式发布；需要技术上的内容寻址时使用 manifest digest。代码或文档中出现一个版本字符串，不代表对应资产已经发布。
+`edge`、`sha-*` 和手动触发的 `candidate-sha-*` 来自 `main` 构建，用于主线观察与服务器验收。只有实际存在且按发布政策不移动的 Git tag、GitHub Release 和精确 GHCR 标签才构成正式发布；需要技术上的内容寻址时使用 manifest digest。代码或文档中出现一个版本字符串，不代表对应资产已经发布。
 
 ### 兼容结论必须有边界
 
@@ -109,8 +109,9 @@
 | rw-core | 实际承载代理数据面的 Xray Core 二进制，由 Node 启停和管理 |
 | `Version` | 本项目构建、GitHub Release 和精确镜像的版本身份 |
 | `ContractVersion` | 当前已实现并默认向 Panel 上报的官方 Node 行为基线 |
-| generation | 每次 rw-core 生命周期变更递增的代次栅栏，阻止旧 RPC 提交到新实例 |
-| lifecycle lease | HTTP 层协调 start、stop 和 Plugin mutation 的共享/独占许可，不是持久锁文件 |
+| operation epoch | 识别一次 Xray start/stop 操作所有权的递增值，不是 rw-core 进程身份 |
+| process lease | 绑定具体 rw-core process epoch 与 abstract socket 的短期许可，防止一次 mutation 跨进程执行 |
+| lifecycle lease | HTTP 层协调 start、stop、Plugin/用户 mutation 和 reset-capable stats 的共享/独占许可，不是持久锁文件 |
 | 候选 `C` | 代码进入 `main` 后被冻结并接受真实环境验收的 commit |
 | 最终提交 `F` | `C` 之后只增加发布资料的最终 `main` commit；正式 Git tag 指向它 |
 | manifest digest | GHCR 多架构镜像索引的 `sha256:...` 内容地址，比可移动 tag 更适合严格固定 |

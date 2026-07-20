@@ -33,9 +33,10 @@ ghcr.io/luxiaba/remnanode-lite
 | `X.Y.Z` | 已完成对应官方版本对齐的正式构建 | 推荐生产使用 |
 | `latest` | 最新一个经过发布验证的稳定构建 | 适合主动跟随稳定版，不适合作为回滚标识 |
 | `sha-<40位commit>` | `main` 提交对应的候选构建 | 真实服务器验收 |
+| `candidate-sha-<40位commit>` | 从 `main` 手动触发的独立候选构建 | 自动候选缺失或需要重建时验收 |
 | `edge` | 当前 `main` 的浮动候选 | 仅临时观察 |
 
-精确版本和 `sha-*` 按项目政策不主动移动，但 registry tag 在技术上不是不可变对象。需要最强固定时使用 `name@sha256:...` manifest digest。首个正式 Release 发布前，`latest` 和版本标签尚不存在，应从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择候选 `sha-*`。
+精确版本、`sha-*` 和 `candidate-sha-*` 按项目政策不主动移动，但 registry tag 在技术上不是不可变对象。需要最强固定时使用 `name@sha256:...` manifest digest。首个正式 Release 发布前，`latest` 和版本标签尚不存在，应从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实候选并记录其 manifest digest。
 
 版本命名与晋升规则见[版本模型](versioning.md)。
 
@@ -52,7 +53,7 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
 ## 单文件部署
 
 先按当前发布阶段选择入口。首个正式 Release 尚未发布，或正在做候选验收时，必须把
-部署文件和 `sha-*` 镜像绑定到同一个完整 commit；正式版本发布后则优先使用 Release
+部署文件和候选镜像绑定到同一个完整 commit；正式版本发布后则优先使用 Release
 附带且经 `SHA256SUMS` 覆盖的 Compose 资产。
 
 ### 首发前或候选验收
@@ -60,7 +61,12 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
 ```bash
 (
   set -euo pipefail
-  candidate_commit=REPLACE_WITH_40_CHAR_COMMIT
+  candidate_tag=REPLACE_WITH_FULL_SHA_OR_CANDIDATE_SHA_TAG
+  case "$candidate_tag" in
+    sha-*) candidate_commit="${candidate_tag#sha-}" ;;
+    candidate-sha-*) candidate_commit="${candidate_tag#candidate-sha-}" ;;
+    *) echo "candidate tag must be sha-<commit> or candidate-sha-<commit>" >&2; exit 1 ;;
+  esac
   printf '%s\n' "$candidate_commit" | grep -Eq '^[0-9a-f]{40}$'
 
   mkdir -p /opt/remnanode
@@ -69,13 +75,13 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
     "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${candidate_commit}/docs/examples/compose.single-file.yaml" \
     -o docker-compose.yaml
   sed -i \
-    "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:sha-${candidate_commit}|" \
+    "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${candidate_tag}|" \
     docker-compose.yaml
   chmod 600 docker-compose.yaml
 )
 ```
 
-从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实存在的完整 40 位 `sha-*` 标签，把其中 commit 填入变量。占位符未替换时校验会在下载前失败。这样 Compose 内容和镜像始终来自同一个提交；验收完成前不要自行重标记为正式版本。
+从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实存在的完整 `sha-<40位commit>` 自动候选，或 `candidate-sha-<40位commit>` 手动候选，把完整 tag 填入变量。占位符、缩写 commit 或其他 tag 会在下载前失败。这样 Compose 内容和镜像始终来自同一个提交；开始验收后还必须记录并固定实际 manifest digest，验收完成前不要自行重标记为正式版本。
 
 ### 正式版本
 
@@ -150,7 +156,7 @@ ss -H -lnt "sport = :38329"
 
 不要在自动化日志中运行不带 `--quiet` 的 `docker compose config`，它会展开内联 Secret。
 
-容器变为 `healthy` 只证明 PID 1 存活且内部配置 Unix socket 已创建；它不证明：
+容器变为 `healthy` 证明 healthcheck 已在 2 秒内主动连接内部配置 Unix socket，即 Node 正在接受内部连接；它不证明：
 
 - Panel 能通过网络访问节点；
 - mTLS、JWT 或 Secret 正确；
@@ -234,13 +240,32 @@ docker compose logs --tail=100 remnanode
 
 `latest` 不会自动替换正在运行的容器。使用它仍然需要定期、主动执行上述更新命令，并在更新前记录旧 digest。
 
+## 批量上线
+
+批量部署只能使用已经完成 M8 验收的同一个 manifest digest。精确版本 tag 便于阅读，实际下发记录仍应保存 `name@sha256:...`；不要把 `latest` 或 `edge` 直接推送到全部节点。
+
+1. 按架构、发行版、地区和主要流量类型划分节点组，并为每台机器记录当前 digest、目标 digest 和回滚 Compose。
+2. 先更新能覆盖真实 `amd64`、`arm64` 和主要网络环境的少量 canary。至少跨过一个业务高峰，确认 Panel 持续在线、rw-core 成功重同步、真实代理流量正常，且没有 OOM、异常重启、zombie、磁盘或日志持续增长。
+3. 依次扩大到约 `5%`、`25%`、`50%`，最后完成余量。每一阶段都必须结束观察后再继续；单个批次不要大到无法在同一维护窗口内恢复上一 digest。
+4. 每个阶段抽查容器 health、Panel 状态、代理流量、restart/OOM 计数、内存、PID、磁盘和 Xray/nft 错误。部署系统应保存节点与 digest 的对应关系，而不是只记录可移动 tag。
+5. 任一阶段出现无法解释的节点离线、代理失败、反复 Xray 启动失败、OOM、异常重启、zombie、资源越界或同类错误集中增长时，立即停止扩批；先回滚该批次，再保留日志和 digest 关联用于定位。
+
+回滚不依赖 Registry 移动 tag：恢复每台节点已记录的上一 Compose/digest，执行 `pull` 与 `up --force-recreate`，并重新确认 Panel 与真实流量。问题没有形成明确结论前，不要继续更新尚未触及的节点，也不要清理 canary 上的上一镜像。
+
 ## `.env` 可选模式
 
-希望把非敏感 Compose 结构和节点参数分离时，可以使用仓库根目录的 `compose.yaml`：
+希望把非敏感 Compose 结构和节点参数分离时，必须从同一个正式 GitHub Release 下载 `compose.yaml`、环境模板和摘要，不能把未来 `main` 的 Compose 与旧镜像版本混用：
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/luxiaba/remnanode-lite/main/compose.yaml
-curl -fL https://raw.githubusercontent.com/luxiaba/remnanode-lite/main/.env.example -o .env
+VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
+curl -fLO "${BASE_URL}/compose.yaml"
+curl -fLO "${BASE_URL}/remnanode.env.example"
+curl -fLO "${BASE_URL}/SHA256SUMS"
+grep -E ' (compose.yaml|remnanode.env.example)$' SHA256SUMS \
+  | sha256sum --check --strict
+mv remnanode.env.example .env
 chmod 600 .env
 ```
 
@@ -253,7 +278,7 @@ SECRET_KEY=粘贴完整内容
 LOW_MEMORY=1
 ```
 
-同样应将示例版本替换为真实 tag 或 digest。完整变量说明见[配置参考](configuration.md)。
+`REMNANODE_IMAGE` 应保持为该 Release 的精确版本，或改为已经验证的 manifest digest。完整变量说明见[配置参考](configuration.md)。
 
 ## 本地源码构建
 
@@ -297,7 +322,7 @@ docker image ls ghcr.io/luxiaba/remnanode-lite
 docker image prune
 ```
 
-确认回滚窗口已经结束后再清理旧镜像。更多日常命令和故障定位见[运维与排障](operations.md)。
+清理前先记录一个已验证的旧版本 tag 或 manifest digest，并确认对应镜像仍在本机；始终至少保留这一个明确的回滚镜像。`docker image prune` 默认只删除 dangling image，不要使用会把唯一回滚版本一并删除的批量清理参数。更多日常命令和故障定位见[运维与排障](operations.md)。
 
 ## 镜像内容与可追溯性
 

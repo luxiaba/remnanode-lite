@@ -139,7 +139,7 @@ ghcr.io/luxiaba/remnanode-lite:edge
 ghcr.io/luxiaba/remnanode-lite:sha-${C}
 ```
 
-`sha-${C}` 第一次写入后由 workflow 拒绝移动；`edge` 只有在 `C` 仍是当前 `main` HEAD 时才会更新。所有服务器验收必须固定完整的 `sha-${C}`，并从同一个 `C` 下载 Compose 或部署文件，避免镜像和配置来自不同提交。
+`sha-${C}` 第一次写入后由 workflow 拒绝移动；`edge` 只有在 `C` 仍是当前 `main` HEAD 时才会更新。先用 `sha-${C}` 定位自动候选，再把 registry 返回的 manifest digest 作为验收的规范镜像身份；从同一个 `C` 下载 Compose 或部署文件，避免镜像和配置来自不同提交。
 
 ```bash
 IMAGE="ghcr.io/luxiaba/remnanode-lite:sha-${C}"
@@ -160,11 +160,13 @@ gh attestation verify \
   --deny-self-hosted-runners
 ```
 
-手动从 `main` 运行候选 workflow 时只发布 `candidate-sha-${C}`，不会覆盖自动 push 已生成的 `sha-${C}`。它是临时验收别名；验收记录仍应保存完整 commit 和最终 manifest digest。
+手动从 `main` 运行候选 workflow 时只发布按策略不移动的 `candidate-sha-${C}`，不会覆盖自动 push 已生成的 `sha-${C}`。它是手动候选专用的发现别名，digest 不保证与自动候选相同。两种候选都可以进入验收，但从开始验收到正式发布必须固定同一个完整 commit 和 manifest digest；正式 Release 直接验证该 digest 的存在性及其 attestation，不依赖候选使用了哪一种 tag 别名。
+
+M8 的容器验收使用 `C` 中的 `docs/examples/compose.single-file.yaml`，将其中镜像引用替换为 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}` 后运行。证据必须同时保存候选 Git object 中该模板的文件 SHA-256 和实际运行的 digest；仅运行 `docker compose config` 或测试相同 tag 的另一次构建不能替代最终候选验收。完整字段和采集口径见 [`development/release-acceptance.md`](development/release-acceptance.md#docker-compose-证据)。
 
 ## 6. 冻结候选与真实验收
 
-正式验收必须针对同一个 `C`，并使用 `scripts/build-release-binaries.sh` 从干净工作树构建二进制。固定官方源码 checkout 由当前契约基线决定：
+正式验收必须针对同一个 `C`，并使用 `scripts/build-release-binaries.sh` 从干净工作树构建二进制。官方 Git repository 必须包含当前契约基线固定的 commit；source oracle 只读取该 commit object，不信任其 checkout、index 或 HEAD：
 
 ```bash
 export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned-remnawave-node
@@ -179,8 +181,10 @@ git status --short
 - 固定官方 Node 与候选 Node 的路由、响应、错误和副作用差分。
 - 目标 Panel 的节点注册、Xray 生命周期、统计、用户和插件流程。
 - Ubuntu/systemd 与 Alpine/OpenRC，架构并集覆盖 amd64 和 arm64。
+- 候选 manifest 同时包含 linux/amd64、linux/arm64，并分别在原生 amd64 与 arm64 验收机上用批量部署 Compose 模板启动同一个验收 digest。
+- 容器实际 cgroup、read-only rootfs、init/reaper、tmpfs、capability、health、优雅停止、PIDs/zombie 和日志轮转约束。
 - rw-core、nftables、socket destroy、进程组清理、安装、升级、回滚和卸载隔离。
-- 整机 `512 MiB RAM / 1 vCPU / 2 GiB disk / no swap` 的资源预算。
+- 整机 `512 MiB RAM / 1 vCPU / 2 GiB disk / no swap` 的资源预算；容器磁盘峰值必须保留一个真实回滚镜像。
 - 50k 用户、规定的持续运行时间和故障恢复场景。
 
 验收材料写入当前项目版本对应的目录：
@@ -191,6 +195,7 @@ docs/development/acceptance/v${VERSION}/
   systemd.json
   openrc.json
   panel.json
+  compose.json
   resource-fault.json
 ```
 
@@ -323,7 +328,7 @@ git push origin "$TAG"
 `.github/workflows/release.yml` 收到 `v${VERSION}` 后按以下顺序执行：
 
 1. 验证 tag commit 正是当前 `origin/main` HEAD，并重新运行版本、证据、代码、供应链和 Linux namespace 门禁。
-2. 从 acceptance manifest 读取 `C` 和已验收 digest，确认 `sha-${C}` 仍解析为同一 digest，并严格校验 attestation 的仓库、签名 workflow、源码提交与 `refs/heads/main` 来源。
+2. 从 acceptance manifest 读取 `C` 和已验收 digest，直接确认该 digest 仍存在，并严格校验 attestation 的仓库、签名 workflow、源码提交与 `refs/heads/main` 来源；不要求它必须来自某一种候选 tag 别名。
 3. 构建 linux/amd64 与 linux/arm64 二进制归档、compact ASN 数据库、标准 Compose、单文件 Compose、环境模板和 `SHA256SUMS`；证据验证器会比较两种架构的 Node 二进制摘要。
 4. 使用 `docs/releases/v${VERSION}.md` 创建 GitHub Release，但暂不把它标为 GitHub 的 Latest Release；已有同名资产不会被覆盖。
 5. 不重新构建容器，而是把已经验收并证明的 `CANDIDATE_DIGEST` 发布为按政策不移动的精确版本：
@@ -354,7 +359,7 @@ C=REPLACE_WITH_40_CHAR_CANDIDATE_COMMIT
 F="$(git rev-list -n 1 "v${VERSION}")"
 CANDIDATE_DIGEST=sha256:REPLACE_WITH_64_HEX_DIGEST
 IMAGE="ghcr.io/luxiaba/remnanode-lite:${VERSION}"
-SHA_IMAGE="ghcr.io/luxiaba/remnanode-lite:sha-${C}"
+CANDIDATE_IMAGE="ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}"
 LATEST_IMAGE="ghcr.io/luxiaba/remnanode-lite:latest"
 ```
 
@@ -362,10 +367,10 @@ LATEST_IMAGE="ghcr.io/luxiaba/remnanode-lite:latest"
 
 ```bash
 docker buildx imagetools inspect "$IMAGE"
-docker buildx imagetools inspect "$SHA_IMAGE"
+docker buildx imagetools inspect "$CANDIDATE_IMAGE"
 ```
 
-输出必须包含 `linux/amd64` 和 `linux/arm64`，且精确版本与 `sha-${C}` 解析为 acceptance manifest 中的同一 manifest digest。
+输出必须包含 `linux/amd64` 和 `linux/arm64`，且精确版本与 acceptance manifest 中的候选引用解析为同一 manifest digest。标准自动候选的 `sha-${C}` 或实际使用过的手动候选 tag 如仍保留，也应解析为该 digest。
 
 验证 GitHub attestation：
 
@@ -385,7 +390,7 @@ gh attestation verify \
 docker buildx imagetools inspect "$LATEST_IMAGE"
 ```
 
-`latest`、精确版本和 `sha-${C}` 应指向同一 manifest digest。若 tag commit `F` 在发布期间已不再是 `main` HEAD，`latest` 保持上一稳定版本是预期行为。
+`latest`、精确版本和 acceptance 中的候选 digest 应指向同一 manifest digest。若 tag commit `F` 在发布期间已不再是 `main` HEAD，`latest` 保持上一稳定版本是预期行为。
 
 验证 GitHub Release 资产：
 
@@ -470,11 +475,12 @@ sudo RNL_TAG=vX.Y.Z-rnl.N bash upgrade.sh --yes
 - [ ] `C` 的 `ci` 与候选容器 workflow 成功。
 - [ ] 所有 evidence 绑定同一个 `C`、candidate tree 和实际验收的多架构 manifest digest。
 - [ ] 目标 Panel、两种 init、两种架构、资源与故障验收通过。
+- [ ] `compose.json` 绑定 `C` 中的单文件 Compose 和同一 digest；amd64/arm64 两条实测 run 都满足整机资源、容器限制、隔离、init/reaper、健康、停止、PIDs/zombie、日志、磁盘余量及实际回滚启动门禁。
 - [ ] 发布资料 PR 只修改最终化白名单，并 squash 为恰好一个单 parent 提交。
 - [ ] README 已移除首发前提示，roadmap 已把本版本 M8 状态更新为完成。
 - [ ] 最终提交 `F` 是当前 `origin/main` HEAD。
 - [ ] `scripts/release-check.sh` 在干净工作树通过。
 - [ ] `v${VERSION}` 是指向 `F` 的 annotated tag，且从未发布过。
 - [ ] tag push 后 GitHub Release、精确镜像、候选 attestation 验证和 `latest` promotion 全部成功。
-- [ ] 精确版本、`sha-${C}` 与 `latest` 都等于 acceptance digest，amd64/arm64 均存在。
+- [ ] 精确版本与 `latest` 都等于 acceptance digest，实际使用的候选别名仍解析为该 digest，amd64/arm64 均存在。
 - [ ] 生产更新记录了精确版本或 digest，并保留可执行的回滚目标。

@@ -77,8 +77,9 @@ bash scripts/check-go.sh
 6. 全量 race test。
 7. `go vet ./...`。
 
-脚本不会自动准备官方源码。未设置 `REMNANODE_OFFICIAL_SOURCE` 时，固定官方源码
-证据测试会跳过；因此需要对齐官方行为的改动应先按下一节准备 checkout。
+脚本不会自动准备官方源码。未设置 `REMNANODE_OFFICIAL_SOURCE` 时，固定 Git object
+重建会跳过，但已提交 source manifest 与本地 Go 路由契约的离线对照始终执行；因此
+需要对齐官方行为的改动仍应先按下一节准备官方 Git repository。
 
 ## 固定官方源码契约测试
 
@@ -92,11 +93,15 @@ git clone --depth 1 --branch "$contract_version" \
   https://github.com/remnawave/node.git "$official_dir"
 
 export REMNANODE_OFFICIAL_SOURCE="$(cd "$official_dir" && pwd)"
+go run ./cmd/contract-source-check
 go test -count=1 ./internal/contract
 ```
 
-测试会校验官方 checkout 的精确 commit，而不是只比较版本字符串。随后运行 Go 门禁时
-保留该环境变量：
+`contract-source-check` 直接读取固定 commit object，禁用 replace refs，不信任 checkout、index 或 HEAD。
+它逐个校验证据 blob 摘要，并从官方 `REST_API`、全局 prefix、route constants 和
+controller decorators 重建 method/path manifest；还会从 Git tree 枚举 controller/module，
+绑定真实 Nest bootstrap、静态 import、严格 metadata、decorator ownership、module 注册可达性以及内部 controller 的 prefix exclusions。未知条件、spread、alias、复合 decorator 或未批准 dynamic module 会直接失败，不会猜测提取。随后运行 Go 门禁时可保留环境变量，
+使 contract package 测试也执行同一证据检查：
 
 ```bash
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
@@ -111,8 +116,9 @@ REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 - stats reset、用户 mutation、插件同步等副作用。
 - 官方契约版本或固定 commit 更新。
 
-只运行 `go test ./internal/contract` 不会启动官方 Node；它验证固定源码证据和本地
-可执行 schema。真实服务行为差分使用后文的 `contract-probe`。
+这些命令不会启动官方 Node。机器提取只证明固定源码内容与公开路由映射，没有声称把
+完整 Zod 自动翻译为 Go；本地可执行 schema 仍由边界测试覆盖，真实服务行为差分使用
+后文的 `contract-probe`。
 
 ### 外部插件 schema 证据
 
