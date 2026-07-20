@@ -92,7 +92,7 @@ jobs:
           printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
 
           image="${REGISTRY}/${IMAGE_NAME}"
-          candidate_ref="${image}:sha-${candidate_commit}"
+          candidate_ref="${image}@${candidate_digest}"
           resolved="$(docker buildx imagetools inspect \
             --format '{{.Manifest.Digest}}' "$candidate_ref" | tr -d '\r\n')"
           if [ "$resolved" != "$candidate_digest" ]; then

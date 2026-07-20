@@ -251,6 +251,72 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 			wantErr: "Panel check lifecyclePluginSerialization must be true",
 		},
 		{
+			name: "missing Compose evidence reference",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.Evidence = manifest.Evidence[:len(manifest.Evidence)-1]
+				fixture.writeManifest(manifest)
+			},
+			wantErr: "manifest evidence count=4, want 5",
+		},
+		{
+			name: "Compose candidate image digest differs from manifest",
+			mutate: func(fixture *releaseFixture) {
+				var evidence composeEvidence
+				fixture.readJSON(acceptanceDirectory+"/compose.json", &evidence)
+				evidence.CandidateImageDigest = "sha256:" + strings.Repeat("c", 64)
+				fixture.writeJSON(acceptanceDirectory+"/compose.json", evidence)
+				fixture.updateEvidenceHash("compose")
+			},
+			wantErr: "want manifest candidateImageDigest",
+		},
+		{
+			name: "Compose source digest differs from candidate",
+			mutate: func(fixture *releaseFixture) {
+				var evidence composeEvidence
+				fixture.readJSON(acceptanceDirectory+"/compose.json", &evidence)
+				evidence.Source.SHA256 = strings.Repeat("d", 64)
+				fixture.writeJSON(acceptanceDirectory+"/compose.json", evidence)
+				fixture.updateEvidenceHash("compose")
+			},
+			wantErr: "want candidate Git object SHA-256",
+		},
+		{
+			name: "Compose legacy single-run schema is rejected",
+			mutate: func(fixture *releaseFixture) {
+				path := acceptanceDirectory + "/compose.json"
+				raw := fixture.readFile(path)
+				fixture.writeFile(path, appendJSONField(raw, `"environment":{}`))
+				fixture.updateEvidenceHash("compose")
+			},
+			wantErr: "unknown field \"environment\"",
+		},
+		{
+			name: "Compose required zero host swap observation missing",
+			mutate: func(fixture *releaseFixture) {
+				var document map[string]any
+				path := acceptanceDirectory + "/compose.json"
+				fixture.readJSON(path, &document)
+				runs := document["runs"].([]any)
+				hostResources := runs[1].(map[string]any)["hostResources"].(map[string]any)
+				delete(hostResources, "swapTotalBytes")
+				fixture.writeJSON(path, document)
+				fixture.updateEvidenceHash("compose")
+			},
+			wantErr: "Compose run \"arm64\": Compose hostResources swapTotalBytes is required",
+		},
+		{
+			name: "Compose actual memory limit mismatch",
+			mutate: func(fixture *releaseFixture) {
+				var evidence composeEvidence
+				fixture.readJSON(acceptanceDirectory+"/compose.json", &evidence)
+				evidence.Runs[0].Limits.MemoryLimitBytes--
+				fixture.writeJSON(acceptanceDirectory+"/compose.json", evidence)
+				fixture.updateEvidenceHash("compose")
+			},
+			wantErr: "actual Compose limits must be",
+		},
+		{
 			name: "resource peak over limit",
 			mutate: func(fixture *releaseFixture) {
 				var evidence resourceFaultEvidence
@@ -563,9 +629,11 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	}
 	fixture.git("init", "-q")
 	fixture.writeFile("code.txt", []byte("release candidate\n"))
+	fixture.writeFile(expectedComposeSourcePath, []byte("services:\n  remnanode:\n    image: candidate\n"))
 	fixture.commitAllAt("freeze release candidate", testCandidateAt)
 	fixture.candidate = fixture.git("rev-parse", "HEAD")
 	candidateTree := fixture.git("rev-parse", fixture.candidate+"^{tree}")
+	candidateComposeSHA := fixture.fileSHA(expectedComposeSourcePath)
 
 	systemd := validSystemEvidence("systemd", "amd64", fixture.candidate)
 	openrc := validSystemEvidence("openrc", "arm64", fixture.candidate)
@@ -617,11 +685,13 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 			LogFaultStormBounded: true, FailedUpgradeRollback: true,
 		},
 	}
+	compose := validComposeEvidence(fixture.candidate, fixture.candidateImageDigest, candidateComposeSHA)
 
 	fixture.writeJSON(acceptanceDirectory+"/systemd.json", systemd)
 	fixture.writeJSON(acceptanceDirectory+"/openrc.json", openrc)
 	fixture.writeJSON(acceptanceDirectory+"/panel.json", panel)
 	fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", resource)
+	fixture.writeJSON(acceptanceDirectory+"/compose.json", compose)
 
 	manifest := acceptanceManifest{
 		SchemaVersion:        1,
@@ -655,6 +725,7 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 			fixture.evidenceReference("openrc"),
 			fixture.evidenceReference("panel"),
 			fixture.evidenceReference("resource-fault"),
+			fixture.evidenceReference("compose"),
 		},
 		Risks: []releaseRisk{},
 	}
@@ -704,6 +775,89 @@ func validRWCoreArtifact(arch string) rwCoreArtifact {
 	return rwCoreArtifact{
 		Version: expectedRWCoreVersion, Commit: expectedRWCoreCommit,
 		AssetSHA256: expectedAssetSHAByArch[arch], BinarySHA256: testCoreSHA(arch),
+	}
+}
+
+func validComposeEvidence(candidate, candidateImageDigest, sourceSHA string) composeEvidence {
+	return composeEvidence{
+		evidenceCommon:       validEvidenceCommon("compose", candidate),
+		CandidateImageDigest: candidateImageDigest,
+		Source: composeSource{
+			Path:   expectedComposeSourcePath,
+			SHA256: sourceSHA,
+		},
+		ManifestPlatforms: []string{"linux/amd64", "linux/arm64"},
+		Runs: []composeRun{
+			validComposeRun("amd64"),
+			validComposeRun("arm64"),
+		},
+	}
+}
+
+func validComposeRun(arch string) composeRun {
+	return composeRun{
+		Environment: composeEnvironment{
+			DockerEngineVersion:  "28.3.2",
+			DockerComposeVersion: "v2.38.2",
+			Arch:                 arch,
+		},
+		HostResources: composeHostResources{
+			MemoryTotalBytes:         int64Pointer(500 * 1024 * 1024),
+			CPUCount:                 intPointer(1),
+			DiskTotalBytes:           int64Pointer(2000 * 1024 * 1024),
+			DiskAvailableAtPeakBytes: int64Pointer(512 * 1024 * 1024),
+			SwapTotalBytes:           int64Pointer(0),
+		},
+		Limits: composeLimits{
+			MemoryLimitBytes:     expectedContainerMemoryBytes,
+			MemorySwapLimitBytes: expectedContainerMemoryBytes,
+			NanoCPUs:             expectedContainerNanoCPUs,
+			PIDsLimit:            expectedContainerPIDsLimit,
+		},
+		Isolation: composeIsolation{
+			ReadOnlyRootFS:        true,
+			NoNewPrivileges:       true,
+			InitEnabled:           true,
+			InitPID:               1,
+			InitProcess:           "docker-init",
+			OrphanReapingPassed:   true,
+			CapDrop:               []string{"ALL"},
+			CapAdd:                []string{"NET_ADMIN", "NET_BIND_SERVICE"},
+			EffectiveCapabilities: []string{"NET_ADMIN", "NET_BIND_SERVICE"},
+			Tmpfs: []composeTmpfsMount{
+				{Target: "/run/remnanode", SizeBytes: 4 * 1024 * 1024, Writable: true, NoExec: true, NoSUID: true, NoDev: true},
+				{Target: "/tmp", SizeBytes: 16 * 1024 * 1024, Writable: true, NoExec: true, NoSUID: true, NoDev: true},
+				{Target: "/var/log/remnanode", SizeBytes: 28 * 1024 * 1024, Writable: true, NoExec: true, NoSUID: true, NoDev: true},
+			},
+		},
+		Health: composeHealth{
+			Status:               "healthy",
+			CheckExitCode:        intPointer(0),
+			ConsecutiveSuccesses: 3,
+		},
+		Lifecycle: composeLifecycle{
+			GracefulStop:         true,
+			ForcedKill:           boolPointer(false),
+			ExitCode:             intPointer(0),
+			PIDsBaseline:         8,
+			PIDsPeak:             15,
+			PIDsAfterRecovery:    8,
+			PIDsAfterStop:        intPointer(0),
+			ZombiesAfterRecovery: intPointer(0),
+		},
+		Logs: composeLogs{
+			Driver: "json-file", MaxSizeBytes: expectedContainerLogSizeBytes,
+			MaxFiles: expectedContainerLogFiles, RotationObserved: true, PeakBytes: 3 * 1024 * 1024,
+		},
+		Storage: composeStorage{
+			RollbackImageRepository:    "docker.io/remnawave/node",
+			RollbackImageDigest:        "sha256:" + strings.Repeat("b", 64),
+			RollbackImagePulled:        true,
+			RollbackImageStarted:       true,
+			RollbackImageHealthy:       true,
+			RollbackImagePresentAtPeak: true,
+			ProjectDiskPeakMiB:         350,
+		},
 	}
 }
 
@@ -935,5 +1089,9 @@ func boolPointer(value bool) *bool {
 }
 
 func intPointer(value int) *int {
+	return &value
+}
+
+func int64Pointer(value int64) *int64 {
 	return &value
 }

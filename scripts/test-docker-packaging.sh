@@ -69,6 +69,7 @@ if grep -Eq '^[[:space:]]+build:' compose.yaml; then
 fi
 
 require_text compose.yaml 'network_mode: host'
+require_text compose.yaml 'init: true'
 require_text compose.yaml 'NET_ADMIN'
 require_text compose.yaml 'NET_BIND_SERVICE'
 require_text compose.yaml 'mem_limit: 448m'
@@ -76,11 +77,12 @@ require_text compose.yaml 'memswap_limit: 448m'
 require_text compose.yaml 'cpus: 1.0'
 require_text compose.yaml 'pids_limit: 256'
 require_text compose.yaml 'read_only: true'
-require_text compose.yaml 'test -S /run/remnanode/internal.sock && kill -0 1'
+require_text compose.yaml '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]'
 
 require_text docs/examples/compose.single-file.yaml 'image: ghcr.io/luxiaba/remnanode-lite:latest'
 require_text docs/examples/compose.single-file.yaml 'SECRET_KEY: "REPLACE_WITH_THE_COMPLETE_PANEL_SECRET_KEY"'
 require_text docs/examples/compose.single-file.yaml 'network_mode: host'
+require_text docs/examples/compose.single-file.yaml 'init: true'
 require_text docs/examples/compose.single-file.yaml 'read_only: true'
 require_text docs/examples/compose.single-file.yaml 'mem_limit: 448m'
 release_single_file="$(sed \
@@ -148,6 +150,14 @@ require_text .github/workflows/container.yml 'workflow_dispatch:'
 require_text .github/workflows/container.yml 'branches: [dev, main]'
 require_text .github/workflows/container.yml '      - ".env.example"'
 require_text .github/workflows/container.yml '      - "compose.yaml"'
+if [ "$(grep -Fc '      - "docs/examples/compose.single-file.yaml"' .github/workflows/container.yml)" -ne 2 ]; then
+  echo "container workflow must track the production single-file Compose on push and pull requests" >&2
+  exit 1
+fi
+if [ "$(grep -Fc '      - "scripts/promote-image-tag.sh"' .github/workflows/container.yml)" -ne 2 ]; then
+  echo "container workflow must track its image promotion helper on push and pull requests" >&2
+  exit 1
+fi
 require_text .github/workflows/container.yml "cancel-in-progress: \${{ github.event_name != 'workflow_dispatch' }}"
 require_text .github/workflows/container.yml "if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')"
 require_text .github/workflows/container.yml "if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
@@ -218,6 +228,15 @@ fi
 
 if grep -Fq 'docker/build-push-action@' .github/workflows/release.yml; then
   echo "release workflow must promote the accepted candidate digest instead of rebuilding it" >&2
+  exit 1
+fi
+
+require_text .github/workflows/release.yml \
+  "candidate_ref=\"${github_expression_prefix}{image}@${github_expression_prefix}{candidate_digest}\""
+if grep -Fq \
+  "candidate_ref=\"${github_expression_prefix}{image}:sha-${github_expression_prefix}{candidate_commit}\"" \
+  .github/workflows/release.yml; then
+  echo "release workflow must not require one candidate tag alias" >&2
   exit 1
 fi
 

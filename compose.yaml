@@ -5,6 +5,7 @@ services:
     image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1}"
     container_name: remnanode
     hostname: remnanode
+    init: true
     network_mode: host
     restart: unless-stopped
     cap_drop:
@@ -37,7 +38,7 @@ services:
         soft: 1048576
         hard: 1048576
     healthcheck:
-      test: ["CMD-SHELL", "test -S /run/remnanode/internal.sock && kill -0 1"]
+      test: ["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]
       interval: 30s
       timeout: 5s
       start_period: 10s

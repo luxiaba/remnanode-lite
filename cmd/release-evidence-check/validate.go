@@ -59,6 +59,7 @@ var expectedAcceptancePaths = []string{
 	acceptanceDirectory + "/openrc.json",
 	acceptanceDirectory + "/panel.json",
 	acceptanceDirectory + "/resource-fault.json",
+	acceptanceDirectory + "/compose.json",
 }
 
 type validationResult struct {
@@ -255,6 +256,7 @@ type validatedEvidence struct {
 	System   *systemEvidence
 	Panel    *panelEvidence
 	Resource *resourceFaultEvidence
+	Compose  *composeEvidence
 }
 
 func validateReleaseEvidence(ctx context.Context, repoDir, manifestPath, releaseTag string) (validationResult, error) {
@@ -322,6 +324,7 @@ func validateReleaseEvidenceAt(
 			ctx,
 			reference,
 			manifest.CandidateCommit,
+			manifest.CandidateImageDigest,
 			candidateTime,
 			now,
 			headTime,
@@ -365,6 +368,9 @@ func validateReleaseEvidenceAt(
 	}
 	if err := validateResourceArtifactClosure(*resource, systemsByArch); err != nil {
 		return validationResult{}, fmt.Errorf("resource-fault artifact identity: %w", err)
+	}
+	if evidenceByKind["compose"].Compose == nil {
+		return validationResult{}, errors.New("missing validated compose evidence")
 	}
 	if acceptedAt.Before(latestEvidenceFinish) {
 		return validationResult{}, fmt.Errorf("acceptedAt %s is before evidence completion %s", acceptedAt.Format(time.RFC3339), latestEvidenceFinish.Format(time.RFC3339))
@@ -464,13 +470,13 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 	if err := validatePolicy(manifest.Policy); err != nil {
 		return time.Time{}, err
 	}
-	if len(manifest.Evidence) != 4 {
-		return time.Time{}, fmt.Errorf("manifest evidence count=%d, want 4", len(manifest.Evidence))
+	if len(manifest.Evidence) != 5 {
+		return time.Time{}, fmt.Errorf("manifest evidence count=%d, want 5", len(manifest.Evidence))
 	}
 	if manifest.Risks == nil {
 		return time.Time{}, errors.New("manifest risks must be an array, use [] when there are no risks")
 	}
-	wantedKinds := map[string]struct{}{"systemd": {}, "openrc": {}, "panel": {}, "resource-fault": {}}
+	wantedKinds := map[string]struct{}{"systemd": {}, "openrc": {}, "panel": {}, "resource-fault": {}, "compose": {}}
 	for _, reference := range manifest.Evidence {
 		if _, ok := wantedKinds[reference.Kind]; !ok {
 			return time.Time{}, fmt.Errorf("unsupported evidence kind %q", reference.Kind)
@@ -541,7 +547,7 @@ func validateRisks(risks []releaseRisk) error {
 func (repo gitRepository) validateEvidence(
 	ctx context.Context,
 	reference evidenceReference,
-	candidateCommit string,
+	candidateCommit, candidateImageDigest string,
 	candidateTime time.Time,
 	now time.Time,
 	headTime time.Time,
@@ -613,6 +619,23 @@ func (repo gitRepository) validateEvidence(
 			return validatedEvidence{}, err
 		}
 		return validatedEvidence{Kind: reference.Kind, Timing: timing, Resource: &evidence}, nil
+	case "compose":
+		var evidence composeEvidence
+		if err := decodeStrictJSON(raw, &evidence); err != nil {
+			return validatedEvidence{}, fmt.Errorf("decode: %w", err)
+		}
+		timing, err := validateCommonEvidence(evidence.evidenceCommon, reference.Kind, candidateCommit, candidateTime, now, headTime)
+		if err != nil {
+			return validatedEvidence{}, err
+		}
+		candidateComposeSHA, err := repo.candidateFileSHA256(ctx, candidateCommit, expectedComposeSourcePath)
+		if err != nil {
+			return validatedEvidence{}, err
+		}
+		if err := validateComposeEvidence(evidence, policy, candidateImageDigest, candidateComposeSHA); err != nil {
+			return validatedEvidence{}, err
+		}
+		return validatedEvidence{Kind: reference.Kind, Timing: timing, Compose: &evidence}, nil
 	default:
 		return validatedEvidence{}, fmt.Errorf("unsupported kind %q", reference.Kind)
 	}
@@ -910,6 +933,15 @@ func (repo gitRepository) validateCandidate(ctx context.Context, candidateCommit
 	return committedAt, nil
 }
 
+func (repo gitRepository) candidateFileSHA256(ctx context.Context, candidateCommit, path string) (string, error) {
+	raw, err := repo.gitBytes(ctx, "show", candidateCommit+":"+path)
+	if err != nil {
+		return "", fmt.Errorf("read %s from candidate commit: %w", path, err)
+	}
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:]), nil
+}
+
 func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, candidateCommit string) (int, error) {
 	commitsRaw, err := repo.gitOutput(ctx, "rev-list", "--reverse", candidateCommit+"..HEAD")
 	if err != nil {
@@ -957,7 +989,8 @@ func isAllowedPostCandidatePath(path string) bool {
 		acceptanceDirectory + "/systemd.json",
 		acceptanceDirectory + "/openrc.json",
 		acceptanceDirectory + "/panel.json",
-		acceptanceDirectory + "/resource-fault.json":
+		acceptanceDirectory + "/resource-fault.json",
+		acceptanceDirectory + "/compose.json":
 		return true
 	default:
 		return false

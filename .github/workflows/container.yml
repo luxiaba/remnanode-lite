@@ -14,10 +14,12 @@ on:
       - ".env.example"
       - "Dockerfile"
       - "compose.yaml"
+      - "docs/examples/compose.single-file.yaml"
       - "go.mod"
       - "go.sum"
       - "cmd/**"
       - "internal/**"
+      - "scripts/promote-image-tag.sh"
   pull_request:
     branches: [main, dev]
     paths:
@@ -26,10 +28,12 @@ on:
       - ".env.example"
       - "Dockerfile"
       - "compose.yaml"
+      - "docs/examples/compose.single-file.yaml"
       - "go.mod"
       - "go.sum"
       - "cmd/**"
       - "internal/**"
+      - "scripts/promote-image-tag.sh"
 
 concurrency:
   group: container-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
