@@ -40,6 +40,28 @@ for workflow in \
     exit 1
   }
 done
+
+dependabot_config=.github/dependabot.yml
+[ -f "$dependabot_config" ] || {
+  echo "Dependabot configuration is missing" >&2
+  exit 1
+}
+for ecosystem in gomod github-actions docker; do
+  grep -Eq "^[[:space:]]*- package-ecosystem: ${ecosystem}$" "$dependabot_config" || {
+    echo "Dependabot does not maintain ${ecosystem} dependencies" >&2
+    exit 1
+  }
+done
+for expected_count in \
+  'target-branch: dev' \
+  'interval: weekly' \
+  'open-pull-requests-limit: 2'; do
+  if [ "$(grep -Ec "^[[:space:]]+${expected_count}$" "$dependabot_config")" -ne 3 ]; then
+    echo "every Dependabot ecosystem must use ${expected_count}" >&2
+    exit 1
+  fi
+done
+
 grep -Fq 'branches: [dev, main]' .github/workflows/test.yml || {
   echo "CI must run after pushes to dev and main" >&2
   exit 1
@@ -50,6 +72,15 @@ for expected in \
   'gh issue create'; do
   grep -Fq "$expected" .github/workflows/contract-sync.yml || {
     echo "contract sync does not automate official release detection: $expected" >&2
+    exit 1
+  }
+done
+for oracle_caller in \
+  .github/workflows/test.yml \
+  .github/workflows/contract-sync.yml \
+  scripts/release-check.sh; do
+  grep -Fq 'go run ./cmd/contract-source-check' "$oracle_caller" || {
+    echo "$oracle_caller does not verify the pinned official source oracle" >&2
     exit 1
   }
 done

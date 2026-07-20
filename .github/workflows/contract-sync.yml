@@ -86,7 +86,7 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Test contract package
-        run: go test ./internal/contract/...
+      - name: Verify pinned official source oracle
+        run: go run ./cmd/contract-source-check
         env:
           REMNANODE_OFFICIAL_SOURCE: /tmp/remnawave-node

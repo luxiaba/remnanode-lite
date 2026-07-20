@@ -27,8 +27,17 @@ func TestOfficialContractInventory(t *testing.T) {
 		if route.Response == nil || route.SuccessStatus != http.StatusOK {
 			t.Errorf("%s: response contract is incomplete", route.ID)
 		}
-		if len(route.SideEffects) == 0 || len(route.Sources) != 2 {
+		if len(route.SideEffects) == 0 || route.ControllerSource == "" || len(route.Sources) < 2 {
 			t.Errorf("%s: evidence is incomplete", route.ID)
+		}
+		controllerSources := 0
+		for _, source := range route.Sources {
+			if source == route.ControllerSource {
+				controllerSources++
+			}
+		}
+		if controllerSources != 1 {
+			t.Errorf("%s: controller source appears %d times in evidence", route.ID, controllerSources)
 		}
 		assertUnique(t, seenIDs, route.ID, "route ID")
 		assertUnique(t, seenRoutes, route.Method+" "+route.Path, "method/path")

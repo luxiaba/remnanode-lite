@@ -16,10 +16,11 @@ if git ls-files --error-unmatch cmd/m8-runtime-probe >/dev/null 2>&1; then
 fi
 
 official_source="${REMNANODE_OFFICIAL_SOURCE:-}"
-[ -n "$official_source" ] && [ -d "$official_source/.git" ] || {
-  echo "REMNANODE_OFFICIAL_SOURCE must point to the pinned official Git checkout" >&2
+[ -n "$official_source" ] || {
+  echo "REMNANODE_OFFICIAL_SOURCE must point to a Git repository containing the pinned official commit" >&2
   exit 1
 }
+go run ./cmd/contract-source-check -source "$official_source"
 
 version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
 release_tag="${RELEASE_TAG:-v${version}}"
@@ -96,7 +97,7 @@ printf '%s\n' "$evidence_summary"
 
 artifact_dir="$(mktemp -d)"
 trap 'rm -rf "$artifact_dir"' EXIT
-CHECK_ARTIFACT_DIR="$artifact_dir" bash scripts/check.sh
+REMNANODE_OFFICIAL_SOURCE='' CHECK_ARTIFACT_DIR="$artifact_dir" bash scripts/check.sh
 go run ./cmd/release-evidence-check \
   -manifest "$manifest" \
   -tag "$release_tag" \

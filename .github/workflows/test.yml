@@ -33,9 +33,12 @@ jobs:
         with:
           go-version: "1.26.5"
 
-      - name: Go quality and tests
+      - name: Verify pinned official source oracle
         env:
           REMNANODE_OFFICIAL_SOURCE: ${{ github.workspace }}/.official-source
+        run: go run ./cmd/contract-source-check
+
+      - name: Go quality and tests
         run: bash scripts/check-go.sh
 
   repository:
