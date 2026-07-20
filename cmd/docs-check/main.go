@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"net/url"
 	"os"
@@ -21,7 +22,17 @@ var (
 	spacePattern               = regexp.MustCompile(`\s+`)
 	referenceDefinitionPattern = regexp.MustCompile(`^ {0,3}\[[^]]+\]:[\t ]*(?:<([^>]+)>|([^\t ]+))`)
 	htmlDestinationPattern     = regexp.MustCompile(`(?i)(?:href|src)[\t ]*=[\t ]*["']([^"']+)["']`)
+	translationMetadataPattern = regexp.MustCompile(`^<!-- translation: locale=([^;[:space:]]+); source=([^;[:space:]]+); source-sha256=([^;[:space:]]+) -->$`)
+	translationHashPattern     = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	rootTranslationPattern     = regexp.MustCompile(`^README\.([^.]+)\.md$`)
 )
+
+const translationHeaderMaxLine = 20
+
+var supportedTranslationLocales = map[string]struct{}{
+	"ru":    {},
+	"zh-CN": {},
+}
 
 type codeFence struct {
 	marker byte
@@ -29,14 +40,22 @@ type codeFence struct {
 }
 
 type document struct {
-	path    string
-	anchors map[string]struct{}
-	links   []documentLink
+	path        string
+	anchors     map[string]struct{}
+	links       []documentLink
+	translation *translationMetadata
 }
 
 type documentLink struct {
 	line   int
 	target string
+}
+
+type translationMetadata struct {
+	line         int
+	locale       string
+	source       string
+	sourceSHA256 string
 }
 
 func main() {
@@ -73,8 +92,14 @@ func main() {
 			}
 		}
 	}
+	translationProblems, translationWarnings := validateTranslations(root, documents)
+	problems = append(problems, translationProblems...)
 	problems = append(problems, orphanedDocuments(documents)...)
 
+	sort.Strings(translationWarnings)
+	for _, warning := range translationWarnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+	}
 	if len(problems) != 0 {
 		sort.Strings(problems)
 		for _, problem := range problems {
@@ -127,9 +152,34 @@ func parseDocument(root, path string) (document, []string, error) {
 	inComment := false
 	h1Count := 0
 	lineNumber := 0
+	firstNonBlankLine := 0
+	var problems []string
 	for scanner.Scan() {
 		lineNumber++
 		line := scanner.Text()
+		trimmedLine := strings.TrimSpace(line)
+		if trimmedLine != "" && firstNonBlankLine == 0 {
+			firstNonBlankLine = lineNumber
+		}
+		if fence.length == 0 && !inComment && strings.HasPrefix(trimmedLine, "<!-- translation:") {
+			match := translationMetadataPattern.FindStringSubmatch(trimmedLine)
+			switch {
+			case match == nil:
+				problems = append(problems, fmt.Sprintf("%s:%d: malformed translation metadata", path, lineNumber))
+			case doc.translation != nil:
+				problems = append(problems, fmt.Sprintf("%s:%d: duplicate translation metadata", path, lineNumber))
+			default:
+				doc.translation = &translationMetadata{
+					line:         lineNumber,
+					locale:       match[1],
+					source:       match[2],
+					sourceSHA256: match[3],
+				}
+				if firstNonBlankLine != lineNumber {
+					problems = append(problems, fmt.Sprintf("%s:%d: translation metadata must be the first non-blank line", path, lineNumber))
+				}
+			}
+		}
 		if fence.length != 0 {
 			if closesCodeFence(line, fence) {
 				fence = codeFence{}
@@ -168,7 +218,6 @@ func parseDocument(root, path string) (document, []string, error) {
 		return document{}, nil, err
 	}
 
-	var problems []string
 	if fence.length != 0 {
 		problems = append(problems, fmt.Sprintf("%s:%d: unclosed %s code fence", path, lineNumber, strings.Repeat(string(fence.marker), fence.length)))
 	}
@@ -400,6 +449,152 @@ func validateLink(root string, doc document, link documentLink, documents map[st
 		return fmt.Sprintf("%s:%d: missing Markdown anchor: %s", doc.path, link.line, link.target)
 	}
 	return ""
+}
+
+func validateTranslations(root string, documents map[string]document) ([]string, []string) {
+	var problems []string
+	var warnings []string
+	translations := make(map[string]string)
+
+	paths := make([]string, 0, len(documents))
+	for path := range documents {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+
+	for _, documentPath := range paths {
+		doc := documents[documentPath]
+		expectedLocale, translationPath := translationLocaleForPath(documentPath)
+		metadata := doc.translation
+		if translationPath {
+			if _, ok := supportedTranslationLocales[expectedLocale]; !ok {
+				problems = append(problems, fmt.Sprintf("%s: unsupported translation locale %q", documentPath, expectedLocale))
+			}
+			if metadata == nil {
+				problems = append(problems, fmt.Sprintf("%s: translation metadata is missing", documentPath))
+				continue
+			}
+			if metadata.locale != expectedLocale {
+				problems = append(problems, fmt.Sprintf("%s:%d: translation locale %q does not match path locale %q", documentPath, metadata.line, metadata.locale, expectedLocale))
+			}
+		} else if metadata != nil {
+			problems = append(problems, fmt.Sprintf("%s:%d: translation metadata is only allowed on localized documents", documentPath, metadata.line))
+		}
+		if metadata == nil {
+			continue
+		}
+		if _, ok := supportedTranslationLocales[metadata.locale]; !ok {
+			problems = append(problems, fmt.Sprintf("%s:%d: unsupported metadata locale %q", documentPath, metadata.line, metadata.locale))
+		}
+		if !translationHashPattern.MatchString(metadata.sourceSHA256) {
+			problems = append(problems, fmt.Sprintf("%s:%d: source-sha256 must be 64 lowercase hexadecimal characters", documentPath, metadata.line))
+		}
+
+		source := metadata.source
+		if problem := validateCanonicalSourcePath(source); problem != "" {
+			problems = append(problems, fmt.Sprintf("%s:%d: %s", documentPath, metadata.line, problem))
+			continue
+		}
+		if _, localized := translationLocaleForPath(source); localized || strings.HasPrefix(source, "docs/i18n/") {
+			problems = append(problems, fmt.Sprintf("%s:%d: translation source must be canonical Markdown outside docs/i18n: %s", documentPath, metadata.line, source))
+			continue
+		}
+		sourceDoc, ok := documents[source]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("%s:%d: translation source does not exist: %s", documentPath, metadata.line, source))
+			continue
+		}
+		if sourceDoc.translation != nil {
+			problems = append(problems, fmt.Sprintf("%s:%d: translation source is not canonical: %s", documentPath, metadata.line, source))
+			continue
+		}
+
+		key := metadata.locale + "\x00" + source
+		if previous, duplicate := translations[key]; duplicate {
+			problems = append(problems, fmt.Sprintf("%s:%d: duplicate %s translation for %s; already provided by %s", documentPath, metadata.line, metadata.locale, source, previous))
+		} else {
+			translations[key] = documentPath
+		}
+
+		if !hasVisibleCanonicalLink(doc, source) {
+			problems = append(problems, fmt.Sprintf("%s: translated document must visibly link to %s within its first %d lines", documentPath, source, translationHeaderMaxLine))
+		}
+
+		if translationHashPattern.MatchString(metadata.sourceSHA256) {
+			content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(source)))
+			if err != nil {
+				problems = append(problems, fmt.Sprintf("%s:%d: read translation source %s: %v", documentPath, metadata.line, source, err))
+				continue
+			}
+			actualHash := fmt.Sprintf("%x", sha256.Sum256(content))
+			if actualHash != metadata.sourceSHA256 {
+				warnings = append(warnings, fmt.Sprintf("%s:%d: translation may be stale: %s has SHA-256 %s, metadata records %s", documentPath, metadata.line, source, actualHash, metadata.sourceSHA256))
+			}
+		}
+	}
+
+	return problems, warnings
+}
+
+func translationLocaleForPath(documentPath string) (string, bool) {
+	if match := rootTranslationPattern.FindStringSubmatch(documentPath); match != nil {
+		return match[1], true
+	}
+	const prefix = "docs/i18n/"
+	if !strings.HasPrefix(documentPath, prefix) {
+		return "", false
+	}
+	remainder := strings.TrimPrefix(documentPath, prefix)
+	separator := strings.IndexByte(remainder, '/')
+	if separator <= 0 || separator == len(remainder)-1 {
+		return "", false
+	}
+	return remainder[:separator], true
+}
+
+func validateCanonicalSourcePath(source string) string {
+	if source == "" {
+		return "translation source is empty"
+	}
+	if strings.Contains(source, `\`) || strings.HasPrefix(source, "/") {
+		return fmt.Sprintf("translation source must be a repository-relative slash path: %s", source)
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(source)))
+	if cleaned != source || cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Sprintf("translation source must be a normalized repository path: %s", source)
+	}
+	if !strings.EqualFold(filepath.Ext(source), ".md") {
+		return fmt.Sprintf("translation source must be Markdown: %s", source)
+	}
+	return ""
+}
+
+func hasVisibleCanonicalLink(doc document, source string) bool {
+	for _, link := range doc.links {
+		if link.line > translationHeaderMaxLine {
+			continue
+		}
+		if resolvedRepositoryLink(doc.path, link.target) == source {
+			return true
+		}
+	}
+	return false
+}
+
+func resolvedRepositoryLink(documentPath, rawTarget string) string {
+	target, err := url.Parse(rawTarget)
+	if err != nil || target.IsAbs() || target.Host != "" || target.Path == "" || strings.HasPrefix(target.Path, "/") {
+		return ""
+	}
+	decoded, err := url.PathUnescape(target.Path)
+	if err != nil {
+		return ""
+	}
+	resolved := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(documentPath), filepath.FromSlash(decoded))))
+	if resolved == ".." || strings.HasPrefix(resolved, "../") {
+		return ""
+	}
+	return resolved
 }
 
 func orphanedDocuments(documents map[string]document) []string {
