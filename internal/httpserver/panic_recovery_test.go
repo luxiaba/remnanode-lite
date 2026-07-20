@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type routePanicProvider struct {
@@ -43,40 +43,40 @@ func (p *routePanicProvider) InboundTags() []string {
 	return []string{"in-1"}
 }
 
-func (*routePanicProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
+func (*routePanicProvider) GetUserIPList(context.Context, string, bool) ([]xrayrpc.IPEntry, error) {
 	return nil, nil
 }
 
-func (*routePanicProvider) HandlerRemoveUser(context.Context, string, string, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerRemoveUser(context.Context, string, string, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (*routePanicProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (*routePanicProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (*routePanicProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (*routePanicProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (*routePanicProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (*routePanicProvider) HandlerGetInboundUsers(context.Context, string) ([]xtls.InboundUser, xtls.HandlerResult) {
-	return nil, xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerGetInboundUsers(context.Context, string) ([]xrayrpc.InboundUser, xrayrpc.HandlerResult) {
+	return nil, xrayrpc.HandlerResult{OK: true}
 }
 
-func (*routePanicProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xtls.HandlerResult) {
-	return 0, xtls.HandlerResult{OK: true}
+func (*routePanicProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xrayrpc.HandlerResult) {
+	return 0, xrayrpc.HandlerResult{OK: true}
 }
 
 func TestMutationPanicThroughHTTPReturnsOfficialErrorAndRecovers(t *testing.T) {

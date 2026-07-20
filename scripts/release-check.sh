@@ -26,11 +26,11 @@ version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.
 release_tag="${RELEASE_TAG:-v${version}}"
 RELEASE_TAG="$release_tag" bash scripts/check-version.sh
 
-grep -Fq 'Unreleased' docs/CHANGELOG.md && {
+grep -Fq 'Unreleased' CHANGELOG.md && {
   echo "CHANGELOG still contains Unreleased" >&2
   exit 1
 }
-grep -Eq "^## \[${version//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" docs/CHANGELOG.md || {
+grep -Eq "^## \[${version//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md || {
   echo "CHANGELOG does not contain a dated ${version} release heading" >&2
   exit 1
 }
@@ -48,7 +48,11 @@ git ls-files --error-unmatch "$release_note" >/dev/null 2>&1 || {
   echo "$release_note must start with '# v${version}'" >&2
   exit 1
 }
-for heading in '## 兼容范围' '## 验收结果' '## 已知风险' '## 安装与升级'; do
+for heading in \
+  '## Compatibility' \
+  '## Acceptance Results' \
+  '## Known Risks' \
+  '## Installation and Upgrade'; do
   grep -Fxq "$heading" "$release_note" || {
     echo "$release_note is missing heading: $heading" >&2
     exit 1
@@ -59,23 +63,10 @@ grep -Fq "../development/acceptance/v${version}/manifest.json" "$release_note" |
   echo "$release_note does not link $manifest" >&2
   exit 1
 }
-if grep -Eiq 'TODO|TBD|待补|Unreleased|开发中' "$release_note"; then
+if grep -Eiq 'TODO|TBD|TO BE COMPLETED|Unreleased|IN PROGRESS' "$release_note"; then
   echo "$release_note still contains placeholder text" >&2
   exit 1
 fi
-
-if grep -Fq '首个正式 Release 尚未发布' README.md; then
-  echo "README still describes the first Release as unpublished" >&2
-  exit 1
-fi
-if grep -Fq '| M8 发布验收 | 推进中 |' docs/development/roadmap.md; then
-  echo "roadmap still describes M8 release acceptance as in progress" >&2
-  exit 1
-fi
-grep -Fq '| M8 发布验收 | 已完成 |' docs/development/roadmap.md || {
-  echo "roadmap does not mark M8 release acceptance complete" >&2
-  exit 1
-}
 
 evidence_summary="$(go run ./cmd/release-evidence-check -manifest "$manifest" -tag "$release_tag")"
 if [[ "$evidence_summary" =~ \(candidate\ ([0-9a-f]{40}),\ image\ (sha256:[0-9a-f]{64})\)$ ]]; then

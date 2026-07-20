@@ -29,7 +29,7 @@ for file in \
   .github/workflows/release.yml \
   scripts/promote-image-tag.sh \
   docs/deployment-docker.md \
-  docs/examples/compose.single-file.yaml; do
+  deploy/compose.single-file.yaml; do
   require_file "$file"
 done
 
@@ -79,25 +79,25 @@ require_text compose.yaml 'pids_limit: 256'
 require_text compose.yaml 'read_only: true'
 require_text compose.yaml '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]'
 
-require_text docs/examples/compose.single-file.yaml 'image: ghcr.io/luxiaba/remnanode-lite:latest'
-require_text docs/examples/compose.single-file.yaml 'SECRET_KEY: "REPLACE_WITH_THE_COMPLETE_PANEL_SECRET_KEY"'
-require_text docs/examples/compose.single-file.yaml 'network_mode: host'
-require_text docs/examples/compose.single-file.yaml 'init: true'
-require_text docs/examples/compose.single-file.yaml 'read_only: true'
-require_text docs/examples/compose.single-file.yaml 'mem_limit: 448m'
+require_text deploy/compose.single-file.yaml 'image: ghcr.io/luxiaba/remnanode-lite:latest'
+require_text deploy/compose.single-file.yaml 'SECRET_KEY: "REPLACE_WITH_THE_COMPLETE_PANEL_SECRET_KEY"'
+require_text deploy/compose.single-file.yaml 'network_mode: host'
+require_text deploy/compose.single-file.yaml 'init: true'
+require_text deploy/compose.single-file.yaml 'read_only: true'
+require_text deploy/compose.single-file.yaml 'mem_limit: 448m'
 release_single_file="$(sed \
   "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${version}|" \
-  docs/examples/compose.single-file.yaml)"
+  deploy/compose.single-file.yaml)"
 grep -Fq "image: ghcr.io/luxiaba/remnanode-lite:${version}" <<<"$release_single_file"
 if grep -Fq 'ghcr.io/luxiaba/remnanode-lite:latest' <<<"$release_single_file"; then
   echo "release single-file Compose still contains latest" >&2
   exit 1
 fi
-if grep -Eq '^[[:space:]]*-[[:space:]]*SECRET_KEY=' docs/examples/compose.single-file.yaml; then
+if grep -Eq '^[[:space:]]*-[[:space:]]*SECRET_KEY=' deploy/compose.single-file.yaml; then
   echo "single-file Compose must use a mapping for SECRET_KEY" >&2
   exit 1
 fi
-if grep -Eq '^[[:space:]]+volumes:' docs/examples/compose.single-file.yaml; then
+if grep -Eq '^[[:space:]]+volumes:' deploy/compose.single-file.yaml; then
   echo "single-file Compose must keep runtime logs ephemeral" >&2
   exit 1
 fi
@@ -150,7 +150,7 @@ require_text .github/workflows/container.yml 'workflow_dispatch:'
 require_text .github/workflows/container.yml 'branches: [dev, main]'
 require_text .github/workflows/container.yml '      - ".env.example"'
 require_text .github/workflows/container.yml '      - "compose.yaml"'
-if [ "$(grep -Fc '      - "docs/examples/compose.single-file.yaml"' .github/workflows/container.yml)" -ne 2 ]; then
+if [ "$(grep -Fc '      - "deploy/compose.single-file.yaml"' .github/workflows/container.yml)" -ne 2 ]; then
   echo "container workflow must track the production single-file Compose on push and pull requests" >&2
   exit 1
 fi
@@ -265,7 +265,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     docker compose -f compose.yaml config --quiet
   SECRET_KEY=packaging-check REMNANODE_IMAGE="$production_image" \
     docker compose -f compose.yaml -f compose.build.yaml config --quiet
-  docker compose -f docs/examples/compose.single-file.yaml config --quiet
+  docker compose -f deploy/compose.single-file.yaml config --quiet
 else
   echo "docker compose is unavailable; skipped Compose schema validation" >&2
 fi

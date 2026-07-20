@@ -1,4 +1,4 @@
-module github.com/Luxiaba/remnanode-lite
+module github.com/luxiaba/remnanode-lite
 
 go 1.26
 

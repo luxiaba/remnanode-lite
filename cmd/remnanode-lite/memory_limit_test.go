@@ -4,7 +4,7 @@ import (
 	"runtime/debug"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/config"
 )
 
 func TestApplyMemoryLimitPolicy(t *testing.T) {

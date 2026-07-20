@@ -2088,8 +2088,8 @@ restart_log="$TMP_ROOT/restart-service.log"
 )
 
 dry_run_output="$(run_trusted_installer upgrade.sh --yes --dry-run --low-memory)"
-grep -Fq '[dry-run] 停止服务并确认 remnanode-lite/rw-core 全部退出' <<<"$dry_run_output"
-grep -Fq '[dry-run] 设置 /etc/remnanode/node.env LOW_MEMORY=1' <<<"$dry_run_output"
+grep -Fq '[dry-run] Stop the service and confirm all remnanode-lite/rw-core processes have exited' <<<"$dry_run_output"
+grep -Fq '[dry-run] Set LOW_MEMORY=1 in /etc/remnanode/node.env' <<<"$dry_run_output"
 if RNL_ENSURE_SERVICE_STARTED=invalid \
   run_trusted_installer upgrade.sh --yes --dry-run >/dev/null 2>&1; then
   echo "upgrade accepted invalid ensure-start state" >&2

@@ -22,8 +22,8 @@ done
 
 readonly PROTOC_VERSION="35.1"
 readonly PROTOC_GEN_GO_VERSION="v1.36.11"
-readonly PROTO_FILE="internal/xtls/xrpc/wire.proto"
-readonly GENERATED_FILE="internal/xtls/xrpc/wire.pb.go"
+readonly PROTO_FILE="internal/xrayrpc/wire/wire.proto"
+readonly GENERATED_FILE="internal/xrayrpc/wire/wire.pb.go"
 
 actual_protoc_version="$(protoc --version)"
 if [ "$actual_protoc_version" != "libprotoc ${PROTOC_VERSION}" ]; then

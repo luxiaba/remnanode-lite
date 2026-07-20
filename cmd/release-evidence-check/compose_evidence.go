@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	expectedComposeSourcePath              = "docs/examples/compose.single-file.yaml"
+	expectedComposeSourcePath              = "deploy/compose.single-file.yaml"
 	expectedContainerMemoryBytes           = int64(expectedServiceMemoryMaxMiB * 1024 * 1024)
 	expectedContainerNanoCPUs              = int64(expectedCPUCount * 1_000_000_000)
 	expectedContainerPIDsLimit             = int64(256)

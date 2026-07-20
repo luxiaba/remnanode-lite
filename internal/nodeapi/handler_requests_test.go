@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
 )
 
 func TestHandlerRequestsAcceptOfficialExamples(t *testing.T) {

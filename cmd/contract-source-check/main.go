@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/contract"
 )
 
 const checkTimeout = 45 * time.Second

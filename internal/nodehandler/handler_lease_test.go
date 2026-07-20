@@ -7,9 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type mutationLeaseContextKey struct{}
@@ -85,49 +85,49 @@ func (p *recordingMutationProvider) InboundTags() []string {
 	return []string{"in-1"}
 }
 
-func (p *recordingMutationProvider) GetUserIPList(ctx context.Context, userID string, reset bool) ([]xtls.IPEntry, error) {
+func (p *recordingMutationProvider) GetUserIPList(ctx context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error) {
 	p.recorder.record(fmt.Sprintf("get_user_ip_list:%s:%t", userID, reset), ctx)
-	return []xtls.IPEntry{{IP: "203.0.113.10"}}, nil
+	return []xrayrpc.IPEntry{{IP: "203.0.113.10"}}, nil
 }
 
-func (p *recordingMutationProvider) HandlerRemoveUser(ctx context.Context, tag, username, _ string) xtls.HandlerResult {
+func (p *recordingMutationProvider) HandlerRemoveUser(ctx context.Context, tag, username, _ string) xrayrpc.HandlerResult {
 	p.recorder.record("handler_remove:"+tag+":"+username, ctx)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *recordingMutationProvider) HandlerAddVlessUser(ctx context.Context, tag, username, _, _ string, _ uint32, _ string) xtls.HandlerResult {
+func (p *recordingMutationProvider) HandlerAddVlessUser(ctx context.Context, tag, username, _, _ string, _ uint32, _ string) xrayrpc.HandlerResult {
 	p.recorder.record("handler_add_vless:"+tag+":"+username, ctx)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *recordingMutationProvider) HandlerAddTrojanUser(ctx context.Context, tag, username, _ string, _ uint32, _ string) xtls.HandlerResult {
+func (p *recordingMutationProvider) HandlerAddTrojanUser(ctx context.Context, tag, username, _ string, _ uint32, _ string) xrayrpc.HandlerResult {
 	p.recorder.record("handler_add_trojan:"+tag+":"+username, ctx)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *recordingMutationProvider) HandlerAddShadowsocksUser(ctx context.Context, tag, username, _ string, _ int, _ bool, _ uint32, _ string) xtls.HandlerResult {
+func (p *recordingMutationProvider) HandlerAddShadowsocksUser(ctx context.Context, tag, username, _ string, _ int, _ bool, _ uint32, _ string) xrayrpc.HandlerResult {
 	p.recorder.record("handler_add_shadowsocks:"+tag+":"+username, ctx)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *recordingMutationProvider) HandlerAddShadowsocks2022User(ctx context.Context, tag, username, _ string, _ uint32, _ string) xtls.HandlerResult {
+func (p *recordingMutationProvider) HandlerAddShadowsocks2022User(ctx context.Context, tag, username, _ string, _ uint32, _ string) xrayrpc.HandlerResult {
 	p.recorder.record("handler_add_shadowsocks2022:"+tag+":"+username, ctx)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *recordingMutationProvider) HandlerAddHysteriaUser(ctx context.Context, tag, username, _ string, _ uint32, _ string) xtls.HandlerResult {
+func (p *recordingMutationProvider) HandlerAddHysteriaUser(ctx context.Context, tag, username, _ string, _ uint32, _ string) xrayrpc.HandlerResult {
 	p.recorder.record("handler_add_hysteria:"+tag+":"+username, ctx)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *recordingMutationProvider) HandlerGetInboundUsers(ctx context.Context, tag string) ([]xtls.InboundUser, xtls.HandlerResult) {
+func (p *recordingMutationProvider) HandlerGetInboundUsers(ctx context.Context, tag string) ([]xrayrpc.InboundUser, xrayrpc.HandlerResult) {
 	p.recorder.record("handler_get_inbound_users:"+tag, ctx)
-	return nil, xtls.HandlerResult{OK: true}
+	return nil, xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *recordingMutationProvider) HandlerGetInboundUsersCount(ctx context.Context, tag string) (int64, xtls.HandlerResult) {
+func (p *recordingMutationProvider) HandlerGetInboundUsersCount(ctx context.Context, tag string) (int64, xrayrpc.HandlerResult) {
 	p.recorder.record("handler_get_inbound_users_count:"+tag, ctx)
-	return 0, xtls.HandlerResult{OK: true}
+	return 0, xrayrpc.HandlerResult{OK: true}
 }
 
 type recordingMutationDropper struct {

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package remnanode.xtls.wire;
 
-option go_package = "github.com/Luxiaba/remnanode-lite/internal/xtls/xrpc";
+option go_package = "github.com/luxiaba/remnanode-lite/internal/xrayrpc/wire";
 
 // These messages intentionally contain only fields used by the Node. Their
 // field numbers and wire types match rw-core, while RPC method paths and

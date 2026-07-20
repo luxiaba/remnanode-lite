@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xraywebhook"
+	"github.com/luxiaba/remnanode-lite/internal/xraywebhook"
 )
 
 var sourceIPPattern = regexp.MustCompile(`^(?:(?:tcp|udp):)?(?:\[(.+?)\]|(.+?))(?::(\d+))?$`)

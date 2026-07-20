@@ -14,7 +14,7 @@ var Version = "2.8.0-rnl.1"
 // Overridable via -ldflags at build time.
 var ContractVersion = "2.8.0"
 
-const releaseRepo = "Luxiaba/remnanode-lite"
+const releaseRepo = "luxiaba/remnanode-lite"
 
 var releaseTagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-rnl\.[1-9][0-9]*)?$`)
 

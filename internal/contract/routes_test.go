@@ -5,8 +5,8 @@ import (
 	"sort"
 	"testing"
 
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/httpserver"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/httpserver"
 )
 
 // The evidence package is independent from the dispatcher registry. Comparing

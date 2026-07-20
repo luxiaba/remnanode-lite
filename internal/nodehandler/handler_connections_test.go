@@ -8,15 +8,15 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type connectionCleanupProvider struct {
 	stubProvider
 	mu          sync.Mutex
-	entries     map[string][]xtls.IPEntry
+	entries     map[string][]xrayrpc.IPEntry
 	resetFlags  []bool
 	lookupErr   error
 	resetErr    error
@@ -24,7 +24,7 @@ type connectionCleanupProvider struct {
 	removeCalls atomic.Int64
 }
 
-func (p *connectionCleanupProvider) GetUserIPList(_ context.Context, userID string, reset bool) ([]xtls.IPEntry, error) {
+func (p *connectionCleanupProvider) GetUserIPList(_ context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.resetFlags = append(p.resetFlags, reset)
@@ -34,19 +34,19 @@ func (p *connectionCleanupProvider) GetUserIPList(_ context.Context, userID stri
 	if reset && p.resetErr != nil {
 		return nil, p.resetErr
 	}
-	entries := append([]xtls.IPEntry(nil), p.entries[userID]...)
+	entries := append([]xrayrpc.IPEntry(nil), p.entries[userID]...)
 	if reset {
 		delete(p.entries, userID)
 	}
 	return entries, nil
 }
 
-func (p *connectionCleanupProvider) HandlerRemoveUser(_ context.Context, tag, _, _ string) xtls.HandlerResult {
+func (p *connectionCleanupProvider) HandlerRemoveUser(_ context.Context, tag, _, _ string) xrayrpc.HandlerResult {
 	p.removeCalls.Add(1)
 	if message := p.removeErr[tag]; message != "" {
-		return xtls.HandlerResult{OK: false, Message: message}
+		return xrayrpc.HandlerResult{OK: false, Message: message}
 	}
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
 type stagedConnectionDropper struct {
@@ -90,7 +90,7 @@ func TestRemoveUsersRetriesSocketKillWithoutResettingOnlineStats(t *testing.T) {
 
 	provider := &connectionCleanupProvider{
 		stubProvider: stubProvider{inboundTags: []string{"in-1"}},
-		entries: map[string][]xtls.IPEntry{
+		entries: map[string][]xrayrpc.IPEntry{
 			"u1": {{IP: "203.0.113.10"}},
 		},
 	}
@@ -108,7 +108,7 @@ func TestRemoveUsersRetriesSocketKillWithoutResettingOnlineStats(t *testing.T) {
 	}
 	provider.mu.Lock()
 	firstFlags := append([]bool(nil), provider.resetFlags...)
-	remaining := append([]xtls.IPEntry(nil), provider.entries["u1"]...)
+	remaining := append([]xrayrpc.IPEntry(nil), provider.entries["u1"]...)
 	provider.mu.Unlock()
 	if !slices.Equal(firstFlags, []bool{false}) {
 		t.Fatalf("first reset flags = %v, want [false]", firstFlags)
@@ -126,7 +126,7 @@ func TestRemoveUsersRetriesSocketKillWithoutResettingOnlineStats(t *testing.T) {
 	}
 	provider.mu.Lock()
 	allFlags := append([]bool(nil), provider.resetFlags...)
-	remaining = append([]xtls.IPEntry(nil), provider.entries["u1"]...)
+	remaining = append([]xrayrpc.IPEntry(nil), provider.entries["u1"]...)
 	provider.mu.Unlock()
 	if !slices.Equal(allFlags, []bool{false, false}) {
 		t.Fatalf("all reset flags = %v, want read-only lookups", allFlags)
@@ -144,7 +144,7 @@ func TestRemoveUsersBatchesConnectionDropAfterReadOnlyStatsLookups(t *testing.T)
 
 	provider := &connectionCleanupProvider{
 		stubProvider: stubProvider{inboundTags: []string{"in-1"}},
-		entries: map[string][]xtls.IPEntry{
+		entries: map[string][]xrayrpc.IPEntry{
 			"u1": {{IP: "203.0.113.10"}},
 			"u2": {{IP: "198.51.100.20"}},
 		},
@@ -181,7 +181,7 @@ func TestRemoveUserNeverRequestsDestructiveOnlineStatsReset(t *testing.T) {
 
 	provider := &connectionCleanupProvider{
 		stubProvider: stubProvider{inboundTags: []string{"in-1"}},
-		entries: map[string][]xtls.IPEntry{
+		entries: map[string][]xrayrpc.IPEntry{
 			"u1": {{IP: "203.0.113.10"}},
 		},
 		resetErr: errors.New("reset unavailable"),
@@ -198,7 +198,7 @@ func TestRemoveUserNeverRequestsDestructiveOnlineStatsReset(t *testing.T) {
 		t.Fatalf("read-only cleanup response = %#v", response)
 	}
 	provider.mu.Lock()
-	remaining := append([]xtls.IPEntry(nil), provider.entries["u1"]...)
+	remaining := append([]xrayrpc.IPEntry(nil), provider.entries["u1"]...)
 	flags := append([]bool(nil), provider.resetFlags...)
 	provider.mu.Unlock()
 	if len(remaining) != 1 {
@@ -214,7 +214,7 @@ func TestRemoveUsersSkipsIPStatsWithoutNetAdminCapability(t *testing.T) {
 
 	provider := &connectionCleanupProvider{
 		stubProvider: stubProvider{inboundTags: []string{"in-1"}},
-		entries: map[string][]xtls.IPEntry{
+		entries: map[string][]xrayrpc.IPEntry{
 			"u1": {{IP: "203.0.113.10"}},
 		},
 	}
@@ -308,7 +308,7 @@ func TestRemoveUserPreservesIPStatsWhenAnInboundRemovalFails(t *testing.T) {
 
 	provider := &connectionCleanupProvider{
 		stubProvider: stubProvider{inboundTags: []string{"in-1", "in-2"}},
-		entries: map[string][]xtls.IPEntry{
+		entries: map[string][]xrayrpc.IPEntry{
 			"u1": {{IP: "203.0.113.10"}},
 		},
 		removeErr: map[string]string{"in-2": "remove unavailable"},
@@ -328,7 +328,7 @@ func TestRemoveUserPreservesIPStatsWhenAnInboundRemovalFails(t *testing.T) {
 	}
 	provider.mu.Lock()
 	flags := append([]bool(nil), provider.resetFlags...)
-	remaining := append([]xtls.IPEntry(nil), provider.entries["u1"]...)
+	remaining := append([]xrayrpc.IPEntry(nil), provider.entries["u1"]...)
 	provider.mu.Unlock()
 	if !slices.Equal(flags, []bool{false}) {
 		t.Fatalf("IP stats calls = %v, want one non-reset lookup", flags)

@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type countingHandlerProvider struct {
@@ -29,41 +29,41 @@ func (p countingHandlerProvider) InboundTags() []string {
 	p.hit()
 	return []string{"inbound-1"}
 }
-func (p countingHandlerProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
+func (p countingHandlerProvider) GetUserIPList(context.Context, string, bool) ([]xrayrpc.IPEntry, error) {
 	p.hit()
-	return []xtls.IPEntry{}, nil
+	return []xrayrpc.IPEntry{}, nil
 }
-func (p countingHandlerProvider) HandlerRemoveUser(context.Context, string, string, string) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerRemoveUser(context.Context, string, string, string) xrayrpc.HandlerResult {
 	p.hit()
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xrayrpc.HandlerResult {
 	p.hit()
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
 	p.hit()
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddShadowsocksUser(context.Context, string, string, string, int, bool, uint32, string) xrayrpc.HandlerResult {
 	p.hit()
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddShadowsocks2022User(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
 	p.hit()
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
+func (p countingHandlerProvider) HandlerAddHysteriaUser(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
 	p.hit()
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerGetInboundUsers(context.Context, string) ([]xtls.InboundUser, xtls.HandlerResult) {
+func (p countingHandlerProvider) HandlerGetInboundUsers(context.Context, string) ([]xrayrpc.InboundUser, xrayrpc.HandlerResult) {
 	p.hit()
-	return []xtls.InboundUser{}, xtls.HandlerResult{OK: true}
+	return []xrayrpc.InboundUser{}, xrayrpc.HandlerResult{OK: true}
 }
-func (p countingHandlerProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xtls.HandlerResult) {
+func (p countingHandlerProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xrayrpc.HandlerResult) {
 	p.hit()
-	return 1, xtls.HandlerResult{OK: true}
+	return 1, xrayrpc.HandlerResult{OK: true}
 }
 
 type countingDropper struct {
@@ -247,9 +247,9 @@ type failingInboundUsersProvider struct {
 	countingHandlerProvider
 }
 
-func (p failingInboundUsersProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xtls.HandlerResult) {
+func (p failingInboundUsersProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xrayrpc.HandlerResult) {
 	p.hit()
-	return 0, xtls.HandlerResult{OK: false, Message: "raw SDK detail"}
+	return 0, xrayrpc.HandlerResult{OK: false, Message: "raw SDK detail"}
 }
 
 func TestHandlerApplicationErrorUsesOfficialCodeAndPath(t *testing.T) {

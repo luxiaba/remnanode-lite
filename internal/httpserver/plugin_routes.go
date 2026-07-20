@@ -3,8 +3,8 @@ package httpserver
 import (
 	"net/http"
 
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
-	"github.com/Luxiaba/remnanode-lite/internal/plugin"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
 )
 
 func (s *Server) handlePluginSync(w http.ResponseWriter, r *http.Request) {

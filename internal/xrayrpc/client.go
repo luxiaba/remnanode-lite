@@ -1,4 +1,4 @@
-package xtls
+package xrayrpc
 
 import (
 	"context"

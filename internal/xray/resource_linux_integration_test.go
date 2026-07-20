@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/unixconfig"
 )
 
 const lowMemoryIntegrationEnv = "REMNANODE_LOW_MEMORY_INTEGRATION"

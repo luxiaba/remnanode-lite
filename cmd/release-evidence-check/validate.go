@@ -982,7 +982,7 @@ func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, cand
 func isAllowedPostCandidatePath(path string) bool {
 	switch path {
 	case "README.md",
-		"docs/CHANGELOG.md",
+		"CHANGELOG.md",
 		"docs/development/roadmap.md",
 		"docs/releases/v2.8.0-rnl.1.md",
 		manifestRepositoryPath,

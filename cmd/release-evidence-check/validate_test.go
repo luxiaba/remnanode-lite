@@ -731,7 +731,7 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	}
 	fixture.writeManifest(manifest)
 	fixture.writeFile("README.md", []byte("# release\n"))
-	fixture.writeFile("docs/CHANGELOG.md", []byte("# changelog\n"))
+	fixture.writeFile("CHANGELOG.md", []byte("# changelog\n"))
 	fixture.writeFile("docs/development/roadmap.md", []byte("# roadmap\n"))
 	fixture.writeFile("docs/releases/v2.8.0-rnl.1.md", []byte("# v2.8.0-rnl.1\n"))
 	fixture.commitAll("record release acceptance")
@@ -1031,7 +1031,7 @@ func (fixture *releaseFixture) createAllowedMergeCommit() {
 	fixture.writeFile("README.md", []byte("# release from side branch\n"))
 	fixture.commitAll("update README on release side branch")
 	fixture.git("checkout", "-q", baseBranch)
-	fixture.writeFile("docs/CHANGELOG.md", []byte("# changelog on main branch\n"))
+	fixture.writeFile("CHANGELOG.md", []byte("# changelog on main branch\n"))
 	fixture.commitAll("update changelog on main branch")
 	fixture.git(
 		"-c", "user.name=Release Test",

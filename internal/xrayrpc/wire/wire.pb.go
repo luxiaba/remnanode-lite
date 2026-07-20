@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.35.1
-// source: internal/xtls/xrpc/wire.proto
+// source: internal/xrayrpc/wire/wire.proto
 
-package xrpc
+package wire
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -29,7 +29,7 @@ type Empty struct {
 
 func (x *Empty) Reset() {
 	*x = Empty{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[0]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41,7 +41,7 @@ func (x *Empty) String() string {
 func (*Empty) ProtoMessage() {}
 
 func (x *Empty) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[0]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -54,7 +54,7 @@ func (x *Empty) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Empty.ProtoReflect.Descriptor instead.
 func (*Empty) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{0}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{0}
 }
 
 type TypedMessage struct {
@@ -67,7 +67,7 @@ type TypedMessage struct {
 
 func (x *TypedMessage) Reset() {
 	*x = TypedMessage{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[1]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -79,7 +79,7 @@ func (x *TypedMessage) String() string {
 func (*TypedMessage) ProtoMessage() {}
 
 func (x *TypedMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[1]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -92,7 +92,7 @@ func (x *TypedMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TypedMessage.ProtoReflect.Descriptor instead.
 func (*TypedMessage) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{1}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TypedMessage) GetType() string {
@@ -120,7 +120,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[2]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -132,7 +132,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[2]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -145,7 +145,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{2}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *User) GetLevel() uint32 {
@@ -180,7 +180,7 @@ type VlessAccount struct {
 
 func (x *VlessAccount) Reset() {
 	*x = VlessAccount{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[3]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -192,7 +192,7 @@ func (x *VlessAccount) String() string {
 func (*VlessAccount) ProtoMessage() {}
 
 func (x *VlessAccount) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[3]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -205,7 +205,7 @@ func (x *VlessAccount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VlessAccount.ProtoReflect.Descriptor instead.
 func (*VlessAccount) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{3}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *VlessAccount) GetId() string {
@@ -238,7 +238,7 @@ type TrojanAccount struct {
 
 func (x *TrojanAccount) Reset() {
 	*x = TrojanAccount{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[4]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -250,7 +250,7 @@ func (x *TrojanAccount) String() string {
 func (*TrojanAccount) ProtoMessage() {}
 
 func (x *TrojanAccount) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[4]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -263,7 +263,7 @@ func (x *TrojanAccount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrojanAccount.ProtoReflect.Descriptor instead.
 func (*TrojanAccount) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{4}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *TrojanAccount) GetPassword() string {
@@ -284,7 +284,7 @@ type ShadowsocksAccount struct {
 
 func (x *ShadowsocksAccount) Reset() {
 	*x = ShadowsocksAccount{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[5]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -296,7 +296,7 @@ func (x *ShadowsocksAccount) String() string {
 func (*ShadowsocksAccount) ProtoMessage() {}
 
 func (x *ShadowsocksAccount) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[5]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -309,7 +309,7 @@ func (x *ShadowsocksAccount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ShadowsocksAccount.ProtoReflect.Descriptor instead.
 func (*ShadowsocksAccount) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{5}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ShadowsocksAccount) GetPassword() string {
@@ -342,7 +342,7 @@ type Shadowsocks2022Account struct {
 
 func (x *Shadowsocks2022Account) Reset() {
 	*x = Shadowsocks2022Account{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[6]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -354,7 +354,7 @@ func (x *Shadowsocks2022Account) String() string {
 func (*Shadowsocks2022Account) ProtoMessage() {}
 
 func (x *Shadowsocks2022Account) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[6]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -367,7 +367,7 @@ func (x *Shadowsocks2022Account) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Shadowsocks2022Account.ProtoReflect.Descriptor instead.
 func (*Shadowsocks2022Account) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{6}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Shadowsocks2022Account) GetKey() string {
@@ -386,7 +386,7 @@ type HysteriaAccount struct {
 
 func (x *HysteriaAccount) Reset() {
 	*x = HysteriaAccount{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[7]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -398,7 +398,7 @@ func (x *HysteriaAccount) String() string {
 func (*HysteriaAccount) ProtoMessage() {}
 
 func (x *HysteriaAccount) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[7]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -411,7 +411,7 @@ func (x *HysteriaAccount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HysteriaAccount.ProtoReflect.Descriptor instead.
 func (*HysteriaAccount) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{7}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *HysteriaAccount) GetAuth() string {
@@ -430,7 +430,7 @@ type AddUserOperation struct {
 
 func (x *AddUserOperation) Reset() {
 	*x = AddUserOperation{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[8]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -442,7 +442,7 @@ func (x *AddUserOperation) String() string {
 func (*AddUserOperation) ProtoMessage() {}
 
 func (x *AddUserOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[8]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +455,7 @@ func (x *AddUserOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddUserOperation.ProtoReflect.Descriptor instead.
 func (*AddUserOperation) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{8}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AddUserOperation) GetUser() *User {
@@ -474,7 +474,7 @@ type RemoveUserOperation struct {
 
 func (x *RemoveUserOperation) Reset() {
 	*x = RemoveUserOperation{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[9]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -486,7 +486,7 @@ func (x *RemoveUserOperation) String() string {
 func (*RemoveUserOperation) ProtoMessage() {}
 
 func (x *RemoveUserOperation) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[9]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -499,7 +499,7 @@ func (x *RemoveUserOperation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveUserOperation.ProtoReflect.Descriptor instead.
 func (*RemoveUserOperation) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{9}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *RemoveUserOperation) GetEmail() string {
@@ -519,7 +519,7 @@ type AlterInboundRequest struct {
 
 func (x *AlterInboundRequest) Reset() {
 	*x = AlterInboundRequest{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[10]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -531,7 +531,7 @@ func (x *AlterInboundRequest) String() string {
 func (*AlterInboundRequest) ProtoMessage() {}
 
 func (x *AlterInboundRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[10]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -544,7 +544,7 @@ func (x *AlterInboundRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AlterInboundRequest.ProtoReflect.Descriptor instead.
 func (*AlterInboundRequest) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{10}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AlterInboundRequest) GetTag() string {
@@ -571,7 +571,7 @@ type GetInboundUserRequest struct {
 
 func (x *GetInboundUserRequest) Reset() {
 	*x = GetInboundUserRequest{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[11]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -583,7 +583,7 @@ func (x *GetInboundUserRequest) String() string {
 func (*GetInboundUserRequest) ProtoMessage() {}
 
 func (x *GetInboundUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[11]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -596,7 +596,7 @@ func (x *GetInboundUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInboundUserRequest.ProtoReflect.Descriptor instead.
 func (*GetInboundUserRequest) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{11}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetInboundUserRequest) GetTag() string {
@@ -622,7 +622,7 @@ type GetInboundUserResponse struct {
 
 func (x *GetInboundUserResponse) Reset() {
 	*x = GetInboundUserResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[12]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -634,7 +634,7 @@ func (x *GetInboundUserResponse) String() string {
 func (*GetInboundUserResponse) ProtoMessage() {}
 
 func (x *GetInboundUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[12]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -647,7 +647,7 @@ func (x *GetInboundUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInboundUserResponse.ProtoReflect.Descriptor instead.
 func (*GetInboundUserResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{12}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetInboundUserResponse) GetUsers() []*User {
@@ -666,7 +666,7 @@ type GetInboundUsersCountResponse struct {
 
 func (x *GetInboundUsersCountResponse) Reset() {
 	*x = GetInboundUsersCountResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[13]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -678,7 +678,7 @@ func (x *GetInboundUsersCountResponse) String() string {
 func (*GetInboundUsersCountResponse) ProtoMessage() {}
 
 func (x *GetInboundUsersCountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[13]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -691,7 +691,7 @@ func (x *GetInboundUsersCountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInboundUsersCountResponse.ProtoReflect.Descriptor instead.
 func (*GetInboundUsersCountResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{13}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetInboundUsersCountResponse) GetCount() int64 {
@@ -710,7 +710,7 @@ type RemoveOutboundRequest struct {
 
 func (x *RemoveOutboundRequest) Reset() {
 	*x = RemoveOutboundRequest{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[14]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -722,7 +722,7 @@ func (x *RemoveOutboundRequest) String() string {
 func (*RemoveOutboundRequest) ProtoMessage() {}
 
 func (x *RemoveOutboundRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[14]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -735,7 +735,7 @@ func (x *RemoveOutboundRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveOutboundRequest.ProtoReflect.Descriptor instead.
 func (*RemoveOutboundRequest) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{14}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RemoveOutboundRequest) GetTag() string {
@@ -755,7 +755,7 @@ type GetStatsRequest struct {
 
 func (x *GetStatsRequest) Reset() {
 	*x = GetStatsRequest{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[15]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -767,7 +767,7 @@ func (x *GetStatsRequest) String() string {
 func (*GetStatsRequest) ProtoMessage() {}
 
 func (x *GetStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[15]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -780,7 +780,7 @@ func (x *GetStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetStatsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{15}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetStatsRequest) GetName() string {
@@ -807,7 +807,7 @@ type Stat struct {
 
 func (x *Stat) Reset() {
 	*x = Stat{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[16]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -819,7 +819,7 @@ func (x *Stat) String() string {
 func (*Stat) ProtoMessage() {}
 
 func (x *Stat) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[16]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -832,7 +832,7 @@ func (x *Stat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Stat.ProtoReflect.Descriptor instead.
 func (*Stat) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{16}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *Stat) GetName() string {
@@ -858,7 +858,7 @@ type GetStatsResponse struct {
 
 func (x *GetStatsResponse) Reset() {
 	*x = GetStatsResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[17]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -870,7 +870,7 @@ func (x *GetStatsResponse) String() string {
 func (*GetStatsResponse) ProtoMessage() {}
 
 func (x *GetStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[17]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -883,7 +883,7 @@ func (x *GetStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetStatsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{17}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetStatsResponse) GetStat() *Stat {
@@ -903,7 +903,7 @@ type QueryStatsRequest struct {
 
 func (x *QueryStatsRequest) Reset() {
 	*x = QueryStatsRequest{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[18]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -915,7 +915,7 @@ func (x *QueryStatsRequest) String() string {
 func (*QueryStatsRequest) ProtoMessage() {}
 
 func (x *QueryStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[18]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -928,7 +928,7 @@ func (x *QueryStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStatsRequest.ProtoReflect.Descriptor instead.
 func (*QueryStatsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{18}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *QueryStatsRequest) GetPattern() string {
@@ -954,7 +954,7 @@ type QueryStatsResponse struct {
 
 func (x *QueryStatsResponse) Reset() {
 	*x = QueryStatsResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[19]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -966,7 +966,7 @@ func (x *QueryStatsResponse) String() string {
 func (*QueryStatsResponse) ProtoMessage() {}
 
 func (x *QueryStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[19]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -979,7 +979,7 @@ func (x *QueryStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QueryStatsResponse.ProtoReflect.Descriptor instead.
 func (*QueryStatsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{19}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *QueryStatsResponse) GetStat() []*Stat {
@@ -1007,7 +1007,7 @@ type SysStatsResponse struct {
 
 func (x *SysStatsResponse) Reset() {
 	*x = SysStatsResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[20]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1019,7 +1019,7 @@ func (x *SysStatsResponse) String() string {
 func (*SysStatsResponse) ProtoMessage() {}
 
 func (x *SysStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[20]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1032,7 +1032,7 @@ func (x *SysStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SysStatsResponse.ProtoReflect.Descriptor instead.
 func (*SysStatsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{20}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SysStatsResponse) GetNumGoroutine() uint32 {
@@ -1115,7 +1115,7 @@ type GetStatsOnlineIpListResponse struct {
 
 func (x *GetStatsOnlineIpListResponse) Reset() {
 	*x = GetStatsOnlineIpListResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[21]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1127,7 +1127,7 @@ func (x *GetStatsOnlineIpListResponse) String() string {
 func (*GetStatsOnlineIpListResponse) ProtoMessage() {}
 
 func (x *GetStatsOnlineIpListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[21]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1140,7 +1140,7 @@ func (x *GetStatsOnlineIpListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatsOnlineIpListResponse.ProtoReflect.Descriptor instead.
 func (*GetStatsOnlineIpListResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{21}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetStatsOnlineIpListResponse) GetName() string {
@@ -1166,7 +1166,7 @@ type GetAllOnlineUsersResponse struct {
 
 func (x *GetAllOnlineUsersResponse) Reset() {
 	*x = GetAllOnlineUsersResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[22]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1178,7 +1178,7 @@ func (x *GetAllOnlineUsersResponse) String() string {
 func (*GetAllOnlineUsersResponse) ProtoMessage() {}
 
 func (x *GetAllOnlineUsersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[22]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1191,7 +1191,7 @@ func (x *GetAllOnlineUsersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetAllOnlineUsersResponse.ProtoReflect.Descriptor instead.
 func (*GetAllOnlineUsersResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{22}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetAllOnlineUsersResponse) GetUsers() []string {
@@ -1212,7 +1212,7 @@ type OnlineIPEntry struct {
 
 func (x *OnlineIPEntry) Reset() {
 	*x = OnlineIPEntry{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[23]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1224,7 +1224,7 @@ func (x *OnlineIPEntry) String() string {
 func (*OnlineIPEntry) ProtoMessage() {}
 
 func (x *OnlineIPEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[23]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1237,7 +1237,7 @@ func (x *OnlineIPEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OnlineIPEntry.ProtoReflect.Descriptor instead.
 func (*OnlineIPEntry) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{23}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *OnlineIPEntry) GetIp() string {
@@ -1264,7 +1264,7 @@ type TrafficUserStat struct {
 
 func (x *TrafficUserStat) Reset() {
 	*x = TrafficUserStat{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[24]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1276,7 +1276,7 @@ func (x *TrafficUserStat) String() string {
 func (*TrafficUserStat) ProtoMessage() {}
 
 func (x *TrafficUserStat) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[24]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1289,7 +1289,7 @@ func (x *TrafficUserStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrafficUserStat.ProtoReflect.Descriptor instead.
 func (*TrafficUserStat) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{24}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *TrafficUserStat) GetUplink() int64 {
@@ -1317,7 +1317,7 @@ type UserStat struct {
 
 func (x *UserStat) Reset() {
 	*x = UserStat{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[25]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1329,7 +1329,7 @@ func (x *UserStat) String() string {
 func (*UserStat) ProtoMessage() {}
 
 func (x *UserStat) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[25]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1342,7 +1342,7 @@ func (x *UserStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserStat.ProtoReflect.Descriptor instead.
 func (*UserStat) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{25}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *UserStat) GetEmail() string {
@@ -1376,7 +1376,7 @@ type GetUsersStatsRequest struct {
 
 func (x *GetUsersStatsRequest) Reset() {
 	*x = GetUsersStatsRequest{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[26]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1388,7 +1388,7 @@ func (x *GetUsersStatsRequest) String() string {
 func (*GetUsersStatsRequest) ProtoMessage() {}
 
 func (x *GetUsersStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[26]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1401,7 +1401,7 @@ func (x *GetUsersStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsersStatsRequest.ProtoReflect.Descriptor instead.
 func (*GetUsersStatsRequest) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{26}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetUsersStatsRequest) GetIncludeTraffic() bool {
@@ -1427,7 +1427,7 @@ type GetUsersStatsResponse struct {
 
 func (x *GetUsersStatsResponse) Reset() {
 	*x = GetUsersStatsResponse{}
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[27]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1439,7 +1439,7 @@ func (x *GetUsersStatsResponse) String() string {
 func (*GetUsersStatsResponse) ProtoMessage() {}
 
 func (x *GetUsersStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_xtls_xrpc_wire_proto_msgTypes[27]
+	mi := &file_internal_xrayrpc_wire_wire_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1452,7 +1452,7 @@ func (x *GetUsersStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsersStatsResponse.ProtoReflect.Descriptor instead.
 func (*GetUsersStatsResponse) Descriptor() ([]byte, []int) {
-	return file_internal_xtls_xrpc_wire_proto_rawDescGZIP(), []int{27}
+	return file_internal_xrayrpc_wire_wire_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetUsersStatsResponse) GetUsers() []*UserStat {
@@ -1462,11 +1462,11 @@ func (x *GetUsersStatsResponse) GetUsers() []*UserStat {
 	return nil
 }
 
-var File_internal_xtls_xrpc_wire_proto protoreflect.FileDescriptor
+var File_internal_xrayrpc_wire_wire_proto protoreflect.FileDescriptor
 
-const file_internal_xtls_xrpc_wire_proto_rawDesc = "" +
+const file_internal_xrayrpc_wire_wire_proto_rawDesc = "" +
 	"\n" +
-	"\x1dinternal/xtls/xrpc/wire.proto\x12\x13remnanode.xtls.wire\"\a\n" +
+	" internal/xrayrpc/wire/wire.proto\x12\x13remnanode.xtls.wire\"\a\n" +
 	"\x05Empty\"8\n" +
 	"\fTypedMessage\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x14\n" +
@@ -1556,22 +1556,22 @@ const file_internal_xtls_xrpc_wire_proto_rawDesc = "" +
 	"\x0finclude_traffic\x18\x01 \x01(\bR\x0eincludeTraffic\x12\x14\n" +
 	"\x05reset\x18\x02 \x01(\bR\x05reset\"L\n" +
 	"\x15GetUsersStatsResponse\x123\n" +
-	"\x05users\x18\x01 \x03(\v2\x1d.remnanode.xtls.wire.UserStatR\x05usersB6Z4github.com/Luxiaba/remnanode-lite/internal/xtls/xrpcb\x06proto3"
+	"\x05users\x18\x01 \x03(\v2\x1d.remnanode.xtls.wire.UserStatR\x05usersB9Z7github.com/luxiaba/remnanode-lite/internal/xrayrpc/wireb\x06proto3"
 
 var (
-	file_internal_xtls_xrpc_wire_proto_rawDescOnce sync.Once
-	file_internal_xtls_xrpc_wire_proto_rawDescData []byte
+	file_internal_xrayrpc_wire_wire_proto_rawDescOnce sync.Once
+	file_internal_xrayrpc_wire_wire_proto_rawDescData []byte
 )
 
-func file_internal_xtls_xrpc_wire_proto_rawDescGZIP() []byte {
-	file_internal_xtls_xrpc_wire_proto_rawDescOnce.Do(func() {
-		file_internal_xtls_xrpc_wire_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_xtls_xrpc_wire_proto_rawDesc), len(file_internal_xtls_xrpc_wire_proto_rawDesc)))
+func file_internal_xrayrpc_wire_wire_proto_rawDescGZIP() []byte {
+	file_internal_xrayrpc_wire_wire_proto_rawDescOnce.Do(func() {
+		file_internal_xrayrpc_wire_wire_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_xrayrpc_wire_wire_proto_rawDesc), len(file_internal_xrayrpc_wire_wire_proto_rawDesc)))
 	})
-	return file_internal_xtls_xrpc_wire_proto_rawDescData
+	return file_internal_xrayrpc_wire_wire_proto_rawDescData
 }
 
-var file_internal_xtls_xrpc_wire_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
-var file_internal_xtls_xrpc_wire_proto_goTypes = []any{
+var file_internal_xrayrpc_wire_wire_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_internal_xrayrpc_wire_wire_proto_goTypes = []any{
 	(*Empty)(nil),                        // 0: remnanode.xtls.wire.Empty
 	(*TypedMessage)(nil),                 // 1: remnanode.xtls.wire.TypedMessage
 	(*User)(nil),                         // 2: remnanode.xtls.wire.User
@@ -1602,7 +1602,7 @@ var file_internal_xtls_xrpc_wire_proto_goTypes = []any{
 	(*GetUsersStatsResponse)(nil),        // 27: remnanode.xtls.wire.GetUsersStatsResponse
 	nil,                                  // 28: remnanode.xtls.wire.GetStatsOnlineIpListResponse.IpsEntry
 }
-var file_internal_xtls_xrpc_wire_proto_depIdxs = []int32{
+var file_internal_xrayrpc_wire_wire_proto_depIdxs = []int32{
 	1,  // 0: remnanode.xtls.wire.User.account:type_name -> remnanode.xtls.wire.TypedMessage
 	2,  // 1: remnanode.xtls.wire.AddUserOperation.user:type_name -> remnanode.xtls.wire.User
 	1,  // 2: remnanode.xtls.wire.AlterInboundRequest.operation:type_name -> remnanode.xtls.wire.TypedMessage
@@ -1620,26 +1620,26 @@ var file_internal_xtls_xrpc_wire_proto_depIdxs = []int32{
 	0,  // [0:10] is the sub-list for field type_name
 }
 
-func init() { file_internal_xtls_xrpc_wire_proto_init() }
-func file_internal_xtls_xrpc_wire_proto_init() {
-	if File_internal_xtls_xrpc_wire_proto != nil {
+func init() { file_internal_xrayrpc_wire_wire_proto_init() }
+func file_internal_xrayrpc_wire_wire_proto_init() {
+	if File_internal_xrayrpc_wire_wire_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_xtls_xrpc_wire_proto_rawDesc), len(file_internal_xtls_xrpc_wire_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_xrayrpc_wire_wire_proto_rawDesc), len(file_internal_xrayrpc_wire_wire_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_internal_xtls_xrpc_wire_proto_goTypes,
-		DependencyIndexes: file_internal_xtls_xrpc_wire_proto_depIdxs,
-		MessageInfos:      file_internal_xtls_xrpc_wire_proto_msgTypes,
+		GoTypes:           file_internal_xrayrpc_wire_wire_proto_goTypes,
+		DependencyIndexes: file_internal_xrayrpc_wire_wire_proto_depIdxs,
+		MessageInfos:      file_internal_xrayrpc_wire_wire_proto_msgTypes,
 	}.Build()
-	File_internal_xtls_xrpc_wire_proto = out.File
-	file_internal_xtls_xrpc_wire_proto_goTypes = nil
-	file_internal_xtls_xrpc_wire_proto_depIdxs = nil
+	File_internal_xrayrpc_wire_wire_proto = out.File
+	file_internal_xrayrpc_wire_wire_proto_goTypes = nil
+	file_internal_xrayrpc_wire_wire_proto_depIdxs = nil
 }

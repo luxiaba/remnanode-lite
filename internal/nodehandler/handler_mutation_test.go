@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type cleanupFailureProvider struct {
@@ -16,17 +16,17 @@ type cleanupFailureProvider struct {
 	removedCommits []string
 }
 
-func (p *cleanupFailureProvider) HandlerRemoveUser(_ context.Context, tag, _, hashUUID string) xtls.HandlerResult {
+func (p *cleanupFailureProvider) HandlerRemoveUser(_ context.Context, tag, _, hashUUID string) xrayrpc.HandlerResult {
 	if tag == "in-2" {
-		return xtls.HandlerResult{OK: false, Message: "remove failed"}
+		return xrayrpc.HandlerResult{OK: false, Message: "remove failed"}
 	}
 	p.removedCommits = append(p.removedCommits, tag+":"+hashUUID)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *cleanupFailureProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
+func (p *cleanupFailureProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xrayrpc.HandlerResult {
 	p.addCalls.Add(1)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
 func TestAddUsersStopsUserAfterCleanupFailure(t *testing.T) {
@@ -54,13 +54,13 @@ type partialAddProvider struct {
 	addedCommits []string
 }
 
-func (p *partialAddProvider) HandlerAddVlessUser(_ context.Context, tag, _, _, _ string, _ uint32, hashUUID string) xtls.HandlerResult {
+func (p *partialAddProvider) HandlerAddVlessUser(_ context.Context, tag, _, _, _ string, _ uint32, hashUUID string) xrayrpc.HandlerResult {
 	p.addedCommits = append(p.addedCommits, tag+":"+hashUUID)
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
-func (p *partialAddProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: false, Message: "trojan failed"}
+func (p *partialAddProvider) HandlerAddTrojanUser(context.Context, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: false, Message: "trojan failed"}
 }
 
 func TestAddUserReportsPartialFailureAndCommitsOnlySuccess(t *testing.T) {
@@ -90,8 +90,8 @@ type rejectedCommitProvider struct {
 	stubProvider
 }
 
-func (p *rejectedCommitProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xtls.HandlerResult {
-	return xtls.HandlerResult{OK: false, Message: "Xray lifecycle changed before user state commit"}
+func (p *rejectedCommitProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	return xrayrpc.HandlerResult{OK: false, Message: "Xray lifecycle changed before user state commit"}
 }
 
 func TestAddUserReportsProcessCommitRejection(t *testing.T) {
@@ -119,16 +119,16 @@ type blockingMutationProvider struct {
 	calls   atomic.Int64
 }
 
-func (p *blockingMutationProvider) HandlerRemoveUser(ctx context.Context, _, _, _ string) xtls.HandlerResult {
+func (p *blockingMutationProvider) HandlerRemoveUser(ctx context.Context, _, _, _ string) xrayrpc.HandlerResult {
 	if p.calls.Add(1) == 1 {
 		close(p.entered)
 		select {
 		case <-p.release:
 		case <-ctx.Done():
-			return xtls.HandlerResult{OK: false, Message: ctx.Err().Error()}
+			return xrayrpc.HandlerResult{OK: false, Message: ctx.Err().Error()}
 		}
 	}
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
 func TestCanceledMutationDoesNotEnterProviderWhileQueued(t *testing.T) {

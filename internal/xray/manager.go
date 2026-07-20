@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/executil"
-	"github.com/Luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/executil"
+	"github.com/luxiaba/remnanode-lite/internal/system"
 )
 
 type Options struct {
@@ -162,9 +162,9 @@ func newManager(opts Options, versionProbe func(context.Context) (string, error)
 	if strings.TrimSpace(opts.CoreVersion) != "" && coreVersion == "" {
 		return nil, errors.New("xray: core version override is invalid")
 	}
-	socket, err := generateXtlsSocketName()
+	socket, err := generateXrayRPCSocketName()
 	if err != nil {
-		return nil, fmt.Errorf("generate xtls api socket name: %w", err)
+		return nil, fmt.Errorf("generate Xray RPC socket name: %w", err)
 	}
 	lifetime := opts.Lifetime
 	if lifetime == nil {
@@ -198,10 +198,10 @@ func newManager(opts Options, versionProbe func(context.Context) (string, error)
 	return manager, nil
 }
 
-// generateXtlsSocketName returns a node-process-unique prefix for Xray gRPC
+// generateXrayRPCSocketName returns a node-process-unique prefix for Xray gRPC
 // sockets. Each rw-core process appends its own epoch so a lazy client for an
 // old core can never connect to its replacement.
-func generateXtlsSocketName() (string, error) {
+func generateXrayRPCSocketName() (string, error) {
 	buf := make([]byte, 8)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err

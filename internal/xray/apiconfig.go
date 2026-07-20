@@ -3,7 +3,7 @@ package xray
 import (
 	"fmt"
 
-	"github.com/Luxiaba/remnanode-lite/internal/netadmin"
+	"github.com/luxiaba/remnanode-lite/internal/netadmin"
 )
 
 const (
@@ -26,8 +26,8 @@ type preparedRuntimeConfig struct {
 	hashState runtimeHashState
 }
 
-func prepareRuntimeConfig(input map[string]any, hashes ConfigHash, xtlsSocket string, torrent TorrentBlockerOptions) (preparedRuntimeConfig, error) {
-	fullConfig := generateAPIConfig(input, xtlsSocket, torrent)
+func prepareRuntimeConfig(input map[string]any, hashes ConfigHash, xrayRPCSocket string, torrent TorrentBlockerOptions) (preparedRuntimeConfig, error) {
+	fullConfig := generateAPIConfig(input, xrayRPCSocket, torrent)
 	state := buildRuntimeHashState(hashes, fullConfig)
 	raw, err := encodePreparedRuntimeConfig(fullConfig)
 	if err != nil {
@@ -39,7 +39,7 @@ func prepareRuntimeConfig(input map[string]any, hashes ConfigHash, xtlsSocket st
 // generateAPIConfig takes ownership of input. The HTTP request does not reuse
 // xrayConfig after this call, so modifying it avoids a full JSON clone before
 // the canonical runtime JSON is produced.
-func generateAPIConfig(input map[string]any, xtlsSocket string, torrent TorrentBlockerOptions) map[string]any {
+func generateAPIConfig(input map[string]any, xrayRPCSocket string, torrent TorrentBlockerOptions) map[string]any {
 	result := input
 	if result == nil {
 		result = map[string]any{}
@@ -51,7 +51,7 @@ func generateAPIConfig(input map[string]any, xtlsSocket string, torrent TorrentB
 		"tag":      apiTag,
 	}
 	result["inbounds"] = append(
-		[]any{apiInbound(xtlsSocket)},
+		[]any{apiInbound(xrayRPCSocket)},
 		arrayFrom(result["inbounds"])...,
 	)
 	result["outbounds"] = arrayFrom(result["outbounds"])

@@ -16,10 +16,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/auth"
-	"github.com/Luxiaba/remnanode-lite/internal/config"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/secret"
+	"github.com/luxiaba/remnanode-lite/internal/auth"
+	"github.com/luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/secret"
 )
 
 func TestExternalServerSecurityPolicy(t *testing.T) {

@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/plugin"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/xray"
-	"github.com/Luxiaba/remnanode-lite/internal/xraywebhook"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
+	"github.com/luxiaba/remnanode-lite/internal/stats"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/xray"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
+	"github.com/luxiaba/remnanode-lite/internal/xraywebhook"
 )
 
 var responseShapeTests = map[string]func(t *testing.T) []byte{
@@ -364,34 +364,34 @@ func (stubStatsProvider) BeginMutation(ctx context.Context) (context.Context, fu
 	return ctx, func() {}, nil
 }
 
-func (stubStatsProvider) GetSysStats(context.Context) (*xtls.SysStats, error) {
-	return &xtls.SysStats{NumGoroutine: 1, Uptime: 10}, nil
+func (stubStatsProvider) GetSysStats(context.Context) (*xrayrpc.SysStats, error) {
+	return &xrayrpc.SysStats{NumGoroutine: 1, Uptime: 10}, nil
 }
-func (stubStatsProvider) GetAllUsersStats(context.Context, bool) ([]xtls.UserTraffic, error) {
-	return []xtls.UserTraffic{{Username: "u1", Uplink: 1, Downlink: 2}}, nil
+func (stubStatsProvider) GetAllUsersStats(context.Context, bool) ([]xrayrpc.UserTraffic, error) {
+	return []xrayrpc.UserTraffic{{Username: "u1", Uplink: 1, Downlink: 2}}, nil
 }
 func (stubStatsProvider) GetUserOnlineStatus(context.Context, string) (bool, error) {
 	return false, nil
 }
-func (stubStatsProvider) GetInboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
-	return xtls.TagTraffic{Tag: "in-1"}, nil
+func (stubStatsProvider) GetInboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
+	return xrayrpc.TagTraffic{Tag: "in-1"}, nil
 }
-func (stubStatsProvider) GetOutboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
-	return xtls.TagTraffic{Tag: "out-1"}, nil
+func (stubStatsProvider) GetOutboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
+	return xrayrpc.TagTraffic{Tag: "out-1"}, nil
 }
-func (stubStatsProvider) GetAllInboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
-	return []xtls.TagTraffic{{Tag: "in-1"}}, nil
+func (stubStatsProvider) GetAllInboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
+	return []xrayrpc.TagTraffic{{Tag: "in-1"}}, nil
 }
-func (stubStatsProvider) GetAllOutboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
-	return []xtls.TagTraffic{{Tag: "out-1"}}, nil
+func (stubStatsProvider) GetAllOutboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
+	return []xrayrpc.TagTraffic{{Tag: "out-1"}}, nil
 }
-func (stubStatsProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
-	return []xtls.IPEntry{{IP: "203.0.113.10", LastSeen: time.Now()}}, nil
+func (stubStatsProvider) GetUserIPList(context.Context, string, bool) ([]xrayrpc.IPEntry, error) {
+	return []xrayrpc.IPEntry{{IP: "203.0.113.10", LastSeen: time.Now()}}, nil
 }
-func (stubStatsProvider) GetUsersIPList(context.Context) ([]xtls.UserIPEntry, error) {
-	return []xtls.UserIPEntry{{
+func (stubStatsProvider) GetUsersIPList(context.Context) ([]xrayrpc.UserIPEntry, error) {
+	return []xrayrpc.UserIPEntry{{
 		UserID: "user-1",
-		IPs:    []xtls.IPEntry{{IP: "203.0.113.10", LastSeen: time.Now()}},
+		IPs:    []xrayrpc.IPEntry{{IP: "203.0.113.10", LastSeen: time.Now()}},
 	}}, nil
 }
 

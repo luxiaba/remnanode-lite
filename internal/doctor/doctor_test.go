@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/asn"
-	"github.com/Luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/asn"
+	"github.com/luxiaba/remnanode-lite/internal/config"
 )
 
 func TestRunMissingEnv(t *testing.T) {
@@ -49,7 +49,7 @@ func TestCheckASNDatabaseUsesRuntimeReader(t *testing.T) {
 
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "missing.bin")
-	if r := checkASNDatabase(missing)[0]; r.level != "WARN" || !strings.Contains(r.detail, "降级为空") {
+	if r := checkASNDatabase(missing)[0]; r.level != "WARN" || !strings.Contains(r.detail, "falls back to empty") {
 		t.Fatalf("missing database result = %#v", r)
 	}
 
@@ -63,7 +63,7 @@ func TestCheckASNDatabaseUsesRuntimeReader(t *testing.T) {
 
 	empty := filepath.Join(dir, "empty.bin")
 	writeASNDatabase(t, empty, nil)
-	if r := checkASNDatabase(empty)[0]; r.level != "WARN" || !strings.Contains(r.detail, "不含 ASN 条目") {
+	if r := checkASNDatabase(empty)[0]; r.level != "WARN" || !strings.Contains(r.detail, "contains no ASN entries") {
 		t.Fatalf("empty database result = %#v", r)
 	}
 

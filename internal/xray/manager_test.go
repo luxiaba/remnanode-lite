@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/system"
 )
 
 func TestBuildCommandArgs(t *testing.T) {

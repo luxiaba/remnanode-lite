@@ -12,7 +12,7 @@ import (
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
 )
 
 func (s *Server) decodeNodeRequest(w http.ResponseWriter, r *http.Request, target any) bool {

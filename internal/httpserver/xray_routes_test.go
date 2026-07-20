@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/xray"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/xray"
 )
 
 type recordingXrayController struct {

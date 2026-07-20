@@ -1,11 +1,11 @@
-package xtls
+package xrayrpc
 
 import (
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xtls/xrpc"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc/wire"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -51,44 +51,44 @@ func NewHandlerAPI(conn grpc.ClientConnInterface) *HandlerAPI {
 }
 
 func (h *HandlerAPI) AddVlessUser(ctx context.Context, tag, username, uuid, flow string, level uint32) HandlerResult {
-	return h.addAccountUser(ctx, tag, username, level, vlessAccountType, &xrpc.VlessAccount{
+	return h.addAccountUser(ctx, tag, username, level, vlessAccountType, &wire.VlessAccount{
 		Id: uuid, Flow: flow, Encryption: "none",
 	})
 }
 
 func (h *HandlerAPI) AddTrojanUser(ctx context.Context, tag, username, password string, level uint32) HandlerResult {
-	return h.addAccountUser(ctx, tag, username, level, trojanAccountType, &xrpc.TrojanAccount{Password: password})
+	return h.addAccountUser(ctx, tag, username, level, trojanAccountType, &wire.TrojanAccount{Password: password})
 }
 
 func (h *HandlerAPI) AddShadowsocksUser(ctx context.Context, tag, username, password string, cipherType int, ivCheck bool, level uint32) HandlerResult {
-	return h.addAccountUser(ctx, tag, username, level, shadowsocksAccountType, &xrpc.ShadowsocksAccount{
+	return h.addAccountUser(ctx, tag, username, level, shadowsocksAccountType, &wire.ShadowsocksAccount{
 		Password: password, CipherType: int32(cipherType), IvCheck: ivCheck,
 	})
 }
 
 func (h *HandlerAPI) AddShadowsocks2022User(ctx context.Context, tag, username, key string, level uint32) HandlerResult {
-	return h.addAccountUser(ctx, tag, username, level, shadowsocks2022AccountType, &xrpc.Shadowsocks2022Account{Key: key})
+	return h.addAccountUser(ctx, tag, username, level, shadowsocks2022AccountType, &wire.Shadowsocks2022Account{Key: key})
 }
 
 func (h *HandlerAPI) AddHysteriaUser(ctx context.Context, tag, username, auth string, level uint32) HandlerResult {
-	return h.addAccountUser(ctx, tag, username, level, hysteriaAccountType, &xrpc.HysteriaAccount{Auth: auth})
+	return h.addAccountUser(ctx, tag, username, level, hysteriaAccountType, &wire.HysteriaAccount{Auth: auth})
 }
 
 func (h *HandlerAPI) RemoveOutbound(ctx context.Context, tag string) error {
 	ctx, cancel := withRPCTimeout(ctx)
 	defer cancel()
-	err := h.conn.Invoke(ctx, handlerRemoveOutboundMethod, &xrpc.RemoveOutboundRequest{Tag: tag}, &xrpc.Empty{}, grpc.StaticMethod())
+	err := h.conn.Invoke(ctx, handlerRemoveOutboundMethod, &wire.RemoveOutboundRequest{Tag: tag}, &wire.Empty{}, grpc.StaticMethod())
 	return err
 }
 
 func (h *HandlerAPI) RemoveUser(ctx context.Context, tag, username string) HandlerResult {
 	ctx, cancel := withRPCTimeout(ctx)
 	defer cancel()
-	operation, marshalErr := typedMessage(removeUserOperationType, &xrpc.RemoveUserOperation{Email: username})
+	operation, marshalErr := typedMessage(removeUserOperationType, &wire.RemoveUserOperation{Email: username})
 	if marshalErr != nil {
 		return HandlerResult{OK: false, Message: marshalErr.Error()}
 	}
-	err := h.conn.Invoke(ctx, handlerAlterInboundMethod, &xrpc.AlterInboundRequest{Tag: tag, Operation: operation}, &xrpc.Empty{}, grpc.StaticMethod())
+	err := h.conn.Invoke(ctx, handlerAlterInboundMethod, &wire.AlterInboundRequest{Tag: tag, Operation: operation}, &wire.Empty{}, grpc.StaticMethod())
 	if err == nil || isUserNotFound(err) {
 		return HandlerResult{OK: true}
 	}
@@ -98,8 +98,8 @@ func (h *HandlerAPI) RemoveUser(ctx context.Context, tag, username string) Handl
 func (h *HandlerAPI) GetInboundUsers(ctx context.Context, tag string) ([]InboundUser, HandlerResult) {
 	ctx, cancel := withRPCTimeout(ctx)
 	defer cancel()
-	resp := &xrpc.GetInboundUserResponse{}
-	err := h.conn.Invoke(ctx, handlerGetInboundUsersMethod, &xrpc.GetInboundUserRequest{Tag: tag}, resp, grpc.StaticMethod())
+	resp := &wire.GetInboundUserResponse{}
+	err := h.conn.Invoke(ctx, handlerGetInboundUsersMethod, &wire.GetInboundUserRequest{Tag: tag}, resp, grpc.StaticMethod())
 	if err != nil {
 		return nil, HandlerResult{OK: false, Message: grpcErrorMessage(err)}
 	}
@@ -151,8 +151,8 @@ func inboundUserProtocol(accountType string) (string, bool) {
 func (h *HandlerAPI) GetInboundUsersCount(ctx context.Context, tag string) (int64, HandlerResult) {
 	ctx, cancel := withRPCTimeout(ctx)
 	defer cancel()
-	resp := &xrpc.GetInboundUsersCountResponse{}
-	err := h.conn.Invoke(ctx, handlerGetInboundUserCountMethod, &xrpc.GetInboundUserRequest{Tag: tag}, resp, grpc.StaticMethod())
+	resp := &wire.GetInboundUsersCountResponse{}
+	err := h.conn.Invoke(ctx, handlerGetInboundUserCountMethod, &wire.GetInboundUserRequest{Tag: tag}, resp, grpc.StaticMethod())
 	if err != nil {
 		return 0, HandlerResult{OK: false, Message: grpcErrorMessage(err)}
 	}
@@ -164,29 +164,29 @@ func (h *HandlerAPI) addAccountUser(ctx context.Context, tag, username string, l
 	if err != nil {
 		return HandlerResult{OK: false, Message: err.Error()}
 	}
-	return h.addUser(ctx, tag, &xrpc.User{Email: username, Level: level, Account: typedAccount})
+	return h.addUser(ctx, tag, &wire.User{Email: username, Level: level, Account: typedAccount})
 }
 
-func (h *HandlerAPI) addUser(ctx context.Context, tag string, user *xrpc.User) HandlerResult {
+func (h *HandlerAPI) addUser(ctx context.Context, tag string, user *wire.User) HandlerResult {
 	ctx, cancel := withRPCTimeout(ctx)
 	defer cancel()
-	operation, marshalErr := typedMessage(addUserOperationType, &xrpc.AddUserOperation{User: user})
+	operation, marshalErr := typedMessage(addUserOperationType, &wire.AddUserOperation{User: user})
 	if marshalErr != nil {
 		return HandlerResult{OK: false, Message: marshalErr.Error()}
 	}
-	err := h.conn.Invoke(ctx, handlerAlterInboundMethod, &xrpc.AlterInboundRequest{Tag: tag, Operation: operation}, &xrpc.Empty{}, grpc.StaticMethod())
+	err := h.conn.Invoke(ctx, handlerAlterInboundMethod, &wire.AlterInboundRequest{Tag: tag, Operation: operation}, &wire.Empty{}, grpc.StaticMethod())
 	if err == nil || isUserExists(err) {
 		return HandlerResult{OK: true}
 	}
 	return HandlerResult{OK: false, Message: grpcErrorMessage(err)}
 }
 
-func typedMessage(typeName string, message proto.Message) (*xrpc.TypedMessage, error) {
+func typedMessage(typeName string, message proto.Message) (*wire.TypedMessage, error) {
 	raw, err := proto.Marshal(message)
 	if err != nil {
 		return nil, err
 	}
-	return &xrpc.TypedMessage{Type: typeName, Value: raw}, nil
+	return &wire.TypedMessage{Type: typeName, Value: raw}, nil
 }
 
 func isUserNotFound(err error) bool {

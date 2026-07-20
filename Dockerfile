@@ -30,7 +30,7 @@ RUN set -eux; \
     env GOWORK=off GOFLAGS='' GOEXPERIMENT='' GOFIPS140=off \
       CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" $arch_env \
       go build -mod=readonly -buildvcs=false -trimpath \
-      -ldflags="-s -w -X github.com/Luxiaba/remnanode-lite/internal/version.Version=$version -X github.com/Luxiaba/remnanode-lite/internal/version.ContractVersion=$contract_version" \
+      -ldflags="-s -w -X github.com/luxiaba/remnanode-lite/internal/version.Version=$version -X github.com/luxiaba/remnanode-lite/internal/version.ContractVersion=$contract_version" \
       -o /out/remnanode-lite ./cmd/remnanode-lite; \
     env GOWORK=off GOFLAGS='' GOEXPERIMENT='' GOFIPS140=off CGO_ENABLED=0 \
       go build -mod=readonly -buildvcs=false -trimpath \
@@ -80,7 +80,7 @@ FROM ${DEBIAN_IMAGE} AS runtime
 
 LABEL org.opencontainers.image.title="Remnanode Lite" \
       org.opencontainers.image.description="Low-memory Remnawave Node compatible implementation" \
-      org.opencontainers.image.source="https://github.com/Luxiaba/remnanode-lite" \
+      org.opencontainers.image.source="https://github.com/luxiaba/remnanode-lite" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 
 RUN set -eux; \

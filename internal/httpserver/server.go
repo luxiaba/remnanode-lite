@@ -15,14 +15,14 @@ import (
 
 	"golang.org/x/net/netutil"
 
-	"github.com/Luxiaba/remnanode-lite/internal/auth"
-	"github.com/Luxiaba/remnanode-lite/internal/bodylimit"
-	"github.com/Luxiaba/remnanode-lite/internal/config"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/plugin"
-	"github.com/Luxiaba/remnanode-lite/internal/secret"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
-	"github.com/Luxiaba/remnanode-lite/internal/xray"
+	"github.com/luxiaba/remnanode-lite/internal/auth"
+	"github.com/luxiaba/remnanode-lite/internal/bodylimit"
+	"github.com/luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
+	"github.com/luxiaba/remnanode-lite/internal/secret"
+	"github.com/luxiaba/remnanode-lite/internal/stats"
+	"github.com/luxiaba/remnanode-lite/internal/xray"
 )
 
 type Server struct {

@@ -4,21 +4,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type Provider interface {
 	BeginMutation(ctx context.Context) (context.Context, func(), error)
-	GetSysStats(ctx context.Context) (*xtls.SysStats, error)
-	GetAllUsersStats(ctx context.Context, reset bool) ([]xtls.UserTraffic, error)
+	GetSysStats(ctx context.Context) (*xrayrpc.SysStats, error)
+	GetAllUsersStats(ctx context.Context, reset bool) ([]xrayrpc.UserTraffic, error)
 	GetUserOnlineStatus(ctx context.Context, username string) (bool, error)
-	GetInboundStats(ctx context.Context, tag string, reset bool) (xtls.TagTraffic, error)
-	GetOutboundStats(ctx context.Context, tag string, reset bool) (xtls.TagTraffic, error)
-	GetAllInboundsStats(ctx context.Context, reset bool) ([]xtls.TagTraffic, error)
-	GetAllOutboundsStats(ctx context.Context, reset bool) ([]xtls.TagTraffic, error)
-	GetUserIPList(ctx context.Context, userID string, reset bool) ([]xtls.IPEntry, error)
-	GetUsersIPList(ctx context.Context) ([]xtls.UserIPEntry, error)
+	GetInboundStats(ctx context.Context, tag string, reset bool) (xrayrpc.TagTraffic, error)
+	GetOutboundStats(ctx context.Context, tag string, reset bool) (xrayrpc.TagTraffic, error)
+	GetAllInboundsStats(ctx context.Context, reset bool) ([]xrayrpc.TagTraffic, error)
+	GetAllOutboundsStats(ctx context.Context, reset bool) ([]xrayrpc.TagTraffic, error)
+	GetUserIPList(ctx context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error)
+	GetUsersIPList(ctx context.Context) ([]xrayrpc.UserIPEntry, error)
 }
 
 type ReportsCounter interface {
@@ -45,7 +45,7 @@ func NewService(provider Provider, reportsCounter ReportsCounter, systemStats Sy
 
 type SystemStatsResponse struct {
 	// Nullable per upstream contract when rw-core is not running yet.
-	XrayInfo *xtls.SysStats `json:"xrayInfo"`
+	XrayInfo *xrayrpc.SysStats `json:"xrayInfo"`
 	Plugins  struct {
 		TorrentBlocker struct {
 			ReportsCount int `json:"reportsCount"`
@@ -278,7 +278,7 @@ func (s *Service) GetUsersIPList(ctx context.Context) GetUsersIPListResponse {
 	return GetUsersIPListResponse{Users: users}
 }
 
-func mapInbounds(items []xtls.TagTraffic) []InboundStatsResponse {
+func mapInbounds(items []xrayrpc.TagTraffic) []InboundStatsResponse {
 	result := make([]InboundStatsResponse, 0, len(items))
 	for _, item := range items {
 		result = append(result, InboundStatsResponse{
@@ -288,7 +288,7 @@ func mapInbounds(items []xtls.TagTraffic) []InboundStatsResponse {
 	return result
 }
 
-func mapOutbounds(items []xtls.TagTraffic) []OutboundStatsResponse {
+func mapOutbounds(items []xrayrpc.TagTraffic) []OutboundStatsResponse {
 	result := make([]OutboundStatsResponse, 0, len(items))
 	for _, item := range items {
 		result = append(result, OutboundStatsResponse{

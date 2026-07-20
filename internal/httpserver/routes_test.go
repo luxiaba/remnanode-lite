@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/stats"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type failingUsersStatsProvider struct{}
@@ -23,31 +23,31 @@ func (failingUsersStatsProvider) BeginMutation(ctx context.Context) (context.Con
 	return ctx, func() {}, nil
 }
 
-func (failingUsersStatsProvider) GetSysStats(context.Context) (*xtls.SysStats, error) {
-	return &xtls.SysStats{}, nil
+func (failingUsersStatsProvider) GetSysStats(context.Context) (*xrayrpc.SysStats, error) {
+	return &xrayrpc.SysStats{}, nil
 }
-func (f failingUsersStatsProvider) GetAllUsersStats(context.Context, bool) ([]xtls.UserTraffic, error) {
+func (f failingUsersStatsProvider) GetAllUsersStats(context.Context, bool) ([]xrayrpc.UserTraffic, error) {
 	return nil, errors.New("grpc unavailable")
 }
 func (f failingUsersStatsProvider) GetUserOnlineStatus(context.Context, string) (bool, error) {
 	return false, nil
 }
-func (f failingUsersStatsProvider) GetInboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
-	return xtls.TagTraffic{}, nil
+func (f failingUsersStatsProvider) GetInboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
+	return xrayrpc.TagTraffic{}, nil
 }
-func (f failingUsersStatsProvider) GetOutboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
-	return xtls.TagTraffic{}, nil
+func (f failingUsersStatsProvider) GetOutboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
+	return xrayrpc.TagTraffic{}, nil
 }
-func (f failingUsersStatsProvider) GetAllInboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
+func (f failingUsersStatsProvider) GetAllInboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
 	return nil, nil
 }
-func (f failingUsersStatsProvider) GetAllOutboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
+func (f failingUsersStatsProvider) GetAllOutboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
 	return nil, nil
 }
-func (f failingUsersStatsProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
+func (f failingUsersStatsProvider) GetUserIPList(context.Context, string, bool) ([]xrayrpc.IPEntry, error) {
 	return nil, nil
 }
-func (f failingUsersStatsProvider) GetUsersIPList(context.Context) ([]xtls.UserIPEntry, error) {
+func (f failingUsersStatsProvider) GetUsersIPList(context.Context) ([]xrayrpc.UserIPEntry, error) {
 	return nil, nil
 }
 
@@ -102,11 +102,11 @@ type blockingResetStatsProvider struct {
 	release <-chan struct{}
 }
 
-func (p *blockingResetStatsProvider) GetAllInboundsStats(ctx context.Context, _ bool) ([]xtls.TagTraffic, error) {
+func (p *blockingResetStatsProvider) GetAllInboundsStats(ctx context.Context, _ bool) ([]xrayrpc.TagTraffic, error) {
 	close(p.entered)
 	select {
 	case <-p.release:
-		return []xtls.TagTraffic{}, nil
+		return []xrayrpc.TagTraffic{}, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
@@ -114,41 +114,41 @@ func (p *blockingResetStatsProvider) GetAllInboundsStats(ctx context.Context, _ 
 
 func (p countingStatsProvider) hit() { p.calls.Add(1) }
 
-func (p countingStatsProvider) GetSysStats(context.Context) (*xtls.SysStats, error) {
+func (p countingStatsProvider) GetSysStats(context.Context) (*xrayrpc.SysStats, error) {
 	p.hit()
-	return &xtls.SysStats{}, nil
+	return &xrayrpc.SysStats{}, nil
 }
-func (p countingStatsProvider) GetAllUsersStats(context.Context, bool) ([]xtls.UserTraffic, error) {
+func (p countingStatsProvider) GetAllUsersStats(context.Context, bool) ([]xrayrpc.UserTraffic, error) {
 	p.hit()
-	return []xtls.UserTraffic{}, nil
+	return []xrayrpc.UserTraffic{}, nil
 }
 func (p countingStatsProvider) GetUserOnlineStatus(context.Context, string) (bool, error) {
 	p.hit()
 	return false, nil
 }
-func (p countingStatsProvider) GetInboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
+func (p countingStatsProvider) GetInboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
 	p.hit()
-	return xtls.TagTraffic{Tag: "inbound"}, nil
+	return xrayrpc.TagTraffic{Tag: "inbound"}, nil
 }
-func (p countingStatsProvider) GetOutboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
+func (p countingStatsProvider) GetOutboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
 	p.hit()
-	return xtls.TagTraffic{Tag: "outbound"}, nil
+	return xrayrpc.TagTraffic{Tag: "outbound"}, nil
 }
-func (p countingStatsProvider) GetAllInboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
+func (p countingStatsProvider) GetAllInboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
 	p.hit()
-	return []xtls.TagTraffic{}, nil
+	return []xrayrpc.TagTraffic{}, nil
 }
-func (p countingStatsProvider) GetAllOutboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
+func (p countingStatsProvider) GetAllOutboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
 	p.hit()
-	return []xtls.TagTraffic{}, nil
+	return []xrayrpc.TagTraffic{}, nil
 }
-func (p countingStatsProvider) GetUserIPList(context.Context, string, bool) ([]xtls.IPEntry, error) {
+func (p countingStatsProvider) GetUserIPList(context.Context, string, bool) ([]xrayrpc.IPEntry, error) {
 	p.hit()
-	return []xtls.IPEntry{}, nil
+	return []xrayrpc.IPEntry{}, nil
 }
-func (p countingStatsProvider) GetUsersIPList(context.Context) ([]xtls.UserIPEntry, error) {
+func (p countingStatsProvider) GetUsersIPList(context.Context) ([]xrayrpc.UserIPEntry, error) {
 	p.hit()
-	return []xtls.UserIPEntry{}, nil
+	return []xrayrpc.UserIPEntry{}, nil
 }
 
 func TestStatsValidationPrecedesProviderCalls(t *testing.T) {

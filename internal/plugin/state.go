@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xraywebhook"
+	"github.com/luxiaba/remnanode-lite/internal/xraywebhook"
 )
 
 const (

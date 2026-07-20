@@ -165,7 +165,7 @@ jobs:
           rm -rf dist/binaries
 
           install -m 0644 compose.yaml dist/compose.yaml
-          install -m 0644 docs/examples/compose.single-file.yaml dist/docker-compose.single-file.yaml
+          install -m 0644 deploy/compose.single-file.yaml dist/docker-compose.single-file.yaml
           release_version="${GITHUB_REF_NAME#v}"
           sed -i \
             "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${release_version}|" \

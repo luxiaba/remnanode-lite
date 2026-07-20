@@ -1,4 +1,4 @@
-package xtls
+package xrayrpc
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xtls/xrpc"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc/wire"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
@@ -58,11 +58,11 @@ func TestHandlerAccountWireGoldens(t *testing.T) {
 				if method != handlerAlterInboundMethod {
 					return fmt.Errorf("method = %q", method)
 				}
-				operation := request.(*xrpc.AlterInboundRequest).GetOperation()
+				operation := request.(*wire.AlterInboundRequest).GetOperation()
 				if operation.GetType() != addUserOperationType {
 					return fmt.Errorf("operation type = %q", operation.GetType())
 				}
-				var add xrpc.AddUserOperation
+				var add wire.AddUserOperation
 				if err := proto.Unmarshal(operation.GetValue(), &add); err != nil {
 					return err
 				}
@@ -125,10 +125,10 @@ func TestStatsWireGoldens(t *testing.T) {
 		message proto.Message
 		want    string
 	}{
-		{"query request", &xrpc.QueryStatsRequest{Pattern: "user>>>", Reset_: true}, "0a07757365723e3e3e1001"},
-		{"query response", &xrpc.QueryStatsResponse{Stat: []*xrpc.Stat{{Name: "metric", Value: 42}}}, "0a0a0a066d6574726963102a"},
-		{"sys response", &xrpc.SysStatsResponse{NumGoroutine: 1, NumGc: 2, Alloc: 3, TotalAlloc: 4, Sys: 5, Mallocs: 6, Frees: 7, LiveObjects: 8, PauseTotalNs: 9, Uptime: 10}, "080110021803200428053006380740084809500a"},
-		{"ip response", &xrpc.GetStatsOnlineIpListResponse{Name: "user", Ips: map[string]int64{"203.0.113.1": 123}}, "0a0475736572120f0a0b3230332e302e3131332e31107b"},
+		{"query request", &wire.QueryStatsRequest{Pattern: "user>>>", Reset_: true}, "0a07757365723e3e3e1001"},
+		{"query response", &wire.QueryStatsResponse{Stat: []*wire.Stat{{Name: "metric", Value: 42}}}, "0a0a0a066d6574726963102a"},
+		{"sys response", &wire.SysStatsResponse{NumGoroutine: 1, NumGc: 2, Alloc: 3, TotalAlloc: 4, Sys: 5, Mallocs: 6, Frees: 7, LiveObjects: 8, PauseTotalNs: 9, Uptime: 10}, "080110021803200428053006380740084809500a"},
+		{"ip response", &wire.GetStatsOnlineIpListResponse{Name: "user", Ips: map[string]int64{"203.0.113.1": 123}}, "0a0475736572120f0a0b3230332e302e3131332e31107b"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

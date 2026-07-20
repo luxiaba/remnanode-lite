@@ -1,6 +1,6 @@
 package stats
 
-import "github.com/Luxiaba/remnanode-lite/internal/nodeapi"
+import "github.com/luxiaba/remnanode-lite/internal/nodeapi"
 
 var (
 	errFailedSystemStats    = nodeapi.ServiceError{Code: "A010", Message: "Failed to get system stats", Status: 500}

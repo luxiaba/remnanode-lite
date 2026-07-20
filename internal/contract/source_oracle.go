@@ -3,7 +3,7 @@ package contract
 import (
 	"context"
 
-	"github.com/Luxiaba/remnanode-lite/internal/contract/sourceoracle"
+	"github.com/luxiaba/remnanode-lite/internal/contract/sourceoracle"
 )
 
 const OfficialSourceManifestPath = "internal/contract/official-source-manifest.json"

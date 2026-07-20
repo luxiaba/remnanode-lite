@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/bodylimit"
+	"github.com/luxiaba/remnanode-lite/internal/bodylimit"
 )
 
 func TestEveryRegisteredRouteHasExpectedRequestBodyBudget(t *testing.T) {

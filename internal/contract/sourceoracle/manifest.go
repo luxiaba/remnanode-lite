@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Luxiaba/remnanode-lite/internal/executil"
+	"github.com/luxiaba/remnanode-lite/internal/executil"
 )
 
 const (

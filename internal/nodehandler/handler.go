@@ -5,22 +5,22 @@ import (
 	"encoding/base64"
 	"log/slog"
 
-	"github.com/Luxiaba/remnanode-lite/internal/connections"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/connections"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type Provider interface {
 	BeginMutation(ctx context.Context) (context.Context, func(), error)
 	InboundTags() []string
-	GetUserIPList(ctx context.Context, userID string, reset bool) ([]xtls.IPEntry, error)
-	HandlerRemoveUser(ctx context.Context, tag, username, hashUUID string) xtls.HandlerResult
-	HandlerAddVlessUser(ctx context.Context, tag, username, uuid, flow string, level uint32, hashUUID string) xtls.HandlerResult
-	HandlerAddTrojanUser(ctx context.Context, tag, username, password string, level uint32, hashUUID string) xtls.HandlerResult
-	HandlerAddShadowsocksUser(ctx context.Context, tag, username, password string, cipherType int, ivCheck bool, level uint32, hashUUID string) xtls.HandlerResult
-	HandlerAddShadowsocks2022User(ctx context.Context, tag, username, key string, level uint32, hashUUID string) xtls.HandlerResult
-	HandlerAddHysteriaUser(ctx context.Context, tag, username, auth string, level uint32, hashUUID string) xtls.HandlerResult
-	HandlerGetInboundUsers(ctx context.Context, tag string) ([]xtls.InboundUser, xtls.HandlerResult)
-	HandlerGetInboundUsersCount(ctx context.Context, tag string) (int64, xtls.HandlerResult)
+	GetUserIPList(ctx context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error)
+	HandlerRemoveUser(ctx context.Context, tag, username, hashUUID string) xrayrpc.HandlerResult
+	HandlerAddVlessUser(ctx context.Context, tag, username, uuid, flow string, level uint32, hashUUID string) xrayrpc.HandlerResult
+	HandlerAddTrojanUser(ctx context.Context, tag, username, password string, level uint32, hashUUID string) xrayrpc.HandlerResult
+	HandlerAddShadowsocksUser(ctx context.Context, tag, username, password string, cipherType int, ivCheck bool, level uint32, hashUUID string) xrayrpc.HandlerResult
+	HandlerAddShadowsocks2022User(ctx context.Context, tag, username, key string, level uint32, hashUUID string) xrayrpc.HandlerResult
+	HandlerAddHysteriaUser(ctx context.Context, tag, username, auth string, level uint32, hashUUID string) xrayrpc.HandlerResult
+	HandlerGetInboundUsers(ctx context.Context, tag string) ([]xrayrpc.InboundUser, xrayrpc.HandlerResult)
+	HandlerGetInboundUsersCount(ctx context.Context, tag string) (int64, xrayrpc.HandlerResult)
 }
 
 type ConnectionDropper interface {
@@ -62,7 +62,7 @@ type InboundUsersCountResponse struct {
 }
 
 type InboundUsersResponse struct {
-	Users []xtls.InboundUser `json:"users"`
+	Users []xrayrpc.InboundUser `json:"users"`
 }
 
 type AddUserRequest struct {
@@ -331,14 +331,14 @@ func (s *Service) GetInboundUsersCount(ctx context.Context, tag string) (Inbound
 func (s *Service) GetInboundUsers(ctx context.Context, tag string) (InboundUsersResponse, error) {
 	ctx = nonNilContext(ctx)
 	if s.provider == nil {
-		return InboundUsersResponse{Users: []xtls.InboundUser{}}, nil
+		return InboundUsersResponse{Users: []xrayrpc.InboundUser{}}, nil
 	}
 	users, result := s.provider.HandlerGetInboundUsers(ctx, tag)
 	if !result.OK {
 		return InboundUsersResponse{}, errFailedInboundUsers
 	}
 	if users == nil {
-		users = []xtls.InboundUser{}
+		users = []xrayrpc.InboundUser{}
 	}
 	return InboundUsersResponse{Users: users}, nil
 }
@@ -361,7 +361,7 @@ func (s *Service) DropIPs(ctx context.Context, ips []string) SuccessResponse {
 	return SuccessResponse{Success: success}
 }
 
-func (s *Service) addSingleUser(ctx context.Context, item AddUserItem, hashUUID string) xtls.HandlerResult {
+func (s *Service) addSingleUser(ctx context.Context, item AddUserItem, hashUUID string) xrayrpc.HandlerResult {
 	switch item.Type {
 	case "vless":
 		return s.provider.HandlerAddVlessUser(ctx, item.Tag, item.Username, item.UUID, item.Flow, 0, hashUUID)
@@ -374,11 +374,11 @@ func (s *Service) addSingleUser(ctx context.Context, item AddUserItem, hashUUID 
 	case "hysteria":
 		return s.provider.HandlerAddHysteriaUser(ctx, item.Tag, item.Username, item.Password, 0, hashUUID)
 	default:
-		return xtls.HandlerResult{OK: false, Message: "unsupported user type: " + item.Type}
+		return xrayrpc.HandlerResult{OK: false, Message: "unsupported user type: " + item.Type}
 	}
 }
 
-func (s *Service) addBatchUser(ctx context.Context, inbound BatchInbound, user BatchUserData, hashUUID string) xtls.HandlerResult {
+func (s *Service) addBatchUser(ctx context.Context, inbound BatchInbound, user BatchUserData, hashUUID string) xrayrpc.HandlerResult {
 	switch inbound.Type {
 	case "vless":
 		return s.provider.HandlerAddVlessUser(ctx, inbound.Tag, user.UserID, user.VlessUUID, inbound.Flow, 0, hashUUID)
@@ -392,7 +392,7 @@ func (s *Service) addBatchUser(ctx context.Context, inbound BatchInbound, user B
 	case "hysteria":
 		return s.provider.HandlerAddHysteriaUser(ctx, inbound.Tag, user.UserID, user.VlessUUID, 0, hashUUID)
 	default:
-		return xtls.HandlerResult{OK: false, Message: "unsupported user type: " + inbound.Type}
+		return xrayrpc.HandlerResult{OK: false, Message: "unsupported user type: " + inbound.Type}
 	}
 }
 
@@ -400,15 +400,15 @@ type userIPDropPlan struct {
 	ips []string
 }
 
-func (s *Service) prepareUserIPDrop(ctx context.Context, userID string) (userIPDropPlan, xtls.HandlerResult) {
+func (s *Service) prepareUserIPDrop(ctx context.Context, userID string) (userIPDropPlan, xrayrpc.HandlerResult) {
 	if !s.connectionDropAvailable() || s.provider == nil {
-		return userIPDropPlan{}, xtls.HandlerResult{OK: true}
+		return userIPDropPlan{}, xrayrpc.HandlerResult{OK: true}
 	}
 	// Removing a user must not clear retry evidence on reset-capable cores.
 	entries, err := s.provider.GetUserIPList(ctx, userID, false)
 	if err != nil {
 		slog.Warn("failed to read user IP stats before removing user", "userId", userID, "error", err)
-		return userIPDropPlan{}, xtls.HandlerResult{OK: false, Message: "failed to read user IP stats"}
+		return userIPDropPlan{}, xrayrpc.HandlerResult{OK: false, Message: "failed to read user IP stats"}
 	}
 	plan := userIPDropPlan{}
 	plan.ips = make([]string, 0, len(entries))
@@ -417,21 +417,21 @@ func (s *Service) prepareUserIPDrop(ctx context.Context, userID string) (userIPD
 			plan.ips = append(plan.ips, entry.IP)
 		}
 	}
-	return plan, xtls.HandlerResult{OK: true}
+	return plan, xrayrpc.HandlerResult{OK: true}
 }
 
-func (s *Service) applyUserIPDrops(ctx context.Context, plans []userIPDropPlan) xtls.HandlerResult {
+func (s *Service) applyUserIPDrops(ctx context.Context, plans []userIPDropPlan) xrayrpc.HandlerResult {
 	allIPs := make([]string, 0)
 	for _, plan := range plans {
 		allIPs = append(allIPs, plan.ips...)
 	}
 	if len(allIPs) == 0 {
-		return xtls.HandlerResult{OK: true}
+		return xrayrpc.HandlerResult{OK: true}
 	}
 	if !s.dropper.DropIPs(ctx, allIPs) {
-		return xtls.HandlerResult{OK: false, Message: "failed to drop user connections"}
+		return xrayrpc.HandlerResult{OK: false, Message: "failed to drop user connections"}
 	}
-	return xtls.HandlerResult{OK: true}
+	return xrayrpc.HandlerResult{OK: true}
 }
 
 func (s *Service) connectionDropAvailable() bool {
@@ -442,7 +442,7 @@ func (s *Service) connectionDropAvailable() bool {
 	return !ok || availability.Available()
 }
 
-func requireAllResults(results []xtls.HandlerResult) GenericResponse {
+func requireAllResults(results []xrayrpc.HandlerResult) GenericResponse {
 	var accumulator resultAccumulator
 	for _, result := range results {
 		accumulator.Add(result)
@@ -455,7 +455,7 @@ type resultAccumulator struct {
 	message string
 }
 
-func (a *resultAccumulator) Add(result xtls.HandlerResult) {
+func (a *resultAccumulator) Add(result xrayrpc.HandlerResult) {
 	if !a.failed && !result.OK {
 		a.failed = true
 		a.message = result.Message
@@ -466,7 +466,7 @@ func (a *resultAccumulator) StopForContext(ctx context.Context) bool {
 	if ctx == nil || ctx.Err() == nil {
 		return false
 	}
-	a.Add(xtls.HandlerResult{OK: false, Message: ctx.Err().Error()})
+	a.Add(xrayrpc.HandlerResult{OK: false, Message: ctx.Err().Error()})
 	return true
 }
 

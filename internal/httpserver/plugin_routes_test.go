@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/plugin"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
 )
 
 type recordingPluginController struct {

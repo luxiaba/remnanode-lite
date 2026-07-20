@@ -1,4 +1,4 @@
-package xtls
+package xrayrpc
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xtls/xrpc"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc/wire"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,19 +35,19 @@ func TestGetUsersIPListUsesNativeBatchRPC(t *testing.T) {
 		if method != getUsersStatsMethod {
 			return fmt.Errorf("method = %q", method)
 		}
-		request, ok := args.(*xrpc.GetUsersStatsRequest)
+		request, ok := args.(*wire.GetUsersStatsRequest)
 		if !ok || request.GetIncludeTraffic() || request.GetReset_() {
 			return fmt.Errorf("unexpected request: %#v", args)
 		}
-		response := reply.(*xrpc.GetUsersStatsResponse)
-		response.Users = []*xrpc.UserStat{
+		response := reply.(*wire.GetUsersStatsResponse)
+		response.Users = []*wire.UserStat{
 			{
 				Email: "u1",
-				Ips: []*xrpc.OnlineIPEntry{{
+				Ips: []*wire.OnlineIPEntry{{
 					Ip: "203.0.113.10", LastSeen: 1_700_000_000,
 				}},
 			},
-			{Email: "u2", Ips: []*xrpc.OnlineIPEntry{}},
+			{Email: "u2", Ips: []*wire.OnlineIPEntry{}},
 		}
 		return nil
 	}}
@@ -91,10 +91,10 @@ func (c *fakeLegacyStatsConn) Invoke(ctx context.Context, method string, args, r
 		return c.nativeErr
 	case statsGetAllOnlineUsersMethod:
 		c.allCalls.Add(1)
-		reply.(*xrpc.GetAllOnlineUsersResponse).Users = append([]string(nil), c.onlineUsers...)
+		reply.(*wire.GetAllOnlineUsersResponse).Users = append([]string(nil), c.onlineUsers...)
 		return nil
 	case statsGetStatsOnlineIPListMethod:
-		request := args.(*xrpc.GetStatsRequest)
+		request := args.(*wire.GetStatsRequest)
 		if request.GetReset_() {
 			return errors.New("read-only users IP list unexpectedly requested reset")
 		}
@@ -115,7 +115,7 @@ func (c *fakeLegacyStatsConn) Invoke(ctx context.Context, method string, args, r
 		if c.lookupErr != nil {
 			return c.lookupErr
 		}
-		response := reply.(*xrpc.GetStatsOnlineIpListResponse)
+		response := reply.(*wire.GetStatsOnlineIpListResponse)
 		response.Name = request.GetName()
 		response.Ips = map[string]int64{"203.0.113.10": 1_700_000_000}
 		return nil
@@ -182,7 +182,7 @@ func TestSingleTagStatsPreserveZeroValuedCounters(t *testing.T) {
 	t.Parallel()
 
 	api := NewStatsAPI(&fakeInvokeConn{invoke: func(_ context.Context, _ string, _, reply any, _ ...grpc.CallOption) error {
-		reply.(*xrpc.QueryStatsResponse).Stat = []*xrpc.Stat{{
+		reply.(*wire.QueryStatsResponse).Stat = []*wire.Stat{{
 			Name: "inbound>>>configured>>>traffic>>>uplink", Value: 0,
 		}}
 		return nil
@@ -263,7 +263,7 @@ func TestUniqueOnlineUserIDs(t *testing.T) {
 }
 
 func TestParseUserTrafficStats(t *testing.T) {
-	stats := []*xrpc.Stat{
+	stats := []*wire.Stat{
 		{Name: "user>>>alice@example.com>>>traffic>>>uplink", Value: 100},
 		{Name: "user>>>alice@example.com>>>traffic>>>downlink", Value: 200},
 	}
@@ -277,7 +277,7 @@ func TestParseUserTrafficStats(t *testing.T) {
 }
 
 func TestParseAllTagTraffic(t *testing.T) {
-	stats := []*xrpc.Stat{
+	stats := []*wire.Stat{
 		{Name: "inbound>>>vless-in>>>traffic>>>uplink", Value: 10},
 		{Name: "inbound>>>vless-in>>>traffic>>>downlink", Value: 20},
 	}

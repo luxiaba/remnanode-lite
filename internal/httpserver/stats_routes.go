@@ -3,7 +3,7 @@ package httpserver
 import (
 	"net/http"
 
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
 )
 
 func (s *Server) handleStatsGetUserOnlineStatus(w http.ResponseWriter, r *http.Request) {

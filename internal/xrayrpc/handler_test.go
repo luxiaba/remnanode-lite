@@ -1,4 +1,4 @@
-package xtls
+package xrayrpc
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/xtls/xrpc"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc/wire"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -21,9 +21,9 @@ func TestGetInboundUsersMatchesOfficialPublicModel(t *testing.T) {
 		if method != handlerGetInboundUsersMethod {
 			return fmt.Errorf("method = %q", method)
 		}
-		reply.(*xrpc.GetInboundUserResponse).Users = []*xrpc.User{
-			{Email: "level-zero", Level: 0, Account: &xrpc.TypedMessage{Type: "xray.proxy.vless.Account"}},
-			{Email: "ss-user", Level: 2, Account: &xrpc.TypedMessage{Type: "xray.proxy.shadowsocks.Account"}},
+		reply.(*wire.GetInboundUserResponse).Users = []*wire.User{
+			{Email: "level-zero", Level: 0, Account: &wire.TypedMessage{Type: "xray.proxy.vless.Account"}},
+			{Email: "ss-user", Level: 2, Account: &wire.TypedMessage{Type: "xray.proxy.shadowsocks.Account"}},
 		}
 		return nil
 	}}
@@ -72,8 +72,8 @@ func TestGetInboundUsersRejectsUnknownAccountType(t *testing.T) {
 	t.Parallel()
 
 	conn := &fakeInvokeConn{invoke: func(_ context.Context, _ string, _, reply any, _ ...grpc.CallOption) error {
-		reply.(*xrpc.GetInboundUserResponse).Users = []*xrpc.User{{
-			Email: "unknown", Account: &xrpc.TypedMessage{Type: "example.UnknownAccount"},
+		reply.(*wire.GetInboundUserResponse).Users = []*wire.User{{
+			Email: "unknown", Account: &wire.TypedMessage{Type: "example.UnknownAccount"},
 		}}
 		return nil
 	}}

@@ -9,10 +9,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	contractspec "github.com/Luxiaba/remnanode-lite/internal/contract"
-	"github.com/Luxiaba/remnanode-lite/internal/nodehandler"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
+	"github.com/luxiaba/remnanode-lite/internal/stats"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type lifecycleRouteCase struct {
@@ -55,64 +55,64 @@ func (p *lifecycleStatsProvider) BeginMutation(ctx context.Context) (context.Con
 	return ctx, func() {}, nil
 }
 
-func (p *lifecycleStatsProvider) GetSysStats(ctx context.Context) (*xtls.SysStats, error) {
+func (p *lifecycleStatsProvider) GetSysStats(ctx context.Context) (*xrayrpc.SysStats, error) {
 	if err := p.wait(ctx); err != nil {
 		return nil, err
 	}
-	return &xtls.SysStats{}, nil
+	return &xrayrpc.SysStats{}, nil
 }
 
-func (p *lifecycleStatsProvider) GetAllUsersStats(ctx context.Context, reset bool) ([]xtls.UserTraffic, error) {
+func (p *lifecycleStatsProvider) GetAllUsersStats(ctx context.Context, reset bool) ([]xrayrpc.UserTraffic, error) {
 	if err := p.waitForReset(ctx, reset); err != nil {
 		return nil, err
 	}
-	return []xtls.UserTraffic{}, nil
+	return []xrayrpc.UserTraffic{}, nil
 }
 
 func (p *lifecycleStatsProvider) GetUserOnlineStatus(ctx context.Context, _ string) (bool, error) {
 	return false, p.wait(ctx)
 }
 
-func (p *lifecycleStatsProvider) GetInboundStats(ctx context.Context, _ string, reset bool) (xtls.TagTraffic, error) {
+func (p *lifecycleStatsProvider) GetInboundStats(ctx context.Context, _ string, reset bool) (xrayrpc.TagTraffic, error) {
 	if err := p.waitForReset(ctx, reset); err != nil {
-		return xtls.TagTraffic{}, err
+		return xrayrpc.TagTraffic{}, err
 	}
-	return xtls.TagTraffic{Tag: "inbound-1"}, nil
+	return xrayrpc.TagTraffic{Tag: "inbound-1"}, nil
 }
 
-func (p *lifecycleStatsProvider) GetOutboundStats(ctx context.Context, _ string, reset bool) (xtls.TagTraffic, error) {
+func (p *lifecycleStatsProvider) GetOutboundStats(ctx context.Context, _ string, reset bool) (xrayrpc.TagTraffic, error) {
 	if err := p.waitForReset(ctx, reset); err != nil {
-		return xtls.TagTraffic{}, err
+		return xrayrpc.TagTraffic{}, err
 	}
-	return xtls.TagTraffic{Tag: "outbound-1"}, nil
+	return xrayrpc.TagTraffic{Tag: "outbound-1"}, nil
 }
 
-func (p *lifecycleStatsProvider) GetAllInboundsStats(ctx context.Context, reset bool) ([]xtls.TagTraffic, error) {
-	if err := p.waitForReset(ctx, reset); err != nil {
-		return nil, err
-	}
-	return []xtls.TagTraffic{}, nil
-}
-
-func (p *lifecycleStatsProvider) GetAllOutboundsStats(ctx context.Context, reset bool) ([]xtls.TagTraffic, error) {
+func (p *lifecycleStatsProvider) GetAllInboundsStats(ctx context.Context, reset bool) ([]xrayrpc.TagTraffic, error) {
 	if err := p.waitForReset(ctx, reset); err != nil {
 		return nil, err
 	}
-	return []xtls.TagTraffic{}, nil
+	return []xrayrpc.TagTraffic{}, nil
 }
 
-func (p *lifecycleStatsProvider) GetUserIPList(ctx context.Context, _ string, reset bool) ([]xtls.IPEntry, error) {
+func (p *lifecycleStatsProvider) GetAllOutboundsStats(ctx context.Context, reset bool) ([]xrayrpc.TagTraffic, error) {
 	if err := p.waitForReset(ctx, reset); err != nil {
 		return nil, err
 	}
-	return []xtls.IPEntry{}, nil
+	return []xrayrpc.TagTraffic{}, nil
 }
 
-func (p *lifecycleStatsProvider) GetUsersIPList(ctx context.Context) ([]xtls.UserIPEntry, error) {
+func (p *lifecycleStatsProvider) GetUserIPList(ctx context.Context, _ string, reset bool) ([]xrayrpc.IPEntry, error) {
+	if err := p.waitForReset(ctx, reset); err != nil {
+		return nil, err
+	}
+	return []xrayrpc.IPEntry{}, nil
+}
+
+func (p *lifecycleStatsProvider) GetUsersIPList(ctx context.Context) ([]xrayrpc.UserIPEntry, error) {
 	if err := p.wait(ctx); err != nil {
 		return nil, err
 	}
-	return []xtls.UserIPEntry{}, nil
+	return []xrayrpc.UserIPEntry{}, nil
 }
 
 type lifecycleHandlerProvider struct {

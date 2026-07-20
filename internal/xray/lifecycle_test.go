@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/unixconfig"
 )
 
 const helperProcessEnv = "GO_WANT_XRAY_PROCESS_HELPER"

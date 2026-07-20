@@ -19,7 +19,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/contract"
 )
 
 const tokenEnvironment = "REMNANODE_CONTRACT_TOKEN"

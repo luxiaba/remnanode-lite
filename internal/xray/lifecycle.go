@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/unixconfig"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/unixconfig"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 const (
@@ -78,7 +78,7 @@ type processState struct {
 	epoch             uint64
 	socket            string
 	mutationGate      sync.RWMutex
-	statsCapabilities xtls.StatsCapabilities
+	statsCapabilities xrayrpc.StatsCapabilities
 	done              chan struct{}
 	leaderDone        chan struct{}
 	monitorDone       chan struct{}

@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/Luxiaba/remnanode-lite/internal/nodeapi"
-	"github.com/Luxiaba/remnanode-lite/internal/stats"
-	"github.com/Luxiaba/remnanode-lite/internal/system"
-	"github.com/Luxiaba/remnanode-lite/internal/xtls"
+	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/stats"
+	"github.com/luxiaba/remnanode-lite/internal/system"
+	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
 
 type combinedLeaseContextKey struct{}
@@ -33,25 +33,25 @@ func (p *combinedLeaseProvider) BeginMutation(ctx context.Context) (context.Cont
 	return context.WithValue(ctx, combinedLeaseContextKey{}, p), func() { p.releaseCalls.Add(1) }, nil
 }
 
-func (p *combinedLeaseProvider) GetAllInboundsStats(ctx context.Context, _ bool) ([]xtls.TagTraffic, error) {
+func (p *combinedLeaseProvider) GetAllInboundsStats(ctx context.Context, _ bool) ([]xrayrpc.TagTraffic, error) {
 	if ctx.Value(combinedLeaseContextKey{}) != p {
 		return nil, errors.New("missing combined lease context")
 	}
 	p.rpcCalls.Add(1)
-	return []xtls.TagTraffic{}, nil
+	return []xrayrpc.TagTraffic{}, nil
 }
 
-func (p *combinedLeaseProvider) GetAllOutboundsStats(ctx context.Context, _ bool) ([]xtls.TagTraffic, error) {
+func (p *combinedLeaseProvider) GetAllOutboundsStats(ctx context.Context, _ bool) ([]xrayrpc.TagTraffic, error) {
 	if ctx.Value(combinedLeaseContextKey{}) != p {
 		return nil, errors.New("missing combined lease context")
 	}
 	p.rpcCalls.Add(1)
-	return []xtls.TagTraffic{}, nil
+	return []xrayrpc.TagTraffic{}, nil
 }
 
 type mockProvider struct {
-	usersStats       []xtls.UserTraffic
-	usersIPList      []xtls.UserIPEntry
+	usersStats       []xrayrpc.UserTraffic
+	usersIPList      []xrayrpc.UserIPEntry
 	usersErr         error
 	onlineCalls      int
 	userIPListCalls  int
@@ -63,10 +63,10 @@ func (m *mockProvider) BeginMutation(ctx context.Context) (context.Context, func
 	return ctx, func() {}, m.usersErr
 }
 
-func (m *mockProvider) GetSysStats(context.Context) (*xtls.SysStats, error) {
-	return &xtls.SysStats{Uptime: 1}, m.usersErr
+func (m *mockProvider) GetSysStats(context.Context) (*xrayrpc.SysStats, error) {
+	return &xrayrpc.SysStats{Uptime: 1}, m.usersErr
 }
-func (m *mockProvider) GetAllUsersStats(context.Context, bool) ([]xtls.UserTraffic, error) {
+func (m *mockProvider) GetAllUsersStats(context.Context, bool) ([]xrayrpc.UserTraffic, error) {
 	return m.usersStats, m.usersErr
 }
 func (m *mockProvider) GetUserOnlineStatus(_ context.Context, username string) (bool, error) {
@@ -74,24 +74,24 @@ func (m *mockProvider) GetUserOnlineStatus(_ context.Context, username string) (
 	m.onlineUsername = username
 	return false, m.usersErr
 }
-func (m *mockProvider) GetInboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
-	return xtls.TagTraffic{}, m.usersErr
+func (m *mockProvider) GetInboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
+	return xrayrpc.TagTraffic{}, m.usersErr
 }
-func (m *mockProvider) GetOutboundStats(context.Context, string, bool) (xtls.TagTraffic, error) {
-	return xtls.TagTraffic{}, m.usersErr
+func (m *mockProvider) GetOutboundStats(context.Context, string, bool) (xrayrpc.TagTraffic, error) {
+	return xrayrpc.TagTraffic{}, m.usersErr
 }
-func (m *mockProvider) GetAllInboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
+func (m *mockProvider) GetAllInboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
 	return nil, m.usersErr
 }
-func (m *mockProvider) GetAllOutboundsStats(context.Context, bool) ([]xtls.TagTraffic, error) {
+func (m *mockProvider) GetAllOutboundsStats(context.Context, bool) ([]xrayrpc.TagTraffic, error) {
 	return nil, m.usersErr
 }
-func (m *mockProvider) GetUserIPList(_ context.Context, userID string, _ bool) ([]xtls.IPEntry, error) {
+func (m *mockProvider) GetUserIPList(_ context.Context, userID string, _ bool) ([]xrayrpc.IPEntry, error) {
 	m.userIPListCalls++
 	m.userIPListUserID = userID
 	return nil, m.usersErr
 }
-func (m *mockProvider) GetUsersIPList(context.Context) ([]xtls.UserIPEntry, error) {
+func (m *mockProvider) GetUsersIPList(context.Context) ([]xrayrpc.UserIPEntry, error) {
 	return m.usersIPList, m.usersErr
 }
 
@@ -120,7 +120,7 @@ func TestGetSystemStatsUsesInjectedSystemCollector(t *testing.T) {
 func TestGetUsersStatsFiltersZeroTraffic(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersStats: []xtls.UserTraffic{
+	service := stats.NewService(&mockProvider{usersStats: []xrayrpc.UserTraffic{
 		{Username: "idle", Uplink: 0, Downlink: 0},
 		{Username: "active", Uplink: 10, Downlink: 5},
 	}}, nil, system.NewCollector(nil))
@@ -201,8 +201,8 @@ func TestGetUsersIPListGRPCError(t *testing.T) {
 func TestGetUsersIPListPreservesNativeUsersWithEmptyIPs(t *testing.T) {
 	t.Parallel()
 
-	service := stats.NewService(&mockProvider{usersIPList: []xtls.UserIPEntry{
-		{UserID: "u1", IPs: []xtls.IPEntry{}},
+	service := stats.NewService(&mockProvider{usersIPList: []xrayrpc.UserIPEntry{
+		{UserID: "u1", IPs: []xrayrpc.IPEntry{}},
 	}}, nil, system.NewCollector(nil))
 	response := service.GetUsersIPList(context.Background())
 	if len(response.Users) != 1 || response.Users[0].UserID != "u1" || len(response.Users[0].IPs) != 0 {

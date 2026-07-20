@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Luxiaba/remnanode-lite/internal/asn"
-	"github.com/Luxiaba/remnanode-lite/internal/config"
-	"github.com/Luxiaba/remnanode-lite/internal/executil"
-	"github.com/Luxiaba/remnanode-lite/internal/netadmin"
-	"github.com/Luxiaba/remnanode-lite/internal/secret"
-	"github.com/Luxiaba/remnanode-lite/internal/version"
+	"github.com/luxiaba/remnanode-lite/internal/asn"
+	"github.com/luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/executil"
+	"github.com/luxiaba/remnanode-lite/internal/netadmin"
+	"github.com/luxiaba/remnanode-lite/internal/secret"
+	"github.com/luxiaba/remnanode-lite/internal/version"
 )
 
 const defaultEnvPath = "/etc/remnanode/node.env"
@@ -41,7 +41,7 @@ func Run(args []string) int {
 	}
 
 	fmt.Println(version.String())
-	fmt.Println("── 部署自检 ──")
+	fmt.Println("-- Deployment diagnostics --")
 
 	var results []result
 
@@ -52,28 +52,28 @@ func Run(args []string) int {
 	if cfgErr != nil {
 		results = append(results, result{
 			level:   "ERROR",
-			title:   "配置文件",
+			title:   "Configuration file",
 			detail:  cfgErr.Error(),
-			fixHint: "创建 " + envPath + " 或指定 --env PATH",
+			fixHint: "Create " + envPath + " or specify --env PATH",
 		})
 	} else {
 		results = append(results, checkSecret(cfg)...)
 		results = append(results, checkXrayBinary(cfg.XrayBin)...)
 		results = append(results, checkGeoFiles(cfg.GeoDir)...)
 		results = append(results, checkASNDatabase(cfg.ASNDBPath)...)
-		results = append(results, checkCommand("nft", "nftables 命令行（插件 IP 封禁）")...)
-		results = append(results, checkCommand("ss", "ss 命令（部署监听端口归属检查）")...)
+		results = append(results, checkCommand("nft", "nftables CLI (plugin IP blocking)")...)
+		results = append(results, checkCommand("ss", "ss command (deployed listening-port ownership checks)")...)
 	}
 
 	exitCode := 0
 	for _, item := range results {
 		fmt.Printf("[%s] %s", item.level, item.title)
 		if item.detail != "" {
-			fmt.Printf(" — %s", item.detail)
+			fmt.Printf(" - %s", item.detail)
 		}
 		fmt.Println()
 		if item.fixHint != "" {
-			fmt.Printf("      → %s\n", item.fixHint)
+			fmt.Printf("      -> %s\n", item.fixHint)
 		}
 		if item.level == "ERROR" {
 			exitCode = 1
@@ -81,9 +81,9 @@ func Run(args []string) int {
 	}
 
 	if exitCode == 0 {
-		fmt.Println("── 结论：核心项通过（WARN 项不影响 Panel 基本连接）──")
+		fmt.Println("-- Result: core checks passed (WARN items do not prevent basic Panel connectivity) --")
 	} else {
-		fmt.Println("── 结论：存在 ERROR，请先修复后再接入 Panel ──")
+		fmt.Println("-- Result: ERROR items found; resolve them before connecting to the Panel --")
 	}
 	return exitCode
 }
@@ -95,20 +95,20 @@ func loadConfig(envPath string) (config.Config, error) {
 				return config.Load(".env")
 			}
 		}
-		return config.Config{}, fmt.Errorf("找不到 %s", envPath)
+		return config.Config{}, fmt.Errorf("%s not found", envPath)
 	}
 	return config.Load(envPath)
 }
 
 func checkCapNetAdmin() result {
 	if netadmin.HasCapNetAdmin() {
-		return result{level: "OK", title: "CAP_NET_ADMIN", detail: "当前进程已具备"}
+		return result{level: "OK", title: "CAP_NET_ADMIN", detail: "available to the current process"}
 	}
 	return result{
 		level:   "WARN",
 		title:   "CAP_NET_ADMIN",
-		detail:  "当前进程未具备（nftables / NETLINK_SOCK_DIAG socket destroy 不可用）",
-		fixHint: "通过 systemd 启动：确认 unit 含 AmbientCapabilities=CAP_NET_ADMIN，然后 systemctl daemon-reload && systemctl restart remnawave-node",
+		detail:  "not available to the current process (nftables and NETLINK_SOCK_DIAG socket destruction are unavailable)",
+		fixHint: "Start with systemd: confirm that the unit contains AmbientCapabilities=CAP_NET_ADMIN, then run systemctl daemon-reload && systemctl restart remnawave-node",
 	}
 }
 
@@ -118,35 +118,35 @@ func checkSystemdCapNetAdmin() result {
 		return result{
 			level:   "WARN",
 			title:   "systemd unit",
-			detail:  defaultUnitPath + " 未找到",
-			fixHint: "运行 install-node.sh 或 upgrade.sh 安装官方 unit",
+			detail:  defaultUnitPath + " not found",
+			fixHint: "Run install-node.sh or upgrade.sh to install the provided unit",
 		}
 	}
 	content := string(data)
 	if strings.Contains(content, "AmbientCapabilities=CAP_NET_ADMIN") {
-		return result{level: "OK", title: "systemd unit", detail: "已配置 AmbientCapabilities=CAP_NET_ADMIN"}
+		return result{level: "OK", title: "systemd unit", detail: "AmbientCapabilities=CAP_NET_ADMIN is configured"}
 	}
 	return result{
 		level:   "WARN",
 		title:   "systemd unit",
-		detail:  "未包含 AmbientCapabilities=CAP_NET_ADMIN",
-		fixHint: "sudo curl -fsSL https://raw.githubusercontent.com/Luxiaba/remnanode-lite/v" + version.Version + "/deploy/remnawave-node.service -o " + defaultUnitPath + " && sudo systemctl daemon-reload && sudo systemctl restart remnawave-node",
+		detail:  "AmbientCapabilities=CAP_NET_ADMIN is missing",
+		fixHint: "sudo curl -fsSL https://raw.githubusercontent.com/luxiaba/remnanode-lite/v" + version.Version + "/deploy/remnawave-node.service -o " + defaultUnitPath + " && sudo systemctl daemon-reload && sudo systemctl restart remnawave-node",
 	}
 }
 
 func checkSecret(cfg config.Config) []result {
 	if _, err := secret.Parse(cfg.SecretKey); err == nil {
-		return []result{{level: "OK", title: "Secret Key", detail: "已配置且格式有效"}}
+		return []result{{level: "OK", title: "Secret Key", detail: "configured and valid"}}
 	}
-	detail := "格式无效（无法解析 Panel 下发的 Key 或缺少必需字段）"
+	detail := "invalid format (the key supplied by the Panel cannot be parsed or required fields are missing)"
 	if strings.TrimSpace(cfg.SecretKey) == "" {
-		detail = "未配置（SECRET_KEY 或 SECRET_KEY_FILE 为空）"
+		detail = "not configured (SECRET_KEY and SECRET_KEY_FILE are empty)"
 	}
 	return []result{{
 		level:   "ERROR",
 		title:   "Secret Key",
 		detail:  detail,
-		fixHint: "编辑 /etc/remnanode/secret.key 写入 Panel 下发的完整 Key，然后重启 remnawave-node 服务",
+		fixHint: "Write the complete key supplied by the Panel to /etc/remnanode/secret.key, then restart the remnawave-node service",
 	}}
 }
 
@@ -159,15 +159,15 @@ func checkXrayBinary(bin string) []result {
 		return []result{{
 			level:   "ERROR",
 			title:   "rw-core",
-			detail:  bin + " 不存在",
-			fixHint: "运行 scripts/install-xray.sh 或 install-node.sh（勿加 --skip-xray）",
+			detail:  bin + " does not exist",
+			fixHint: "Run scripts/install-xray.sh or install-node.sh without --skip-xray",
 		}}
 	}
 	if info.Mode()&0o111 == 0 {
 		return []result{{
 			level:   "ERROR",
 			title:   "rw-core",
-			detail:  bin + " 不可执行",
+			detail:  bin + " is not executable",
 			fixHint: "sudo chmod +x " + bin,
 		}}
 	}
@@ -178,7 +178,7 @@ func checkXrayBinary(bin string) []result {
 		return []result{{
 			level:  "WARN",
 			title:  "rw-core",
-			detail: bin + " 存在但 version 命令失败",
+			detail: bin + " exists, but the version command failed",
 		}}
 	}
 	line := strings.TrimSpace(strings.Split(string(command.Stdout), "\n")[0])
@@ -196,7 +196,7 @@ func checkGeoFiles(dir string) []result {
 		}
 	}
 	if len(missing) == 0 {
-		detail := dir + " 含 geoip.dat / geosite.dat"
+		detail := dir + " contains geoip.dat and geosite.dat"
 		var extras []string
 		for _, name := range []string{"geo-zapret.dat", "ip-zapret.dat"} {
 			if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
@@ -204,15 +204,15 @@ func checkGeoFiles(dir string) []result {
 			}
 		}
 		if len(extras) > 0 {
-			detail += "；可选 " + strings.Join(extras, ", ")
+			detail += "; optional: " + strings.Join(extras, ", ")
 		}
-		return []result{{level: "OK", title: "Geo 数据", detail: detail}}
+		return []result{{level: "OK", title: "Geo data", detail: detail}}
 	}
 	return []result{{
 		level:   "WARN",
-		title:   "Geo 数据",
-		detail:  "缺少 " + strings.Join(missing, ", "),
-		fixHint: "重新运行 install-xray.sh 或从 Xray 发行版复制到 " + dir,
+		title:   "Geo data",
+		detail:  "missing " + strings.Join(missing, ", "),
+		fixHint: "Run install-xray.sh again or copy the files from an Xray release to " + dir,
 	}}
 }
 
@@ -224,38 +224,38 @@ func checkASNDatabase(path string) []result {
 	if err != nil {
 		return []result{{
 			level:   "WARN",
-			title:   "ASN 数据库",
-			detail:  fmt.Sprintf("%s 无法由运行时加载：%v（插件 asList 共享列表降级为空）", path, err),
-			fixHint: "设置 ASN_DB_URL 重跑 install-xray.sh，或用 cmd/asn-builder 生成后放到该路径",
+			title:   "ASN database",
+			detail:  fmt.Sprintf("%s cannot be loaded by the runtime: %v (the plugin asList shared list falls back to empty)", path, err),
+			fixHint: "Set ASN_DB_URL and rerun install-xray.sh, or generate the database with cmd/asn-builder and place it at this path",
 		}}
 	}
 	available := database.Available()
 	if err := database.Close(); err != nil {
 		return []result{{
 			level:  "WARN",
-			title:  "ASN 数据库",
-			detail: fmt.Sprintf("%s 无法正常关闭：%v（插件 asList 共享列表可能不可用）", path, err),
+			title:  "ASN database",
+			detail: fmt.Sprintf("%s cannot be closed cleanly: %v (the plugin asList shared list may be unavailable)", path, err),
 		}}
 	}
 	if !available {
 		return []result{{
 			level:   "WARN",
-			title:   "ASN 数据库",
-			detail:  path + " 不含 ASN 条目（插件 asList 共享列表降级为空）",
-			fixHint: "设置 ASN_DB_URL 重跑 install-xray.sh，或用 cmd/asn-builder 生成后替换该文件",
+			title:   "ASN database",
+			detail:  path + " contains no ASN entries (the plugin asList shared list falls back to empty)",
+			fixHint: "Set ASN_DB_URL and rerun install-xray.sh, or generate a replacement with cmd/asn-builder",
 		}}
 	}
-	return []result{{level: "OK", title: "ASN 数据库", detail: path + " 已通过运行时打开检查"}}
+	return []result{{level: "OK", title: "ASN database", detail: path + " passed the runtime open check"}}
 }
 
 func checkCommand(name, purpose string) []result {
 	if path, err := exec.LookPath(name); err == nil {
-		return []result{{level: "OK", title: name, detail: path + "（" + purpose + "）"}}
+		return []result{{level: "OK", title: name, detail: path + " (" + purpose + ")"}}
 	}
 	return []result{{
 		level:   "WARN",
 		title:   name,
-		detail:  "未安装（" + purpose + "）",
+		detail:  "not installed (" + purpose + ")",
 		fixHint: "Debian/Ubuntu: apt install iproute2 " + name,
 	}}
 }
