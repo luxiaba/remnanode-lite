@@ -27,6 +27,7 @@ for file in \
   .env.example \
   .github/workflows/container.yml \
   .github/workflows/release.yml \
+  scripts/check-release-risk-disclosure.sh \
   scripts/promote-image-tag.sh \
   docs/deployment-docker.md \
   deploy/compose.single-file.yaml; do
@@ -111,11 +112,72 @@ require_text .github/workflows/release.yml 'needs: release'
 require_text .github/workflows/release.yml 'needs: publish-container'
 require_text .github/workflows/release.yml 'Verify accepted candidate image'
 require_text .github/workflows/release.yml 'candidateImageDigest // empty'
-require_text .github/workflows/release.yml '--signer-workflow'
+require_text .github/workflows/release.yml '--cert-identity'
+require_text .github/workflows/release.yml '/.github/workflows/container.yml@refs/heads/main'
 require_text .github/workflows/release.yml '--source-digest'
-require_text .github/workflows/release.yml '--source-ref refs/heads/main'
 require_text .github/workflows/release.yml '--deny-self-hosted-runners'
 require_text .github/workflows/release.yml 'docker buildx imagetools inspect'
+require_text .github/workflows/release.yml 'docker buildx imagetools inspect --raw'
+require_text .github/workflows/release.yml 'vnd.docker.reference.type'
+require_text .github/workflows/release.yml 'vnd.docker.reference.digest'
+jq_index="\$index"
+jq_runnable="\$runnable"
+jq_attestations="\$attestations"
+require_text .github/workflows/release.yml "(${jq_index}.manifests | length) == 4"
+require_text .github/workflows/release.yml "(${jq_runnable} | length) == 2"
+require_text .github/workflows/release.yml "(${jq_attestations} | length) == 2"
+require_text .github/workflows/release.yml '["linux/amd64", "linux/arm64"]'
+if grep -Fq -- '--signer-workflow' .github/workflows/release.yml ||
+  grep -Fq -- '--source-ref' .github/workflows/release.yml; then
+  echo "release workflow must use an exact attestation certificate identity" >&2
+  exit 1
+fi
+require_text scripts/release-check.sh 'scripts/check-release-risk-disclosure.sh'
+require_text scripts/check-release-risk-disclosure.sh '## Known Risks'
+require_text scripts/check-release-risk-disclosure.sh 'operator-attested'
+require_text scripts/check-release-risk-disclosure.sh 'not an unforgeable proof'
+for deferred in \
+  arm64-production-runtime \
+  native-systemd-install \
+  native-openrc-install \
+  50000-user-load \
+  24h-soak \
+  fault-and-rollback-injection; do
+  require_text scripts/check-release-risk-disclosure.sh "$deferred"
+done
+
+risk_fixture_dir="$(mktemp -d)"
+trap 'rm -rf "$risk_fixture_dir"' EXIT
+valid_risks="${risk_fixture_dir}/valid.md"
+invalid_deferred="${risk_fixture_dir}/invalid-deferred.md"
+invalid_operator="${risk_fixture_dir}/invalid-operator.md"
+{
+  printf '%s\n\n' '# v2.8.0' '## Known Risks'
+  for deferred in \
+    arm64-production-runtime \
+    native-systemd-install \
+    native-openrc-install \
+    50000-user-load \
+    24h-soak \
+    fault-and-rollback-injection; do
+    printf -- "- \`%s\`: deferred; not validated by \`docker-production-smoke-v1\`.\n" "$deferred"
+  done
+  printf '\n%s\n\n%s\n' \
+    'Runtime evidence is operator-attested and is not an unforgeable proof.' \
+    '## Installation and Upgrade'
+} >"$valid_risks"
+bash scripts/check-release-risk-disclosure.sh "$valid_risks"
+sed 's/: deferred;/: not deferred;/' "$valid_risks" >"$invalid_deferred"
+if bash scripts/check-release-risk-disclosure.sh "$invalid_deferred" >/dev/null 2>&1; then
+  echo "release risk checker accepted a negated deferred disclosure" >&2
+  exit 1
+fi
+sed 's/Runtime evidence is operator-attested/Runtime evidence is not operator-attested/' \
+  "$valid_risks" >"$invalid_operator"
+if bash scripts/check-release-risk-disclosure.sh "$invalid_operator" >/dev/null 2>&1; then
+  echo "release risk checker accepted a negated operator evidence statement" >&2
+  exit 1
+fi
 require_text .github/workflows/release.yml \
   "SOURCE_DIGEST: ${github_expression_prefix}{{ needs.release.outputs.candidate_digest }}"
 require_text .github/workflows/release.yml 'make_latest: false'

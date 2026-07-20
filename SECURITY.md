@@ -159,5 +159,5 @@ REQUIRE_GOVULNCHECK=1 \
 
 Passing this gate proves repository-level checks only. It does not replace
 real Linux namespace tests, candidate attestation verification, Panel
-integration, resource-fault testing, or long-running M8 acceptance where those
-are required.
+integration, or any version-specific runtime and extended-acceptance checks
+required by the applicable release profile.

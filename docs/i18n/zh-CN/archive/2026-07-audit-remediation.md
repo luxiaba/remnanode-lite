@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=cff4add22fe13288fcc976167286409d3b2f9e8183586b5bf99215c48572ad48 -->
+<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=63a33e6e53ef46e02305d315ebcc07d45d006e9acde550a2b7d642e607b14ebe -->
 # 2026-07 静态审计整改记录（归档）
 
 > **翻译说明：** [英文原文](../../../archive/2026-07-audit-remediation.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
@@ -7,7 +7,15 @@
 
 本文保存首个独立版本线在 2026 年 7 月执行的静态审计和整改原则。它是决策记录，不是当前待办列表，也不应作为新维护者的入口。原审计发生在仓库历史重置之前，其本地基线 commit 已不属于当前独立 Git 历史；可持续追踪的事实已经转移到代码测试、[2.8.0 契约基线](../development/contract-2.8.0.md)、[资源预算](../development/resource-budget.md)和[发布验收协议](../development/release-acceptance.md)。
 
-M0-M7 的静态整改已经完成；冻结候选上的真实 Panel/Linux、资源、故障和长期运行证据仍由 M8 管理。掉电、installer/supervisor 自身被强杀后的自动恢复是已接受的运维限制，处理方式是重新运行 installer、重启主机或重新创建容器。
+下文记录的原生、双运行时、50,000 用户和 24 小时严格 M8 计划属于历史方案。对于仍未
+发布的 `v2.8.0` 候选，该方案已由 schema version 2 和
+`docker-production-smoke-v1` profile 取代；当前 profile 将这些旧 runtime 场景
+记录为 deferred、non-blocking validation。应以当前发布验收协议为准，不能把归档
+计划继续当作发布门禁。
+
+在本记录形成时，M0-M7 静态整改已经完成，冻结候选上的真实 Panel/Linux、资源、故障
+和长期运行 evidence 由 M8 管理。掉电、installer/supervisor 自身被强杀后的自动恢复
+仍是已接受的运维限制，处理方式是重新运行 installer、重启主机或重新创建容器。
 
 ## 工程原则
 

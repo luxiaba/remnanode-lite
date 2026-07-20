@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	expectedSchemaVersion = 1
+	expectedSchemaVersion     = 2
+	expectedAcceptanceProfile = "docker-production-smoke-v1"
 
 	expectedOfficialNodeVersion = "2.8.0"
 	expectedOfficialNodeCommit  = "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b"
@@ -34,32 +35,26 @@ const (
 	expectedAMD64AssetSHA = "b3e5902d06d6282fe53cfa2fc426058b9aeaa429b2c812e20887cd47f26d08bf"
 	expectedARM64AssetSHA = "13a251379bea366c2cf10363ad71e75734193d401f26f518bf0c25e5c8f8c931"
 
-	expectedWholeMachineMemoryMiB = 512
-	expectedServiceMemoryMaxMiB   = 448
-	expectedCPUCount              = 1
-	expectedDiskMiB               = 2048
-	expectedUsers                 = 50000
-	minimumSoakSeconds            = 86400
-	maximumClockSkew              = 5 * time.Minute
-	maximumAcceptanceFileBytes    = 1 << 20
+	maximumClockSkew           = 5 * time.Minute
+	maximumAcceptanceFileBytes = 1 << 20
 
 	acceptanceDirectory       = "docs/development/acceptance/v" + expectedReleaseVersion
 	manifestRepositoryPath    = acceptanceDirectory + "/manifest.json"
 	releaseNoteRepositoryPath = "docs/releases/v" + expectedReleaseVersion + ".md"
 )
 
-var expectedAssetSHAByArch = map[string]string{
-	"amd64": expectedAMD64AssetSHA,
-	"arm64": expectedARM64AssetSHA,
+var expectedDeferredValidation = []string{
+	"arm64-production-runtime",
+	"native-systemd-install",
+	"native-openrc-install",
+	"50000-user-load",
+	"24h-soak",
+	"fault-and-rollback-injection",
 }
 
 var expectedAcceptancePaths = []string{
 	manifestRepositoryPath,
-	acceptanceDirectory + "/systemd.json",
-	acceptanceDirectory + "/openrc.json",
-	acceptanceDirectory + "/panel.json",
-	acceptanceDirectory + "/resource-fault.json",
-	acceptanceDirectory + "/compose.json",
+	acceptanceDirectory + "/docker-smoke.json",
 }
 
 type validationResult struct {
@@ -71,17 +66,19 @@ type validationResult struct {
 
 type acceptanceManifest struct {
 	SchemaVersion        int                 `json:"schemaVersion"`
+	AcceptanceProfile    string              `json:"acceptanceProfile"`
 	ReleaseVersion       string              `json:"releaseVersion"`
 	ReleaseTag           string              `json:"releaseTag"`
 	CandidateCommit      string              `json:"candidateCommit"`
 	CandidateTree        string              `json:"candidateTree"`
 	CandidateImageDigest string              `json:"candidateImageDigest"`
+	CandidateNodeSHA256  architectureSHAs    `json:"candidateNodeSha256"`
 	AcceptedAt           string              `json:"acceptedAt"`
 	Decision             string              `json:"decision"`
 	OfficialNode         officialNodeTarget  `json:"officialNode"`
 	PanelTarget          panelTarget         `json:"panelTarget"`
 	RWCore               rwCoreTarget        `json:"rwCore"`
-	Policy               acceptancePolicy    `json:"policy"`
+	DeferredValidation   []string            `json:"deferredValidation"`
 	Evidence             []evidenceReference `json:"evidence"`
 	Risks                []releaseRisk       `json:"risks"`
 }
@@ -104,16 +101,6 @@ type rwCoreTarget struct {
 type architectureSHAs struct {
 	AMD64 string `json:"amd64"`
 	ARM64 string `json:"arm64"`
-}
-
-type acceptancePolicy struct {
-	WholeMachineMemoryMiB int   `json:"wholeMachineMemoryMiB"`
-	ServiceMemoryMaxMiB   int   `json:"serviceMemoryMaxMiB"`
-	CPUCount              int   `json:"cpuCount"`
-	DiskMiB               int   `json:"diskMiB"`
-	Users                 int   `json:"users"`
-	Swap                  *bool `json:"swap"`
-	SoakSeconds           int   `json:"soakSeconds"`
 }
 
 type evidenceReference struct {
@@ -142,105 +129,6 @@ type evidenceCommon struct {
 	Command         []string `json:"command"`
 }
 
-type systemEvidence struct {
-	evidenceCommon
-	Environment machineEnvironment `json:"environment"`
-	Node        nodeArtifact       `json:"node"`
-	RWCore      rwCoreArtifact     `json:"rwCore"`
-	Checks      systemChecks       `json:"checks"`
-}
-
-type panelEvidence struct {
-	evidenceCommon
-	PanelVersion       string                  `json:"panelVersion"`
-	Targets            []string                `json:"targets"`
-	Artifacts          []panelArtifactIdentity `json:"artifacts"`
-	RoutesTotal        int                     `json:"routesTotal"`
-	RoutesPassed       int                     `json:"routesPassed"`
-	SemanticMismatches *int                    `json:"semanticMismatches"`
-	Checks             panelChecks             `json:"checks"`
-}
-
-type panelArtifactIdentity struct {
-	Target             string `json:"target"`
-	Arch               string `json:"arch"`
-	NodeBinarySHA256   string `json:"nodeBinarySha256"`
-	RWCoreBinarySHA256 string `json:"rwCoreBinarySha256"`
-}
-
-type resourceFaultEvidence struct {
-	evidenceCommon
-	Environment machineEnvironment   `json:"environment"`
-	Node        nodeArtifact         `json:"node"`
-	RWCore      rwCoreArtifact       `json:"rwCore"`
-	Metrics     resourceFaultMetrics `json:"metrics"`
-	Checks      resourceFaultChecks  `json:"checks"`
-}
-
-type machineEnvironment struct {
-	OSID      string `json:"osId"`
-	OSVersion string `json:"osVersion"`
-	Init      string `json:"init"`
-	Arch      string `json:"arch"`
-	Kernel    string `json:"kernel"`
-	MemoryMiB int    `json:"memoryMiB"`
-	CPUCount  int    `json:"cpuCount"`
-	DiskMiB   int    `json:"diskMiB"`
-}
-
-type nodeArtifact struct {
-	VersionOutput string `json:"versionOutput"`
-	BinarySHA256  string `json:"binarySha256"`
-}
-
-type rwCoreArtifact struct {
-	Version      string `json:"version"`
-	Commit       string `json:"commit"`
-	AssetSHA256  string `json:"assetSha256"`
-	BinarySHA256 string `json:"binarySha256"`
-}
-
-type systemChecks struct {
-	FreshInstall              bool `json:"freshInstall"`
-	RepeatInstall             bool `json:"repeatInstall"`
-	StartStopRestart          bool `json:"startStopRestart"`
-	SuccessfulUpgrade         bool `json:"successfulUpgrade"`
-	FailedUpgradeRollback     bool `json:"failedUpgradeRollback"`
-	RebootPanelResync         bool `json:"rebootPanelResync"`
-	CapabilityBoundary        bool `json:"capabilityBoundary"`
-	UninstallIsolation        bool `json:"uninstallIsolation"`
-	NFTNamespace              bool `json:"nftNamespace"`
-	SocketKillNamespace       bool `json:"socketKillNamespace"`
-	RWCoreProcessGroupCleanup bool `json:"rwCoreProcessGroupCleanup"`
-}
-
-type panelChecks struct {
-	NodeRegistration             bool `json:"nodeRegistration"`
-	XrayLifecycle                bool `json:"xrayLifecycle"`
-	Stats                        bool `json:"stats"`
-	UserMutations                bool `json:"userMutations"`
-	PluginSync                   bool `json:"pluginSync"`
-	LifecyclePluginSerialization bool `json:"lifecyclePluginSerialization"`
-}
-
-type resourceFaultMetrics struct {
-	Users              int  `json:"users"`
-	SoakSeconds        int  `json:"soakSeconds"`
-	PeakMemoryMiB      int  `json:"peakMemoryMiB"`
-	OOMKills           *int `json:"oomKills"`
-	ProjectDiskPeakMiB int  `json:"projectDiskPeakMiB"`
-}
-
-type resourceFaultChecks struct {
-	NoSwap                  bool `json:"noSwap"`
-	CoreKillRecovery        bool `json:"coreKillRecovery"`
-	NodeRestartRecovery     bool `json:"nodeRestartRecovery"`
-	PanelDisconnectRecovery bool `json:"panelDisconnectRecovery"`
-	NFTFailureRetry         bool `json:"nftFailureRetry"`
-	LogFaultStormBounded    bool `json:"logFaultStormBounded"`
-	FailedUpgradeRollback   bool `json:"failedUpgradeRollback"`
-}
-
 type gitRepository struct {
 	root string
 }
@@ -251,12 +139,8 @@ type evidenceTiming struct {
 }
 
 type validatedEvidence struct {
-	Kind     string
-	Timing   evidenceTiming
-	System   *systemEvidence
-	Panel    *panelEvidence
-	Resource *resourceFaultEvidence
-	Compose  *composeEvidence
+	Timing evidenceTiming
+	Smoke  *dockerSmokeEvidence
 }
 
 func validateReleaseEvidence(ctx context.Context, repoDir, manifestPath, releaseTag string) (validationResult, error) {
@@ -325,10 +209,10 @@ func validateReleaseEvidenceAt(
 			reference,
 			manifest.CandidateCommit,
 			manifest.CandidateImageDigest,
+			manifest.CandidateNodeSHA256,
 			candidateTime,
 			now,
 			headTime,
-			manifest.Policy,
 		)
 		if err != nil {
 			return validationResult{}, fmt.Errorf("evidence %s: %w", reference.Kind, err)
@@ -339,38 +223,8 @@ func validateReleaseEvidenceAt(
 		}
 	}
 
-	systemsByTarget := make(map[string]systemEvidence, 2)
-	systemsByArch := make(map[string]systemEvidence, 2)
-	architectures := make(map[string]struct{}, 2)
-	for _, target := range []string{"systemd", "openrc"} {
-		record := evidenceByKind[target]
-		if record.System == nil {
-			return validationResult{}, fmt.Errorf("missing validated %s evidence", target)
-		}
-		system := *record.System
-		systemsByTarget[target] = system
-		systemsByArch[system.Environment.Arch] = system
-		architectures[system.Environment.Arch] = struct{}{}
-	}
-	if !sameStringSet(architectures, []string{"amd64", "arm64"}) {
-		return validationResult{}, fmt.Errorf("system evidence architectures must cover amd64 and arm64, got %v", sortedKeys(architectures))
-	}
-	panel := evidenceByKind["panel"].Panel
-	if panel == nil {
-		return validationResult{}, errors.New("missing validated panel evidence")
-	}
-	if err := validatePanelArtifactClosure(*panel, systemsByTarget); err != nil {
-		return validationResult{}, fmt.Errorf("Panel artifact identity: %w", err)
-	}
-	resource := evidenceByKind["resource-fault"].Resource
-	if resource == nil {
-		return validationResult{}, errors.New("missing validated resource-fault evidence")
-	}
-	if err := validateResourceArtifactClosure(*resource, systemsByArch); err != nil {
-		return validationResult{}, fmt.Errorf("resource-fault artifact identity: %w", err)
-	}
-	if evidenceByKind["compose"].Compose == nil {
-		return validationResult{}, errors.New("missing validated compose evidence")
+	if evidenceByKind["docker-production-smoke"].Smoke == nil {
+		return validationResult{}, errors.New("missing validated docker-production-smoke evidence")
 	}
 	if acceptedAt.Before(latestEvidenceFinish) {
 		return validationResult{}, fmt.Errorf("acceptedAt %s is before evidence completion %s", acceptedAt.Format(time.RFC3339), latestEvidenceFinish.Format(time.RFC3339))
@@ -379,9 +233,9 @@ func validateReleaseEvidenceAt(
 		return validationResult{}, fmt.Errorf("release finalization must contain exactly one single-parent commit after the candidate, found %d", postCandidateCommits)
 	}
 
-	nodeSHAByArch := make(map[string]string, len(systemsByArch))
-	for arch, system := range systemsByArch {
-		nodeSHAByArch[arch] = system.Node.BinarySHA256
+	nodeSHAByArch := map[string]string{
+		"amd64": manifest.CandidateNodeSHA256.AMD64,
+		"arm64": manifest.CandidateNodeSHA256.ARM64,
 	}
 	return validationResult{
 		ReleaseTag:           releaseTag,
@@ -433,6 +287,9 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 	if manifest.SchemaVersion != expectedSchemaVersion {
 		return time.Time{}, fmt.Errorf("manifest schemaVersion=%d, want %d", manifest.SchemaVersion, expectedSchemaVersion)
 	}
+	if manifest.AcceptanceProfile != expectedAcceptanceProfile {
+		return time.Time{}, fmt.Errorf("manifest acceptanceProfile=%q, want %q", manifest.AcceptanceProfile, expectedAcceptanceProfile)
+	}
 	if manifest.ReleaseVersion != expectedReleaseVersion || manifest.ReleaseTag != releaseTag {
 		return time.Time{}, fmt.Errorf("manifest release=%q tag=%q, want %s and %s", manifest.ReleaseVersion, manifest.ReleaseTag, expectedReleaseVersion, releaseTag)
 	}
@@ -444,6 +301,9 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 	}
 	if !isSHA256Digest(manifest.CandidateImageDigest) {
 		return time.Time{}, errors.New("manifest candidateImageDigest must be sha256: followed by 64 lowercase hexadecimal characters")
+	}
+	if !isLowerHex(manifest.CandidateNodeSHA256.AMD64, 64) || !isLowerHex(manifest.CandidateNodeSHA256.ARM64, 64) {
+		return time.Time{}, errors.New("manifest candidateNodeSha256 must contain amd64 and arm64 64-character lowercase hexadecimal digests")
 	}
 	acceptedAt, err := parseRFC3339("manifest acceptedAt", manifest.AcceptedAt)
 	if err != nil {
@@ -467,24 +327,23 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 	if manifest.RWCore.SHA256.AMD64 != expectedAMD64AssetSHA || manifest.RWCore.SHA256.ARM64 != expectedARM64AssetSHA {
 		return time.Time{}, errors.New("rw-core architecture SHA-256 pins do not match the audited assets")
 	}
-	if err := validatePolicy(manifest.Policy); err != nil {
-		return time.Time{}, err
+	if !reflect.DeepEqual(manifest.DeferredValidation, expectedDeferredValidation) {
+		return time.Time{}, fmt.Errorf("manifest deferredValidation=%v, want %v", manifest.DeferredValidation, expectedDeferredValidation)
 	}
-	if len(manifest.Evidence) != 5 {
-		return time.Time{}, fmt.Errorf("manifest evidence count=%d, want 5", len(manifest.Evidence))
+	if len(manifest.Evidence) != 1 {
+		return time.Time{}, fmt.Errorf("manifest evidence count=%d, want 1", len(manifest.Evidence))
 	}
 	if manifest.Risks == nil {
 		return time.Time{}, errors.New("manifest risks must be an array, use [] when there are no risks")
 	}
-	wantedKinds := map[string]struct{}{"systemd": {}, "openrc": {}, "panel": {}, "resource-fault": {}, "compose": {}}
 	for _, reference := range manifest.Evidence {
-		if _, ok := wantedKinds[reference.Kind]; !ok {
+		if reference.Kind != "docker-production-smoke" {
 			return time.Time{}, fmt.Errorf("unsupported evidence kind %q", reference.Kind)
 		}
 		if reference.Status != "pass" {
 			return time.Time{}, fmt.Errorf("evidence %s status=%q, want pass", reference.Kind, reference.Status)
 		}
-		expectedPath := acceptanceDirectory + "/" + reference.Kind + ".json"
+		expectedPath := acceptanceDirectory + "/docker-smoke.json"
 		if reference.Path != expectedPath {
 			return time.Time{}, fmt.Errorf("evidence %s path=%q, want %q", reference.Kind, reference.Path, expectedPath)
 		}
@@ -496,20 +355,6 @@ func validateManifest(manifest *acceptanceManifest, releaseTag string, now, head
 		return time.Time{}, err
 	}
 	return acceptedAt, nil
-}
-
-func validatePolicy(policy acceptancePolicy) error {
-	if policy.WholeMachineMemoryMiB != expectedWholeMachineMemoryMiB ||
-		policy.ServiceMemoryMaxMiB != expectedServiceMemoryMaxMiB ||
-		policy.CPUCount != expectedCPUCount ||
-		policy.DiskMiB != expectedDiskMiB ||
-		policy.Users != expectedUsers || policy.Swap == nil || *policy.Swap || policy.SoakSeconds < minimumSoakSeconds {
-		return fmt.Errorf(
-			"acceptance policy must be 512 MiB whole-machine, 448 MiB service, 1 CPU, 2048 MiB disk, 50000 users, no swap, and soak >= %d seconds",
-			minimumSoakSeconds,
-		)
-	}
-	return nil
 }
 
 func validateRisks(risks []releaseRisk) error {
@@ -548,10 +393,10 @@ func (repo gitRepository) validateEvidence(
 	ctx context.Context,
 	reference evidenceReference,
 	candidateCommit, candidateImageDigest string,
+	candidateNodeSHA256 architectureSHAs,
 	candidateTime time.Time,
 	now time.Time,
 	headTime time.Time,
-	policy acceptancePolicy,
 ) (validatedEvidence, error) {
 	abs, rel, err := repo.resolveRepositoryFile(reference.Path)
 	if err != nil {
@@ -580,47 +425,8 @@ func (repo gitRepository) validateEvidence(
 	}
 
 	switch reference.Kind {
-	case "systemd", "openrc":
-		var evidence systemEvidence
-		if err := decodeStrictJSON(raw, &evidence); err != nil {
-			return validatedEvidence{}, fmt.Errorf("decode: %w", err)
-		}
-		timing, err := validateCommonEvidence(evidence.evidenceCommon, reference.Kind, candidateCommit, candidateTime, now, headTime)
-		if err != nil {
-			return validatedEvidence{}, err
-		}
-		if err := validateSystemEvidence(evidence, reference.Kind, policy); err != nil {
-			return validatedEvidence{}, err
-		}
-		return validatedEvidence{Kind: reference.Kind, Timing: timing, System: &evidence}, nil
-	case "panel":
-		var evidence panelEvidence
-		if err := decodeStrictJSON(raw, &evidence); err != nil {
-			return validatedEvidence{}, fmt.Errorf("decode: %w", err)
-		}
-		timing, err := validateCommonEvidence(evidence.evidenceCommon, reference.Kind, candidateCommit, candidateTime, now, headTime)
-		if err != nil {
-			return validatedEvidence{}, err
-		}
-		if err := validatePanelEvidence(evidence); err != nil {
-			return validatedEvidence{}, err
-		}
-		return validatedEvidence{Kind: reference.Kind, Timing: timing, Panel: &evidence}, nil
-	case "resource-fault":
-		var evidence resourceFaultEvidence
-		if err := decodeStrictJSON(raw, &evidence); err != nil {
-			return validatedEvidence{}, fmt.Errorf("decode: %w", err)
-		}
-		timing, err := validateCommonEvidence(evidence.evidenceCommon, reference.Kind, candidateCommit, candidateTime, now, headTime)
-		if err != nil {
-			return validatedEvidence{}, err
-		}
-		if err := validateResourceFaultEvidence(evidence, policy, timing); err != nil {
-			return validatedEvidence{}, err
-		}
-		return validatedEvidence{Kind: reference.Kind, Timing: timing, Resource: &evidence}, nil
-	case "compose":
-		var evidence composeEvidence
+	case "docker-production-smoke":
+		var evidence dockerSmokeEvidence
 		if err := decodeStrictJSON(raw, &evidence); err != nil {
 			return validatedEvidence{}, fmt.Errorf("decode: %w", err)
 		}
@@ -632,10 +438,16 @@ func (repo gitRepository) validateEvidence(
 		if err != nil {
 			return validatedEvidence{}, err
 		}
-		if err := validateComposeEvidence(evidence, policy, candidateImageDigest, candidateComposeSHA); err != nil {
+		if err := validateDockerSmokeEvidence(
+			evidence,
+			timing,
+			candidateImageDigest,
+			candidateNodeSHA256.AMD64,
+			candidateComposeSHA,
+		); err != nil {
 			return validatedEvidence{}, err
 		}
-		return validatedEvidence{Kind: reference.Kind, Timing: timing, Compose: &evidence}, nil
+		return validatedEvidence{Timing: timing, Smoke: &evidence}, nil
 	default:
 		return validatedEvidence{}, fmt.Errorf("unsupported kind %q", reference.Kind)
 	}
@@ -685,194 +497,11 @@ func validateCommonEvidence(
 		if strings.TrimSpace(argument) == "" {
 			return evidenceTiming{}, errors.New("command arguments must not be empty")
 		}
+		if !isSafeEvidenceCommandArgument(argument) {
+			return evidenceTiming{}, errors.New("command contains a potentially sensitive argument")
+		}
 	}
 	return evidenceTiming{Started: started, Finished: finished}, nil
-}
-
-func validateSystemEvidence(evidence systemEvidence, kind string, policy acceptancePolicy) error {
-	wantOSID, wantOSVersion, wantInit := "ubuntu", "24.04", "systemd"
-	if kind == "openrc" {
-		wantOSID, wantOSVersion, wantInit = "alpine", "3.22", "openrc"
-	}
-	if evidence.Environment.OSID != wantOSID || evidence.Environment.OSVersion != wantOSVersion || evidence.Environment.Init != wantInit {
-		return fmt.Errorf("environment must be %s %s/%s", wantOSID, wantOSVersion, wantInit)
-	}
-	if err := validateMachineEnvironment(evidence.Environment, policy); err != nil {
-		return err
-	}
-	if err := validateArtifacts(evidence.Environment.Arch, evidence.Node, evidence.RWCore); err != nil {
-		return err
-	}
-	checks := evidence.Checks
-	if !checks.RWCoreProcessGroupCleanup {
-		return errors.New("system check rwCoreProcessGroupCleanup must be true")
-	}
-	if !checks.FreshInstall || !checks.RepeatInstall || !checks.StartStopRestart ||
-		!checks.SuccessfulUpgrade || !checks.FailedUpgradeRollback || !checks.RebootPanelResync ||
-		!checks.CapabilityBoundary || !checks.UninstallIsolation || !checks.NFTNamespace ||
-		!checks.SocketKillNamespace {
-		return errors.New("all system acceptance checks must pass")
-	}
-	return nil
-}
-
-func validatePanelEvidence(evidence panelEvidence) error {
-	if evidence.PanelVersion != expectedPanelVersion {
-		return fmt.Errorf("panelVersion=%q, want %s", evidence.PanelVersion, expectedPanelVersion)
-	}
-	if !exactStringSliceSet(evidence.Targets, []string{"systemd", "openrc"}) {
-		return fmt.Errorf("panel targets must be systemd and openrc, got %v", evidence.Targets)
-	}
-	if len(evidence.Artifacts) != 2 {
-		return fmt.Errorf("Panel artifacts count=%d, want 2", len(evidence.Artifacts))
-	}
-	seenTargets := make(map[string]struct{}, len(evidence.Artifacts))
-	for _, artifact := range evidence.Artifacts {
-		if artifact.Target != "systemd" && artifact.Target != "openrc" {
-			return fmt.Errorf("Panel artifact has unsupported target %q", artifact.Target)
-		}
-		if _, duplicate := seenTargets[artifact.Target]; duplicate {
-			return fmt.Errorf("Panel artifact target %q is duplicated", artifact.Target)
-		}
-		seenTargets[artifact.Target] = struct{}{}
-		if _, ok := expectedAssetSHAByArch[artifact.Arch]; !ok {
-			return fmt.Errorf("Panel artifact target %s has unsupported architecture %q", artifact.Target, artifact.Arch)
-		}
-		if !isLowerHex(artifact.NodeBinarySHA256, 64) || !isLowerHex(artifact.RWCoreBinarySHA256, 64) {
-			return fmt.Errorf("Panel artifact target %s binary SHA-256 values must be 64 lowercase hexadecimal characters", artifact.Target)
-		}
-	}
-	if evidence.SemanticMismatches == nil {
-		return errors.New("Panel semanticMismatches is required")
-	}
-	if evidence.RoutesTotal != 26 || evidence.RoutesPassed != 26 || *evidence.SemanticMismatches != 0 {
-		return fmt.Errorf(
-			"Panel contract result must be 26 total, 26 passed, 0 semantic mismatches; got %d/%d/%d",
-			evidence.RoutesTotal,
-			evidence.RoutesPassed,
-			*evidence.SemanticMismatches,
-		)
-	}
-	checks := evidence.Checks
-	if !checks.LifecyclePluginSerialization {
-		return errors.New("Panel check lifecyclePluginSerialization must be true")
-	}
-	if !checks.NodeRegistration || !checks.XrayLifecycle || !checks.Stats || !checks.UserMutations || !checks.PluginSync {
-		return errors.New("all Panel acceptance checks must pass")
-	}
-	return nil
-}
-
-func validateResourceFaultEvidence(evidence resourceFaultEvidence, policy acceptancePolicy, timing evidenceTiming) error {
-	if strings.TrimSpace(evidence.Environment.OSID) == "" || strings.TrimSpace(evidence.Environment.OSVersion) == "" || strings.TrimSpace(evidence.Environment.Init) == "" {
-		return errors.New("resource environment osId, osVersion, and init must not be empty")
-	}
-	if err := validateMachineEnvironment(evidence.Environment, policy); err != nil {
-		return err
-	}
-	if err := validateArtifacts(evidence.Environment.Arch, evidence.Node, evidence.RWCore); err != nil {
-		return err
-	}
-	metrics := evidence.Metrics
-	if metrics.OOMKills == nil {
-		return errors.New("resource oomKills is required")
-	}
-	if metrics.Users != policy.Users || metrics.SoakSeconds < policy.SoakSeconds ||
-		metrics.PeakMemoryMiB <= 0 || metrics.PeakMemoryMiB > policy.ServiceMemoryMaxMiB ||
-		*metrics.OOMKills != 0 || metrics.ProjectDiskPeakMiB <= 0 || metrics.ProjectDiskPeakMiB > policy.DiskMiB {
-		return fmt.Errorf(
-			"resource metrics must have %d users, soak >= %d, peak memory 1..%d MiB, zero OOM kills, and project disk 1..%d MiB",
-			policy.Users,
-			policy.SoakSeconds,
-			policy.ServiceMemoryMaxMiB,
-			policy.DiskMiB,
-		)
-	}
-	elapsedSeconds := int64(timing.Finished.Sub(timing.Started) / time.Second)
-	if elapsedSeconds < int64(metrics.SoakSeconds) || elapsedSeconds < minimumSoakSeconds {
-		return fmt.Errorf(
-			"resource evidence wall-clock duration=%d seconds, want at least soakSeconds=%d and %d seconds",
-			elapsedSeconds,
-			metrics.SoakSeconds,
-			minimumSoakSeconds,
-		)
-	}
-	checks := evidence.Checks
-	if !checks.NoSwap || !checks.CoreKillRecovery || !checks.NodeRestartRecovery ||
-		!checks.PanelDisconnectRecovery || !checks.NFTFailureRetry || !checks.LogFaultStormBounded ||
-		!checks.FailedUpgradeRollback {
-		return errors.New("all resource and fault-recovery checks must pass")
-	}
-	return nil
-}
-
-func validatePanelArtifactClosure(evidence panelEvidence, systemsByTarget map[string]systemEvidence) error {
-	for _, artifact := range evidence.Artifacts {
-		system, ok := systemsByTarget[artifact.Target]
-		if !ok {
-			return fmt.Errorf("target %q has no matching system evidence", artifact.Target)
-		}
-		if artifact.Arch != system.Environment.Arch {
-			return fmt.Errorf("target %s arch=%q, want %q", artifact.Target, artifact.Arch, system.Environment.Arch)
-		}
-		if artifact.NodeBinarySHA256 != system.Node.BinarySHA256 {
-			return fmt.Errorf("target %s nodeBinarySha256 does not match system evidence", artifact.Target)
-		}
-		if artifact.RWCoreBinarySHA256 != system.RWCore.BinarySHA256 {
-			return fmt.Errorf("target %s rwCoreBinarySha256 does not match system evidence", artifact.Target)
-		}
-	}
-	return nil
-}
-
-func validateResourceArtifactClosure(evidence resourceFaultEvidence, systemsByArch map[string]systemEvidence) error {
-	system, ok := systemsByArch[evidence.Environment.Arch]
-	if !ok {
-		return fmt.Errorf("arch %q has no matching system evidence", evidence.Environment.Arch)
-	}
-	if evidence.Node.BinarySHA256 != system.Node.BinarySHA256 {
-		return fmt.Errorf("node binarySha256 for %s does not match system evidence", evidence.Environment.Arch)
-	}
-	if evidence.RWCore.BinarySHA256 != system.RWCore.BinarySHA256 {
-		return fmt.Errorf("rw-core binarySha256 for %s does not match system evidence", evidence.Environment.Arch)
-	}
-	return nil
-}
-
-func validateMachineEnvironment(environment machineEnvironment, policy acceptancePolicy) error {
-	if _, ok := expectedAssetSHAByArch[environment.Arch]; !ok {
-		return fmt.Errorf("unsupported architecture %q", environment.Arch)
-	}
-	if strings.TrimSpace(environment.Kernel) == "" {
-		return errors.New("environment kernel must not be empty")
-	}
-	if environment.MemoryMiB != policy.WholeMachineMemoryMiB || environment.CPUCount != policy.CPUCount || environment.DiskMiB != policy.DiskMiB {
-		return fmt.Errorf("environment limits must be %d MiB, %d CPU, and %d MiB disk", policy.WholeMachineMemoryMiB, policy.CPUCount, policy.DiskMiB)
-	}
-	return nil
-}
-
-func validateArtifacts(arch string, node nodeArtifact, core rwCoreArtifact) error {
-	if node.VersionOutput != expectedVersionOutput {
-		return fmt.Errorf("node versionOutput=%q, want %q", node.VersionOutput, expectedVersionOutput)
-	}
-	if !isLowerHex(node.BinarySHA256, 64) {
-		return errors.New("node binarySha256 must be 64 lowercase hexadecimal characters")
-	}
-	wantAssetSHA, ok := expectedAssetSHAByArch[arch]
-	if !ok {
-		return fmt.Errorf("unsupported architecture %q", arch)
-	}
-	if core.Version != expectedRWCoreVersion || core.Commit != expectedRWCoreCommit {
-		return fmt.Errorf("rw-core must be %s@%s", expectedRWCoreVersion, expectedRWCoreCommit)
-	}
-	if core.AssetSHA256 != wantAssetSHA {
-		return fmt.Errorf("rw-core assetSha256=%q, want %s for %s", core.AssetSHA256, wantAssetSHA, arch)
-	}
-	if !isLowerHex(core.BinarySHA256, 64) {
-		return errors.New("rw-core binarySha256 must be 64 lowercase hexadecimal characters")
-	}
-	return nil
 }
 
 func openGitRepository(ctx context.Context, repoDir string) (gitRepository, error) {
@@ -989,11 +618,7 @@ func isAllowedPostCandidatePath(path string) bool {
 		"docs/i18n/zh-CN/development/roadmap.md",
 		releaseNoteRepositoryPath,
 		manifestRepositoryPath,
-		acceptanceDirectory + "/systemd.json",
-		acceptanceDirectory + "/openrc.json",
-		acceptanceDirectory + "/panel.json",
-		acceptanceDirectory + "/resource-fault.json",
-		acceptanceDirectory + "/compose.json":
+		acceptanceDirectory + "/docker-smoke.json":
 		return true
 	default:
 		return false
@@ -1444,15 +1069,6 @@ func sameStringSet(values map[string]struct{}, expected []string) bool {
 		}
 	}
 	return true
-}
-
-func sortedKeys(values map[string]struct{}) []string {
-	keys := make([]string, 0, len(values))
-	for value := range values {
-		keys = append(keys, value)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func splitNUL(raw []byte) []string {

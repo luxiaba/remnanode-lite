@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=5df0202af7048f10f655716c39186050a57ae5b870e97ef5117fdb7aa01ca246 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=6f3b9d41995907103917f8a3bc49a0078ddf9cf24b0e874fd5c6ba826d86a613 -->
 # 测试指南
 
 > **翻译说明：** [英文原文](../../../development/testing.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
@@ -15,7 +15,12 @@
 - 状态、锁、goroutine、取消或生命周期变化必须运行 race test。
 - 官方可见行为变化必须运行固定源码契约测试。
 - Linux capability、netlink、nftables、进程组和 cgroup 结论只能由 Linux 测试支持。
-- 真实 Panel、真实 rw-core、资源门禁和 soak 是候选验收，不是普通单元测试的替代品。
+- 发布验收按版本定义。`v2.8.0` M8 候选当前唯一阻塞性的运行检查，是在生产
+  `amd64` 主机以真实 Panel 和真实代理流量完成 `docker-production-smoke-v1`。
+- `arm64-production-runtime`、`native-systemd-install`、
+  `native-openrc-install`、当前候选 50,000 用户负载、24 小时
+  soak 与故障/回滚注入属于本版本的扩展验证，已明确延期且不阻塞发布；单元测试不能
+  把未运行项目变成已通过。
 - 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应。
 
 ## 快速选择
@@ -208,8 +213,9 @@ REQUIRE_GOVULNCHECK=1 \
 `REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，它会跳过漏洞扫描；因此发布前和
 需要报告完整结果时必须显式要求该工具。
 
-即便该命令成功，它也不包含 Linux network namespace、真实 rw-core、Panel 黑盒、
-资源门禁或长期 soak，不应描述为生产验收完成。
+即便该命令成功，也不满足 `v2.8.0` M8 的 Docker 生产 smoke：它没有在生产
+`amd64` 主机上用真实 Panel 和真实流量运行冻结镜像 digest，也不执行已延期的候选
+负载、soak、原生 init、`arm64` 运行或故障注入。不能仅凭 `check.sh` 宣称生产验收完成。
 
 ## Installer 测试
 
@@ -225,8 +231,9 @@ bash scripts/check-repository.sh
 `/etc/remnanode` 或启动本机服务。
 
 测试中的部分 `flock` 分支只有系统存在 `flock` 时才运行。macOS 结果不能替代
-Ubuntu/OpenRC 的真实安装验收；installer 行为变化仍应等待 CI 的 Ubuntu job，并在
-候选阶段按发布验收协议验证真实主机。
+Ubuntu CI 或真实原生主机观测。真实 systemd/OpenRC 安装属于扩展验证，在
+`v2.8.0` 中已延期且不阻塞发布；installer 行为变化仍须运行与风险匹配的 CI 和离线
+事务测试。
 
 ## Linux 网络管理集成测试
 
@@ -252,7 +259,7 @@ sudo apt-get install --yes iproute2 nftables
 这些测试只操作隔离 namespace。不要删掉环境变量保护，也不要把测试改为直接操作
 开发机默认 network namespace。
 
-## 低内存资源门禁
+## 低内存资源测试
 
 资源测试将测试进程与真实 rw-core 放在同一个 Docker cgroup 中，默认使用
 `448 MiB / 1 CPU / no swap / 256 PIDs / 50,000 users`：
@@ -270,8 +277,11 @@ scripts/test-low-memory.sh \
 - `--rw-core` 指向与 Docker 架构相同的可执行 Linux rw-core。
 - 宿主机支持 Docker memory、CPU、swap 和 PID 限制。
 
-资源、请求解析、配置保留、队列、日志、并发上限或 rw-core 生命周期变化时需要运行。
-结果应记录 cgroup peak；单独的 Go 进程 RSS 不是门禁判定值。详细基线见
+带日期的 M6 50,000 用户结果是工程基线，不是冻结 `v2.8.0` 候选的运行证据。当前
+M8 profile 已将候选负载复测列为延期且不阻塞发布。
+
+资源、请求解析、配置保留、队列、日志、并发上限或 rw-core 生命周期变化时应运行
+该测试。结果应记录 cgroup peak；单独的 Go 进程 RSS 不是对应指标。详细基线见
 [资源预算](resource-budget.md)。
 
 ## Docker 与镜像测试
@@ -330,10 +340,22 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-该脚本只适用于已经冻结且具备真实 acceptance evidence 的发布候选。它要求工作树
-干净、release note 和 CHANGELOG 已最终化、证据 manifest 可校验、候选 ancestry
-合法，并运行完整仓库检查。普通开发分支缺少这些资料时失败是正常行为，不要通过
-伪造 evidence、放宽检查或提前修改发布状态让它变绿。
+该脚本只适用于已经冻结且具备当前版本 profile 所要求 acceptance evidence 的发布
+候选。它要求工作树干净、release note 和 CHANGELOG 已最终化、证据 manifest 可校验、
+候选 ancestry 合法，并运行完整仓库检查。普通开发分支缺少这些资料时失败是正常行为，
+不要通过伪造 evidence、放宽检查或提前修改发布状态让它变绿。
+
+`v2.8.0` 的 M8 门禁要求冻结镜像 digest 在正式发布前通过
+`docker-production-smoke-v1`。对应 `docker-smoke.json` 必须记录生产 `amd64`
+Compose 运行、预期版本输出、真实 Panel 连接与真实代理流量、cgroup 内存/PID 观测，
+并确认容器持续运行且健康、OOM kill 与 restart 都为零。manifest 必须把
+`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、
+当前候选 50,000 用户负载、24 小时 soak、故障/回滚注入列为延期且
+不阻塞发布的验证。
+
+smoke 记录包含 operator 签注的观测。校验器会将记录绑定到候选 commit 和镜像 digest，
+并检查必需字段、时间和内部一致性，但无法独立证明物理运行确实发生。该签注是可追责的
+审计声明，不是不可伪造证明。
 
 具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
 [发布流程](../release.md)。
@@ -346,18 +368,18 @@ REQUIRE_GOVULNCHECK=1 \
 | 普通 Go 逻辑 | 目标包普通测试 | `bash scripts/check-go.sh` |
 | 锁、状态、worker、关闭 | 目标包 race test | 全量 race 与相关生命周期测试 |
 | HTTP/API/schema | `nodeapi`、`httpserver`、`contract` | 固定源码契约与黑盒差分 |
-| Xray 生命周期 | `xray`、`httpserver` race | 真实 rw-core、Panel、资源门禁 |
+| Xray 生命周期 | `xray`、`httpserver` race | `amd64` Docker 生产 smoke；风险需要时运行资源测试 |
 | 用户与 stats | `nodehandler`、`stats`、`xrayrpc` | contract response 与 Panel 差分 |
 | 插件纯逻辑 | `plugin` race | HTTP lifecycle 交错测试 |
 | nftables/socket destroy | 对应 Linux unit test | 两条 namespace 集成测试 |
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
-| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 真实 systemd/OpenRC |
-| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与候选部署 |
+| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 真实 systemd/OpenRC（扩展验证；`v2.8.0` 延期） |
+| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与 `amd64` 候选 smoke；`arm64` 运行延期 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |
 | 官方契约升级 | 全契约与固定源码测试 | 全部注册路由黑盒、Panel 全流程 |
 | protobuf wire | `scripts/generate-protobuf.sh --check`、`go test ./internal/xrayrpc` | 真实 rw-core 与 golden wire 回归 |
-| 资源上限 | 相关 unit/race | `test-low-memory.sh` 与 soak |
+| 资源上限 | 相关 unit/race | 按风险运行 `test-low-memory.sh`；`v2.8.0` 的候选 50k 负载与 soak 延期 |
 
 “最低验证”适合开发循环，不代表 PR 一定只需要这一列。改动跨越多个组件时取各行并集。
 

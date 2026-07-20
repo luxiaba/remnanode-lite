@@ -104,7 +104,7 @@ With `LOW_MEMORY=1`, the public `/node` server defaults to a 16 MiB request-body
 
 Production init reads only `/etc/remnanode/node.env`; it does not fall back to a service-writable working directory. The configuration must be a regular, non-symlink file of at most 1 MiB, 4,096 lines, and 256 assignments. Configuration and Secret files are checked and bounded-read through the same descriptor opened with `O_NOFOLLOW|O_NONBLOCK`. systemd and OpenRC do not export the complete configuration environment; `GOMEMLIMIT` and version overrides are validated and applied by the same Go parser.
 
-The real-rw-core `v26.6.27` gate at 1 CPU, 448 MiB, and no swap covers a 1k-user start, unchanged sync, 50k-user restart, hot add/remove, and statistics RPCs. Its dated engineering cgroup peak was 143.9 MiB. Reproduction conditions and per-stage measurements are in [`resource-budget.md`](resource-budget.md).
+The real-rw-core `v26.6.27` gate at 1 CPU, 448 MiB, and no swap covers a 1k-user start, unchanged sync, 50k-user restart, hot add/remove, and statistics RPCs. Its dated M6 engineering cgroup peak was 143.9 MiB. This baseline predates the frozen `v2.8.0` candidate and is not current-candidate runtime evidence. Reproduction conditions and per-stage measurements are in [`resource-budget.md`](resource-budget.md).
 
 ## Go Transport, System, and Supply-Chain Implementation
 
@@ -113,6 +113,10 @@ M7 sets the external TLS minimum to 1.3 and disables automatic Go HTTP/2 negotia
 systemd and OpenRC run under the dedicated `remnanode:remnanode` account. Configuration is `root:remnanode 0640`; state and log directories are `remnanode:remnanode 0750`. The service receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd also narrows the bounding set to those capabilities and enables `NoNewPrivileges`, read-only system paths, namespace/syscall/address-family restrictions, `448 MiB` memory, zero swap, 1 CPU, and 256 tasks. Alpine 3.22 measurements for `supervise-daemon` showed `CapInh/Prm/Eff/Amb=0x1400` and `NoNewPrivs=1`; an `nft` child launched by the service could create the private table.
 
 Project assets live under `/usr/local/lib/remnanode` and `/usr/local/share/remnanode`; the project no longer takes ownership of generic Xray paths. Release archives, rw-core zips, custom cores, and ASN data must pass SHA-256 plus structure/version checks before being written into place. The pinned rw-core `v26.6.27` cannot override its audited digest. Upgrade backs up the binary, service definition, support assets, `node.env`, and optional rw-core assets. After refresh, service and port gates must pass or every item is restored automatically. Fault injection with bad service definitions on Ubuntu/systemd and Alpine/OpenRC verified digest and runtime-state restoration. Full uninstall also verified that unrelated same-named processes are not terminated and generic Xray files are not deleted.
+
+The dated M7 systemd/OpenRC and bad-service rollback observations above are
+engineering baselines. They were not produced from the current frozen
+`v2.8.0` candidate and do not count as its runtime acceptance evidence.
 
 Whole-process shutdown shares one 25-second application budget rather than restarting a timeout for each component. HTTPS and Unix intake, log rotation, and background version probing receive cancellation first. rw-core gets up to five seconds for SIGINT plus five seconds for SIGKILL. Only after core is confirmed stopped may plugins use the remaining budget to remove private nft tables. A transient core or plugin cleanup error is retried once within the same deadline.
 
@@ -165,7 +169,21 @@ The table summarizes only core constraints. Executable schemas in `internal/cont
 
 ## Current Known Differences
 
-M7 closed the previously recorded TLS/socket and system supply-chain differences. There is currently no known static P1/P2 difference in the `/node` contract. M8 must still complete end-to-end differential and fault-recovery acceptance for the release candidate with a real Panel 2.8.1.
+M7 closed the previously recorded TLS/socket and system supply-chain differences. There is currently no known static P1/P2 difference in the `/node` contract.
+
+The `v2.8.0` M8 gate defines its release-blocking runtime scope as
+`docker-production-smoke-v1`: the exact candidate image digest
+must run through the production single-file Compose template on an
+`x86_64`/`amd64` host, report the expected version, connect to a real Panel
+2.8.1, carry real proxy traffic, record cgroup memory and PID observations, and
+remain running and healthy with zero OOM kills and zero restarts.
+
+`arm64-production-runtime`, `native-systemd-install`,
+`native-openrc-install`, a repeated
+50,000-user candidate load, a 24-hour soak, and fault/rollback injection are
+explicitly deferred, non-blocking validation. Their absence must remain visible
+in the acceptance manifest and release risks rather than being reported as a
+pass.
 
 Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd and OpenRC remain equivalent native deployment entry points.
 

@@ -12,8 +12,8 @@ The first release line starts at `2.8.0` with these goals:
 - Real integration validation against Panel `2.8.1`.
 - Resolution of known lifecycle, plugin, firewall, contract, and installation supply-chain defects.
 - Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk`.
-- Support for Linux `amd64` and `arm64`.
-- Debian/systemd as the primary acceptance environment and Alpine/OpenRC as the second.
+- Publish Linux `amd64` and `arm64` artifacts; runtime acceptance for `2.8.0` is scoped to the production `amd64` Docker profile.
+- Keep Debian/systemd and Alpine/OpenRC installation paths available, with native runtime acceptance deferred beyond the first release.
 
 The project version and official contract version are independent. `X.Y.Z-rnl.N` identifies a project-specific iteration and may be used either to develop the next version line early or to improve an existing official-version baseline. A plain `X.Y.Z` release is allowed only after alignment with that official contract is complete. Official release monitoring creates an issue; it never changes the contract or publishes automatically. See the [versioning model](../versioning.md).
 
@@ -50,18 +50,20 @@ The project version and official contract version are independent. `X.Y.Z-rnl.N`
 | M7 System integration and supply chain | Complete |
 | M8 Release acceptance | In progress |
 
-The M6 and M7 resource and distribution measurements are engineering baselines, not evidence for the current M8 candidate. They must be repeated under the versioned [acceptance protocol](release-acceptance.md) after `C` is frozen.
+The dated M6 50,000-user measurement (2026-07-15) and M7 init/distribution snapshots (2026-07-19) remain engineering baselines. They predate candidate `C` and are not runtime evidence for the current M8 candidate. Repeating those profiles is deferred and does not block `2.8.0`.
 
-The static implementation, CI, candidate-image pipeline, and code-level 512 MiB controls are in place. A stable tag still requires complete Panel, systemd/OpenRC, native amd64/arm64, Compose, resource-fault, and long-running soak evidence on the frozen candidate. A `sha-*` image from `main` is suitable for acceptance but is not a formal release.
+`2.8.0` remains unreleased and M8 remains in progress. The static implementation, CI, candidate-image pipeline, and code-level 512 MiB controls are in place. The only blocking acceptance profile is `docker-production-smoke-v1` on the frozen candidate: resolve the candidate tag to an immutable manifest digest, run that digest through the production Compose template on `amd64`, observe a real Panel connection and proxy traffic, and confirm that the container remains running and healthy with zero OOM kills and restarts. A `sha-*` tag from `main` locates a candidate but is not itself an acceptance identity or a formal release.
 
 ## Current focus
 
-- **Now:** Freeze the first formal candidate and complete M8 with redacted, digest-bound real-environment evidence.
+- **Now:** Complete the frozen candidate's `amd64` Docker production smoke and record the real Panel, traffic, process-state, memory, OOM, and restart observations needed to close M8.
 - **Next:** Evaluate the next official release detected by automation. Pin its source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements and do not block `2.8.0`:
 
+- `arm64-production-runtime`, `native-systemd-install`, and `native-openrc-install` are deferred.
+- Candidate-scale 50,000-user load, a 24-hour soak, and fault/rollback injection are deferred extended-validation profiles.
 - The installer has no persistent phase journal. Rerun it after `SIGKILL` or power loss; recreate a container deployment.
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
 - Revisit the memory tradeoff of a resident active-config copy and runtime `dump-config` only with measured need.
@@ -133,14 +135,13 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 
 ### M8 - Release acceptance
 
-- Complete real rw-core, Panel, nftables, systemd/OpenRC, and Compose integration tests.
-- On the frozen candidate, verify the shared-start/exclusive-mutation coordinator, fixed lock order, and cancellation propagation across `xray start/stop` and `plugin sync/recreate`.
-- Under systemd and OpenRC, verify an independent rw-core process group, normal stop, timeout escalation, and descendant cleanup after natural leader exit. Automatic recovery after the Node or supervisor itself is forcibly killed is not required.
 - Pass Go tests, race tests, vet, static checks, script checks, and multi-platform builds.
-- Complete long-running and fault-recovery tests under the target resource limits.
+- Freeze the code candidate first and bind the blocking acceptance record to its commit and candidate image.
+- Complete the sole blocking runtime profile, `docker-production-smoke-v1`: an `amd64` production Compose deployment pinned to the candidate manifest digest, with a real Panel connection and real proxy traffic, observed memory and PID usage, a running and healthy container, zero OOM kills, and zero restarts.
+- Keep the existing lifecycle coordinator, process-group cleanup, init, 50,000-user, and rollback tests as code-level or dated engineering evidence; do not present them as current-candidate runtime observations.
+- Defer `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` as non-blocking follow-up validation.
 - Update the compatibility matrix, risk register, operations documentation, root `CHANGELOG.md`, and `2.8.0` release material.
-- Freeze the code candidate first. Bind every acceptance record to `C` and permit only the finalization allowlist afterward.
-- Validate strict JSON, file digests, Git ancestry, the two architecture-specific Compose runs, and the candidate image manifest digest. See [`release-acceptance.md`](release-acceptance.md).
+- Validate the release record and candidate identity according to [`release-acceptance.md`](release-acceptance.md), then permit only finalization changes.
 
 ## Development and release rules
 

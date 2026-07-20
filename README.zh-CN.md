@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=4803d9b11e8b118d4fba089408f1429349f9e687a7e9dd41bdfac800777ea377 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=f1223d703e387bd7fbe49b9880d3ada5e653e0a4672b432576ab2c8892421b0b -->
 
 <div align="center">
 
@@ -45,15 +45,17 @@ Remnanode Lite 负责接收 Remnawave Panel 的节点指令，管理 rw-core 生
 
 | 项目 | 当前值 |
 | --- | --- |
-| 项目版本 | `2.8.0`；正式可用性以不可变 Git tag 和 GitHub Release 为准 |
+| 项目版本 | `2.8.0`，当前仍是未发布 Release 候选；正式可用性以不可变 Git tag 和 GitHub Release 为准 |
 | 官方契约 | `remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b` |
 | 集成验收使用的 Panel 版本 | `2.8.1`；它不决定项目版本号 |
 | rw-core | `v26.6.27` |
 | 架构 | `linux/amd64`、`linux/arm64` |
-| M7 原生工程快照 | Ubuntu 24.04 arm64/systemd；Alpine 3.22 arm64/OpenRC 容器（不是 M8 冻结候选验收） |
+| M7 原生工程快照 | 日期为 2026-07-19：Ubuntu 24.04 arm64/systemd、Alpine 3.22 arm64/OpenRC 容器；它们仍是历史工程结果 |
 | 生产资源目标 | 整机 `512 MiB / 1 vCPU / 2 GB disk`，服务上限 `448 MiB`、无 swap |
+| Schema v2 候选门禁 | GitHub CI；amd64/arm64 镜像构建及 provenance/build attestation；绑定候选、使用规范 Compose 模板的真实 amd64/x86_64 低内存 smoke；Panel 2.8.1 在线并通过真实流量；容器 healthy、OOM/restart 为零、memory/PID 观测有效 |
+| 延后验证 | `arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak`、`fault-and-rollback-injection` |
 
-静态契约和代码级整改已经完成，完整发布仍以冻结候选上的 Panel、双 init、双架构、资源、故障与 soak 验收为准。阶段状态见[路线图](docs/i18n/zh-CN/development/roadmap.md)，历史基准不等于正式版本的 SLA。
+Schema v2 evidence 是由操作员签注并绑定候选的记录。门禁会校验其结构以及候选提交、镜像和规范 Compose 文件之间的绑定，但不能独立证明操作员声明的观测结果，也不是不可伪造的证明。延后验证明确不属于 `2.8.0` 候选门禁，Release 不得暗示已经覆盖这些项目。带日期的 M6/M7 结果仍是有价值的工程基线，不是本候选验收或已发布 SLA；阶段状态见[路线图](docs/i18n/zh-CN/development/roadmap.md)。
 
 ## 快速开始
 
@@ -80,6 +82,12 @@ Remnanode Lite 负责接收 Remnawave Panel 的节点指令，管理 rw-core 生
   chmod 600 docker-compose.yaml
 )
 ```
+
+上面的 candidate tag 只用于发现镜像。开始计时
+`docker-production-smoke-v1` 前，必须将 tag 解析为 manifest digest，并把
+`image:` 替换成
+`ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>`。仍绑定 tag 的
+Compose 文件不能作为 smoke evidence。
 
 正式版本发布后，GitHub Release 会附带已把镜像固定到该精确版本的同类文件和 `SHA256SUMS`；受控生产部署应优先下载与目标版本配套的 Release 资产。
 
@@ -127,8 +135,8 @@ flowchart LR
 
 | 标签 | 含义 | 建议用途 |
 | --- | --- | --- |
-| `sha-<commit>` | 某个 `main` 提交的候选镜像 | 服务器验收；更强固定请记录 manifest digest |
-| `candidate-sha-<commit>` | 从 `main` 手动触发的独立候选镜像 | 自动候选缺失或需要重建时定位候选 |
+| `sha-<commit>` | 某个 `main` 提交的候选镜像 | 发现候选，再解析并固定 manifest digest |
+| `candidate-sha-<commit>` | 从 `main` 手动触发的独立候选镜像 | 发现手动重建，再解析并固定 manifest digest |
 | `edge` | 当前 `main` 的浮动候选 | 临时观察，不用于稳定回滚 |
 | `X.Y.Z-rnl.N` | 本项目独立迭代版本 | 精确部署和回滚 |
 | `X.Y.Z` | 完成对应官方版本对齐后的正式版本 | 精确部署和回滚 |

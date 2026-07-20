@@ -15,7 +15,9 @@ Builds and CI cover Linux `amd64` and `arm64`. The currently documented real ins
 | Ubuntu 24.04 | systemd | arm64 |
 | Alpine 3.22 | OpenRC | arm64 |
 
-CI cross-compiles amd64 and arm64 and runs Linux network-administration tests on an Ubuntu runner. That does not mean both init systems on both architectures have completed formal release acceptance. M8 requires the combined systemd and OpenRC evidence to cover amd64 and arm64. The evidence attached to a specific Release defines its formally accepted scope. Other modern systemd distributions are expected to work but are not a verified baseline. On non-Debian/Ubuntu systems, install the commands required by the scripts in advance.
+CI cross-compiles amd64 and arm64 and runs Linux network-administration tests on an Ubuntu runner. Build availability does not imply runtime acceptance. The `v2.8.0` blocking runtime profile is the canonical Docker Compose smoke on a real `x86_64` (`linux/amd64`) host; `native-systemd-install` and `native-openrc-install`, on either architecture, are deferred and non-blocking. The two rows above remain real engineering snapshots, not a requirement to repeat both init systems or both architectures before releasing `v2.8.0`.
+
+Real `arm64` runtime, a candidate-specific 50k-user load run, a 24-hour soak, fault injection, and rollback injection are also deferred follow-up validation for `v2.8.0`. Missing follow-up evidence must be described as deferred, not passed. Other modern systemd distributions are expected to work but are not a verified baseline. On non-Debian/Ubuntu systems, install the commands required by the scripts in advance.
 
 The target tag must have a published GitHub Release containing binary archives, support files, `SHA256SUMS`, and the ASN database. An `edge` or `sha-*` GHCR candidate image cannot substitute for native Release assets.
 

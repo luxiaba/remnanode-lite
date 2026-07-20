@@ -10,7 +10,14 @@ This guide describes Remnanode Lite's test layers, platform boundaries, and exec
 - Changes to state, locks, goroutines, cancellation, or lifecycle behavior require race testing.
 - Changes to officially observable behavior require the pinned-source contract tests.
 - Only Linux tests can support claims about capabilities, netlink, nftables, process groups, or cgroups.
-- Real Panel, real rw-core, the resource gate, and soak tests are candidate acceptance; unit tests do not replace them.
+- Release acceptance is versioned. For the `v2.8.0` M8 candidate, the blocking
+  runtime check is the `docker-production-smoke-v1` profile on a production
+  `amd64` host with a real Panel and real proxy traffic.
+- `arm64-production-runtime`, `native-systemd-install`,
+  `native-openrc-install`, a candidate 50,000-user load,
+  24-hour soak, and fault/rollback injection are expanded validation for this
+  release. They are explicitly deferred and non-blocking; unit tests do not
+  turn an unrun item into a pass.
 - Test data must not contain real Secrets, JWTs, certificates, private keys, node IPs, hostnames, or raw responses.
 
 ## Quick Selection
@@ -189,7 +196,11 @@ REQUIRE_GOVULNCHECK=1 \
 
 `check.sh` combines the Go gate, repository gate, offline installer tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. Release checks and reports that claim complete results must require it explicitly.
 
-Even a successful run does not include Linux network namespaces, a real rw-core, Panel black-box tests, the resource gate, or a long-running soak. Do not describe it as completed production acceptance.
+Even a successful run does not satisfy the `v2.8.0` M8 Docker production
+smoke: it does not run the frozen image digest with a real Panel and real
+traffic on a production `amd64` host. It also does not run the deferred
+candidate load, soak, native-init, `arm64` runtime, or fault-injection work. Do
+not describe `check.sh` alone as completed production acceptance.
 
 ## Installer Tests
 
@@ -202,7 +213,12 @@ bash scripts/check-repository.sh
 
 `test-install-ops.sh` uses temporary directories and command mocks to verify locking, permissions, path safety, Secret migration, atomic replacement, failure rollback, systemd/OpenRC state transitions, and uninstall isolation without changing real `/etc/remnanode` state or starting local services.
 
-Some `flock` branches run only when the system provides `flock`. A macOS result cannot replace real Ubuntu/OpenRC installation acceptance. Installer behavior changes must still pass the Ubuntu CI job and the real-host release acceptance protocol for a frozen candidate.
+Some `flock` branches run only when the system provides `flock`. A macOS result
+cannot replace the Ubuntu CI job or real native-host observations. Real
+`native-systemd-install` and `native-openrc-install` are expanded validation
+and are deferred,
+non-blocking work for `v2.8.0`; installer behavior changes still require the
+risk-appropriate CI and offline transaction tests.
 
 ## Linux Network-Management Integration Tests
 
@@ -227,7 +243,7 @@ sudo apt-get install --yes iproute2 nftables
 
 These tests operate only inside isolated namespaces. Do not remove their environment-variable guards or modify them to operate on the development host's default network namespace.
 
-## Low-Memory Resource Gate
+## Low-Memory Resource Test
 
 The resource test places the test process and a real rw-core in the same Docker cgroup. Its defaults are `448 MiB / 1 CPU / no swap / 256 PIDs / 50,000 users`:
 
@@ -244,7 +260,14 @@ Prerequisites:
 - `--rw-core` points to an executable Linux rw-core for the same architecture as Docker.
 - The host supports Docker memory, CPU, swap, and PID limits.
 
-Run this gate after changes to resource handling, request parsing, retained configuration, queues, logs, concurrency limits, or the rw-core lifecycle. Record the cgroup peak; the Go process RSS alone is not the gate metric. See the [resource budget](resource-budget.md) for the dated baseline.
+The dated M6 50,000-user result is an engineering baseline, not runtime
+evidence for the frozen `v2.8.0` candidate. Repeating the candidate load is
+deferred and non-blocking under the current M8 profile.
+
+Run this test after changes to resource handling, request parsing, retained
+configuration, queues, logs, concurrency limits, or the rw-core lifecycle.
+Record the cgroup peak; the Go process RSS alone is not the relevant metric.
+See the [resource budget](resource-budget.md) for the dated baseline.
 
 ## Docker and Image Tests
 
@@ -297,7 +320,29 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-This script is only for a frozen release candidate with real acceptance evidence. It requires a clean worktree, finalized Release notes and `CHANGELOG.md`, a valid evidence manifest, and valid candidate ancestry, then runs the complete repository checks. Failure on an ordinary development branch that lacks these materials is expected. Do not fabricate evidence, weaken the checks, or advance release state merely to make it pass.
+This script is only for a frozen release candidate with the acceptance evidence
+required by its versioned profile. It requires a clean worktree, finalized
+Release notes and `CHANGELOG.md`, a valid evidence manifest, and valid candidate
+ancestry, then runs the complete repository checks. Failure on an ordinary
+development branch that lacks these materials is expected. Do not fabricate
+evidence, weaken the checks, or advance release state merely to make it pass.
+
+The `v2.8.0` M8 gate requires the frozen image digest to pass
+`docker-production-smoke-v1` before publication. Its
+`docker-smoke.json` record must identify a production `amd64` Compose run,
+expected version output, real Panel connectivity and real proxy traffic,
+cgroup memory/PID observations, a running and healthy container, no OOM kill,
+and zero restarts. The
+manifest must list `arm64-production-runtime`, `native-systemd-install`,
+`native-openrc-install`,
+50,000-user candidate load, 24-hour soak, and fault/rollback injection as
+deferred, non-blocking validation.
+
+The smoke record contains operator-attested observations. The validator binds
+the record to the candidate commit and image digest and checks its required
+fields, timing, and internal consistency; it cannot independently prove that
+the physical run occurred. Treat the attestation as an accountable audit claim,
+not as unforgeable proof.
 
 See the [versioning policy](../versioning.md) for tag, version, and `latest` semantics, and the [release process](../release.md) for candidate freeze and release steps.
 
@@ -309,18 +354,18 @@ See the [versioning policy](../versioning.md) for tag, version, and `latest` sem
 | Ordinary Go logic | Owning package tests | `bash scripts/check-go.sh` |
 | Locks, state, workers, shutdown | Owning package race test | Full race suite and related lifecycle tests |
 | HTTP/API/schema | `nodeapi`, `httpserver`, `contract` | Pinned-source contract tests and black-box comparison |
-| Xray lifecycle | `xray` and `httpserver` race tests | Real rw-core, Panel, and resource gate |
+| Xray lifecycle | `xray` and `httpserver` race tests | `amd64` Docker production smoke; resource test when risk requires it |
 | Users and statistics | `nodehandler`, `stats`, `xrayrpc` | Contract response tests and Panel differential testing |
 | Plugin pure logic | `plugin` race test | HTTP lifecycle interleaving tests |
 | nftables/socket destruction | Corresponding Linux unit test | Both namespace integration tests |
 | Configuration/Secret/JWT | `config`, `secret`, `auth`, server security | Installer Secret flow |
-| Shell/service | `bash scripts/check-repository.sh`, `bash scripts/test-install-ops.sh` | Real systemd/OpenRC |
-| Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build and candidate deployment |
+| Shell/service | `bash scripts/check-repository.sh`, `bash scripts/test-install-ops.sh` | Real systemd/OpenRC (expanded; deferred for `v2.8.0`) |
+| Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build plus `amd64` candidate smoke; `arm64` runtime is deferred |
 | Dependency or downloadable asset | `go mod tidy -diff`, supply-chain checks, govulncheck | Dual-architecture build, SBOM, and attestation |
 | Project version | `bash scripts/check-version.sh` | Release preflight |
 | Official contract upgrade | Full contract and pinned-source tests | Black-box all registered routes and complete Panel flow |
 | Protobuf wire | `scripts/generate-protobuf.sh --check`, `go test ./internal/xrayrpc` | Real rw-core and golden-wire regression |
-| Resource limit | Related unit/race tests | `test-low-memory.sh` and soak |
+| Resource limit | Related unit/race tests | Risk-driven `test-low-memory.sh`; candidate 50k load and soak are deferred for `v2.8.0` |
 
 “Minimum verification” is for the development loop, not necessarily the entire pull-request requirement. For a cross-component change, take the union of the applicable rows.
 

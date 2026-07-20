@@ -213,9 +213,8 @@ printf '%s\n' "$CANDIDATE_DIGEST" \
 gh attestation verify \
   "oci://ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}" \
   --repo luxiaba/remnanode-lite \
-  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml \
+  --cert-identity https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
   --source-digest "$C" \
-  --source-ref refs/heads/main \
   --deny-self-hosted-runners
 ```
 
@@ -228,14 +227,14 @@ commit and manifest digest must remain fixed from the start of acceptance
 through final publication. The final Release verifies the chosen digest and
 its attestation directly; it does not depend on which candidate alias was used.
 
-M8 container acceptance must use
+The `docker-production-smoke-v1` profile must use
 [`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml) from
 `C`, with its image reference replaced by
 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}`. The evidence records both
 the file SHA-256 of that template in the candidate Git object and the digest
 that actually ran. Running only `docker compose config`, or testing another
 build behind the same tag, cannot substitute for acceptance of the final
-candidate. See [Docker Compose evidence](development/release-acceptance.md#docker-compose-evidence)
+candidate. See [Docker production smoke](development/release-acceptance.md#docker-production-smoke)
 for the complete schema and collection rules.
 
 ## 6. Freeze the Candidate and Run Real-Environment Acceptance
@@ -255,53 +254,55 @@ git status --short
 ```
 
 The authoritative scope is defined in
-[`development/release-acceptance.md`](development/release-acceptance.md). It
-must cover at least:
+[`development/release-acceptance.md`](development/release-acceptance.md).
+Schema version 2 uses the version-specific
+`docker-production-smoke-v1` profile. Its blocking scope is:
 
-- route, response, error, and side-effect differential testing between the
-  pinned official Node and the candidate Node;
-- node registration, Xray lifecycle, statistics, user, and plugin flows against
-  the target Panel;
-- Ubuntu/systemd and Alpine/OpenRC, with the union of tested systems covering
-  amd64 and arm64;
-- a candidate manifest containing both `linux/amd64` and `linux/arm64`, with
-  the same accepted digest launched from the fleet Compose template on native
-  amd64 and arm64 hosts;
-- actual container cgroups, read-only root filesystem, init/reaper, tmpfs,
-  capabilities, health, graceful shutdown, PID/zombie behavior, and log
-  rotation;
-- rw-core, nftables, socket destruction, process-group cleanup, installation,
-  upgrade, rollback, and uninstall isolation;
-- the whole-machine budget of `512 MiB RAM / 1 vCPU / 2 GiB disk / no swap`,
-  while retaining one real rollback image within the container disk peak; and
-- 50,000 users, the prescribed soak duration, and fault-recovery scenarios.
+- the protected-branch GitHub CI gate for `C`;
+- a candidate image manifest built for `linux/amd64` and `linux/arm64`,
+  with SBOM, provenance, and GitHub build attestation;
+- both architecture-specific release binaries built from `C` and identified
+  by SHA-256;
+- one candidate-bound, digest-pinned run of the canonical single-file Compose
+  template on a real native amd64/x86_64 low-memory host;
+- a running and healthy container with the canonical memory, CPU, swap, and PID
+  limits, zero OOM kills and restarts, and positive memory/PID observations; and
+- Panel 2.8.1 online with real proxy traffic, plus Release Owner signoff.
+
+The operator-attested runtime record is auditable and bound to the candidate,
+but the validator cannot independently prove that the reported Panel session or
+traffic observation occurred. It is not an unforgeable proof.
+
+The profile records these exact deferred, non-blocking validations:
+`arm64-production-runtime`, `native-systemd-install`,
+`native-openrc-install`, `50000-user-load`, `24h-soak`, and
+`fault-and-rollback-injection`. A Release note must disclose them and must not
+present the dated M6/M7 engineering baselines as candidate runtime acceptance.
 
 Store acceptance material under the directory for the current project version:
 
 ```text
 docs/development/acceptance/v${VERSION}/
   manifest.json
-  systemd.json
-  openrc.json
-  panel.json
-  compose.json
-  resource-fault.json
+  docker-smoke.json
 ```
 
-The current `cmd/release-evidence-check` implements a strict profile for the
-first release line. It pins the version, official commit, Panel, rw-core,
-operating systems, route count, and resource policy. When preparing a new
-project or contract version, update and test this profile in a normal code pull
-request first. Never loosen it ad hoc in the tag workflow, and never rename and
-reuse evidence from an older release.
+The current `cmd/release-evidence-check` pins schema version 2, the acceptance
+profile, version, official commit, Panel, rw-core, exact deferred list, smoke
+thresholds, and signoff identity. For another project or contract version,
+update and test its profile in a normal code pull request before freezing
+`C`. Never loosen it ad hoc in the tag workflow, and never rename and reuse
+evidence from an older release.
 
-`manifest.json` must record `C`, the candidate tree, `CANDIDATE_DIGEST`, project
-version, Git tag, official contract pin, Panel, rw-core, resource policy, known
-risks, and SHA-256 digests of all other evidence files. It must not record final
-commit `F`, which does not exist yet; the strict schema rejects that unknown
-field. Never commit a Secret Key, JWT, CA, certificate, private key, IP address,
-hostname, Panel URL, raw response body, or any user data that can be
-reconstructed.
+`manifest.json` records `C`, the candidate tree, `CANDIDATE_DIGEST`, both
+Node binary hashes, project/tag/contract identities, deferred validation,
+risks, and the complete-file SHA-256 of `docker-smoke.json`. The smoke record
+binds the canonical Compose blob in `C`, the same image digest, the amd64 Node
+binary, actual limits and observations, Panel/traffic results, a sanitized raw
+bundle digest, and operator signoff. It must not record final commit `F`,
+which does not exist yet. Never commit a Secret Key, JWT, CA, certificate,
+private key, IP address, hostname, Panel URL, raw response body, or
+reconstructable user data.
 
 ## 7. Commit Release Material under Protected `main`
 
@@ -316,11 +317,7 @@ CHANGELOG.md
 docs/development/roadmap.md
 docs/i18n/zh-CN/development/roadmap.md
 docs/development/acceptance/v${VERSION}/manifest.json
-docs/development/acceptance/v${VERSION}/systemd.json
-docs/development/acceptance/v${VERSION}/openrc.json
-docs/development/acceptance/v${VERSION}/panel.json
-docs/development/acceptance/v${VERSION}/compose.json
-docs/development/acceptance/v${VERSION}/resource-fault.json
+docs/development/acceptance/v${VERSION}/docker-smoke.json
 docs/releases/v${VERSION}.md
 ```
 
@@ -399,8 +396,9 @@ The Release notes must contain at least these sections:
 ```
 
 The compatibility section must state the project version, contract version,
-pinned official commit, target Panel, rw-core, and supported architectures
-separately. Acceptance results must include candidate commit `C`,
+pinned official commit, target Panel, rw-core, and packaged architectures
+separately from runtime-validated architectures. Acceptance results must name
+`docker-production-smoke-v1`, include candidate commit `C`,
 `candidateImageDigest`, and the exact relative link required by the gate:
 
 ```markdown
@@ -411,9 +409,22 @@ Release notes must not embed their own commit `F`, because that would require an
 impossible self-referential Git SHA. After publication, the final tag points to
 `F`; resolve it with `git rev-list -n 1 v${VERSION}` or the target commit of the
 GitHub Release. Do not replace an audit conclusion in Known Risks with a vague
-"none." Even when there are no open risks, document the acceptance boundary and
-anything not covered. The file must not contain placeholders such as `TODO`,
-`TBD`, `Unreleased`, or "in progress."
+"none." Use one line per deferred token in this machine-checkable form:
+
+```markdown
+- `arm64-production-runtime`: deferred; not validated by `docker-production-smoke-v1`.
+```
+
+Apply the same form to `native-systemd-install`, `native-openrc-install`,
+`50000-user-load`, `24h-soak`, and `fault-and-rollback-injection`. The section
+must also contain this exact line:
+
+```text
+Runtime evidence is operator-attested and is not an unforgeable proof.
+```
+
+The file must not contain placeholders such as `TODO`, `TBD`, `Unreleased`, or
+"in progress."
 
 ## 9. Final Gate and Tag
 
@@ -544,9 +555,8 @@ Verify the GitHub attestation:
 gh attestation verify \
   "oci://ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}" \
   --repo luxiaba/remnanode-lite \
-  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml \
+  --cert-identity https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
   --source-digest "$C" \
-  --source-ref refs/heads/main \
   --deny-self-hosted-runners
 ```
 
@@ -678,14 +688,18 @@ Before pushing a final tag, confirm every item:
 - [ ] The code pull request has entered protected `main`, and candidate `C` is
       the post-merge `main` commit.
 - [ ] Both `ci` and the candidate container workflow passed for `C`.
-- [ ] Every evidence file binds the same `C`, candidate tree, and
-      multi-architecture manifest digest actually accepted.
-- [ ] The target Panel, both init systems, both architectures, resource budget,
-      and fault scenarios passed acceptance.
-- [ ] `compose.json` binds the single-file Compose template from `C` and the
-      same digest. Its amd64 and arm64 runs each pass whole-host resources,
-      container limits, isolation, init/reaper, health, shutdown, PID/zombie,
-      logging, free-disk, and real rollback-start gates.
+- [ ] `manifest.json` and `docker-smoke.json` bind the same `C`, candidate
+      tree, multi-architecture manifest digest, candidate binary hashes, and
+      canonical Compose blob.
+- [ ] `docker-production-smoke-v1` passed on a real native amd64/x86_64
+      low-memory host for at least 600 seconds with the container running and
+      healthy, zero OOM kills/restarts, valid memory/PID observations, Panel
+      2.8.1 online, and real proxy traffic.
+- [ ] The exact deferred list is disclosed as non-blocking and unvalidated:
+      arm64 runtime, native systemd/OpenRC, 50,000-user load, 24-hour soak, and
+      fault/rollback injection.
+- [ ] Release Owner signoff and the sanitized raw-bundle digest are recorded
+      without presenting operator-attested evidence as unforgeable proof.
 - [ ] The release-material pull request changes only the finalization allowlist
       and is squashed to exactly one single-parent commit.
 - [ ] README no longer contains a pre-release notice, and the roadmap marks this

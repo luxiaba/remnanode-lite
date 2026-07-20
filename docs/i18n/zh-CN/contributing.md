@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=b564e54795f86f333ca34ccf14471d91cf555db90cc3fbc773043960efa3f883 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=7f05ec8445307a5876b795f47e7d131094277501c3e574040a6b558f6c7dc3d5 -->
 
 # 贡献指南
 
@@ -123,7 +123,8 @@ git switch -c fix/short-description
 - 启动、停止、重试和关闭总时间。
 
 优先流式处理或保留 hash/摘要，不长期保存大配置的第二份副本。资源变化应说明最坏
-情况，并按[测试指南](development/testing.md)决定是否重跑 50k 用户资源门禁。
+情况，并按[测试指南](development/testing.md)决定是否把 50k 用户资源测试作为扩展验证
+重跑；带日期的工程基线不能作为后续冻结候选的证据。
 
 ### 安全与 Secret
 
@@ -211,7 +212,7 @@ git diff --check
 - API 变化运行 `nodeapi`、`httpserver`、`contract` 和固定源码证据测试。
 - Shell/部署变化运行仓库门禁；installer 变化追加离线操作测试。
 - nftables/netlink 变化运行 Linux namespace 测试。
-- 资源上限或大配置路径变化运行低内存门禁。
+- 资源上限或大配置路径变化运行低内存测试。
 
 提交 PR 前，尽量运行与 CI 等价的仓库检查：
 
@@ -222,7 +223,8 @@ REQUIRE_GOVULNCHECK=1 \
 ```
 
 该命令不包含真实 Panel、Linux network namespace、真实 rw-core 或长期 soak。无法在
-本地运行的平台测试应在 PR 中明确说明，不能写成已经通过。
+本地运行的平台测试应在 PR 中明确说明；扩展测试在特定版本 profile 中可以不阻塞发布，
+但没有运行时绝不能写成已经通过。
 
 ## Commit
 
@@ -279,8 +281,21 @@ Review 重点依次是正确性与契约、状态/并发、资源边界、安全
 `latest`、Release 资产和 acceptance evidence 由维护者按[版本策略](versioning.md)
 与[发布流程](release.md)统一处理。
 
-发布门禁要求冻结候选、干净工作树、固定官方源码和真实验收资料。不要在普通 PR 中
-修改检查以绕过尚未完成的 evidence，也不要将 `edge` 或 commit SHA 镜像描述为正式版。
+发布门禁要求冻结候选、干净工作树、固定官方源码和当前版本 profile 要求的验收资料。
+不要修改检查以绕过缺失的必需 evidence，也不要将 `edge`、`sha-*` 或
+`candidate-sha-*` 镜像描述为正式版。
+
+`v2.8.0` 的 M8 门禁要求冻结镜像 digest 在正式发布前通过生产 `amd64` 主机上的
+`docker-production-smoke-v1`。阻塞性记录覆盖生产 Compose 模板、预期版本、
+真实 Panel 连接、真实代理流量、cgroup 内存/PID 观测、容器持续运行且健康、无 OOM
+kill 与 restart 都为零。
+`arm64` 运行、`native-systemd-install`、`native-openrc-install`、当前候选
+50,000 用户负载、24 小时 soak、
+故障/回滚注入均明确延期且不阻塞发布，并须如实披露。
+
+由 operator 签注的运行观测是可追责的审计声明。校验可以把记录绑定到候选 commit 与
+digest，并检查 schema 和内部一致性，但不能让底层观测变得不可伪造，也无法独立证明
+运行确实发生。不得编造或夸大此类 evidence。
 
 ## 许可证
 

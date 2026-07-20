@@ -84,6 +84,7 @@ grep -Fq "$candidate_digest" "$release_note" || {
   echo "$release_note does not record candidate image digest $candidate_digest" >&2
   exit 1
 }
+bash scripts/check-release-risk-disclosure.sh "$release_note"
 printf '%s\n' "$evidence_summary"
 
 artifact_dir="$(mktemp -d)"

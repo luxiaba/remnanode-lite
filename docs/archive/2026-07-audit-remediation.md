@@ -4,7 +4,19 @@
 
 This document preserves the static-audit scope and remediation principles applied to the first independent release line in July 2026. It is a decision record, not a current backlog or an onboarding entry point. The original audit predates the repository history reset, so its local baseline commit is not part of the current independent Git history. Facts that must remain traceable now live in code and tests, the [2.8.0 contract baseline](../development/contract-2.8.0.md), the [resource budget](../development/resource-budget.md), and the [release acceptance protocol](../development/release-acceptance.md).
 
-The M0-M7 static remediation work is complete. M8 still owns real Panel/Linux, resource, fault-recovery, and long-running evidence for a frozen candidate. Automatic recovery from power loss or a forcibly terminated installer or supervisor remains an accepted operational limitation. Recovery consists of rerunning the installer, rebooting the host, or recreating the container as appropriate.
+The strict native, dual-runtime, 50,000-user, and 24-hour M8 plan recorded below
+is historical. It has been superseded for the still-unpublished `v2.8.0`
+candidate by schema version 2 and the
+`docker-production-smoke-v1` profile. The current profile records those old
+runtime scenarios as deferred, non-blocking validation; follow the current
+acceptance protocol rather than treating the archived plan as a release gate.
+
+At the time of this record, M0-M7 static remediation was complete and M8 owned
+real Panel/Linux, resource, fault-recovery, and long-running evidence for a
+frozen candidate. Automatic recovery from power loss or a forcibly terminated
+installer or supervisor remains an accepted operational limitation. Recovery
+consists of rerunning the installer, rebooting the host, or recreating the
+container as appropriate.
 
 ## Engineering Principles
 

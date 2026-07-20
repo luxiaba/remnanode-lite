@@ -162,7 +162,7 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | `scripts/install*.sh`, `scripts/upgrade.sh`, `scripts/uninstall.sh` | Native installation, asset transactions, upgrade rollback, and uninstall |
 | `deploy/` | systemd/OpenRC service definitions, native `node.env`, and the production single-file Compose template |
 | `compose.yaml`, `compose.build.yaml` | GHCR runtime configuration and local source-build override |
-| `docs/development/acceptance/` | Versioned, redacted, machine-validated release acceptance evidence, created only for a frozen candidate |
+| `docs/development/acceptance/` | Versioned and redacted release acceptance records whose schema and digests are machine-validated, created only for a frozen candidate |
 | `docs/releases/` | GitHub Release notes paired with Git tags, created only for a frozen candidate |
 | `Dockerfile` | Dual-architecture Node build, pinned rw-core/geo/ASN assets, and minimal runtime image |
 
@@ -200,7 +200,16 @@ git diff --check
 git diff
 ```
 
-Do not run the release gate after every line-level edit. Test cost should match risk. The complete repository check belongs after a coherent batch or before opening a pull request; real Panel, resource, and long-running soak tests belong to candidate acceptance.
+Do not run the release gate after every line-level edit. Test cost should match
+risk. The complete repository check belongs after a coherent batch or before
+opening a pull request.
+
+The `v2.8.0` M8 gate requires the frozen digest to pass the `amd64` Docker
+production smoke with a real Panel and real proxy traffic before publication.
+`arm64-production-runtime`,
+`native-systemd-install`, `native-openrc-install`, a candidate
+50,000-user load, 24-hour soak, and fault/rollback injection are expanded
+validation that is explicitly deferred and non-blocking for this release.
 
 ## Common Change Paths
 

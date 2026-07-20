@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=72cc3d52b2645b57ccdf134d9ef35eea64aaab252892635ac516389a1d7b8004 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=013851da454f8604788a072398d2e40401e3f5044a85b822d14e34fa44b2c5e2 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > **翻译说明：** [英文原文](../../../development/contract-2.8.0.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
@@ -85,7 +85,7 @@ M6 在不改变官方 HTTP 契约的前提下收紧资源边界。Xray 配置仅
 
 `LOW_MEMORY=1` 时公开 `/node` server 的默认请求体上限为 16 MiB，Go runtime 管理内存软上限为 180 MiB。显式 `BODY_LIMIT_MB` 允许 `1..1024`，非法、负数或溢出值会使进程启动失败，而不是静默回退；内部 Unix webhook 仍使用独立的 8 KiB 固定上限。Debian 与 Alpine 安装器在整机内存不超过 512 MiB 时自动启用该模式。生产 init 固定读取 `/etc/remnanode/node.env`，不回退到 service-writable working directory；配置必须是普通非符号链接文件，总计不超过 1 MiB、4096 行和 256 个赋值。配置与 Secret 都通过同一 `O_NOFOLLOW|O_NONBLOCK` 文件描述符完成检查和有界读取。systemd/OpenRC 均不导出整份配置环境，`GOMEMLIMIT` 与版本 override 由同一个 Go 解析器验证后应用。
 
-真实 rw-core `v26.6.27` 的 1 CPU / 448 MiB / no-swap 门禁覆盖 1k 用户启动、无变化同步、50k 用户重启、热增删与统计 RPC，实测 cgroup 峰值为 143.9 MiB。复现条件和阶段数据见 [`resource-budget.md`](resource-budget.md)。
+真实 rw-core `v26.6.27` 的 1 CPU / 448 MiB / no-swap 门禁覆盖 1k 用户启动、无变化同步、50k 用户重启、热增删与统计 RPC，带日期的 M6 工程实测 cgroup 峰值为 143.9 MiB。该基线早于冻结的 `v2.8.0` 候选，不是当前候选的运行证据。复现条件和阶段数据见 [`resource-budget.md`](resource-budget.md)。
 
 ## Go 传输、系统与供应链实现
 
@@ -94,6 +94,9 @@ M7 将外部 TLS 最低版本收敛为 1.3，并禁用 Go HTTP/2 自动协商以
 systemd 与 OpenRC 均使用专用 `remnanode:remnanode` 账号，配置为 `root:remnanode 0640`，状态和日志目录为 `remnanode:remnanode 0750`。服务只获得 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`；systemd 同时将 bounding set 收紧到这两项，并启用 `NoNewPrivileges`、只读系统、namespace/syscall/address-family 限制、`448 MiB` 内存、零 swap、1 CPU 和 256 tasks。Alpine 3.22 的 supervise-daemon 实测 `CapInh/Prm/Eff/Amb=0x1400`、`NoNewPrivs=1`，且由服务派生的 `nft` 子进程可创建私有表。
 
 项目资产位于 `/usr/local/lib/remnanode` 和 `/usr/local/share/remnanode`，不再接管通用 Xray 路径。Release 归档、rw-core zip、自定义 core 与 ASN 数据都必须通过 SHA-256 和结构/版本自检后才写盘；固定 rw-core `v26.6.27` 不允许覆盖其已审计摘要。升级会备份 binary、service、support、`node.env` 以及可选 rw-core 资产，刷新后必须重新通过服务与端口门禁，否则自动逐项恢复。Ubuntu/systemd 与 Alpine/OpenRC 的坏 service 注入均验证了摘要和运行状态恢复；完全卸载也验证了不会终止无关同名进程或删除通用 Xray 文件。
+
+上述带日期的 M7 systemd/OpenRC 与坏 service 回滚观测属于工程基线。它们并非使用
+当前冻结的 `v2.8.0` 候选产生，不能作为当前候选的运行验收证据。
 
 整机退出使用一个共享的 25 秒应用预算，而不是为各组件串行重置 timeout。HTTPS/Unix intake、日志轮转和后台版本探测先收到取消；rw-core 最多使用 5 秒 SIGINT 加 5 秒 SIGKILL，确认 core 停止后，插件再使用剩余预算清理私有 nft 表。core 或插件的瞬时清理错误会在同一 deadline 内重试一次。公开 `xray/stop` 也串行化 start/stop，只有 core 确认停止后才 reset 插件；Stop 失败会保留规则与快照。systemd 提供 30 秒 TERM grace，OpenRC 提供 `TERM/30/KILL/5` 外层兜底；deadline 或清理失败会形成聚合错误，不能被记录为优雅退出成功。
 
@@ -144,7 +147,22 @@ systemd 与 OpenRC 均使用专用 `remnanode:remnanode` 账号，配置为 `roo
 
 ## 当前已知偏差
 
-M7 已关闭此前记录的 TLS/socket 与系统供应链偏差。当前没有已知的静态 `/node` 契约 P1/P2；M8 仍需以真实 Panel 2.8.1 完成发行候选的端到端差分和故障恢复验收。Docker Compose 与官方一样使用 host network 和 `NET_ADMIN`，同时保留低端口监听能力；Go Manager 直接拥有 rw-core 生命周期，因此无需复制官方双进程 s6 运行结构。systemd/OpenRC 继续作为等价的原生部署入口。
+M7 已关闭此前记录的 TLS/socket 与系统供应链偏差。当前没有已知的静态 `/node`
+契约 P1/P2。
+
+`v2.8.0` 的 M8 门禁把唯一阻塞发布的运行范围定义为
+`docker-production-smoke-v1`：精确的候选镜像 digest 必须通过生产单文件 Compose
+模板运行在 `x86_64`/`amd64` 主机，输出预期版本，连接真实 Panel 2.8.1，承载真实
+代理流量，记录 cgroup 内存与 PID 观测，并保持运行和健康，OOM kill 与 restart 都为零。
+
+`arm64-production-runtime`、`native-systemd-install`、
+`native-openrc-install`、当前候选 50,000 用户负载复测、
+24 小时 soak、故障/回滚注入均明确延期且不阻塞发布。验收 manifest 与发布风险必须
+继续披露这些缺口，不能将未运行项目写成已通过。
+
+Docker Compose 与官方一样使用 host network 和 `NET_ADMIN`，同时保留低端口监听
+能力；Go Manager 直接拥有 rw-core 生命周期，因此无需复制官方双进程 s6 运行结构。
+systemd/OpenRC 继续作为等价的原生部署入口。
 
 运行期 `dump-config` 是已接受的后置差异：Manager 只在 rw-core 启动期间保留完整规范配置，ready 后释放该副本并让 `CurrentConfigJSON` 返回 `{}`。这是面向 512 MiB 节点的内存取舍，不影响 `/node` 或 rw-core 启动契约；后续如恢复该诊断能力，必须采用有界方案，不能常驻第二份大配置。
 

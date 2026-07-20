@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=bb93385582357b15ec17ca8c7d7dac6ac3651ab3594f2b4a8670163928547074 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=b226928707e7d24793185dae0284459b04e720fee4c3ddb0a241199b1b4258d3 -->
 
 # 原生 Linux 部署
 
@@ -20,7 +20,9 @@
 | Ubuntu 24.04 | systemd | arm64 |
 | Alpine 3.22 | OpenRC | arm64 |
 
-CI 会交叉构建 amd64/arm64，并在 Ubuntu runner 执行 Linux 网络管理测试，但这不等于两种 init 与两种架构组合都已经完成正式发行验收。M8 要求 systemd/OpenRC 的架构并集覆盖 amd64、arm64；正式支持范围以对应 Release evidence 为准。其它现代 systemd 发行版预期可用，但并非已验证基线。非 Debian/Ubuntu 系统需要提前自行安装脚本所需命令。
+CI 会交叉构建 amd64/arm64，并在 Ubuntu runner 执行 Linux 网络管理测试，但可构建不等于已通过运行验收。`v2.8.0` 唯一阻断性的运行验收范围，是在真实 `x86_64`（`linux/amd64`）主机上执行规范 Docker Compose smoke；任一架构上的 `native-systemd-install` 与 `native-openrc-install` 均推迟且不阻断发布。上表两项仍是真实工程快照，不要求在发布 `v2.8.0` 前重复覆盖两种 init 或两种架构。
+
+真实 `arm64` 运行、针对候选的 50k 用户负载、24 小时持续运行、故障注入和回滚注入，也属于 `v2.8.0` 的后续验证项。缺少后续 evidence 时必须写明 deferred，不得写成 passed。其它现代 systemd 发行版预期可用，但并非已验证基线。非 Debian/Ubuntu 系统需要提前自行安装脚本所需命令。
 
 目标 tag 必须已经发布 GitHub Release，并包含二进制归档、support 文件、`SHA256SUMS` 和 ASN 数据库。`edge` 或 `sha-*` GHCR 候选镜像不能替代原生 Release 资产。
 

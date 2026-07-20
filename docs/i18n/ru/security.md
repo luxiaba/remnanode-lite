@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=SECURITY.md; source-sha256=3c6712d903c3fbfccae1837f2ae2348601323e6157d91cd3516b80ba4b176c5b -->
+<!-- translation: locale=ru; source=SECURITY.md; source-sha256=3a17d9930b11512838e2f445db27bfd5124491ab12bdbc0dcd75aa5f8be109ba -->
 # Политика безопасности
 
 > English is the only authoritative source. If this translation differs from the [canonical English security policy](../../../SECURITY.md), follow the English document.
@@ -174,5 +174,5 @@ REQUIRE_GOVULNCHECK=1 \
 
 Успешное прохождение этого gate подтверждает только проверки на уровне
 репозитория. Оно не заменяет реальные тесты пространств имён Linux, проверку
-аттестации кандидата, интеграцию с Panel, тесты отказов при ограниченных
-ресурсах или длительную приёмку M8 там, где они требуются.
+аттестации кандидата, интеграцию с Panel, а также проверки runtime и расширенной
+приёмки, требуемые профилем соответствующего выпуска.

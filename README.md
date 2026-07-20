@@ -43,15 +43,17 @@ See [Project scope and goals](docs/project.md) for the background, supported bou
 
 | Item | Current value |
 | --- | --- |
-| Project version | `2.8.0`; formal availability is defined by immutable Git tags and GitHub Releases |
+| Project version | `2.8.0`, currently an unpublished Release candidate; formal availability is defined by immutable Git tags and GitHub Releases |
 | Official contract baseline | `remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b` |
 | Panel version used for integration acceptance | `2.8.1`; it does not determine the project version |
 | rw-core | `v26.6.27` |
 | Target architectures | `linux/amd64`, `linux/arm64` |
-| M7 engineering snapshots | Ubuntu 24.04 arm64/systemd and Alpine 3.22 arm64/OpenRC container; these are not frozen-candidate M8 acceptance |
+| M7 engineering snapshots | Dated 2026-07-19: Ubuntu 24.04 arm64/systemd and Alpine 3.22 arm64/OpenRC container; these remain historical engineering results |
 | Production resource target | Whole host `512 MiB / 1 vCPU / 2 GB disk`, service maximum `448 MiB`, no swap |
+| Schema v2 candidate gate | GitHub CI; amd64/arm64 image build plus provenance/build attestation; a candidate-bound real amd64/x86_64 low-memory smoke using the canonical Compose template; Panel 2.8.1 online with real traffic; healthy container, zero OOM kills/restarts, and valid memory/PID observations |
+| Deferred validation | `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` |
 
-The static contract and code-level remediation are in place. A production Release still requires frozen-candidate Panel, init-system, dual-architecture, resource, fault, and soak evidence. Follow the [roadmap](docs/development/roadmap.md) and do not treat an engineering snapshot as a published SLA.
+Schema v2 evidence is an operator-attested, candidate-bound record. The gate checks its structure and bindings to the candidate commit, image, and canonical Compose file, but it cannot independently prove the operator's observations and is not an unforgeable proof. Deferred validation is explicitly outside the `2.8.0` candidate gate and must not be implied by the Release. The dated M6/M7 results remain useful engineering baselines, not candidate acceptance or a published SLA; see the [roadmap](docs/development/roadmap.md).
 
 ## Quick start
 
@@ -78,6 +80,12 @@ Before a formal Release is available, and whenever validating a new candidate, s
   chmod 600 docker-compose.yaml
 )
 ```
+
+The candidate tags above are discovery aliases only. Before timing the
+`docker-production-smoke-v1` run, resolve the tag to its manifest digest and
+replace `image:` with
+`ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>`. A tag-bound
+Compose file is not valid smoke evidence.
 
 After a formal Release, download the matching Compose asset and `SHA256SUMS` from that GitHub Release instead. The release workflow pins the asset to the exact version rather than `latest`.
 
@@ -125,8 +133,8 @@ The central rule is single ownership of mutable state. The HTTP layer authentica
 
 | Tag | Meaning | Intended use |
 | --- | --- | --- |
-| `sha-<commit>` | Candidate built automatically from a `main` commit | Server acceptance; record the manifest digest for strict pinning |
-| `candidate-sha-<commit>` | Independent candidate built by a manual workflow run on `main` | Rebuild or acceptance when the automatic candidate is unavailable |
+| `sha-<commit>` | Candidate built automatically from a `main` commit | Discover the candidate, then resolve and pin its manifest digest |
+| `candidate-sha-<commit>` | Independent candidate built by a manual workflow run on `main` | Discover a manual rebuild, then resolve and pin its manifest digest |
 | `edge` | Moving image for the current `main` head | Short-lived observation only |
 | `X.Y.Z-rnl.N` | Independently versioned Remnanode Lite Release | Exact deployment and rollback |
 | `X.Y.Z` | Formal Release after matching the official version's contract | Exact deployment and rollback |

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=7077eede152cfd5d81c81041095586ed9060f67b88e0a35589fadeeb654b4c9f -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=c18e61e5be4a3154332013b3b8e37c72d1370150b20541eede3e98265faf8362 -->
 
 # Docker Compose 部署
 
@@ -37,8 +37,8 @@ ghcr.io/luxiaba/remnanode-lite
 | `X.Y.Z-rnl.N` | 本项目经过发布验证的独立迭代 | 推荐生产使用，便于准确回滚 |
 | `X.Y.Z` | 已完成对应官方版本对齐的正式构建 | 推荐生产使用 |
 | `latest` | 最新一个经过发布验证的稳定构建 | 适合主动跟随稳定版，不适合作为回滚标识 |
-| `sha-<40位commit>` | `main` 提交对应的候选构建 | 真实服务器验收 |
-| `candidate-sha-<40位commit>` | 从 `main` 手动触发的独立候选构建 | 自动候选缺失或需要重建时验收 |
+| `sha-<40位commit>` | `main` 提交对应的候选构建 | 发现候选，再解析并固定 digest |
+| `candidate-sha-<40位commit>` | 从 `main` 手动触发的独立候选构建 | 发现手动重建，再解析并固定 digest |
 | `edge` | 当前 `main` 的浮动候选 | 仅临时观察 |
 
 精确版本、`sha-*` 和 `candidate-sha-*` 按项目政策不主动移动，但 registry tag 在技术上不是不可变对象。需要最强固定时使用 `name@sha256:...` manifest digest。首个正式 Release 发布前，`latest` 和版本标签尚不存在，应从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实候选并记录其 manifest digest。
@@ -194,7 +194,17 @@ docker compose logs --tail=100 remnanode
 
 ## 候选镜像的自动化语义
 
-合入 `main` 且命中容器构建输入时，`container` workflow 先构建多架构 manifest 并生成 build attestation，成功后才发布按策略不移动的 `sha-<commit>`；只有该提交仍是当前 `main` HEAD 时才移动 `edge`。候选镜像没有 GitHub Release 资产，也不代表正式发布。部署命令见前文“首发前或候选验收”。
+合入 `main` 且命中容器构建输入时，`container` workflow 会构建 `linux/amd64` 和 `linux/arm64` 平台镜像、发布多架构 manifest，并生成 build provenance 与 attestation。两种平台构建成功且 attestation 可验证，仍是正式发布的构建与供应链要求；它们只确认产物身份和构建来源，不代表任一架构已经通过真实运行验收。
+
+上述步骤全部成功后，workflow 才发布按策略不移动的 `sha-<commit>`；只有该提交仍是当前 `main` HEAD 时才移动 `edge`。候选镜像没有 GitHub Release 资产，也不代表正式发布。部署命令见前文“首发前或候选验收”。
+
+## v2.8.0 运行验收范围
+
+`v2.8.0` 唯一阻断性的运行验收范围，有意限定为一台真实的小内存 Linux `x86_64`（`linux/amd64`）主机。使用同一 commit 中规范的 `deploy/compose.single-file.yaml` 运行候选，并把 `image:` 固定到精确的多架构 manifest digest。记录模板 SHA-256 与镜像 digest，然后确认 Compose 校验和启动、上报版本、容器 running/healthy、规范限制下的实际 memory/PID current/peak、Panel 连接、rw-core 启动、具有代表性的真实代理流量、`OOMKilled=false`，以及容器 restart 为零。smoke 必须持续至少 600 秒，并满足[验收协议](development/release-acceptance.md#docker-生产-smoke)中的全部精确宿主、容器限制、health 和 readiness 要求。
+
+`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 和 `fault-and-rollback-injection` 均作为后续验证推迟，不阻断 `v2.8.0` 发布。缺少这些结果时必须写明 deferred，不得写成 passed。
+
+由 operator 确认的运行记录有助于追溯和评审，但不是运行观察确实发生过的不可伪造证明。build attestation 覆盖构建链，不覆盖这些运行声明。Release notes 必须如实说明实际观察范围，不能把任一类 evidence 提升为更强的结论。
 
 ## 固定 digest 与验证证明
 
@@ -223,7 +233,8 @@ image: ghcr.io/luxiaba/remnanode-lite@sha256:...
 gh attestation verify \
   "oci://${DIGEST_REF}" \
   --repo luxiaba/remnanode-lite \
-  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml
+  --cert-identity https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
+  --deny-self-hosted-runners
 ```
 
 tag 说明“希望引用哪个版本”，digest 说明“实际运行哪一份字节”。受控批量部署应保存后者。
@@ -247,17 +258,17 @@ docker compose logs --tail=100 remnanode
 
 ## 批量上线
 
-批量部署只能使用已经完成 M8 验收的同一个 manifest digest。精确版本 tag 便于阅读，实际下发记录仍应保存 `name@sha256:...`；不要把 `latest` 或 `edge` 直接推送到全部节点。
+批量上线全程使用同一个已验证 manifest digest。`v2.8.0` 是否可发布由前述运行验收范围决定；下面的分阶段流程是上线运维建议，不扩大发布门禁。精确版本 tag 便于阅读，实际下发记录仍应保存 `name@sha256:...`；不要把 `latest` 或 `edge` 直接推送到全部节点。
 
 1. 按架构、发行版、地区和主要流量类型划分节点组，并为每台机器记录当前 digest、目标 digest 和回滚 Compose。
-2. 先更新能覆盖真实 `amd64`、`arm64` 和主要网络环境的少量 canary。至少跨过一个业务高峰，确认 Panel 持续在线、rw-core 成功重同步、真实代理流量正常，且没有 OOM、异常重启、zombie、磁盘或日志持续增长。
+2. 先更新覆盖主要网络环境的少量 canary；异构 fleet 还应覆盖真实 `amd64` 与 `arm64` 节点。至少跨过一个业务高峰，确认 Panel 持续在线、rw-core 成功重同步、真实代理流量正常，且没有 OOM、异常重启、zombie、磁盘或日志持续增长。
 3. 依次扩大到约 `5%`、`25%`、`50%`，最后完成余量。每一阶段都必须结束观察后再继续；单个批次不要大到无法在同一维护窗口内恢复上一 digest。
 4. 每个阶段抽查容器 health、Panel 状态、代理流量、restart/OOM 计数、内存、PID、磁盘和 Xray/nft 错误。部署系统应保存节点与 digest 的对应关系，而不是只记录可移动 tag。
 5. 任一阶段出现无法解释的节点离线、代理失败、反复 Xray 启动失败、OOM、异常重启、zombie、资源越界或同类错误集中增长时，立即停止扩批；先回滚该批次，再保留日志和 digest 关联用于定位。
 
 回滚不依赖 Registry 移动 tag：恢复每台节点已记录的上一 Compose/digest，执行 `pull` 与 `up --force-recreate`，并重新确认 Panel 与真实流量。问题没有形成明确结论前，不要继续更新尚未触及的节点，也不要清理 canary 上的上一镜像。
 
-每个正式 Release 都必须在 release note 中链接已经完成的 M8 验收 manifest。如果没有这项记录，只能把镜像视为验收输入，不能据此进行未经观察的批量上线。
+Release notes 应链接运行验收记录以便追溯，并列明已测试范围和所有 deferred 项。该记录用于说明发布决策，不代表可以跳过观察直接全量上线；批量部署仍应遵循上述分阶段建议。
 
 ## `.env` 可选模式
 

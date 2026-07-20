@@ -32,8 +32,8 @@ ghcr.io/luxiaba/remnanode-lite
 | `X.Y.Z-rnl.N` | Independently versioned project iteration that passed the release process | Recommended for production and precise rollback |
 | `X.Y.Z` | Formal build aligned with the corresponding official version | Recommended for production |
 | `latest` | Most recent stable build that passed the release process | Opt-in stable tracking; not a rollback identifier |
-| `sha-<40-character-commit>` | Candidate built for a `main` commit | Acceptance on real servers |
-| `candidate-sha-<40-character-commit>` | Independently rebuilt candidate manually dispatched from `main` | Acceptance when the automatic candidate is absent or must be rebuilt |
+| `sha-<40-character-commit>` | Candidate built for a `main` commit | Discover the candidate, then resolve and pin its digest |
+| `candidate-sha-<40-character-commit>` | Independently rebuilt candidate manually dispatched from `main` | Discover a manual rebuild, then resolve and pin its digest |
 | `edge` | Moving candidate for current `main` | Short-term observation only |
 
 By project policy, exact versions, `sha-*`, and `candidate-sha-*` are not intentionally moved, but registry tags are not technically immutable. Use a `name@sha256:...` manifest digest for the strongest pin. Before the first formal Release, `latest` and exact version tags do not exist. Select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) and record its manifest digest.
@@ -81,7 +81,7 @@ The maintained source template is [`deploy/compose.single-file.yaml`](../deploy/
 )
 ```
 
-Choose an existing full automatic `sha-<40-character-commit>` candidate or a manual `candidate-sha-<40-character-commit>` candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite), then place the complete tag in the variable. A placeholder, abbreviated commit, or different tag fails before download. This keeps the Compose content and image source at the same commit. Once acceptance begins, also record and pin the resolved manifest digest. Do not retag it as a formal version before acceptance is complete.
+Choose an existing full automatic `sha-<40-character-commit>` candidate or a manual `candidate-sha-<40-character-commit>` candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite), then place the complete tag in the variable. A placeholder, abbreviated commit, or different tag fails before download. This keeps the Compose content and image source at the same commit for discovery. Before the blocking smoke begins, resolve the tag and replace `image:` with `ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>`; a tag-bound Compose file is not valid evidence. Do not retag it as a formal version before acceptance is complete.
 
 ### Formal Release
 
@@ -189,7 +189,17 @@ There is no container runtime state or Xray configuration volume to migrate; the
 
 ## Candidate image automation
 
-When a merge to `main` changes a container build input, the `container` workflow builds a multi-architecture manifest and produces build provenance. Only after those steps succeed does it publish the policy-immutable `sha-<commit>` tag. It moves `edge` only if the commit is still the current `main` HEAD. A candidate has no GitHub Release assets and is not a formal release. Use the earlier candidate-acceptance procedure to deploy it.
+When a merge to `main` changes a container build input, the `container` workflow builds the `linux/amd64` and `linux/arm64` platform images, publishes a multi-architecture manifest, and produces build provenance and attestations. Successful builds for both platforms and verifiable attestations remain release build and supply-chain requirements. They establish artifact identity and build origin; they do not establish successful runtime behavior on either architecture.
+
+Only after those steps succeed does the workflow publish the policy-immutable `sha-<commit>` tag. It moves `edge` only if the commit is still the current `main` HEAD. A candidate has no GitHub Release assets and is not a formal release. Use the earlier candidate-acceptance procedure to deploy it.
+
+## v2.8.0 runtime acceptance profile
+
+For `v2.8.0`, the blocking runtime profile is deliberately limited to one real low-memory Linux `x86_64` (`linux/amd64`) host. Run the candidate with the canonical `deploy/compose.single-file.yaml` from the same commit and pin `image:` to the exact multi-architecture manifest digest. Record the template SHA-256 and image digest, then confirm Compose validation and startup, the reported version, a running and healthy container, actual memory and PID current/peak observations under the canonical limits, Panel connectivity, rw-core startup, representative real proxy traffic, `OOMKilled=false`, and zero container restarts. The smoke must run for at least 600 seconds under every exact host, container-limit, health, and readiness requirement in the [acceptance protocol](development/release-acceptance.md#docker-production-smoke).
+
+`arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` are deferred follow-up validation. They are not release blockers for `v2.8.0`, and their absence must be reported as deferred rather than passed.
+
+An operator-attested runtime record is useful for traceability and review, but it is not unforgeable proof that the observations occurred. Build attestations cover the build chain, not these runtime claims. Release notes must state the actual observed scope without upgrading either kind of evidence into a stronger claim.
 
 ## Pin a digest and verify provenance
 
@@ -218,7 +228,8 @@ With GitHub CLI installed, verify provenance produced by this repository:
 gh attestation verify \
   "oci://${DIGEST_REF}" \
   --repo luxiaba/remnanode-lite \
-  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml
+  --cert-identity https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
+  --deny-self-hosted-runners
 ```
 
 A tag states which version you intend to reference. A digest identifies the bytes actually deployed. A controlled fleet rollout should record the digest.
@@ -242,17 +253,17 @@ To roll back, restore the previously verified YAML or change `image:` back to th
 
 ## Fleet rollout
 
-Deploy a fleet only from one manifest digest that has completed M8 acceptance. Exact version tags are readable, but deployment records must still retain `name@sha256:...`. Do not send `latest` or `edge` directly to every node.
+Use one verified manifest digest throughout a fleet rollout. For `v2.8.0`, release eligibility comes from the runtime profile above; the staged sequence below is an operational rollout recommendation, not an extension of the release gate. Exact version tags are readable, but deployment records must still retain `name@sha256:...`. Do not send `latest` or `edge` directly to every node.
 
 1. Group nodes by architecture, distribution, region, and primary traffic profile. Record the current digest, target digest, and rollback Compose file for every node.
-2. Start with a small canary group covering real `amd64`, `arm64`, and representative network environments. Observe at least one traffic peak. Confirm that the Panel remains connected, rw-core resynchronizes, real proxy traffic succeeds, and there is no OOM, unexpected restart, zombie process, or sustained disk or log growth.
+2. Start with a small canary group covering representative network environments and, for a heterogeneous fleet, real `amd64` and `arm64` nodes. Observe at least one traffic peak. Confirm that the Panel remains connected, rw-core resynchronizes, real proxy traffic succeeds, and there is no OOM, unexpected restart, zombie process, or sustained disk or log growth.
 3. Expand in stages of approximately `5%`, `25%`, and `50%`, then deploy the remainder. Finish each observation period before continuing. Keep each batch small enough to restore its previous digest within the same maintenance window.
 4. At every stage, sample container health, Panel state, proxy traffic, restart and OOM counts, memory, PIDs, disk, and Xray or nft errors. The deployment system must map nodes to digests, not only to a moving tag.
 5. Stop expansion immediately if a stage shows unexplained node loss, proxy failure, repeated Xray startup failure, OOM, unexpected restart, zombies, resource-limit violations, or a clustered increase in similar errors. Roll back that batch first, then preserve logs and their digest association for diagnosis.
 
 Rollback does not depend on moving a registry tag. Restore each node's recorded previous Compose file or digest, run `pull` and `up --force-recreate`, and confirm Panel connectivity and real traffic again. Until the issue has a clear conclusion, do not continue with untouched nodes or prune the previous image from canaries.
 
-Each formal Release must link its completed M8 evidence manifest from its release note. If that record is absent, treat the image as an acceptance input, not authorization for an unobserved fleet rollout.
+Link the runtime acceptance record from the Release notes for traceability, including the tested scope and every deferred item. That record documents the release decision; it is not authorization for an unobserved fleet rollout, which should still follow the staged recommendation above.
 
 ## Optional `.env` layout
 

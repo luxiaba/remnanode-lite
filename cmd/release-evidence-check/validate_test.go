@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,19 +17,21 @@ import (
 )
 
 var (
-	testValidationNow = time.Now().UTC().Truncate(time.Second)
-	testCandidateAt   = testValidationNow.Add(-30 * time.Hour)
-	testStartedAt     = testValidationNow.Add(-26 * time.Hour).Format(time.RFC3339)
-	testFinishedAt    = testValidationNow.Add(-2 * time.Hour).Format(time.RFC3339)
-	testAcceptedAt    = testValidationNow.Add(-time.Hour).Format(time.RFC3339)
+	testCandidateAt = time.Date(2026, 7, 20, 11, 50, 0, 0, time.UTC)
+	testStartedAt   = time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
+	testFinishedAt  = time.Date(2026, 7, 20, 12, 10, 0, 0, time.UTC)
+	testAcceptedAt  = time.Date(2026, 7, 20, 12, 11, 0, 0, time.UTC)
+	testFinalAt     = time.Date(2026, 7, 20, 12, 12, 0, 0, time.UTC)
+	testNow         = time.Date(2026, 7, 20, 13, 0, 0, 0, time.UTC)
 )
 
 type releaseFixture struct {
 	t                    *testing.T
 	root                 string
-	manifest             string
 	candidate            string
+	candidateTree        string
 	candidateImageDigest string
+	manifestPath         string
 }
 
 func TestReleaseProfileMatchesProjectIdentity(t *testing.T) {
@@ -38,38 +39,36 @@ func TestReleaseProfileMatchesProjectIdentity(t *testing.T) {
 		t.Fatalf("release profile version = %q, project version = %q", expectedReleaseVersion, projectversion.Version)
 	}
 	if expectedOfficialNodeVersion != projectversion.ContractVersion {
-		t.Fatalf("release profile contract = %q, project contract = %q", expectedOfficialNodeVersion, projectversion.ContractVersion)
+		t.Fatalf("profile contract = %q, project contract = %q", expectedOfficialNodeVersion, projectversion.ContractVersion)
 	}
 	if expectedReleaseTag != "v"+projectversion.Version {
-		t.Fatalf("release profile tag = %q, want v%s", expectedReleaseTag, projectversion.Version)
+		t.Fatalf("release profile tag = %q", expectedReleaseTag)
 	}
-	if expectedVersionOutput != projectversion.String() {
-		t.Fatalf("release profile version output = %q, want %q", expectedVersionOutput, projectversion.String())
-	}
-	if acceptanceDirectory != "docs/development/acceptance/"+expectedReleaseTag {
-		t.Fatalf("acceptance directory = %q, want versioned directory", acceptanceDirectory)
-	}
-	if releaseNoteRepositoryPath != "docs/releases/"+expectedReleaseTag+".md" {
-		t.Fatalf("release note path = %q, want versioned path", releaseNoteRepositoryPath)
+	if expectedAcceptanceProfile != "docker-production-smoke-v1" {
+		t.Fatalf("acceptance profile = %q", expectedAcceptanceProfile)
 	}
 }
 
-func TestReleaseFinalizationAllowlistIncludesLocalizedStatusDocuments(t *testing.T) {
+func TestReleaseFinalizationAllowlist(t *testing.T) {
 	for _, path := range []string{
 		"README.md",
 		"README.ru.md",
 		"README.zh-CN.md",
+		"CHANGELOG.md",
 		"docs/development/roadmap.md",
 		"docs/i18n/zh-CN/development/roadmap.md",
 		releaseNoteRepositoryPath,
+		manifestRepositoryPath,
+		acceptanceDirectory + "/docker-smoke.json",
 	} {
 		if !isAllowedPostCandidatePath(path) {
 			t.Errorf("release finalization path %q is not allowed", path)
 		}
 	}
 	for _, path := range []string{
-		"internal/version/version.go",
-		"docs/i18n/zh-CN/development/release-acceptance.md",
+		"cmd/remnanode-lite/main.go",
+		acceptanceDirectory + "/systemd.json",
+		acceptanceDirectory + "/compose.json",
 		acceptanceDirectory + "/raw-output.json",
 	} {
 		if isAllowedPostCandidatePath(path) {
@@ -78,399 +77,203 @@ func TestReleaseFinalizationAllowlistIncludesLocalizedStatusDocuments(t *testing
 	}
 }
 
+func TestValidateRisks(t *testing.T) {
+	valid := releaseRisk{
+		ID: "risk", Severity: "P3", Status: "open", Summary: "summary", Mitigation: "mitigation",
+		ReleaseBlocking: boolPointer(false),
+	}
+	if err := validateRisks([]releaseRisk{valid}); err != nil {
+		t.Fatalf("validateRisks() error = %v", err)
+	}
+	tests := []struct {
+		name    string
+		mutate  func(*releaseRisk)
+		wantErr string
+	}{
+		{name: "empty id", mutate: func(risk *releaseRisk) { risk.ID = " " }, wantErr: "id must not be empty"},
+		{name: "bad severity", mutate: func(risk *releaseRisk) { risk.Severity = "P0" }, wantErr: "unsupported severity"},
+		{name: "bad status", mutate: func(risk *releaseRisk) { risk.Status = "waived" }, wantErr: "unsupported status"},
+		{name: "missing blocking decision", mutate: func(risk *releaseRisk) { risk.ReleaseBlocking = nil }, wantErr: "releaseBlocking is required"},
+		{name: "blocking", mutate: func(risk *releaseRisk) { risk.ReleaseBlocking = boolPointer(true) }, wantErr: "release-blocking"},
+		{name: "open P2", mutate: func(risk *releaseRisk) { risk.Severity = "P2" }, wantErr: "unclosed P2"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			risk := valid
+			test.mutate(&risk)
+			err := validateRisks([]releaseRisk{risk})
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("validateRisks() error = %v, want containing %q", err, test.wantErr)
+			}
+		})
+	}
+	if err := validateRisks([]releaseRisk{valid, valid}); err == nil || !strings.Contains(err.Error(), "duplicate risk id") {
+		t.Fatalf("validateRisks() duplicate error = %v", err)
+	}
+}
+
 func TestValidateReleaseEvidence(t *testing.T) {
 	fixture := newReleaseFixture(t)
-
-	result, err := validateReleaseEvidenceAt(context.Background(), fixture.root, fixture.manifest, expectedReleaseTag, testValidationNow)
+	result, err := validateReleaseEvidenceAt(
+		context.Background(), fixture.root, fixture.manifestPath, expectedReleaseTag, testNow,
+	)
 	if err != nil {
-		t.Fatalf("validateReleaseEvidence() error = %v", err)
+		t.Fatalf("validateReleaseEvidenceAt() error = %v", err)
 	}
-	if result.ReleaseTag != expectedReleaseTag ||
-		result.CandidateCommit != fixture.candidate ||
+	if result.ReleaseTag != expectedReleaseTag || result.CandidateCommit != fixture.candidate ||
 		result.CandidateImageDigest != fixture.candidateImageDigest {
-		t.Fatalf("validateReleaseEvidence() = %#v", result)
+		t.Fatalf("validationResult = %#v", result)
 	}
 	for _, arch := range []string{"amd64", "arm64"} {
 		if result.NodeSHA256ByArch[arch] != testNodeSHA(arch) {
-			t.Fatalf("NodeSHA256ByArch[%s] = %q, want %q", arch, result.NodeSHA256ByArch[arch], testNodeSHA(arch))
+			t.Errorf("NodeSHA256ByArch[%s] = %q, want %q", arch, result.NodeSHA256ByArch[arch], testNodeSHA(arch))
 		}
+	}
+	if fixture.isDirty() {
+		t.Fatal("validation changed the fixture worktree")
+	}
+}
+
+func TestValidateReleaseEvidenceRejectsWrongTag(t *testing.T) {
+	fixture := newReleaseFixture(t)
+	_, err := validateReleaseEvidenceAt(
+		context.Background(), fixture.root, fixture.manifestPath, "v2.8.0-rnl.1", testNow,
+	)
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("validateReleaseEvidenceAt() error = %v", err)
 	}
 }
 
 func TestValidateReleaseEvidenceFailures(t *testing.T) {
 	tests := []struct {
-		name       string
-		mutate     func(*releaseFixture)
-		leaveDirty bool
-		wantErr    string
+		name    string
+		mutate  func(*releaseFixture)
+		wantErr string
 	}{
 		{
-			name: "manifest unknown field",
+			name: "wrong acceptance profile",
 			mutate: func(fixture *releaseFixture) {
-				raw := fixture.readFile(manifestRepositoryPath)
-				fixture.writeFile(manifestRepositoryPath, appendJSONField(raw, `"unexpected":true`))
+				manifest := fixture.readManifest()
+				manifest.AcceptanceProfile = "m8"
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "unknown field \"unexpected\"",
-		},
-		{
-			name: "manifest duplicate field",
-			mutate: func(fixture *releaseFixture) {
-				raw := fixture.readFile(manifestRepositoryPath)
-				fixture.writeFile(manifestRepositoryPath, appendJSONField(raw, `"decision":"pass"`))
-			},
-			wantErr: "duplicate JSON field \"decision\"",
-		},
-		{
-			name: "manifest case-insensitive field alias",
-			mutate: func(fixture *releaseFixture) {
-				raw := fixture.readFile(manifestRepositoryPath)
-				fixture.writeFile(manifestRepositoryPath, appendJSONField(raw, `"Decision":"pass"`))
-			},
-			wantErr: "unknown field \"Decision\"",
-		},
-		{
-			name: "missing candidate image digest",
-			mutate: func(fixture *releaseFixture) {
-				var manifest map[string]json.RawMessage
-				fixture.readJSON(manifestRepositoryPath, &manifest)
-				delete(manifest, "candidateImageDigest")
-				fixture.writeJSON(manifestRepositoryPath, manifest)
-			},
-			wantErr: "candidateImageDigest must be sha256: followed by 64 lowercase hexadecimal characters",
+			wantErr: "acceptanceProfile",
 		},
 		{
 			name: "invalid candidate image digest",
 			mutate: func(fixture *releaseFixture) {
 				manifest := fixture.readManifest()
-				manifest.CandidateImageDigest = "sha256:" + strings.Repeat("A", 64)
+				manifest.CandidateImageDigest = "sha256:BAD"
 				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "candidateImageDigest must be sha256: followed by 64 lowercase hexadecimal characters",
+			wantErr: "candidateImageDigest",
 		},
 		{
-			name: "evidence unknown field",
-			mutate: func(fixture *releaseFixture) {
-				path := acceptanceDirectory + "/panel.json"
-				raw := fixture.readFile(path)
-				fixture.writeFile(path, appendJSONField(raw, `"unexpected":true`))
-				fixture.updateEvidenceHash("panel")
-			},
-			wantErr: "unknown field \"unexpected\"",
-		},
-		{
-			name: "evidence digest mismatch",
-			mutate: func(fixture *releaseFixture) {
-				path := acceptanceDirectory + "/panel.json"
-				fixture.writeFile(path, append(fixture.readFile(path), '\n'))
-			},
-			wantErr: "SHA-256=",
-		},
-		{
-			name: "untracked evidence",
-			mutate: func(fixture *releaseFixture) {
-				fixture.git("rm", "--cached", "--", acceptanceDirectory+"/panel.json")
-			},
-			leaveDirty: true,
-			wantErr:    "must have exactly one Git index entry",
-		},
-		{
-			name: "intent-to-add evidence",
-			mutate: func(fixture *releaseFixture) {
-				path := acceptanceDirectory + "/panel.json"
-				fixture.git("rm", "--cached", "--", path)
-				fixture.git("add", "--intent-to-add", "--", path)
-			},
-			leaveDirty: true,
-			wantErr:    "index entry does not match HEAD",
-		},
-		{
-			name: "conflicted evidence index",
-			mutate: func(fixture *releaseFixture) {
-				fixture.makeIndexConflict(acceptanceDirectory + "/panel.json")
-			},
-			leaveDirty: true,
-			wantErr:    "must have exactly one Git index entry",
-		},
-		{
-			name: "staged evidence differs from HEAD",
-			mutate: func(fixture *releaseFixture) {
-				path := acceptanceDirectory + "/panel.json"
-				fixture.writeFile(path, append(fixture.readFile(path), '\n'))
-				fixture.git("add", "--", path)
-			},
-			leaveDirty: true,
-			wantErr:    "index entry does not match HEAD",
-		},
-		{
-			name: "worktree evidence differs from HEAD",
-			mutate: func(fixture *releaseFixture) {
-				path := acceptanceDirectory + "/panel.json"
-				fixture.writeFile(path, append(fixture.readFile(path), '\n'))
-			},
-			leaveDirty: true,
-			wantErr:    "worktree bytes do not match HEAD blob",
-		},
-		{
-			name: "worktree evidence is executable",
-			mutate: func(fixture *releaseFixture) {
-				path := filepath.Join(fixture.root, filepath.FromSlash(acceptanceDirectory+"/panel.json"))
-				if err := os.Chmod(path, 0o755); err != nil {
-					fixture.t.Fatalf("make Panel evidence executable: %v", err)
-				}
-			},
-			leaveDirty: true,
-			wantErr:    "worktree mode is executable",
-		},
-		{
-			name: "acceptance ancestor symlink",
-			mutate: func(fixture *releaseFixture) {
-				fixture.replaceAcceptanceDirectoryWithSymlink()
-			},
-			leaveDirty: true,
-			wantErr:    "contains symlink component",
-		},
-		{
-			name: "evidence HEAD entry is a symlink",
-			mutate: func(fixture *releaseFixture) {
-				path := acceptanceDirectory + "/panel.json"
-				original := fixture.readFile(path)
-				absolute := filepath.Join(fixture.root, filepath.FromSlash(path))
-				if err := os.Remove(absolute); err != nil {
-					fixture.t.Fatalf("remove Panel evidence: %v", err)
-				}
-				if err := os.Symlink("systemd.json", absolute); err != nil {
-					fixture.t.Fatalf("symlink Panel evidence: %v", err)
-				}
-				fixture.commitAll("replace Panel evidence with a symlink")
-				if err := os.Remove(absolute); err != nil {
-					fixture.t.Fatalf("remove Panel evidence symlink: %v", err)
-				}
-				fixture.writeFile(path, original)
-			},
-			leaveDirty: true,
-			wantErr:    "has HEAD mode 120000",
-		},
-		{
-			name: "Panel route mismatch",
-			mutate: func(fixture *releaseFixture) {
-				var evidence panelEvidence
-				fixture.readJSON(acceptanceDirectory+"/panel.json", &evidence)
-				evidence.RoutesPassed = 25
-				fixture.writeJSON(acceptanceDirectory+"/panel.json", evidence)
-				fixture.updateEvidenceHash("panel")
-			},
-			wantErr: "26 total, 26 passed, 0 semantic mismatches",
-		},
-		{
-			name: "rw-core process-group cleanup false",
-			mutate: func(fixture *releaseFixture) {
-				var evidence systemEvidence
-				fixture.readJSON(acceptanceDirectory+"/systemd.json", &evidence)
-				evidence.Checks.RWCoreProcessGroupCleanup = false
-				fixture.writeJSON(acceptanceDirectory+"/systemd.json", evidence)
-				fixture.updateEvidenceHash("systemd")
-			},
-			wantErr: "system check rwCoreProcessGroupCleanup must be true",
-		},
-		{
-			name: "rw-core process-group cleanup missing",
-			mutate: func(fixture *releaseFixture) {
-				fixture.removeEvidenceCheck("systemd", "rwCoreProcessGroupCleanup")
-			},
-			wantErr: "system check rwCoreProcessGroupCleanup must be true",
-		},
-		{
-			name: "lifecycle plugin serialization false",
-			mutate: func(fixture *releaseFixture) {
-				var evidence panelEvidence
-				fixture.readJSON(acceptanceDirectory+"/panel.json", &evidence)
-				evidence.Checks.LifecyclePluginSerialization = false
-				fixture.writeJSON(acceptanceDirectory+"/panel.json", evidence)
-				fixture.updateEvidenceHash("panel")
-			},
-			wantErr: "Panel check lifecyclePluginSerialization must be true",
-		},
-		{
-			name: "lifecycle plugin serialization missing",
-			mutate: func(fixture *releaseFixture) {
-				fixture.removeEvidenceCheck("panel", "lifecyclePluginSerialization")
-			},
-			wantErr: "Panel check lifecyclePluginSerialization must be true",
-		},
-		{
-			name: "missing Compose evidence reference",
+			name: "unknown candidate commit",
 			mutate: func(fixture *releaseFixture) {
 				manifest := fixture.readManifest()
-				manifest.Evidence = manifest.Evidence[:len(manifest.Evidence)-1]
+				manifest.CandidateCommit = strings.Repeat("0", 40)
 				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "manifest evidence count=4, want 5",
+			wantErr: "verify candidate commit",
 		},
 		{
-			name: "Compose candidate image digest differs from manifest",
+			name: "candidate is not ancestor",
 			mutate: func(fixture *releaseFixture) {
-				var evidence composeEvidence
-				fixture.readJSON(acceptanceDirectory+"/compose.json", &evidence)
-				evidence.CandidateImageDigest = "sha256:" + strings.Repeat("c", 64)
-				fixture.writeJSON(acceptanceDirectory+"/compose.json", evidence)
-				fixture.updateEvidenceHash("compose")
+				commit, tree := fixture.createNonAncestorCandidate()
+				manifest := fixture.readManifest()
+				manifest.CandidateCommit = commit
+				manifest.CandidateTree = tree
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "want manifest candidateImageDigest",
+			wantErr: "is not an ancestor of HEAD",
 		},
 		{
-			name: "Compose source digest differs from candidate",
-			mutate: func(fixture *releaseFixture) {
-				var evidence composeEvidence
-				fixture.readJSON(acceptanceDirectory+"/compose.json", &evidence)
-				evidence.Source.SHA256 = strings.Repeat("d", 64)
-				fixture.writeJSON(acceptanceDirectory+"/compose.json", evidence)
-				fixture.updateEvidenceHash("compose")
-			},
-			wantErr: "want candidate Git object SHA-256",
-		},
-		{
-			name: "Compose legacy single-run schema is rejected",
-			mutate: func(fixture *releaseFixture) {
-				path := acceptanceDirectory + "/compose.json"
-				raw := fixture.readFile(path)
-				fixture.writeFile(path, appendJSONField(raw, `"environment":{}`))
-				fixture.updateEvidenceHash("compose")
-			},
-			wantErr: "unknown field \"environment\"",
-		},
-		{
-			name: "Compose required zero host swap observation missing",
-			mutate: func(fixture *releaseFixture) {
-				var document map[string]any
-				path := acceptanceDirectory + "/compose.json"
-				fixture.readJSON(path, &document)
-				runs := document["runs"].([]any)
-				hostResources := runs[1].(map[string]any)["hostResources"].(map[string]any)
-				delete(hostResources, "swapTotalBytes")
-				fixture.writeJSON(path, document)
-				fixture.updateEvidenceHash("compose")
-			},
-			wantErr: "Compose run \"arm64\": Compose hostResources swapTotalBytes is required",
-		},
-		{
-			name: "Compose actual memory limit mismatch",
-			mutate: func(fixture *releaseFixture) {
-				var evidence composeEvidence
-				fixture.readJSON(acceptanceDirectory+"/compose.json", &evidence)
-				evidence.Runs[0].Limits.MemoryLimitBytes--
-				fixture.writeJSON(acceptanceDirectory+"/compose.json", evidence)
-				fixture.updateEvidenceHash("compose")
-			},
-			wantErr: "actual Compose limits must be",
-		},
-		{
-			name: "resource peak over limit",
-			mutate: func(fixture *releaseFixture) {
-				var evidence resourceFaultEvidence
-				fixture.readJSON(acceptanceDirectory+"/resource-fault.json", &evidence)
-				evidence.Metrics.PeakMemoryMiB = 449
-				fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", evidence)
-				fixture.updateEvidenceHash("resource-fault")
-			},
-			wantErr: "peak memory 1..448 MiB",
-		},
-		{
-			name: "resource soak shorter than declared",
-			mutate: func(fixture *releaseFixture) {
-				var evidence resourceFaultEvidence
-				fixture.readJSON(acceptanceDirectory+"/resource-fault.json", &evidence)
-				evidence.StartedAt = testValidationNow.Add(-3 * time.Hour).Format(time.RFC3339)
-				fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", evidence)
-				fixture.updateEvidenceHash("resource-fault")
-			},
-			wantErr: "wall-clock duration=3600 seconds",
-		},
-		{
-			name: "resource Node artifact differs from system evidence",
-			mutate: func(fixture *releaseFixture) {
-				var evidence resourceFaultEvidence
-				fixture.readJSON(acceptanceDirectory+"/resource-fault.json", &evidence)
-				evidence.Node.BinarySHA256 = strings.Repeat("c", 64)
-				fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", evidence)
-				fixture.updateEvidenceHash("resource-fault")
-			},
-			wantErr: "node binarySha256 for arm64 does not match system evidence",
-		},
-		{
-			name: "Panel artifact differs from system evidence",
-			mutate: func(fixture *releaseFixture) {
-				var evidence panelEvidence
-				fixture.readJSON(acceptanceDirectory+"/panel.json", &evidence)
-				evidence.Artifacts[0].NodeBinarySHA256 = strings.Repeat("d", 64)
-				fixture.writeJSON(acceptanceDirectory+"/panel.json", evidence)
-				fixture.updateEvidenceHash("panel")
-			},
-			wantErr: "target systemd nodeBinarySha256 does not match system evidence",
-		},
-		{
-			name: "resource rw-core artifact differs from system evidence",
-			mutate: func(fixture *releaseFixture) {
-				var evidence resourceFaultEvidence
-				fixture.readJSON(acceptanceDirectory+"/resource-fault.json", &evidence)
-				evidence.RWCore.BinarySHA256 = strings.Repeat("e", 64)
-				fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", evidence)
-				fixture.updateEvidenceHash("resource-fault")
-			},
-			wantErr: "rw-core binarySha256 for arm64 does not match system evidence",
-		},
-		{
-			name: "missing Panel artifacts",
-			mutate: func(fixture *releaseFixture) {
-				var evidence panelEvidence
-				fixture.readJSON(acceptanceDirectory+"/panel.json", &evidence)
-				evidence.Artifacts = nil
-				fixture.writeJSON(acceptanceDirectory+"/panel.json", evidence)
-				fixture.updateEvidenceHash("panel")
-			},
-			wantErr: "Panel artifacts count=0, want 2",
-		},
-		{
-			name: "missing no-swap policy field",
+			name: "invalid candidate node hash",
 			mutate: func(fixture *releaseFixture) {
 				manifest := fixture.readManifest()
-				manifest.Policy.Swap = nil
+				manifest.CandidateNodeSHA256.ARM64 = "missing"
 				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "acceptance policy must be",
+			wantErr: "candidateNodeSha256",
 		},
 		{
-			name: "missing semantic mismatch count",
+			name: "deferred validation incomplete",
 			mutate: func(fixture *releaseFixture) {
-				var evidence panelEvidence
-				fixture.readJSON(acceptanceDirectory+"/panel.json", &evidence)
-				evidence.SemanticMismatches = nil
-				fixture.writeJSON(acceptanceDirectory+"/panel.json", evidence)
-				fixture.updateEvidenceHash("panel")
+				manifest := fixture.readManifest()
+				manifest.DeferredValidation = manifest.DeferredValidation[:len(manifest.DeferredValidation)-1]
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "semanticMismatches is required",
+			wantErr: "deferredValidation",
 		},
 		{
-			name: "system architectures incomplete",
+			name: "deferred validation reordered",
 			mutate: func(fixture *releaseFixture) {
-				var evidence systemEvidence
-				fixture.readJSON(acceptanceDirectory+"/openrc.json", &evidence)
-				evidence.Environment.Arch = "amd64"
-				evidence.RWCore = validRWCoreArtifact("amd64")
-				fixture.writeJSON(acceptanceDirectory+"/openrc.json", evidence)
-				fixture.updateEvidenceHash("openrc")
+				manifest := fixture.readManifest()
+				manifest.DeferredValidation[0], manifest.DeferredValidation[1] = manifest.DeferredValidation[1], manifest.DeferredValidation[0]
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "must cover amd64 and arm64",
+			wantErr: "deferredValidation",
 		},
 		{
-			name: "fault recovery check failed",
+			name: "missing evidence reference",
 			mutate: func(fixture *releaseFixture) {
-				var evidence resourceFaultEvidence
-				fixture.readJSON(acceptanceDirectory+"/resource-fault.json", &evidence)
-				evidence.Checks.CoreKillRecovery = false
-				fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", evidence)
-				fixture.updateEvidenceHash("resource-fault")
+				manifest := fixture.readManifest()
+				manifest.Evidence = nil
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
-			wantErr: "all resource and fault-recovery checks must pass",
+			wantErr: "evidence count=0",
+		},
+		{
+			name: "wrong evidence kind",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.Evidence[0].Kind = "compose"
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
+			},
+			wantErr: "unsupported evidence kind",
+		},
+		{
+			name: "wrong evidence path",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.Evidence[0].Path = acceptanceDirectory + "/../docker-smoke.json"
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
+			},
+			wantErr: "path=",
+		},
+		{
+			name: "evidence status not pass",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.Evidence[0].Status = "fail"
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
+			},
+			wantErr: "status=\"fail\"",
+		},
+		{
+			name: "release blocking risk",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.Risks = []releaseRisk{{
+					ID: "risk", Severity: "P3", Status: "open", Summary: "summary", Mitigation: "mitigation",
+					ReleaseBlocking: boolPointer(true),
+				}}
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
+			},
+			wantErr: "release-blocking",
 		},
 		{
 			name: "candidate tree mismatch",
@@ -478,122 +281,204 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 				manifest := fixture.readManifest()
 				manifest.CandidateTree = strings.Repeat("0", 40)
 				fixture.writeManifest(manifest)
+				fixture.amendAll()
 			},
 			wantErr: "candidate tree=",
 		},
 		{
+			name: "evidence candidate mismatch",
+			mutate: func(fixture *releaseFixture) {
+				fixture.mutateSmoke(func(evidence *dockerSmokeEvidence) {
+					evidence.CandidateCommit = strings.Repeat("0", 40)
+				})
+			},
+			wantErr: "candidateCommit=",
+		},
+		{
+			name: "evidence digest mismatch",
+			mutate: func(fixture *releaseFixture) {
+				fixture.mutateSmoke(func(evidence *dockerSmokeEvidence) {
+					evidence.CandidateImageDigest = "sha256:" + strings.Repeat("0", 64)
+				})
+			},
+			wantErr: "candidateImageDigest",
+		},
+		{
+			name: "candidate compose hash mismatch",
+			mutate: func(fixture *releaseFixture) {
+				fixture.mutateSmoke(func(evidence *dockerSmokeEvidence) {
+					evidence.Source.SHA256 = strings.Repeat("0", 64)
+				})
+			},
+			wantErr: "candidate Git object",
+		},
+		{
+			name: "candidate node hash mismatch",
+			mutate: func(fixture *releaseFixture) {
+				fixture.mutateSmoke(func(evidence *dockerSmokeEvidence) {
+					evidence.Node.BinarySHA256 = strings.Repeat("0", 64)
+				})
+			},
+			wantErr: "candidateNodeSha256.amd64",
+		},
+		{
+			name: "unsafe command",
+			mutate: func(fixture *releaseFixture) {
+				fixture.mutateSmoke(func(evidence *dockerSmokeEvidence) {
+					evidence.Command = []string{"collector", "SECRET_KEY=value"}
+				})
+			},
+			wantErr: "potentially sensitive",
+		},
+		{
+			name: "short smoke",
+			mutate: func(fixture *releaseFixture) {
+				fixture.mutateSmoke(func(evidence *dockerSmokeEvidence) {
+					evidence.FinishedAt = testStartedAt.Add(minimumDockerSmokeDuration - time.Second).Format(time.RFC3339)
+				})
+			},
+			wantErr: "wall-clock duration",
+		},
+		{
+			name: "accepted before evidence completion",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.AcceptedAt = testFinishedAt.Add(-time.Second).Format(time.RFC3339)
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
+			},
+			wantErr: "before evidence completion",
+		},
+		{
+			name: "accepted in future",
+			mutate: func(fixture *releaseFixture) {
+				manifest := fixture.readManifest()
+				manifest.AcceptedAt = testNow.Add(10 * time.Minute).Format(time.RFC3339)
+				fixture.writeManifest(manifest)
+				fixture.amendAll()
+			},
+			wantErr: "later than current time",
+		},
+		{
 			name: "evidence predates candidate",
 			mutate: func(fixture *releaseFixture) {
-				var evidence panelEvidence
-				fixture.readJSON(acceptanceDirectory+"/panel.json", &evidence)
-				evidence.StartedAt = "2000-01-01T00:00:00Z"
-				evidence.FinishedAt = "2000-01-01T01:00:00Z"
-				fixture.writeJSON(acceptanceDirectory+"/panel.json", evidence)
-				fixture.updateEvidenceHash("panel")
+				fixture.mutateSmoke(func(evidence *dockerSmokeEvidence) {
+					evidence.StartedAt = testCandidateAt.Add(-time.Second).Format(time.RFC3339)
+				})
 			},
-			wantErr: "startedAt predates candidate commit",
+			wantErr: "predates candidate",
 		},
 		{
-			name: "acceptedAt is in the future",
+			name: "unknown manifest field",
+			mutate: func(fixture *releaseFixture) {
+				raw := appendJSONField(fixture.readFile(manifestRepositoryPath), `"unexpected":true`)
+				fixture.writeFile(manifestRepositoryPath, raw)
+				fixture.amendAll()
+			},
+			wantErr: "unknown field",
+		},
+		{
+			name: "duplicate manifest field",
+			mutate: func(fixture *releaseFixture) {
+				raw := appendJSONField(fixture.readFile(manifestRepositoryPath), `"releaseTag":"v2.8.0"`)
+				fixture.writeFile(manifestRepositoryPath, raw)
+				fixture.amendAll()
+			},
+			wantErr: "duplicate JSON field",
+		},
+		{
+			name: "unknown smoke field",
+			mutate: func(fixture *releaseFixture) {
+				path := acceptanceDirectory + "/docker-smoke.json"
+				raw := appendJSONField(fixture.readFile(path), `"unexpected":true`)
+				fixture.writeFile(path, raw)
+				fixture.updateEvidenceHash()
+				fixture.amendAll()
+			},
+			wantErr: "unknown field",
+		},
+		{
+			name: "evidence SHA mismatch",
+			mutate: func(fixture *releaseFixture) {
+				path := acceptanceDirectory + "/docker-smoke.json"
+				raw := appendJSONField(fixture.readFile(path), `"unexpected":true`)
+				fixture.writeFile(path, raw)
+				fixture.amendAll()
+			},
+			wantErr: "SHA-256=",
+		},
+		{
+			name: "dirty manifest",
 			mutate: func(fixture *releaseFixture) {
 				manifest := fixture.readManifest()
-				manifest.AcceptedAt = testValidationNow.Add(10 * time.Minute).Format(time.RFC3339)
+				manifest.Decision = "fail"
 				fixture.writeManifest(manifest)
 			},
-			wantErr: "later than current time plus 5m0s",
+			wantErr: "worktree bytes do not match HEAD blob",
 		},
 		{
-			name: "evidence finishes in the future",
+			name: "executable evidence",
 			mutate: func(fixture *releaseFixture) {
-				var evidence panelEvidence
-				fixture.readJSON(acceptanceDirectory+"/panel.json", &evidence)
-				evidence.StartedAt = testValidationNow.Add(-time.Hour).Format(time.RFC3339)
-				evidence.FinishedAt = testValidationNow.Add(10 * time.Minute).Format(time.RFC3339)
-				fixture.writeJSON(acceptanceDirectory+"/panel.json", evidence)
-				fixture.updateEvidenceHash("panel")
-			},
-			wantErr: "panel finishedAt",
-		},
-		{
-			name: "acceptedAt is later than HEAD commit",
-			mutate: func(fixture *releaseFixture) {
-				fixture.amendCommitAt(testValidationNow.Add(-3 * time.Hour))
-			},
-			wantErr: "later than HEAD commit time plus 5m0s",
-		},
-		{
-			name: "acceptedAt predates evidence completion",
-			mutate: func(fixture *releaseFixture) {
-				manifest := fixture.readManifest()
-				manifest.AcceptedAt = testValidationNow.Add(-3 * time.Hour).Format(time.RFC3339)
-				fixture.writeManifest(manifest)
-			},
-			wantErr: "is before evidence completion",
-		},
-		{
-			name: "open P2 risk",
-			mutate: func(fixture *releaseFixture) {
-				manifest := fixture.readManifest()
-				manifest.Risks = []releaseRisk{{
-					ID: "R-P2", Severity: "P2", Status: "open",
-					Summary: "known defect", Mitigation: "fix before release", ReleaseBlocking: boolPointer(false),
-				}}
-				fixture.writeManifest(manifest)
-			},
-			wantErr: "is an unclosed P2",
-		},
-		{
-			name: "post-candidate code change",
-			mutate: func(fixture *releaseFixture) {
-				fixture.writeFile("internal/changed.go", []byte("package internal\n"))
-				fixture.commitAll("change code after acceptance candidate")
-			},
-			wantErr: "outside the release-finalization allowlist",
-		},
-		{
-			name: "post-candidate code change then revert",
-			mutate: func(fixture *releaseFixture) {
-				fixture.writeFile("code.txt", []byte("temporarily changed\n"))
-				fixture.commitAll("temporarily change candidate code")
-				fixture.writeFile("code.txt", []byte("release candidate\n"))
-				fixture.commitAll("revert candidate code")
-			},
-			wantErr: "outside the release-finalization allowlist",
-		},
-		{
-			name: "post-candidate merge",
-			mutate: func(fixture *releaseFixture) {
-				fixture.createAllowedMergeCommit()
-			},
-			wantErr: "merges are not allowed during release finalization",
-		},
-		{
-			name: "multiple allowed post-candidate commits",
-			mutate: func(fixture *releaseFixture) {
-				fixture.writeFile("README.md", []byte("# release\n\nsecond finalization commit\n"))
-				fixture.commitAll("add another allowed release documentation commit")
-			},
-			wantErr: "must contain exactly one single-parent commit",
-		},
-		{
-			name: "post-candidate code rename",
-			mutate: func(fixture *releaseFixture) {
-				destination := releaseNoteRepositoryPath
-				fixture.git("rm", "--", destination)
-				if err := os.MkdirAll(filepath.Join(fixture.root, filepath.Dir(destination)), 0o755); err != nil {
-					fixture.t.Fatalf("recreate release-note directory: %v", err)
+				path := filepath.Join(fixture.root, filepath.FromSlash(acceptanceDirectory+"/docker-smoke.json"))
+				if err := os.Chmod(path, 0o755); err != nil {
+					fixture.t.Fatal(err)
 				}
-				fixture.git("mv", "code.txt", destination)
-				fixture.commitAll("rename code into acceptance directory")
+				fixture.amendAll()
 			},
-			wantErr: "outside the release-finalization allowlist",
+			wantErr: "HEAD mode 100755",
+		},
+		{
+			name: "symlink acceptance directory",
+			mutate: func(fixture *releaseFixture) {
+				fixture.replaceAcceptanceDirectoryWithSymlink()
+			},
+			wantErr: "symlink",
+		},
+		{
+			name: "index conflict",
+			mutate: func(fixture *releaseFixture) {
+				fixture.makeIndexConflict(manifestRepositoryPath)
+			},
+			wantErr: "exactly one Git index entry",
 		},
 		{
 			name: "extra acceptance file",
 			mutate: func(fixture *releaseFixture) {
 				fixture.writeFile(acceptanceDirectory+"/raw-output.json", []byte("{}\n"))
+				fixture.amendAll()
 			},
 			wantErr: "acceptance files in HEAD must be exactly",
+		},
+		{
+			name: "code changed during finalization",
+			mutate: func(fixture *releaseFixture) {
+				fixture.writeFile("code.txt", []byte("changed\n"))
+				fixture.amendAll()
+			},
+			wantErr: "outside the release-finalization allowlist",
+		},
+		{
+			name: "rename cannot hide code deletion",
+			mutate: func(fixture *releaseFixture) {
+				fixture.git("mv", "code.txt", "README.md")
+				fixture.amendAll()
+			},
+			wantErr: "outside the release-finalization allowlist",
+		},
+		{
+			name: "multiple finalization commits",
+			mutate: func(fixture *releaseFixture) {
+				fixture.writeFile("README.md", []byte("release\n"))
+				fixture.commitAllAt("second finalization", testFinalAt.Add(time.Minute))
+			},
+			wantErr: "exactly one single-parent commit",
+		},
+		{
+			name: "merge finalization",
+			mutate: func(fixture *releaseFixture) {
+				fixture.createAllowedMergeCommit()
+			},
+			wantErr: "merges are not allowed",
 		},
 	}
 
@@ -601,13 +486,11 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			fixture := newReleaseFixture(t)
 			test.mutate(fixture)
-			if !test.leaveDirty && fixture.isDirty() {
-				fixture.commitAll("record invalid release evidence")
-			}
-
-			_, err := validateReleaseEvidenceAt(context.Background(), fixture.root, fixture.manifest, expectedReleaseTag, testValidationNow)
+			_, err := validateReleaseEvidenceAt(
+				context.Background(), fixture.root, fixture.manifestPath, expectedReleaseTag, testNow,
+			)
 			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
-				t.Fatalf("validateReleaseEvidence() error = %v, want substring %q", err, test.wantErr)
+				t.Fatalf("validateReleaseEvidenceAt() error = %v, want containing %q", err, test.wantErr)
 			}
 		})
 	}
@@ -615,50 +498,42 @@ func TestValidateReleaseEvidenceFailures(t *testing.T) {
 
 func TestRunRequiresFlags(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := run(nil, &stdout, &stderr); code != 2 {
-		t.Fatalf("run() code = %d, want 2", code)
+	if code := runInRepository(t.TempDir(), nil, &stdout, &stderr); code != 2 {
+		t.Fatalf("runInRepository() = %d, want 2", code)
 	}
 	if !strings.Contains(stderr.String(), "-manifest and -tag are required") {
-		t.Fatalf("run() stderr = %q", stderr.String())
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 
 func TestRunValidatesReleaseArtifacts(t *testing.T) {
 	fixture := newReleaseFixture(t)
-	artifactsDirectory := t.TempDir()
+	artifacts := t.TempDir()
 	for _, arch := range []string{"amd64", "arm64"} {
-		path := filepath.Join(artifactsDirectory, "remnanode-lite_linux_"+arch)
+		path := filepath.Join(artifacts, "remnanode-lite_linux_"+arch)
 		if err := os.WriteFile(path, testNodeBinary(arch), 0o755); err != nil {
-			t.Fatalf("write %s artifact: %v", arch, err)
+			t.Fatal(err)
 		}
 	}
-	args := []string{
-		"-manifest", fixture.manifest,
-		"-tag", expectedReleaseTag,
-		"-artifacts", artifactsDirectory,
-	}
+	args := []string{"-manifest", fixture.manifestPath, "-tag", expectedReleaseTag, "-artifacts", artifacts}
 	var stdout, stderr bytes.Buffer
 	if code := runInRepository(fixture.root, args, &stdout, &stderr); code != 0 {
-		t.Fatalf("runInRepository() code = %d, stderr = %q", code, stderr.String())
+		t.Fatalf("runInRepository() = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "release evidence check passed") {
-		t.Fatalf("runInRepository() stdout = %q", stdout.String())
-	}
-	if !strings.Contains(stdout.String(), fixture.candidateImageDigest) {
-		t.Fatalf("runInRepository() stdout = %q, want image digest %q", stdout.String(), fixture.candidateImageDigest)
+	if !strings.Contains(stdout.String(), fixture.candidate) || !strings.Contains(stdout.String(), fixture.candidateImageDigest) {
+		t.Fatalf("stdout = %q", stdout.String())
 	}
 
-	arm64Path := filepath.Join(artifactsDirectory, "remnanode-lite_linux_arm64")
-	if err := os.WriteFile(arm64Path, []byte("wrong artifact\n"), 0o755); err != nil {
-		t.Fatalf("replace arm64 artifact: %v", err)
+	if err := os.WriteFile(filepath.Join(artifacts, "remnanode-lite_linux_arm64"), []byte("wrong"), 0o755); err != nil {
+		t.Fatal(err)
 	}
 	stdout.Reset()
 	stderr.Reset()
 	if code := runInRepository(fixture.root, args, &stdout, &stderr); code != 1 {
-		t.Fatalf("runInRepository() mismatch code = %d, want 1", code)
+		t.Fatalf("runInRepository() with wrong artifact = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "arm64 artifact SHA-256=") {
-		t.Fatalf("runInRepository() mismatch stderr = %q", stderr.String())
+	if !strings.Contains(stderr.String(), "arm64 artifact SHA-256") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 
@@ -667,249 +542,67 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is required for release evidence tests")
 	}
-
 	fixture := &releaseFixture{
 		t:                    t,
 		root:                 t.TempDir(),
-		manifest:             manifestRepositoryPath,
 		candidateImageDigest: "sha256:" + strings.Repeat("a", 64),
+		manifestPath:         manifestRepositoryPath,
 	}
 	fixture.git("init", "-q")
-	fixture.writeFile("code.txt", []byte("release candidate\n"))
+	fixture.git("config", "user.name", "Release Test")
+	fixture.git("config", "user.email", "release@example.invalid")
+	fixture.git("config", "commit.gpgsign", "false")
+	fixture.writeFile("code.txt", []byte("candidate code\n"))
 	fixture.writeFile(expectedComposeSourcePath, []byte("services:\n  remnanode:\n    image: candidate\n"))
-	fixture.commitAllAt("freeze release candidate", testCandidateAt)
+	fixture.commitAllAt("candidate", testCandidateAt)
 	fixture.candidate = fixture.git("rev-parse", "HEAD")
-	candidateTree := fixture.git("rev-parse", fixture.candidate+"^{tree}")
-	candidateComposeSHA := fixture.fileSHA(expectedComposeSourcePath)
+	fixture.candidateTree = fixture.git("rev-parse", fixture.candidate+"^{tree}")
 
-	systemd := validSystemEvidence("systemd", "amd64", fixture.candidate)
-	openrc := validSystemEvidence("openrc", "arm64", fixture.candidate)
-	panel := panelEvidence{
-		evidenceCommon: validEvidenceCommon("panel", fixture.candidate),
-		PanelVersion:   expectedPanelVersion,
-		Targets:        []string{"systemd", "openrc"},
-		Artifacts: []panelArtifactIdentity{
-			{
-				Target:             "systemd",
-				Arch:               "amd64",
-				NodeBinarySHA256:   testNodeSHA("amd64"),
-				RWCoreBinarySHA256: testCoreSHA("amd64"),
-			},
-			{
-				Target:             "openrc",
-				Arch:               "arm64",
-				NodeBinarySHA256:   testNodeSHA("arm64"),
-				RWCoreBinarySHA256: testCoreSHA("arm64"),
-			},
-		},
-		RoutesTotal:        26,
-		RoutesPassed:       26,
-		SemanticMismatches: intPointer(0),
-		Checks: panelChecks{
-			NodeRegistration:             true,
-			XrayLifecycle:                true,
-			Stats:                        true,
-			UserMutations:                true,
-			PluginSync:                   true,
-			LifecyclePluginSerialization: true,
-		},
-	}
-	resource := resourceFaultEvidence{
-		evidenceCommon: validEvidenceCommon("resource-fault", fixture.candidate),
-		Environment: machineEnvironment{
-			OSID: "alpine", OSVersion: "3.22", Init: "none", Arch: "arm64",
-			Kernel: "6.8.0", MemoryMiB: 512, CPUCount: 1, DiskMiB: 2048,
-		},
-		Node:   validNodeArtifact("arm64"),
-		RWCore: validRWCoreArtifact("arm64"),
-		Metrics: resourceFaultMetrics{
-			Users: 50000, SoakSeconds: 86400, PeakMemoryMiB: 144,
-			OOMKills: intPointer(0), ProjectDiskPeakMiB: 160,
-		},
-		Checks: resourceFaultChecks{
-			NoSwap: true, CoreKillRecovery: true, NodeRestartRecovery: true,
-			PanelDisconnectRecovery: true, NFTFailureRetry: true,
-			LogFaultStormBounded: true, FailedUpgradeRollback: true,
-		},
-	}
-	compose := validComposeEvidence(fixture.candidate, fixture.candidateImageDigest, candidateComposeSHA)
-
-	fixture.writeJSON(acceptanceDirectory+"/systemd.json", systemd)
-	fixture.writeJSON(acceptanceDirectory+"/openrc.json", openrc)
-	fixture.writeJSON(acceptanceDirectory+"/panel.json", panel)
-	fixture.writeJSON(acceptanceDirectory+"/resource-fault.json", resource)
-	fixture.writeJSON(acceptanceDirectory+"/compose.json", compose)
+	composeSHA := fixture.fileSHA(expectedComposeSourcePath)
+	smoke := validDockerSmokeEvidence(fixture.candidate, fixture.candidateImageDigest, testNodeSHA("amd64"), composeSHA)
+	smoke.StartedAt = testStartedAt.Format(time.RFC3339)
+	smoke.FinishedAt = testFinishedAt.Format(time.RFC3339)
+	smoke.Container.StartedAt = smoke.StartedAt
+	fixture.writeJSON(acceptanceDirectory+"/docker-smoke.json", smoke)
 
 	manifest := acceptanceManifest{
-		SchemaVersion:        1,
+		SchemaVersion:        expectedSchemaVersion,
+		AcceptanceProfile:    expectedAcceptanceProfile,
 		ReleaseVersion:       expectedReleaseVersion,
 		ReleaseTag:           expectedReleaseTag,
 		CandidateCommit:      fixture.candidate,
-		CandidateTree:        candidateTree,
+		CandidateTree:        fixture.candidateTree,
 		CandidateImageDigest: fixture.candidateImageDigest,
-		AcceptedAt:           testAcceptedAt,
-		Decision:             "pass",
+		CandidateNodeSHA256: architectureSHAs{
+			AMD64: testNodeSHA("amd64"), ARM64: testNodeSHA("arm64"),
+		},
+		AcceptedAt: testAcceptedAt.Format(time.RFC3339),
+		Decision:   "pass",
 		OfficialNode: officialNodeTarget{
-			Version: expectedOfficialNodeVersion,
-			Commit:  expectedOfficialNodeCommit,
+			Version: expectedOfficialNodeVersion, Commit: expectedOfficialNodeCommit,
 		},
 		PanelTarget: panelTarget{Version: expectedPanelVersion},
 		RWCore: rwCoreTarget{
 			Version: expectedRWCoreVersion,
 			Commit:  expectedRWCoreCommit,
 			SHA256: architectureSHAs{
-				AMD64: expectedAMD64AssetSHA,
-				ARM64: expectedARM64AssetSHA,
+				AMD64: expectedAMD64AssetSHA, ARM64: expectedARM64AssetSHA,
 			},
 		},
-		Policy: acceptancePolicy{
-			WholeMachineMemoryMiB: 512,
-			ServiceMemoryMaxMiB:   448,
-			CPUCount:              1, DiskMiB: 2048, Users: 50000, Swap: boolPointer(false), SoakSeconds: 86400,
-		},
-		Evidence: []evidenceReference{
-			fixture.evidenceReference("systemd"),
-			fixture.evidenceReference("openrc"),
-			fixture.evidenceReference("panel"),
-			fixture.evidenceReference("resource-fault"),
-			fixture.evidenceReference("compose"),
-		},
+		DeferredValidation: append([]string(nil), expectedDeferredValidation...),
+		Evidence: []evidenceReference{{
+			Kind: "docker-production-smoke", Path: acceptanceDirectory + "/docker-smoke.json",
+			SHA256: fixture.fileSHA(acceptanceDirectory + "/docker-smoke.json"), Status: "pass",
+		}},
 		Risks: []releaseRisk{},
 	}
 	fixture.writeManifest(manifest)
-	fixture.writeFile("README.md", []byte("# release\n"))
-	fixture.writeFile("CHANGELOG.md", []byte("# changelog\n"))
-	fixture.writeFile("docs/development/roadmap.md", []byte("# roadmap\n"))
-	fixture.writeFile(releaseNoteRepositoryPath, []byte("# "+expectedReleaseTag+"\n"))
-	fixture.commitAll("record release acceptance")
+	fixture.commitAllAt("record Docker production smoke acceptance", testFinalAt)
 	return fixture
 }
 
-func validEvidenceCommon(kind, candidate string) evidenceCommon {
-	return evidenceCommon{
-		SchemaVersion: 1, Kind: kind, CandidateCommit: candidate, Status: "pass",
-		StartedAt: testStartedAt, FinishedAt: testFinishedAt, Command: []string{"scripts/acceptance.sh", kind},
-	}
-}
-
-func validSystemEvidence(kind, arch, candidate string) systemEvidence {
-	osID, osVersion, initSystem := "ubuntu", "24.04", "systemd"
-	if kind == "openrc" {
-		osID, osVersion, initSystem = "alpine", "3.22", "openrc"
-	}
-	return systemEvidence{
-		evidenceCommon: validEvidenceCommon(kind, candidate),
-		Environment: machineEnvironment{
-			OSID: osID, OSVersion: osVersion, Init: initSystem, Arch: arch,
-			Kernel: "6.8.0", MemoryMiB: 512, CPUCount: 1, DiskMiB: 2048,
-		},
-		Node:   validNodeArtifact(arch),
-		RWCore: validRWCoreArtifact(arch),
-		Checks: systemChecks{
-			FreshInstall: true, RepeatInstall: true, StartStopRestart: true,
-			SuccessfulUpgrade: true, FailedUpgradeRollback: true, RebootPanelResync: true,
-			CapabilityBoundary: true, UninstallIsolation: true, NFTNamespace: true,
-			SocketKillNamespace: true, RWCoreProcessGroupCleanup: true,
-		},
-	}
-}
-
-func validNodeArtifact(arch string) nodeArtifact {
-	return nodeArtifact{VersionOutput: expectedVersionOutput, BinarySHA256: testNodeSHA(arch)}
-}
-
-func validRWCoreArtifact(arch string) rwCoreArtifact {
-	return rwCoreArtifact{
-		Version: expectedRWCoreVersion, Commit: expectedRWCoreCommit,
-		AssetSHA256: expectedAssetSHAByArch[arch], BinarySHA256: testCoreSHA(arch),
-	}
-}
-
-func validComposeEvidence(candidate, candidateImageDigest, sourceSHA string) composeEvidence {
-	return composeEvidence{
-		evidenceCommon:       validEvidenceCommon("compose", candidate),
-		CandidateImageDigest: candidateImageDigest,
-		Source: composeSource{
-			Path:   expectedComposeSourcePath,
-			SHA256: sourceSHA,
-		},
-		ManifestPlatforms: []string{"linux/amd64", "linux/arm64"},
-		Runs: []composeRun{
-			validComposeRun("amd64"),
-			validComposeRun("arm64"),
-		},
-	}
-}
-
-func validComposeRun(arch string) composeRun {
-	return composeRun{
-		Environment: composeEnvironment{
-			DockerEngineVersion:  "28.3.2",
-			DockerComposeVersion: "v2.38.2",
-			Arch:                 arch,
-		},
-		HostResources: composeHostResources{
-			MemoryTotalBytes:         int64Pointer(500 * 1024 * 1024),
-			CPUCount:                 intPointer(1),
-			DiskTotalBytes:           int64Pointer(2000 * 1024 * 1024),
-			DiskAvailableAtPeakBytes: int64Pointer(512 * 1024 * 1024),
-			SwapTotalBytes:           int64Pointer(0),
-		},
-		Limits: composeLimits{
-			MemoryLimitBytes:     expectedContainerMemoryBytes,
-			MemorySwapLimitBytes: expectedContainerMemoryBytes,
-			NanoCPUs:             expectedContainerNanoCPUs,
-			PIDsLimit:            expectedContainerPIDsLimit,
-		},
-		Isolation: composeIsolation{
-			ReadOnlyRootFS:        true,
-			NoNewPrivileges:       true,
-			InitEnabled:           true,
-			InitPID:               1,
-			InitProcess:           "docker-init",
-			OrphanReapingPassed:   true,
-			CapDrop:               []string{"ALL"},
-			CapAdd:                []string{"NET_ADMIN", "NET_BIND_SERVICE"},
-			EffectiveCapabilities: []string{"NET_ADMIN", "NET_BIND_SERVICE"},
-			Tmpfs: []composeTmpfsMount{
-				{Target: "/run/remnanode", SizeBytes: 4 * 1024 * 1024, Writable: true, NoExec: true, NoSUID: true, NoDev: true},
-				{Target: "/tmp", SizeBytes: 16 * 1024 * 1024, Writable: true, NoExec: true, NoSUID: true, NoDev: true},
-				{Target: "/var/log/remnanode", SizeBytes: 28 * 1024 * 1024, Writable: true, NoExec: true, NoSUID: true, NoDev: true},
-			},
-		},
-		Health: composeHealth{
-			Status:               "healthy",
-			CheckExitCode:        intPointer(0),
-			ConsecutiveSuccesses: 3,
-		},
-		Lifecycle: composeLifecycle{
-			GracefulStop:         true,
-			ForcedKill:           boolPointer(false),
-			ExitCode:             intPointer(0),
-			PIDsBaseline:         8,
-			PIDsPeak:             15,
-			PIDsAfterRecovery:    8,
-			PIDsAfterStop:        intPointer(0),
-			ZombiesAfterRecovery: intPointer(0),
-		},
-		Logs: composeLogs{
-			Driver: "json-file", MaxSizeBytes: expectedContainerLogSizeBytes,
-			MaxFiles: expectedContainerLogFiles, RotationObserved: true, PeakBytes: 3 * 1024 * 1024,
-		},
-		Storage: composeStorage{
-			RollbackImageRepository:    "docker.io/remnawave/node",
-			RollbackImageDigest:        "sha256:" + strings.Repeat("b", 64),
-			RollbackImagePulled:        true,
-			RollbackImageStarted:       true,
-			RollbackImageHealthy:       true,
-			RollbackImagePresentAtPeak: true,
-			ProjectDiskPeakMiB:         350,
-		},
-	}
-}
-
 func testNodeBinary(arch string) []byte {
-	return []byte("release-node-binary-" + arch + "\n")
+	return []byte("remnanode-lite test binary " + arch + "\n")
 }
 
 func testNodeSHA(arch string) string {
@@ -917,45 +610,22 @@ func testNodeSHA(arch string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func testCoreSHA(arch string) string {
-	digest := sha256.Sum256([]byte("installed-rw-core-" + arch + "\n"))
-	return hex.EncodeToString(digest[:])
-}
-
-func (fixture *releaseFixture) evidenceReference(kind string) evidenceReference {
+func (fixture *releaseFixture) mutateSmoke(mutate func(*dockerSmokeEvidence)) {
 	fixture.t.Helper()
-	path := acceptanceDirectory + "/" + kind + ".json"
-	return evidenceReference{Kind: kind, Path: path, SHA256: fixture.fileSHA(path), Status: "pass"}
+	path := acceptanceDirectory + "/docker-smoke.json"
+	var evidence dockerSmokeEvidence
+	fixture.readJSON(path, &evidence)
+	mutate(&evidence)
+	fixture.writeJSON(path, evidence)
+	fixture.updateEvidenceHash()
+	fixture.amendAll()
 }
 
-func (fixture *releaseFixture) updateEvidenceHash(kind string) {
+func (fixture *releaseFixture) updateEvidenceHash() {
 	fixture.t.Helper()
 	manifest := fixture.readManifest()
-	for index := range manifest.Evidence {
-		if manifest.Evidence[index].Kind == kind {
-			manifest.Evidence[index].SHA256 = fixture.fileSHA(manifest.Evidence[index].Path)
-			fixture.writeManifest(manifest)
-			return
-		}
-	}
-	fixture.t.Fatalf("manifest has no %s evidence", kind)
-}
-
-func (fixture *releaseFixture) removeEvidenceCheck(kind, check string) {
-	fixture.t.Helper()
-	path := acceptanceDirectory + "/" + kind + ".json"
-	var document map[string]any
-	fixture.readJSON(path, &document)
-	checks, ok := document["checks"].(map[string]any)
-	if !ok {
-		fixture.t.Fatalf("%s checks are not a JSON object", kind)
-	}
-	if _, ok := checks[check]; !ok {
-		fixture.t.Fatalf("%s check %s is already missing", kind, check)
-	}
-	delete(checks, check)
-	fixture.writeJSON(path, document)
-	fixture.updateEvidenceHash(kind)
+	manifest.Evidence[0].SHA256 = fixture.fileSHA(acceptanceDirectory + "/docker-smoke.json")
+	fixture.writeManifest(manifest)
 }
 
 func (fixture *releaseFixture) readManifest() acceptanceManifest {
@@ -999,7 +669,7 @@ func (fixture *releaseFixture) writeFile(path string, raw []byte) {
 	fixture.t.Helper()
 	abs := filepath.Join(fixture.root, filepath.FromSlash(path))
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		fixture.t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+		fixture.t.Fatalf("mkdir %s: %v", path, err)
 	}
 	if err := os.WriteFile(abs, raw, 0o644); err != nil {
 		fixture.t.Fatalf("write %s: %v", path, err)
@@ -1012,40 +682,21 @@ func (fixture *releaseFixture) fileSHA(path string) string {
 	return hex.EncodeToString(digest[:])
 }
 
-func (fixture *releaseFixture) commitAll(message string) {
-	fixture.t.Helper()
-	fixture.git("add", "--all")
-	fixture.git(
-		"-c", "user.name=Release Test",
-		"-c", "user.email=release-test@example.invalid",
-		"commit", "--no-gpg-sign", "-qm", message,
-	)
-}
-
 func (fixture *releaseFixture) commitAllAt(message string, committedAt time.Time) {
 	fixture.t.Helper()
 	fixture.git("add", "--all")
 	fixture.gitWithEnv(
-		[]string{
-			"GIT_AUTHOR_DATE=" + committedAt.Format(time.RFC3339),
-			"GIT_COMMITTER_DATE=" + committedAt.Format(time.RFC3339),
-		},
-		"-c", "user.name=Release Test",
-		"-c", "user.email=release-test@example.invalid",
-		"commit", "--no-gpg-sign", "-qm", message,
+		[]string{"GIT_AUTHOR_DATE=" + committedAt.Format(time.RFC3339), "GIT_COMMITTER_DATE=" + committedAt.Format(time.RFC3339)},
+		"commit", "-qm", message,
 	)
 }
 
-func (fixture *releaseFixture) amendCommitAt(committedAt time.Time) {
+func (fixture *releaseFixture) amendAll() {
 	fixture.t.Helper()
+	fixture.git("add", "--all")
 	fixture.gitWithEnv(
-		[]string{
-			"GIT_AUTHOR_DATE=" + committedAt.Format(time.RFC3339),
-			"GIT_COMMITTER_DATE=" + committedAt.Format(time.RFC3339),
-		},
-		"-c", "user.name=Release Test",
-		"-c", "user.email=release-test@example.invalid",
-		"commit", "--amend", "--no-edit", "--no-gpg-sign", "-q",
+		[]string{"GIT_COMMITTER_DATE=" + testFinalAt.Format(time.RFC3339)},
+		"commit", "-q", "--amend", "--no-edit",
 	)
 }
 
@@ -1054,7 +705,7 @@ func (fixture *releaseFixture) makeIndexConflict(path string) {
 	blob := fixture.git("rev-parse", "HEAD:"+path)
 	fixture.git("update-index", "--force-remove", "--", path)
 	fixture.gitWithInput(
-		fmt.Sprintf("100644 %s 1\t%s\n100644 %s 2\t%s\n", blob, path, blob, path),
+		"100644 "+blob+" 1\t"+path+"\n100644 "+blob+" 2\t"+path+"\n",
 		"update-index", "--index-info",
 	)
 }
@@ -1071,24 +722,35 @@ func (fixture *releaseFixture) replaceAcceptanceDirectoryWithSymlink() {
 	}
 }
 
+func (fixture *releaseFixture) createNonAncestorCandidate() (string, string) {
+	fixture.t.Helper()
+	baseBranch := fixture.git("branch", "--show-current")
+	fixture.git("checkout", "-q", "--orphan", "unrelated-candidate")
+	fixture.git("rm", "-qrf", ".")
+	fixture.writeFile("unrelated.txt", []byte("unrelated candidate\n"))
+	fixture.commitAllAt("unrelated candidate", testCandidateAt)
+	commit := fixture.git("rev-parse", "HEAD")
+	tree := fixture.git("rev-parse", "HEAD^{tree}")
+	fixture.git("checkout", "-q", baseBranch)
+	return commit, tree
+}
+
 func (fixture *releaseFixture) createAllowedMergeCommit() {
 	fixture.t.Helper()
 	baseBranch := fixture.git("branch", "--show-current")
 	fixture.git("checkout", "-qb", "release-side")
-	fixture.writeFile("README.md", []byte("# release from side branch\n"))
-	fixture.commitAll("update README on release side branch")
+	fixture.writeFile("README.md", []byte("side\n"))
+	fixture.commitAllAt("allowed side", testFinalAt.Add(time.Minute))
 	fixture.git("checkout", "-q", baseBranch)
-	fixture.writeFile("CHANGELOG.md", []byte("# changelog on main branch\n"))
-	fixture.commitAll("update changelog on main branch")
-	fixture.git(
-		"-c", "user.name=Release Test",
-		"-c", "user.email=release-test@example.invalid",
-		"merge", "--no-ff", "--no-gpg-sign", "-qm", "merge release documentation", "release-side",
+	fixture.writeFile("README.zh-CN.md", []byte("base\n"))
+	fixture.commitAllAt("allowed base", testFinalAt.Add(2*time.Minute))
+	fixture.gitWithEnv(
+		[]string{"GIT_AUTHOR_DATE=" + testFinalAt.Add(3*time.Minute).Format(time.RFC3339), "GIT_COMMITTER_DATE=" + testFinalAt.Add(3*time.Minute).Format(time.RFC3339)},
+		"merge", "--no-ff", "-qm", "merge allowed finalization", "release-side",
 	)
 }
 
 func (fixture *releaseFixture) isDirty() bool {
-	fixture.t.Helper()
 	return fixture.git("status", "--porcelain", "--untracked-files=all") != ""
 }
 
@@ -1122,23 +784,15 @@ func (fixture *releaseFixture) gitWithInput(input string, args ...string) string
 func appendJSONField(raw []byte, field string) []byte {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[len(trimmed)-1] != '}' {
-		panic(fmt.Sprintf("not a JSON object: %q", trimmed))
+		panic("JSON fixture is not an object")
 	}
-	result := append([]byte{}, trimmed[:len(trimmed)-1]...)
+	result := append([]byte(nil), trimmed[:len(trimmed)-1]...)
 	result = append(result, ',')
 	result = append(result, field...)
 	result = append(result, '}', '\n')
 	return result
 }
 
-func boolPointer(value bool) *bool {
-	return &value
-}
-
-func intPointer(value int) *int {
-	return &value
-}
-
-func int64Pointer(value int64) *int64 {
-	return &value
-}
+func boolPointer(value bool) *bool    { return &value }
+func intPointer(value int) *int       { return &value }
+func int64Pointer(value int64) *int64 { return &value }

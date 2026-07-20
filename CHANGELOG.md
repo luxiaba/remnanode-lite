@@ -8,6 +8,10 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). It r
 
 This is the first independent release line of `luxiaba/remnanode-lite`. Its implemented contract is pinned to official Node 2.8.0; Panel 2.8.1 is the integration acceptance environment and does not determine the project version.
 
+`2.8.0` remains an unpublished candidate. Its schema v2 gate covers GitHub CI, amd64/arm64 image builds with provenance/build attestation, and a candidate-bound real amd64/x86_64 low-memory smoke using the canonical Compose template. The smoke record requires Panel 2.8.1 to be online with real traffic and records health, OOM, restart, memory, and PID observations. The exact deferred set is `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection`; these do not block this candidate.
+
+The schema v2 evidence is an operator-attested, candidate-bound record. Validation checks its structure and artifact bindings, but cannot independently prove the reported observations; it is not an unforgeable proof.
+
 The first entry also records the repository takeover and architectural remediation, so it is intentionally more detailed than future entries. Later entries should contain only changes that users, operators, or maintainers need to understand.
 
 ### Added
@@ -22,8 +26,8 @@ The first entry also records the repository takeover and architectural remediati
 - Added a unified Node API boundary covering Zod-equivalent required fields, unions, UUID/IP formats, enums, nullable and default values, and array-length rules.
 - Added Linux network-namespace integration gates for nftables and socket destruction, including real dual-stack replacement, block, unblock, recreation, shutdown cleanup, and TCP connection termination.
 - Added a streaming ASN build pipeline pinned to an `ipverse/as-ip-blocks` commit and archive digest. Releases include the compact `asn-prefixes.bin` database and `SHA256SUMS`.
-- Added a real rw-core resource gate at `448 MiB / 1 CPU / no swap`. The M6 engineering baseline peaked at `143.9 MiB` with 50,000 users; the frozen M8 candidate must still repeat this validation.
-- Extended M8 evidence with real Compose runs bound to the candidate manifest digest and the deployment template stored in the candidate Git object. Native amd64 and arm64 runs must each pass whole-host resource, cgroup, init/reaping, capability, tmpfs, health, graceful-stop, zombie, log-rotation, disk-headroom, and rollback-image startup checks.
+- Added a real rw-core resource gate at `448 MiB / 1 CPU / no swap`. The dated 2026-07-15 M6 engineering baseline peaked at `143.9 MiB` with 50,000 users. It remains a historical baseline; repeating the 50,000-user load is deferred rather than a `2.8.0` candidate blocker.
+- Added the schema v2 `docker-production-smoke-v1` acceptance profile. It binds the real amd64/x86_64 Compose smoke to the candidate commit, manifest digest, architecture binary, and canonical Compose file, while recording the Panel 2.8.1 real-traffic result and health, OOM, restart, memory, and PID observations.
 
 ### Security
 
@@ -78,9 +82,9 @@ The first entry also records the repository takeover and architectural remediati
 - Moved the Go module, installer URLs, Release addresses, and documentation ownership to this repository.
 - Established the compatibility, architecture-remediation, and 512 MiB acceptance roadmap.
 - Make contract CI read raw Git objects from the pinned official commit, verify SHA-256 for 58 registered blobs including the lockfile, and fail closed around Nest bootstrap, static imports, module/controller metadata, decorator ownership, global-prefix exclusions, and all 26 routes. Updating the official pin still requires human review of extraction results and newly unsupported syntax.
-- Bind the Release gate to a frozen candidate commit, strict JSON evidence, compatibility/resource/fault results, and a two-stage process that permits only release-document changes after acceptance.
+- Bind the Release gate to a frozen candidate commit, strict schema v2 JSON evidence, CI and multi-architecture build attestations, the canonical-Compose amd64 production smoke, and a two-stage process that permits only release-document changes after acceptance. The evidence is operator-attested rather than an independently unforgeable proof, and the manifest records the deferred validation set explicitly.
 - Separate HTTP transport from stats, user-handler, and plugin application services. The business layer no longer depends on `net/http` or decodes request JSON itself.
 - Make `main` the single composition root. It explicitly constructs and injects the network monitor, system collector, version, request-body budget, and application services, removing import-time goroutines, process-global mutable body limits, and environment-variable rewrites.
 - Pin and calibrate external schema evidence for `@remnawave/node-plugins@0.4.5`, including explicit null, AS numbers, `ext:`, and numeric limits.
 - Replace the full Xray Go module with a minimal rw-core protobuf wire client, reducing both architecture binaries by about 30%.
-- Complete the M7 engineering baseline on Ubuntu 24.04/systemd and Alpine 3.22/OpenRC for fresh install, upgrade rollback, start/stop, dedicated user and capabilities, logs, disk, and uninstall isolation. This does not replace M8 acceptance on the frozen candidate.
+- Complete the dated 2026-07-19 M7 engineering baseline on Ubuntu 24.04/systemd and Alpine 3.22/OpenRC for fresh install, upgrade rollback, start/stop, dedicated user and capabilities, logs, disk, and uninstall isolation. These remain historical engineering results; `native-systemd-install` and `native-openrc-install` are deferred from the `2.8.0` candidate gate.

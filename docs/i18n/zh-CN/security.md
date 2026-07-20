@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=3c6712d903c3fbfccae1837f2ae2348601323e6157d91cd3516b80ba4b176c5b -->
+<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=3a17d9930b11512838e2f445db27bfd5124491ab12bdbc0dcd75aa5f8be109ba -->
 
 # 安全策略
 
@@ -91,4 +91,4 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-该门禁通过只证明仓库级检查，不替代真实 Linux namespace、候选 attestation、Panel 集成、资源故障测试或适用时的长期 M8 验收。
+该门禁通过只证明仓库级检查，不替代真实 Linux namespace、候选 attestation、Panel 集成，也不替代对应版本发布 profile 要求的运行时与扩展验收。
