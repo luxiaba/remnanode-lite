@@ -1,31 +1,46 @@
-# 贡献指南
+# Contributing to Remnanode Lite
 
-感谢你改进 Remnanode Lite。本项目维护一个面向低资源 Linux 节点的 Go 实现，外部
-行为以固定版本的官方 Remnawave Node 为契约，同时保持独立的代码、架构和发行节奏。
+Thank you for helping improve Remnanode Lite. This repository maintains an
+independent Go implementation of Remnawave Node for resource-constrained Linux
+hosts. Its externally observable behavior is governed by a pinned release of
+the official Remnawave Node, while its implementation, architecture, and
+release cadence remain independent.
 
-贡献的首要目标是：行为可证明、状态所有权清晰、资源有界、失败可恢复，并让下一位
-维护者能够理解和验证这次变化。
+A good contribution leaves behavior verifiable, state ownership explicit,
+resource use bounded, failures recoverable, and the resulting design clear to
+the next maintainer.
 
-## 开始之前
+## Before You Start
 
-请先阅读：
+Read the material relevant to your change:
 
-- [开发指南](docs/development/README.md)：环境、代码地图和常见修改路径。
-- [架构说明](docs/architecture.md)：运行链路、依赖方向、并发与生命周期边界。
-- [测试指南](docs/development/testing.md)：测试层级和按改动选择测试。
-- [版本策略](docs/versioning.md)：项目版本与官方契约版本的独立语义。
-- [文档总览](docs/README.md)：部署、运维、契约和发布资料入口。
+- [Development guide](docs/development/README.md) for the toolchain, code map,
+  and common change paths.
+- [Architecture](docs/architecture.md) for request flow, dependency direction,
+  concurrency, and lifecycle boundaries.
+- [Testing strategy](docs/development/testing.md) for the test layers and the
+  minimum checks required for each class of change.
+- [Versioning policy](docs/versioning.md) for the independent meanings of the
+  project version and official contract version.
+- [Documentation index](docs/README.md) for deployment, operations, contract,
+  and release material.
 
-发现安全漏洞或 Secret 泄漏风险时，不要先创建公开 Issue；按
-[SECURITY.md](SECURITY.md) 的私密渠道报告，不要公开利用细节。
+Do not open a public issue for a vulnerability or suspected secret exposure.
+Use the private process in [SECURITY.md](SECURITY.md), and do not publish
+exploitation details.
 
-## 分支模型
+## Branch Model
 
-- `main` 是受保护的发布分支，只接收从 `dev` 提升且已通过代码门禁的候选；该提交合入后才冻结为 M8 发布候选，验收完成后允许发布资料专用分支按发布白名单进入。
-- `dev` 是稳定开发与集成分支，普通功能和修复最终合入这里。
-- 日常工作使用从最新 `dev` 创建的短生命周期主题分支。
+- `main` is the protected release branch. It accepts a tested promotion from
+  `dev`. The resulting `main` commit becomes the M8 release candidate only
+  after the merge. Once that candidate has passed acceptance, a release-only
+  branch may enter under the documented path allowlist.
+- `dev` is the stable development and integration branch. Normal features,
+  fixes, refactors, and maintenance changes ultimately merge here.
+- Daily work belongs on a short-lived topic branch created from the latest
+  `dev`.
 
-开始一个变更：
+Start a change with:
 
 ```bash
 git fetch origin
@@ -34,181 +49,257 @@ git pull --ff-only origin dev
 git switch -c fix/short-description
 ```
 
-推荐分支前缀：
+Use a branch prefix that describes the change:
 
-- `feat/`：新增官方契约能力或项目能力。
-- `fix/`：修复行为、资源、安全或运维问题。
-- `refactor/`：不改变外部行为的结构调整。
-- `test/`：测试与验收工具。
-- `docs/`：文档。
-- `chore/`：依赖、CI、发布和维护工作。
+- `feat/` for a new verified contract capability or project feature.
+- `fix/` for a behavior, resource, security, or operational correction.
+- `refactor/` for a structural change that preserves external behavior.
+- `test/` for tests and acceptance tooling.
+- `docs/` for documentation.
+- `chore/` for dependencies, CI, releases, and repository maintenance.
 
-普通 Pull Request 的目标分支是 `dev`。维护者准备发布时先创建 `dev -> main` Pull Request；冻结候选验收完成后，还会按[发布流程](docs/release.md#7-受保护-main-下提交发布资料)创建只含 README、CHANGELOG、roadmap、evidence 和 Release note 的 `release/v*-docs -> main` 最终化 PR。除这两个受控入口外，不要直接在 `main` 开发，也不要在功能 PR 中创建或移动正式 tag。
+Normal pull requests target `dev`. A maintainer preparing a release opens a
+`dev -> main` pull request. After candidate acceptance, the maintainer opens a
+final `release/v*-docs -> main` pull request containing only the allowed
+README, root [`CHANGELOG.md`](CHANGELOG.md), roadmap, evidence, and release-note
+paths. See the [release procedure](docs/release.md) for the protected-main
+finalization rules.
+Do not develop directly on `main`, and do not create or move a final release
+tag from a feature pull request.
 
-官方 `remnawave/node` 只作为协议和行为参考。不要把它的分支 merge/rebase 到本项目，
-也不要通过 Git 历史同步实现；固定源码应放在仓库外，由契约测试验证精确 commit。
+The official `remnawave/node` repository is a protocol and behavior reference,
+not this repository's Git upstream. Never merge or rebase its branches into
+this project. Keep the pinned source checkout outside this repository and let
+the contract checks verify the exact official commit.
 
-## 确定变更范围
+## Define the Change Before Coding
 
-提交代码前先回答：
+Before implementing a change, answer these questions:
 
-1. 这是内部实现变化，还是 Panel/rw-core 可观察行为变化？
-2. 哪个组件应拥有新状态、进程、队列或后台任务？
-3. 输入、内存、磁盘、并发和外部命令输出的上限是什么？
-4. 请求取消、进程退出、部分失败和重复调用时发生什么？
-5. macOS stub、Linux 实现、Docker、systemd 和 OpenRC 中哪些路径受影响？
-6. 哪些测试能证明行为，而不只是执行到了代码？
+1. Is this purely internal, or can Panel or rw-core observe it?
+2. Which component should own any new state, process, queue, or background
+   task?
+3. What bounds apply to input, memory, disk, concurrency, and external-command
+   output?
+4. What happens on cancellation, process exit, partial failure, and repeated
+   calls?
+5. Which macOS stub, Linux implementation, Docker, systemd, or OpenRC paths are
+   affected?
+6. Which tests prove the behavior rather than merely execute the code?
 
-范围较大的变更应先在 Issue 或设计说明中写清契约、所有权、迁移和验证计划。明确的
-小修复可以直接提交 PR，但描述仍需说明原因和测试。
+For a broad change, document the contract, ownership, migration, and validation
+plan in an issue or design note first. A narrow and well-understood fix may go
+directly to a pull request, but its description must still explain why the
+change is needed and how it was tested.
 
-## 实现规范
+## Implementation Standards
 
-### Go 风格
+### Go code
 
-- 所有 Go 文件必须通过 `gofmt`；不要混入无关格式化或重命名。
-- 优先使用标准库和现有内部包，不为少量语法便利引入依赖。
-- 包名、类型名和函数名表达领域职责，避免 `util`、`common`、`manager2` 等模糊容器。
-- 在消费方定义小接口；不要为了 mock 预先抽象没有第二个真实边界的代码。
-- 构造函数建立完整不变量，必需依赖不应在运行中悄悄为 `nil`。
-- 使用 `fmt.Errorf("operation: %w", err)` 添加操作上下文，并保留可检查的错误链。
-- 注释解释不明显的约束、证据或锁序，不复述代码表面动作。
-- 新代码必须配套测试；bug 修复优先加入能稳定复现问题的回归测试。
+- Run `gofmt` on every changed Go file. Avoid unrelated formatting or renames.
+- Prefer the standard library and existing internal packages. Do not add a
+  dependency for minor syntactic convenience.
+- Name packages, types, and functions for domain responsibilities. Avoid vague
+  containers such as `util`, `common`, or `manager2`.
+- Define small interfaces at the consuming boundary. Do not introduce an
+  abstraction solely to make mocking easier when no second real boundary
+  exists.
+- Constructors must establish complete invariants. Required dependencies must
+  not become silently optional through runtime `nil` checks.
+- Add operational context while preserving the error chain, for example
+  `fmt.Errorf("start core: %w", err)`.
+- Comments should explain non-obvious invariants, evidence, or lock ordering,
+  not restate the visible operation.
+- Add tests with new code. A bug fix should normally include a deterministic
+  regression test that fails without the fix.
 
-### 契约与 HTTP 边界
+### Contract and HTTP boundaries
 
-`/node` API 不是自由设计面。method/path、请求 shape、联合类型、默认值、成功响应、
-错误类别、状态码、连接关闭和副作用都可能被 Panel 依赖。
+The `/node` API is not an open-ended design surface. Panel may depend on the
+HTTP method and path, request shape, union variants, defaults, success body,
+error category, status code, connection behavior, and side effects.
 
-涉及外部行为时：
+When changing externally visible behavior:
 
-1. 在固定官方源码中找到证据。
-2. 更新 `internal/contract` 的路由、schema、语义或来源清单。
-3. 更新 `internal/nodeapi` 与 `internal/httpserver`。
-4. 通过现有 service 进入 Xray、Stats、Handler 或 Plugin，不在 route 中复制领域逻辑。
-5. 添加请求、响应、错误和副作用测试。
-6. 在候选阶段使用 `contract-probe` 与真实官方节点比较。
+1. Locate the evidence in the pinned official source.
+2. Update the route, schema, semantic, or source manifest in
+   `internal/contract`.
+3. Update `internal/nodeapi` and `internal/httpserver` as required.
+4. Reach Xray, Stats, Handler, or Plugin through the existing application
+   service; do not duplicate domain logic in a route.
+5. Add request, response, error, and side-effect tests.
+6. During candidate acceptance, compare the official node and candidate with
+   `contract-probe`.
 
-不要因为另一种 JSON 或错误格式“更符合 Go 习惯”就偏离已验证的官方行为。
+Do not diverge from verified official behavior merely because another JSON or
+error representation looks more idiomatic in Go.
 
-### 状态、并发与生命周期
+### State, concurrency, and lifecycle
 
-- `xray.Manager` 是 rw-core 进程、配置、hash 和生命周期的唯一所有者。
-- `plugin.Service` 与 `plugin.State` 拥有插件快照、防火墙计划和 torrent report。
-- `httpserver` 的 lifecycle gate 协调跨 Xray 与 Plugin 的操作。
-- 固定锁序是外层 lifecycle lease、Plugin operation gate、Manager 内部状态。
-- 不要从新内部入口绕过 gate，也不要在持有内层锁时反向获取外层锁。
+- `xray.Manager` is the sole owner of the rw-core process, configuration, hash,
+  and lifecycle state.
+- `plugin.Service` and `plugin.State` own plugin snapshots, firewall plans, and
+  torrent reports.
+- The lifecycle gate in `httpserver` coordinates operations spanning Xray and
+  Plugin.
+- The fixed lock order is the outer lifecycle lease, the Plugin operation gate,
+  and then Manager-internal state.
+- New internal entry points must not bypass these gates, and code holding an
+  inner lock must not acquire an outer lock in reverse order.
 
-所有可能阻塞的 I/O、外部命令、gRPC、队列和 gate 等待都应传播
-`context.Context`。新增 goroutine 或 worker 时必须有明确所有者、停止信号、等待路径、
-队列容量和过载响应；不允许无法关闭的后台任务。
+Propagate `context.Context` through blocking I/O, external commands, gRPC,
+queues, and gate waits. Every new goroutine or worker requires an explicit
+owner, stop signal, join path, queue capacity, and overload response. The
+project does not accept background work that cannot be shut down.
 
-并发变化至少运行目标包 race test，并增加确定性的交错测试。不要用长时间 sleep
-代替同步信号。
+At minimum, concurrency changes require a race test for the affected packages
+and deterministic interleaving coverage. Do not substitute long sleeps for
+synchronization signals.
 
-### 资源约束
+### Resource limits
 
-生产目标是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。任何新增资源都必须有界：
+The production target is an entire host with `512 MiB RAM / 1 vCPU / 2 GB
+disk`. Every newly consumed resource must have an explicit bound, including:
 
-- HTTP 和压缩后的请求体。
-- JSON、protobuf、命令 stdout/stderr 和文件读取。
-- channel、report、缓存、map 与 goroutine 数量。
-- handler、连接、Xray start 和批处理并发。
-- 日志单文件、轮转数量、tmpfs 和持久磁盘写入。
-- 启动、停止、重试和关闭总时间。
+- Plain and compressed HTTP request bodies.
+- JSON, protobuf, command stdout/stderr, and file reads.
+- Channels, reports, caches, maps, and goroutine counts.
+- Handler, connection, Xray startup, and batch concurrency.
+- Log-file size, rotation count, tmpfs use, and persistent writes.
+- Startup, stop, retry, and total shutdown time.
 
-优先流式处理或保留 hash/摘要，不长期保存大配置的第二份副本。资源变化应说明最坏
-情况，并按[测试指南](docs/development/testing.md)决定是否重跑 50k 用户资源门禁。
+Prefer streaming or retaining a hash or summary over keeping a second long-lived
+copy of a large configuration. Document the worst case of a resource-affecting
+change and use the [testing strategy](docs/development/testing.md) to decide
+whether the 50,000-user resource gate must be rerun.
 
-### 安全与 Secret
+### Security and secrets
 
-- 不记录或提交 `SECRET_KEY`、JWT、客户端证书、私钥和完整认证 header。
-- 不把真实节点 IP、hostname 或原始 Panel 响应写入测试 fixture 和 acceptance evidence。
-- 配置和 Secret 文件读取必须有大小、类型、symlink、owner/mode 与稳定读取保护。
-- 外部命令使用参数数组和有界输入输出，不拼接未经验证的 shell 文本。
-- HTTP 客户端和探针必须验证 TLS，不增加通用的 insecure 跳过开关。
-- Docker 与原生服务继续遵守最小 capability、只读 rootfs/文件权限和
-  `no-new-privileges` 约束。
+- Never log or commit `SECRET_KEY`, JWTs, client certificates, private keys, or
+  complete authentication headers.
+- Do not place real node IP addresses, hostnames, or raw Panel responses in test
+  fixtures or acceptance evidence.
+- Configuration and secret readers must enforce size, file type, symlink,
+  owner/mode, and stable-read protections.
+- Invoke external commands with argument arrays and bounded input and output.
+  Never concatenate untrusted text into a shell command.
+- HTTP clients and probes must verify TLS. Do not add a general-purpose option
+  to skip verification.
+- Docker and native services must preserve least capability, read-only
+  filesystem or file-permission controls, and `no-new-privileges`.
 
-如果在本地 diff、日志或测试输出中发现真实 Secret，先停止传播和提交，再完成轮换与
-清理；不要仅在后续 commit 中删除后继续公开原有历史。
+If a real secret appears in a local diff, log, or test output, stop propagating
+and committing it. Rotate it and clean the affected history; deleting it in a
+later commit does not make earlier public history safe.
 
-### Linux 与跨平台
+### Linux and cross-platform code
 
-生产运行目标是 Linux。Linux 专属能力使用 `//go:build linux`，并提供非 Linux stub
-保证日常开发平台可编译。stub 只表达“不可用”或可移植退化行为，不能伪造 nftables、
-netlink、capability 或进程组成功。
+Linux is the production platform. Put Linux-only behavior behind
+`//go:build linux`, and provide a non-Linux stub so ordinary development builds
+remain possible. A stub may report unavailability or a portable degradation;
+it must not claim that nftables, netlink, capabilities, or process groups
+succeeded.
 
-修改 Linux 专属路径时：
+When changing a Linux-specific path:
 
-- 在 macOS/Linux 运行普通包测试。
-- 在 Linux 运行对应 unit test。
-- 涉及 nftables 或 socket destroy 时运行隔离 namespace 集成测试。
-- 涉及 service manager 时同时考虑 systemd 与 OpenRC。
+- Run ordinary package tests on macOS or Linux as applicable.
+- Run the corresponding unit tests on Linux.
+- For nftables or socket destruction, run the isolated network-namespace
+  integration tests.
+- For service-manager behavior, account for both systemd and OpenRC.
 
-完整命令见[测试指南](docs/development/testing.md#linux-网络管理集成测试)。
+The exact commands are in the
+[testing strategy](docs/development/testing.md).
 
-### Shell、安装器和 service 文件
+### Shell, installers, and service definitions
 
-- Bash 脚本使用 `set -euo pipefail`，OpenRC 文件保持 POSIX `sh` 兼容。
-- 所有 shell/service 文件保持 LF；`.gitattributes` 已固定行尾。
-- 文件替换使用受限临时目录、校验后原子 rename，并保留清晰回滚点。
-- installer 的共享锁、信任根、下载预算、路径验证和 Secret 迁移不可绕过。
-- systemd 与 OpenRC 的用户、capability、资源上限、停止和卸载语义应保持对称。
-- 修改安装器必须运行离线操作测试，不要用真实主机安装代替失败注入覆盖。
+- Bash scripts use `set -euo pipefail`. OpenRC service files remain compatible
+  with POSIX `sh`.
+- Shell and service files use LF line endings; `.gitattributes` enforces this.
+- Replace files through a restricted temporary directory and an atomic rename
+  after validation, retaining an explicit rollback point.
+- Do not bypass the installer's shared lock, trust roots, download budgets,
+  path validation, or secret migration.
+- Keep systemd and OpenRC user, capability, resource, stop, and uninstall
+  semantics aligned.
+- Installer changes require the offline operational tests. Installing on a
+  real host does not replace failure-injection coverage.
 
-### 生成文件、依赖与供应链
+### Generated code, dependencies, and supply chain
 
-`internal/xtls/xrpc/wire.pb.go` 是生成文件，不得手工编辑。wire schema 变化必须通过
-`scripts/generate-protobuf.sh` 使用固定的 `protoc 35.1` 与 `protoc-gen-go v1.36.11`
-生成，并运行 protobuf golden test；提交前用 `scripts/generate-protobuf.sh --check`
-证明生成结果没有漂移。
+`internal/xrayrpc/wire/wire.pb.go` is generated code and must not be edited by
+hand. Regenerate wire-schema changes with `scripts/generate-protobuf.sh`, using
+the pinned `protoc 35.1` and `protoc-gen-go v1.36.11`. Run the protobuf golden
+test, and prove there is no generated drift before submission:
 
-新增或升级依赖时：
+```bash
+bash scripts/generate-protobuf.sh --check
+```
 
-- 说明标准库或现有依赖为何不足。
-- 运行 `go mod tidy -diff`、`go mod verify` 和 govulncheck。
-- 评估二进制大小、初始化成本、常驻内存和 transitive dependency。
-- GitHub Actions 使用完整 40 位 commit SHA。
-- Docker 基础镜像、下载资产、rw-core 与 ASN 来源使用固定版本和 SHA-256。
-- 同步更新供应链检查，不允许只改 URL 让静态门禁失去覆盖。
+When adding or upgrading a dependency:
 
-## 文档与变更日志
+- Explain why the standard library and existing dependencies are insufficient.
+- Run `go mod tidy -diff`, `go mod verify`, and `govulncheck`.
+- Evaluate binary size, initialization cost, resident memory, and transitive
+  dependencies.
+- Pin GitHub Actions to a complete 40-character commit SHA.
+- Pin Docker base images, downloaded assets, rw-core, and ASN sources to a
+  version or digest and verify their SHA-256 values.
+- Update the supply-chain checks with the source change. Never change only a
+  URL in a way that leaves static validation checking the old assumption.
 
-代码与文档是同一个变更的一部分。以下变化必须同步文档：
+## Documentation and Changelog
 
-- 用户可见配置、默认值、资源限制或部署步骤。
-- API、官方契约版本或已知差异。
-- 架构边界、锁序、状态所有权或关闭语义。
-- 分支、CI、版本、镜像标签或发布流程。
-- 安装、升级、回滚和卸载行为。
+Code and documentation are one change. Update the relevant canonical document
+in the same pull request when changing:
 
-面向使用者的变化更新 `docs/CHANGELOG.md`。不要把未完成验收写成已发布事实，也不要
-在多份文档复制容易漂移的“当前状态”；优先链接版本策略、契约或 release note 的
-单一事实源。
+- User-visible configuration, defaults, resource limits, or deployment steps.
+- APIs, the official contract version, or known differences.
+- Architecture boundaries, lock order, state ownership, or shutdown semantics.
+- Branches, CI, versions, image tags, or the release process.
+- Install, upgrade, rollback, or uninstall behavior.
 
-纯文档变更至少运行：
+Record user-visible changes in the root [`CHANGELOG.md`](CHANGELOG.md). Do not
+describe unfinished acceptance as a release. Avoid copying volatile "current
+status" statements into several documents; link to the versioning policy,
+contract baseline, or release note that owns the fact.
+
+The canonical CI workflow is [`.github/workflows/ci.yml`](.github/workflows/ci.yml),
+and the supported single-file deployment template is
+[`deploy/compose.single-file.yaml`](deploy/compose.single-file.yaml). Historical
+audit records live under `docs/archive/`; the
+[2026 audit remediation record](docs/archive/2026-07-audit-remediation.md), for
+example, is context only and not a current architecture or release-status
+source.
+
+For documentation-only changes, run at least:
 
 ```bash
 go run ./cmd/docs-check
 git diff --check
 ```
 
-文档包含命令时，应在适用环境实际执行或明确标注前置条件、示例占位符与破坏性范围。
+Execute documented commands in their supported environment when practical. If
+that is not possible, state the prerequisites, placeholders, and destructive
+scope explicitly.
 
-## 测试要求
+## Testing Requirements
 
-测试范围按风险决定，完整矩阵见[测试指南](docs/development/testing.md#按改动选择测试)。
-最低要求：
+Test scope follows risk; the full matrix is in the
+[testing strategy](docs/development/testing.md).
+The minimum expectations are:
 
-- 开发循环运行目标包测试。
-- 状态或并发变化运行目标包 race test。
-- API 变化运行 `nodeapi`、`httpserver`、`contract` 和固定源码证据测试。
-- Shell/部署变化运行仓库门禁；installer 变化追加离线操作测试。
-- nftables/netlink 变化运行 Linux namespace 测试。
-- 资源上限或大配置路径变化运行低内存门禁。
+- Run affected-package tests during development.
+- Run affected-package race tests for state or concurrency changes.
+- For API changes, run `nodeapi`, `httpserver`, `contract`, and pinned-source
+  evidence tests.
+- Run repository checks for shell or deployment changes; add offline
+  operational tests for installer changes.
+- Run Linux network-namespace tests for nftables or netlink changes.
+- Run the low-memory gate for resource ceilings or large-configuration paths.
 
-提交 PR 前，尽量运行与 CI 等价的仓库检查：
+Before opening a pull request, run the repository checks equivalent to CI when
+your environment supports them:
 
 ```bash
 REMNANODE_OFFICIAL_SOURCE=/absolute/path/to/pinned-official-source \
@@ -216,12 +307,17 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-该命令不包含真实 Panel、Linux network namespace、真实 rw-core 或长期 soak。无法在
-本地运行的平台测试应在 PR 中明确说明，不能写成已经通过。
+This command does not exercise a real Panel, Linux network namespaces, a real
+rw-core, or a long soak. List platform tests you could not run in the pull
+request; never report them as passed.
 
-## Commit
+CI is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Its
+`ci / gate` job aggregates Go and race checks, repository and packaging checks,
+offline installer operations, and isolated Linux network-administration tests.
 
-采用 Conventional Commits 风格：
+## Commits
+
+Use Conventional Commits:
 
 ```text
 feat(contract): support a verified node route
@@ -232,53 +328,78 @@ docs: add the developer testing guide
 chore(deps): update grpc with verified module state
 ```
 
-要求：
+- Write an imperative subject that describes the result. Avoid vague messages
+  such as `update files` or `fix bug`.
+- Use a stable component for the scope, such as `xray`, `plugin`, `contract`,
+  `installer`, or `container`.
+- Keep each commit to one explainable and verifiable logical change, but do not
+  mechanically split every small step of one fix.
+- Exclude unrelated formatting, generated output, and local configuration.
+- Before committing, inspect the staged diff and run
+  `git diff --cached --check`.
 
-- 标题使用祈使语气并说明结果，不写 `update files`、`fix bug` 等模糊描述。
-- scope 使用稳定组件名，例如 `xray`、`plugin`、`contract`、`installer`、`container`。
-- 一个 commit 包含一个可解释、可验证的逻辑变化，但不要机械拆分同一修复的每个小步骤。
-- 不混入无关格式化、生成文件或本地配置。
-- 提交前检查 `git diff --cached --check` 和 staged diff。
+Large work may use a small number of coherent checkpoints, such as contract,
+core implementation, and deployment/documentation. Each checkpoint should be
+independently reviewable; every minor adjustment does not need its own commit.
 
-较大工作可以按“契约/核心实现/部署与文档”等逻辑 checkpoint 分成少量 commit，确保
-每个 checkpoint 都能独立评审，不要求为每次微调创建 commit。
+## Pull Requests
 
-## Pull Request
+Normal pull requests target `dev`. The description should include:
 
-普通 PR 目标为 `dev`。描述应包含：
+- The problem and user-observable impact.
+- The chosen design and why the responsibility belongs to that component.
+- Official contract evidence, or a statement that external behavior is
+  unchanged.
+- Concurrency, resource, security, and platform effects.
+- Commands actually run and their results, with unrun environment tests listed
+  explicitly.
+- Configuration, deployment, migration, rollback, and documentation changes.
 
-- 问题和用户可观察影响。
-- 方案及为何属于当前组件。
-- 官方契约证据或“不改变外部行为”的说明。
-- 并发、资源、安全和平台影响。
-- 实际执行的命令与结果；明确列出未运行的环境测试。
-- 配置、部署、迁移、回滚和文档变化。
+Before requesting review, confirm:
 
-提交前检查：
+- [ ] The branch is based on the latest `dev`, and the pull request targets
+      `dev`.
+- [ ] The diff contains no secrets, local `.env`, real node data, or unrelated
+      changes.
+- [ ] Go code is formatted and module state did not drift accidentally.
+- [ ] Regression tests were added or updated, and risk-appropriate checks ran.
+- [ ] Linux-only behavior is not reported as validated solely through a macOS
+      stub.
+- [ ] User-visible changes update the canonical documentation and root
+      `CHANGELOG.md`.
+- [ ] New dependencies, Actions, and downloaded assets are pinned and covered
+      by supply-chain checks.
+- [ ] No final tag was created, overwritten, or moved early.
 
-- [ ] 分支基于最新 `dev`，PR 目标是 `dev`。
-- [ ] diff 不包含 Secret、本地 `.env`、真实节点资料或无关改动。
-- [ ] Go 代码已 `gofmt`，module 状态未意外变化。
-- [ ] 已添加或更新回归测试，并按风险运行对应检查。
-- [ ] Linux-only 行为没有仅凭 macOS stub 宣称通过。
-- [ ] 用户可见变化已更新文档和 CHANGELOG。
-- [ ] 新依赖、Action 和下载资产已固定并完成供应链检查。
-- [ ] 没有提前创建、覆盖或移动正式 tag。
+Review prioritizes correctness and contract fidelity, state and concurrency,
+resource bounds, security, maintainability, and then style. If review exposes
+an ownership or design problem, fix the design and tests instead of defending
+the wrong boundary with more comments.
 
-Review 重点依次是正确性与契约、状态/并发、资源边界、安全、可维护性和风格。评审中
-发现实现方向需要改变时，优先修正设计和测试，不通过增加注释为错误所有权辩护。
+## Release Boundary
 
-## 发布边界
+A normal contribution ends when it merges into `dev`; contributors do not
+publish it independently. Maintainers control the `dev -> main` promotion,
+candidate images, final tags, `latest`, release assets, and acceptance evidence
+under the [versioning policy](docs/versioning.md) and
+[release procedure](docs/release.md).
 
-普通贡献完成于合入 `dev`，不负责自行发布。`dev -> main` 提升、候选镜像、正式 tag、
-`latest`、Release 资产和 acceptance evidence 由维护者按[版本策略](docs/versioning.md)
-与[发布流程](docs/release.md)统一处理。
+In that procedure, `C` is the frozen code candidate on `main`. After M8
+acceptance, the finalization pull request may add only allowlisted release
+material; its squash-merged result is `F`. The final Git tag points to `F`,
+while the exact release container tag promotes the already accepted manifest
+digest built from `C`. Neither a candidate tag nor a commit-SHA image is a
+release by itself.
 
-发布门禁要求冻结候选、干净工作树、固定官方源码和真实验收资料。不要在普通 PR 中
-修改检查以绕过尚未完成的 evidence，也不要将 `edge` 或 commit SHA 镜像描述为正式版。
+Release gates require a clean worktree, the pinned official source, one frozen
+candidate, and real acceptance evidence. Do not weaken checks to bypass missing
+evidence, and do not describe `edge`, `sha-*`, or `candidate-sha-*` images as
+final releases.
 
-## 许可证
+## License
 
-提交贡献即表示你有权提供相关代码和文档，并同意其按仓库的
-[AGPL-3.0-only](LICENSE) 许可证发布。引用或改写外部实现时必须确认来源与许可证兼容，
-并在需要时保留归属信息。
+By contributing, you confirm that you have the right to provide the code and
+documentation and agree that it will be distributed under the repository's
+[AGPL-3.0-only license](LICENSE). Before quoting or adapting an external
+implementation, verify license compatibility and retain attribution when
+required.

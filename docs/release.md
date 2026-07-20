@@ -1,120 +1,163 @@
-# 发布与版本维护手册
+# Release and Version Maintenance Guide
 
-[返回文档首页](README.md) · [版本模型](versioning.md)
+[Documentation home](README.md) | [Versioning model](versioning.md)
 
-本文面向项目维护者，定义从日常开发、候选冻结、真实验收，到 GitHub Release 与 GHCR 镜像发布的长期流程。这里描述的是仓库的正式发布规则，不是某个版本的一次性清单。
+This guide defines the long-term release process for maintainers, from routine
+development and candidate freezing through real-environment acceptance, GitHub
+Releases, and GHCR image publication. It is the repository's authoritative
+release procedure, not a one-time checklist for a particular version.
 
-版本名称和镜像渠道的规范定义见 [`versioning.md`](versioning.md)；本文重点说明如何把这些规则落实为一次可验证的发布。
+See [`versioning.md`](versioning.md) for the normative version and image-channel
+rules. This guide explains how to turn those rules into a verifiable release.
 
-发布流程有三个核心目标：
+The process has three primary goals:
 
-1. 每个正式版本都能追溯到受保护 `main` 上的确定提交。
-2. 验收记录同时绑定候选提交、二进制摘要和实际测试的容器 manifest digest。
-3. `latest` 始终指向最近一次完整发布且已验证 attestation 的候选 digest，历史版本重跑不能让它回退。
+1. Every final release is traceable to one specific commit on the protected
+   `main` branch.
+2. Acceptance records bind the candidate commit, binary digests, and the exact
+   container manifest digest that was tested.
+3. `latest` always refers to the most recently completed release whose
+   candidate attestation was verified. Re-running an older release must never
+   move `latest` backwards.
 
-## 1. 版本模型
+## 1. Version Model
 
-项目版本与官方 Node 契约版本是两个独立概念。
+The project version and the official Node contract version are separate
+concepts.
 
-| 名称 | 示例 | 含义 |
+| Name | Example | Meaning |
 | --- | --- | --- |
-| 项目版本 | `2.8.1-rnl.9` | 示例 remnanode-lite 构建和 Release 的身份 |
-| 契约版本 | `2.8.0` | 当前代码级可证明并默认向 Panel 上报的官方 Node 契约基线 |
-| Git tag | `v2.8.1-rnl.9` | 触发正式发布 workflow，发布后按政策不可移动 |
-| 镜像 tag | `2.8.1-rnl.9` | 与项目版本完全一致，不带 Git tag 的 `v` 前缀 |
+| Project version | `2.8.1-rnl.9` | Identity of this remnanode-lite build and Release |
+| Contract version | `2.8.0` | Official Node contract baseline currently proven by the code and reported to the Panel by default |
+| Git tag | `v2.8.1-rnl.9` | Triggers the final release workflow and becomes immutable after publication |
+| Image tag | `2.8.1-rnl.9` | Exactly matches the project version, without the Git tag's `v` prefix |
 
-正式版本只允许以下两种格式：
+Final releases may use only these formats:
 
-- `X.Y.Z-rnl.N`：本项目的独立迭代版本。`N` 与官方发布次序没有直接关系；项目可以提前开展下一版本的工作，也可以在已经对齐的官方版本上继续改进。
-- `X.Y.Z`：官方对齐版本。只有当前契约、固定的官方源码、实现、测试和真实验收都完成 `X.Y.Z` 对齐时才能使用纯版本号。
+- `X.Y.Z-rnl.N`: an independent project iteration. `N` has no direct
+  relationship to the official release sequence. The project may start work on
+  a future version early or continue improving an already aligned official
+  version.
+- `X.Y.Z`: an official-alignment release. This form is permitted only after the
+  current contract, pinned official source, implementation, tests, and
+  real-environment acceptance have all been aligned with `X.Y.Z`.
 
-纯 `X.Y.Z` 发布时，项目版本必须等于契约版本。`X.Y.Z-rnl.N` 的前三段不构成官方兼容声明，实际兼容范围始终以契约版本和 Release note 中的兼容矩阵为准。
+For a plain `X.Y.Z` release, the project version must equal the contract
+version. The first three components of `X.Y.Z-rnl.N` do not claim official
+compatibility; the actual compatibility range is always defined by the
+contract version and the compatibility matrix in the Release notes.
 
-例如，以下演进都是合法的：
+The following progressions are all valid:
 
 ```text
-项目版本          契约版本          说明
-2.8.1-rnl.1      2.8.0            提前开展 2.8.1 项目线，仍按 2.8.0 契约报告
-2.8.1            2.8.1            完成官方 2.8.1 对齐后的纯版本
-2.8.1-rnl.9      2.8.1            在已对齐版本上继续进行项目改进
-2.8.2-rnl.1      2.8.1            提前进入下一条项目开发线
+Project version     Contract version     Meaning
+2.8.1-rnl.1         2.8.0                Begin the 2.8.1 project line early while still reporting the 2.8.0 contract
+2.8.1               2.8.1                Plain release after official 2.8.1 alignment is complete
+2.8.1-rnl.9         2.8.1                Continue project-specific improvements on an aligned version
+2.8.2-rnl.1         2.8.1                Begin the next project development line early
 ```
 
-`-rnl.N` 在 SemVer 语法中属于预发布后缀，因此 SemVer 会认为 `2.8.1-rnl.9` 小于 `2.8.1`。本项目不使用 SemVer 排序决定发布时间或 `latest` 指向；稳定性由完整发布门禁决定，先后顺序由实际发布记录决定。
+In SemVer syntax, `-rnl.N` is a prerelease suffix, so SemVer sorts
+`2.8.1-rnl.9` before `2.8.1`. This project does not use SemVer ordering to
+determine release chronology or the target of `latest`. The complete release
+gates determine stability, and the actual release history determines order.
 
-### 1.1 标签不变性
+### 1.1 Tag Immutability
 
-- 已推送的正式 Git tag `v${VERSION}` 不得移动、覆盖或复用。
-- 已发布的 GHCR 精确版本 tag 和 `sha-*` tag 不得主动覆盖。
-- `edge` 与 `latest` 是明确的可变别名，不能作为回滚依据。
-- 未完成正式验收的构建只能使用 `edge`、`sha-*` 或 `candidate-sha-*`，不能创建 `v*` 正式 tag。
-- `latest` 属于本项目自己的稳定镜像通道，不代表 `remnawave/node` 官方镜像的 latest。
+- A published final Git tag, `v${VERSION}`, must never be moved, overwritten,
+  or reused.
+- Published exact-version GHCR tags and `sha-*` tags must never be deliberately
+  overwritten.
+- `edge` and `latest` are explicitly mutable aliases and must not be used as
+  rollback identities.
+- Builds that have not completed final acceptance may use only `edge`, `sha-*`,
+  or `candidate-sha-*`; they must not receive a final `v*` Git tag.
+- `latest` is this project's stable image channel. It does not refer to the
+  `latest` tag of the official `remnawave/node` image.
 
-## 2. 分支与自动化边界
+## 2. Branch and Automation Boundaries
 
-仓库长期维护两个分支：
+The repository maintains two long-lived branches:
 
-| 分支 | 职责 | 常规进入方式 |
+| Branch | Responsibility | Normal entry path |
 | --- | --- | --- |
-| `dev` | 日常开发、集成和回归 | 从短期主题分支发起 PR，经 CI 后合入 |
-| `main` | 发布候选与正式发布来源 | 从 `dev` 发起 PR，经 CI 后合入 |
+| `dev` | Routine development, integration, and regression testing | Pull request from a short-lived topic branch after CI passes |
+| `main` | Source of release candidates and final releases | Pull request from `dev` after CI passes |
 
-GitHub Actions 的职责彼此独立：
+The GitHub Actions workflows have distinct responsibilities:
 
-| Workflow | 触发条件 | 产物或作用 |
+| Workflow | Trigger | Output or responsibility |
 | --- | --- | --- |
-| `ci` | `dev`/`main` push 与相关 PR | Go、仓库、installer 和 Linux 网络管理门禁，由 `ci / gate` 汇总 |
-| `container` | 容器输入发生变化的 `dev`/`main` push 或 PR | `dev`/PR 只构建；`main` 先按 digest 构建和证明，再发布 `sha-<commit>` 与 `edge` |
-| `security` | 定时或手动 | 扫描可达 Go 漏洞 |
-| `contract-sync` | 定时或手动 | 检查固定官方契约，发现官方新版本时创建 Issue，不自动改代码 |
-| `release` | push `v*` tag | 最终门禁、候选 attestation 验证、GitHub Release、精确 GHCR 标签和 `latest` 晋升 |
+| [`ci`](../.github/workflows/ci.yml) | Pushes to `dev`/`main` and relevant pull requests | Go, repository, installer, and Linux network-management gates, summarized by `ci / gate` |
+| [`container`](../.github/workflows/container.yml) | Pushes or pull requests to `dev`/`main` that change container inputs | Builds only on `dev` and pull requests; on `main`, builds and attests by digest before publishing `sha-<commit>` and `edge` |
+| [`security`](../.github/workflows/security.yml) | Scheduled or manual | Scans for reachable Go vulnerabilities |
+| [`contract-sync`](../.github/workflows/contract-sync.yml) | Scheduled or manual | Checks the pinned official contract and opens an issue when a new official version appears; never changes code automatically |
+| [`release`](../.github/workflows/release.yml) | Push of a `v*` tag | Runs final gates, verifies candidate attestation, creates the GitHub Release, and promotes exact and `latest` GHCR tags |
 
-`ci` 与 `container` 不是重复流程：前者验证代码和仓库，后者验证或发布容器。分支保护应始终要求不会因路径过滤而缺失的 `ci / gate`；按路径触发的 `container` 不适合作为唯一 required check。
+`ci` and `container` are not duplicate pipelines. The former verifies the code
+and repository; the latter verifies or publishes the container. Branch
+protection should always require `ci / gate`, which cannot disappear because of
+path filtering. The path-filtered `container` workflow is unsuitable as the
+only required check.
 
-## 3. 日常开发
+## 3. Routine Development
 
-所有功能、修复、依赖、workflow、部署文件和长期文档变更先通过主题分支进入 `dev`：
+All features, fixes, dependency changes, workflows, deployment assets, and
+long-lived documentation changes first enter `dev` through a topic branch:
 
 ```bash
 git switch dev
 git pull --ff-only origin dev
 git switch -c chore/prepare-next-release
 
-# 修改并运行与风险匹配的检查
+# Make the changes and run checks appropriate to their risk.
 bash scripts/check-go.sh
 
 git status --short
 git diff --check
-git add <明确的文件列表>
+git add <explicit-file-list>
 git diff --cached --check
 git commit -m "type(scope): describe the change"
 git push -u origin chore/prepare-next-release
 
-# 在 GitHub 发起 chore/prepare-next-release -> dev 的 PR；CI 成功并评审后合入
+# Open a chore/prepare-next-release -> dev pull request on GitHub.
+# Merge it after CI succeeds and the review is complete.
 ```
 
-即使只有一位维护者，也使用同一条 PR 路径，让 `dev` 的变更、CI 结论和评审上下文可追溯；不要把“允许 push”理解为常规开发入口。
+Even with a single maintainer, use the same pull-request path so that changes,
+CI conclusions, and review context on `dev` remain traceable. Permission to
+push directly is not the normal development entry point.
 
-发布前必须在 `dev` 完成版本元数据更新。设本次项目版本为：
+Before release, update all version metadata on `dev`. Define the intended
+project version as:
 
 ```bash
-VERSION=X.Y.Z-rnl.N   # 或已经完成官方对齐的 X.Y.Z
+VERSION=X.Y.Z-rnl.N   # Or X.Y.Z after official alignment is complete.
 TAG="v${VERSION}"
 ```
 
-版本更新必须同步应用版本、安装/升级脚本默认 tag、容器默认镜像、contract probe 身份、CHANGELOG 和相关测试。若只是进入新的 `rnl` 项目线，不得顺手修改契约版本或官方源码 pin。
+The version update must cover the application version, default tags in the
+install and upgrade scripts, default container images, contract-probe identity,
+the root [`CHANGELOG.md`](../CHANGELOG.md), and related tests. Merely entering a
+new `rnl` project line must not silently change the contract version or the
+official source pin.
 
-官方契约升级是单独的兼容性任务，至少包括：
+An official contract upgrade is a separate compatibility project. At minimum,
+it requires:
 
-- 固定新的官方 Node tag 与完整 commit。
-- 更新契约版本和 Panel 上报版本。
-- 重新审计路由、schema、错误和副作用。
-- 调整实现与自动化测试。
-- 更新兼容文档、真实 Panel 目标和验收范围。
+- pinning the new official Node tag and full commit;
+- updating the contract version and version reported to the Panel;
+- re-auditing routes, schemas, errors, and side effects;
+- updating the implementation and automated tests; and
+- updating compatibility documentation, the real Panel target, and the
+  acceptance scope.
 
-## 4. 将代码候选合入 main
+## 4. Merge the Code Candidate into `main`
 
-完成 `dev` 回归后，发起 `dev -> main` PR。代码 PR 可以使用仓库允许的正常合并方式；候选提交 `C` 必须定义为 PR 已经合入后 `main` 上的最终提交，而不是合入前的 `dev` 提交。
+After regression testing on `dev`, open a `dev -> main` pull request. The code
+pull request may use any normal merge method allowed by the repository. Define
+candidate commit `C` as the final commit on `main` after that pull request has
+been merged, not the pre-merge commit from `dev`.
 
 ```bash
 git fetch origin dev main
@@ -126,20 +169,36 @@ git rev-parse "${C}^{commit}"
 git rev-parse "${C}^{tree}"
 ```
 
-从此刻开始冻结 `main`。冻结范围包括 Go 代码、测试、脚本、workflow、Dockerfile、Compose、部署服务文件和非发布专用文档。验收期间如果 `main` 出现任何超出最终化白名单的变化，原候选证据失效，必须以新的 `main` 提交作为 `C` 并重新执行相关验收。
+Freeze `main` at this point. The freeze covers Go code, tests, scripts,
+workflows, Dockerfiles, Compose files, service definitions, and all
+documentation outside the release-finalization allowlist. If `main` changes
+beyond that allowlist during acceptance, the original evidence becomes
+invalid. Treat the new `main` commit as `C` and repeat the affected acceptance
+work.
 
-不要提前创建正式 `v${VERSION}` tag。候选身份使用完整的 40 位 commit 即可；如确实需要本地标记，可以创建包含 commit 短 SHA 的本地候选 tag，但不得将它当作 Release tag。
+Do not create the final `v${VERSION}` tag yet. The full 40-character commit is
+sufficient to identify a candidate. If a local marker is genuinely useful, it
+may include the short commit SHA, but it must not be treated or pushed as a
+Release tag.
 
-## 5. 候选镜像验收
+## 5. Accept the Candidate Image
 
-若候选提交包含容器输入变化，`main` 的 `container` workflow 会先构建没有业务 tag 的多架构 manifest，生成 BuildKit SBOM/provenance 和 GitHub build attestation，最后才发布：
+When the candidate changes a container input, the `container` workflow on
+`main` first builds a multi-architecture manifest without a user-facing tag. It
+produces BuildKit SBOM/provenance and a GitHub build attestation before
+publishing:
 
 ```text
 ghcr.io/luxiaba/remnanode-lite:edge
 ghcr.io/luxiaba/remnanode-lite:sha-${C}
 ```
 
-`sha-${C}` 第一次写入后由 workflow 拒绝移动；`edge` 只有在 `C` 仍是当前 `main` HEAD 时才会更新。先用 `sha-${C}` 定位自动候选，再把 registry 返回的 manifest digest 作为验收的规范镜像身份；从同一个 `C` 下载 Compose 或部署文件，避免镜像和配置来自不同提交。
+The workflow refuses to move `sha-${C}` after its first publication. It updates
+`edge` only while `C` remains the current `main` HEAD. Use `sha-${C}` to locate
+the automatic candidate, then treat the manifest digest returned by the
+registry as the canonical image identity for acceptance. Download the Compose
+and deployment assets from the same `C` so the image and its configuration
+cannot come from different commits.
 
 ```bash
 IMAGE="ghcr.io/luxiaba/remnanode-lite:sha-${C}"
@@ -160,13 +219,32 @@ gh attestation verify \
   --deny-self-hosted-runners
 ```
 
-手动从 `main` 运行候选 workflow 时只发布按策略不移动的 `candidate-sha-${C}`，不会覆盖自动 push 已生成的 `sha-${C}`。它是手动候选专用的发现别名，digest 不保证与自动候选相同。两种候选都可以进入验收，但从开始验收到正式发布必须固定同一个完整 commit 和 manifest digest；正式 Release 直接验证该 digest 的存在性及其 attestation，不依赖候选使用了哪一种 tag 别名。
+A manual run of the candidate workflow from `main` publishes only the
+policy-immutable `candidate-sha-${C}` alias. It does not overwrite an automatic
+`sha-${C}` created by a push. This is a discovery alias for manually requested
+candidates, and its digest is not guaranteed to match the automatic
+candidate's digest. Either candidate may enter acceptance, but the same full
+commit and manifest digest must remain fixed from the start of acceptance
+through final publication. The final Release verifies the chosen digest and
+its attestation directly; it does not depend on which candidate alias was used.
 
-M8 的容器验收使用 `C` 中的 `docs/examples/compose.single-file.yaml`，将其中镜像引用替换为 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}` 后运行。证据必须同时保存候选 Git object 中该模板的文件 SHA-256 和实际运行的 digest；仅运行 `docker compose config` 或测试相同 tag 的另一次构建不能替代最终候选验收。完整字段和采集口径见 [`development/release-acceptance.md`](development/release-acceptance.md#docker-compose-证据)。
+M8 container acceptance must use
+[`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml) from
+`C`, with its image reference replaced by
+`ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}`. The evidence records both
+the file SHA-256 of that template in the candidate Git object and the digest
+that actually ran. Running only `docker compose config`, or testing another
+build behind the same tag, cannot substitute for acceptance of the final
+candidate. See [Docker Compose evidence](development/release-acceptance.md#docker-compose-evidence)
+for the complete schema and collection rules.
 
-## 6. 冻结候选与真实验收
+## 6. Freeze the Candidate and Run Real-Environment Acceptance
 
-正式验收必须针对同一个 `C`，并使用 `scripts/build-release-binaries.sh` 从干净工作树构建二进制。官方 Git repository 必须包含当前契约基线固定的 commit；source oracle 只读取该 commit object，不信任其 checkout、index 或 HEAD：
+Final acceptance must target the same `C`. Build native binaries from a clean
+worktree with `scripts/build-release-binaries.sh`. The official Git repository
+must contain the pinned commit for the current contract baseline. The source
+oracle reads that commit object directly and does not trust its checkout,
+index, or `HEAD`:
 
 ```bash
 export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned-remnawave-node
@@ -176,18 +254,29 @@ bash scripts/check.sh
 git status --short
 ```
 
-真实验收范围以 [`development/release-acceptance.md`](development/release-acceptance.md) 为准，至少覆盖：
+The authoritative scope is defined in
+[`development/release-acceptance.md`](development/release-acceptance.md). It
+must cover at least:
 
-- 固定官方 Node 与候选 Node 的路由、响应、错误和副作用差分。
-- 目标 Panel 的节点注册、Xray 生命周期、统计、用户和插件流程。
-- Ubuntu/systemd 与 Alpine/OpenRC，架构并集覆盖 amd64 和 arm64。
-- 候选 manifest 同时包含 linux/amd64、linux/arm64，并分别在原生 amd64 与 arm64 验收机上用批量部署 Compose 模板启动同一个验收 digest。
-- 容器实际 cgroup、read-only rootfs、init/reaper、tmpfs、capability、health、优雅停止、PIDs/zombie 和日志轮转约束。
-- rw-core、nftables、socket destroy、进程组清理、安装、升级、回滚和卸载隔离。
-- 整机 `512 MiB RAM / 1 vCPU / 2 GiB disk / no swap` 的资源预算；容器磁盘峰值必须保留一个真实回滚镜像。
-- 50k 用户、规定的持续运行时间和故障恢复场景。
+- route, response, error, and side-effect differential testing between the
+  pinned official Node and the candidate Node;
+- node registration, Xray lifecycle, statistics, user, and plugin flows against
+  the target Panel;
+- Ubuntu/systemd and Alpine/OpenRC, with the union of tested systems covering
+  amd64 and arm64;
+- a candidate manifest containing both `linux/amd64` and `linux/arm64`, with
+  the same accepted digest launched from the fleet Compose template on native
+  amd64 and arm64 hosts;
+- actual container cgroups, read-only root filesystem, init/reaper, tmpfs,
+  capabilities, health, graceful shutdown, PID/zombie behavior, and log
+  rotation;
+- rw-core, nftables, socket destruction, process-group cleanup, installation,
+  upgrade, rollback, and uninstall isolation;
+- the whole-machine budget of `512 MiB RAM / 1 vCPU / 2 GiB disk / no swap`,
+  while retaining one real rollback image within the container disk peak; and
+- 50,000 users, the prescribed soak duration, and fault-recovery scenarios.
 
-验收材料写入当前项目版本对应的目录：
+Store acceptance material under the directory for the current project version:
 
 ```text
 docs/development/acceptance/v${VERSION}/
@@ -199,32 +288,47 @@ docs/development/acceptance/v${VERSION}/
   resource-fault.json
 ```
 
-当前 `cmd/release-evidence-check` 是首个版本线的严格验收 profile，会固定版本、官方提交、Panel、rw-core、系统、路由数量和资源策略。准备新的项目版本或契约时，必须先在普通代码 PR 中更新并测试这个 profile；不能等到 tag workflow 中临时放宽校验，也不能把旧版本 evidence 改名复用。
+The current `cmd/release-evidence-check` implements a strict profile for the
+first release line. It pins the version, official commit, Panel, rw-core,
+operating systems, route count, and resource policy. When preparing a new
+project or contract version, update and test this profile in a normal code pull
+request first. Never loosen it ad hoc in the tag workflow, and never rename and
+reuse evidence from an older release.
 
-`manifest.json` 必须记录 `C`、candidate tree、`CANDIDATE_DIGEST`、项目版本、Git tag、官方契约 pin、Panel、rw-core、资源策略、风险和其余 evidence 的 SHA-256。它不记录尚未产生的最终提交 `F`；严格 schema 会拒绝这个未知字段。不得提交 Secret Key、JWT、CA、证书、私钥、IP、hostname、Panel URL、原始响应 body 或可还原用户的数据。
+`manifest.json` must record `C`, the candidate tree, `CANDIDATE_DIGEST`, project
+version, Git tag, official contract pin, Panel, rw-core, resource policy, known
+risks, and SHA-256 digests of all other evidence files. It must not record final
+commit `F`, which does not exist yet; the strict schema rejects that unknown
+field. Never commit a Secret Key, JWT, CA, certificate, private key, IP address,
+hostname, Panel URL, raw response body, or any user data that can be
+reconstructed.
 
-## 7. 受保护 main 下提交发布资料
+## 7. Commit Release Material under Protected `main`
 
-候选验收通过后，只允许提交发布最终化资料。当前白名单为：
+After candidate acceptance succeeds, only release-finalization material may be
+changed. The current allowlist is:
 
 ```text
 README.md
-docs/CHANGELOG.md
+CHANGELOG.md
 docs/development/roadmap.md
 docs/development/acceptance/v${VERSION}/**
 docs/releases/v${VERSION}.md
 ```
 
-验收前必须完成其他长期文档；`C` 之后修改架构、配置、部署或本发布手册都会使候选失效。
+Complete all other long-lived documentation before acceptance. Changes after
+`C` to architecture, configuration, deployment documentation, or this release
+guide invalidate the candidate.
 
-从 `C` 创建专用文档分支：
+Create a dedicated documentation branch from `C`:
 
 ```bash
 git switch --detach "$C"
 git switch -c "release/v${VERSION}-docs"
 
-# 填写 evidence、Release note、CHANGELOG，并把 README/roadmap 从候选状态更新为发布状态
-git add README.md docs/CHANGELOG.md docs/development/roadmap.md \
+# Add evidence and Release notes, update CHANGELOG, and move README/roadmap
+# from candidate status to released status.
+git add README.md CHANGELOG.md docs/development/roadmap.md \
   "docs/development/acceptance/v${VERSION}" \
   "docs/releases/v${VERSION}.md"
 git diff --cached --check
@@ -232,18 +336,22 @@ git commit -m "docs(release): record v${VERSION} acceptance"
 git push -u origin "release/v${VERSION}-docs"
 ```
 
-然后发起该分支到 `main` 的 PR。这里有一个不可省略的约束：**发布资料 PR 必须使用 squash merge**。
+Open a pull request from this branch to `main`. One constraint is mandatory:
+**the release-material pull request must use squash merge**.
 
-验收验证器会逐个检查 `C..HEAD` 的提交，并拒绝：
+The evidence validator examines every commit in `C..HEAD` and rejects:
 
-- 任意双 parent 或多 parent 的 merge commit。
-- 白名单以外的路径变化。
-- 修改后再 revert 的代码漂移。
-- evidence 与 HEAD、Git index 或工作树不一致。
+- any merge commit with two or more parents;
+- changes outside the allowlist;
+- code drift that was later reverted; and
+- evidence that disagrees with `HEAD`, the Git index, or the worktree.
 
-因此不能使用普通 merge commit 完成发布资料 PR。合并时 `main` 仍必须停在 `C`；若其他提交已经进入 `main`，不要 rebase 后继续沿用旧 evidence，应重新评估变更并冻结新的候选。
+Therefore, do not use a regular merge commit for the release-material pull
+request. `main` must still be at `C` when it is merged. If another commit has
+entered `main`, do not rebase and continue using the old evidence; reassess the
+changes and freeze a new candidate.
 
-Squash merge 后，最终发布提交记为 `F`：
+After the squash merge, call the final release commit `F`:
 
 ```bash
 git fetch origin main
@@ -255,42 +363,52 @@ git merge-base --is-ancestor "$C" "$F"
 git diff --name-only "$C..$F"
 ```
 
-正式 tag 指向 `F`，不是候选代码提交 `C`。验证器会证明 `F` 只比 `C` 多出允许的发布资料。
+The final tag points to `F`, not candidate code commit `C`. The validator proves
+that `F` differs from `C` only by permitted release material.
 
-## 8. Release note 要求
+## 8. Release Note Requirements
 
-每个正式版本必须提供：
+Every final version must provide:
 
 ```text
 docs/releases/v${VERSION}.md
 ```
 
-首行必须是：
+Its first line must be:
 
 ```markdown
 # v${VERSION}
 ```
 
-Release note 至少包含以下章节：
+The Release notes must contain at least these sections:
 
 ```markdown
-## 兼容范围
-## 验收结果
-## 已知风险
-## 安装与升级
+## Compatibility
+## Acceptance Results
+## Known Risks
+## Installation and Upgrade
 ```
 
-兼容范围必须分别写明项目版本、契约版本、固定官方 commit、目标 Panel、rw-core 和支持架构；验收结果还必须列出候选提交 `C` 与 `candidateImageDigest`，并包含门禁要求的精确相对链接：
+The compatibility section must state the project version, contract version,
+pinned official commit, target Panel, rw-core, and supported architectures
+separately. Acceptance results must include candidate commit `C`,
+`candidateImageDigest`, and the exact relative link required by the gate:
 
 ```markdown
-[验收 manifest](../development/acceptance/v${VERSION}/manifest.json)
+[Acceptance manifest](../development/acceptance/v${VERSION}/manifest.json)
 ```
 
-Release note 不能写入自身所在提交 `F`，否则会形成不可实现的 Git SHA 自引用。发布完成后，正式 tag 指向的 commit 就是 `F`，可用 `git rev-list -n 1 v${VERSION}` 或 GitHub Release 的 target commit 解析。已知风险不能用空泛的“无”替代审计结论；不存在开放风险时也应说明验收边界和未覆盖范围。文件不得包含 `TODO`、`TBD`、`待补`、`Unreleased` 或“开发中”等占位内容。
+Release notes must not embed their own commit `F`, because that would require an
+impossible self-referential Git SHA. After publication, the final tag points to
+`F`; resolve it with `git rev-list -n 1 v${VERSION}` or the target commit of the
+GitHub Release. Do not replace an audit conclusion in Known Risks with a vague
+"none." Even when there are no open risks, document the acceptance boundary and
+anything not covered. The file must not contain placeholders such as `TODO`,
+`TBD`, `Unreleased`, or "in progress."
 
-## 9. 最终门禁与 tag
+## 9. Final Gate and Tag
 
-在最新 `main` 的干净工作树上执行最终检查：
+Run the final checks from a clean worktree at the latest `main`:
 
 ```bash
 git fetch origin main --tags
@@ -305,7 +423,8 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-确认版本、证据和最终提交无误后创建 annotated tag：
+After confirming the version, evidence, and final commit, create an annotated
+tag:
 
 ```bash
 git tag -a "$TAG" -m "release ${TAG}"
@@ -319,42 +438,76 @@ REQUIRE_TAG_AT_HEAD=1 \
 git push origin "$TAG"
 ```
 
-如果 tag push 后因非瞬时问题失败，不得 force-move 原 tag。修复需要源码变化时使用新的项目版本并重新走候选流程。
+If the workflow fails for a non-transient reason after the tag is pushed, never
+force-move the original tag. A fix that changes source code requires a new
+project version and a new candidate cycle.
 
-从冻结 `C` 开始直到 `latest` 晋升和发布后验证完成，`main` 应保持冻结。若正式 workflow 运行期间 `main` 已经前进，精确版本仍可保留为可审计 Release，但 promotion 会拒绝把它设为 `latest`；需要推荐新的主线状态时，应从新的 `main` HEAD 准备后续版本，不能绕过 HEAD guard。
+Keep `main` frozen from the moment `C` is selected until `latest` promotion and
+post-release verification finish. If `main` advances while the final workflow
+is running, the exact release remains an auditable artifact, but promotion
+refuses to make it `latest`. To recommend the newer mainline state, prepare a
+subsequent version from the new `main` HEAD; do not bypass the HEAD guard.
 
-## 10. Tag Release 自动化
+## 10. Tag-Triggered Release Automation
 
-`.github/workflows/release.yml` 收到 `v${VERSION}` 后按以下顺序执行：
+When [`.github/workflows/release.yml`](../.github/workflows/release.yml) receives
+`v${VERSION}`, it runs these steps in order:
 
-1. 验证 tag commit 正是当前 `origin/main` HEAD，并重新运行版本、证据、代码、供应链和 Linux namespace 门禁。
-2. 从 acceptance manifest 读取 `C` 和已验收 digest，直接确认该 digest 仍存在，并严格校验 attestation 的仓库、签名 workflow、源码提交与 `refs/heads/main` 来源；不要求它必须来自某一种候选 tag 别名。
-3. 构建 linux/amd64 与 linux/arm64 二进制归档、compact ASN 数据库、标准 Compose、单文件 Compose、环境模板和 `SHA256SUMS`；证据验证器会比较两种架构的 Node 二进制摘要。
-4. 使用 `docs/releases/v${VERSION}.md` 创建 GitHub Release，但暂不把它标为 GitHub 的 Latest Release；已有同名资产不会被覆盖。
-5. 不重新构建容器，而是把已经验收并证明的 `CANDIDATE_DIGEST` 发布为按政策不移动的精确版本：
+1. Verify that the tagged commit is the current `origin/main` HEAD, then rerun
+   version, evidence, code, supply-chain, and Linux namespace gates.
+2. Read `C` and the accepted digest from the acceptance manifest. Confirm that
+   the digest still exists and strictly verify its attestation repository,
+   signing workflow, source commit, and `refs/heads/main` source. The digest
+   does not have to be discoverable through one particular candidate alias.
+3. Build linux/amd64 and linux/arm64 binary archives, the compact ASN database,
+   standard Compose, single-file Compose, the environment template, and
+   `SHA256SUMS`. The evidence validator compares the Node binary digest for both
+   architectures.
+4. Create the GitHub Release from `docs/releases/v${VERSION}.md`, but do not yet
+   mark it as GitHub's Latest Release. Existing assets with the same names are
+   not overwritten.
+5. Do not rebuild the container. Publish the accepted and attested
+   `CANDIDATE_DIGEST` under the policy-immutable exact version:
 
    ```text
    ghcr.io/luxiaba/remnanode-lite:${VERSION}
    ```
 
-6. 只有精确版本发布成功，且 tag commit 仍是当前 `origin/main` HEAD 时，才把同一个已证明 digest 晋升为 GHCR `latest`，并将对应 GitHub Release 标记为 Latest Release：
+6. Only after exact-version publication succeeds, and only while the tagged
+   commit remains the current `origin/main` HEAD, promote the same attested
+   digest to GHCR `latest` and mark the corresponding GitHub Release as Latest:
 
    ```text
    ghcr.io/luxiaba/remnanode-lite:latest
    ```
 
-正式镜像的构建 provenance 和 OCI revision 指向候选代码提交 `C`；Git tag 与 GitHub Release 指向只比 `C` 多发布资料的最终提交 `F`。acceptance manifest 和 Release note 记录 `C` 与 digest，Git tag 本身唯一解析出 `F`；commit-bound 文件不能自引用尚未产生的 `F`。不能把精确版本描述为重新从 `F` 构建的另一份容器。
+The final image's build provenance and OCI revision refer to candidate code
+commit `C`. The Git tag and GitHub Release refer to final commit `F`, which adds
+only release material to `C`. The acceptance manifest and Release notes record
+`C` and the digest, while the Git tag uniquely resolves `F`; commit-bound files
+cannot self-reference an `F` that has not yet been created. Never describe the
+exact-version image as a separate image rebuilt from `F`.
 
-精确版本写入采用“不存在则创建、存在则必须是同一 digest”的规则，完整 workflow 重跑不能把它改向另一份内容。`latest` 晋升只移动浮动 tag，不重新构建镜像。promotion job 必须独立重新读取 `origin/main` 并检查 HEAD，不能只依赖更早 job 曾经完成的检查。任何历史 tag 都不得更新 GHCR `latest` 或 GitHub Latest Release。release workflow 使用仓库级串行组，避免两个正式发布同时竞争 registry 写入。
+Exact-version publication follows a "create if absent; otherwise require the
+same digest" rule. Re-running the complete workflow cannot move it to different
+content. Promoting `latest` only moves the floating tag and never rebuilds the
+image. The promotion job must independently fetch `origin/main` again and
+verify its HEAD; it must not rely solely on a check completed by an earlier
+job. An old tag must never update GHCR `latest` or GitHub's Latest Release. The
+release workflow uses a repository-wide concurrency group so two final
+releases cannot race to write registry state.
 
-纯 `X.Y.Z` 和 `X.Y.Z-rnl.N` 在通过同一套正式门禁后都属于稳定 Release，也都会被自动晋升为 `latest`。实验性构建不要通过降低 GitHub Release 的 prerelease 标记来发布，应继续使用候选镜像通道。
+Both plain `X.Y.Z` and `X.Y.Z-rnl.N` are stable Releases after passing the same
+final gates, and both are eligible for automatic promotion to `latest`. Do not
+publish experimental builds by weakening the GitHub Release prerelease flag;
+keep them in the candidate image channels.
 
-## 11. 发布后验证
+## 11. Post-Release Verification
 
-设候选提交为 `C`、最终资料提交为 `F`：
+Let `C` be the candidate commit and `F` the final material commit:
 
 ```bash
-VERSION=X.Y.Z-rnl.N   # 或 X.Y.Z
+VERSION=X.Y.Z-rnl.N   # Or X.Y.Z.
 C=REPLACE_WITH_40_CHAR_CANDIDATE_COMMIT
 F="$(git rev-list -n 1 "v${VERSION}")"
 CANDIDATE_DIGEST=sha256:REPLACE_WITH_64_HEX_DIGEST
@@ -363,16 +516,20 @@ CANDIDATE_IMAGE="ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}"
 LATEST_IMAGE="ghcr.io/luxiaba/remnanode-lite:latest"
 ```
 
-确认 multi-arch manifest：
+Inspect the multi-architecture manifests:
 
 ```bash
 docker buildx imagetools inspect "$IMAGE"
 docker buildx imagetools inspect "$CANDIDATE_IMAGE"
 ```
 
-输出必须包含 `linux/amd64` 和 `linux/arm64`，且精确版本与 acceptance manifest 中的候选引用解析为同一 manifest digest。标准自动候选的 `sha-${C}` 或实际使用过的手动候选 tag 如仍保留，也应解析为该 digest。
+The output must contain both `linux/amd64` and `linux/arm64`. The exact version
+and the candidate reference in the acceptance manifest must resolve to the same
+manifest digest. The normal automatic candidate tag, `sha-${C}`, or the manual
+candidate tag actually used for acceptance should also resolve to that digest
+while it remains available.
 
-验证 GitHub attestation：
+Verify the GitHub attestation:
 
 ```bash
 gh attestation verify \
@@ -384,15 +541,18 @@ gh attestation verify \
   --deny-self-hosted-runners
 ```
 
-确认本次发布被晋升为稳定版本时，再比较 `latest`：
+If this release was promoted to the stable channel, compare `latest`:
 
 ```bash
 docker buildx imagetools inspect "$LATEST_IMAGE"
 ```
 
-`latest`、精确版本和 acceptance 中的候选 digest 应指向同一 manifest digest。若 tag commit `F` 在发布期间已不再是 `main` HEAD，`latest` 保持上一稳定版本是预期行为。
+`latest`, the exact version, and the accepted candidate digest must all resolve
+to the same manifest digest. If final tag commit `F` stopped being the `main`
+HEAD during publication, it is expected that `latest` remains on the previous
+stable release.
 
-验证 GitHub Release 资产：
+Verify the GitHub Release assets:
 
 ```bash
 BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
@@ -409,27 +569,42 @@ curl -fLO "$BASE_URL/remnanode.env.example"
 sha256sum --check SHA256SUMS
 ```
 
-`SHA256SUMS` 验证下载内容与 workflow 生成内容一致；容器的 GitHub attestation 则提供独立的构建来源证明。除非 Release workflow 另行增加文件级 artifact attestation，不应把容器 attestation 描述为二进制归档的证明。
+`SHA256SUMS` proves that the downloaded files match the files produced by the
+workflow. The container's GitHub attestation independently proves its build
+origin. Unless the Release workflow later adds file-level artifact
+attestations, do not describe the container attestation as proof for the binary
+archives.
 
-## 12. 部分失败与恢复
+## 12. Partial Failures and Recovery
 
-发布 workflow 是分阶段产生外部状态的。失败后先确认已经创建了哪些对象，再决定重试范围。
+The release workflow creates external state in stages. After a failure, first
+identify which objects already exist, then choose the narrowest safe retry.
 
-| 失败位置 | 已有状态 | 恢复方式 | `latest` 状态 |
+| Failure point | Existing state | Recovery | State of `latest` |
 | --- | --- | --- | --- |
-| 门禁、候选 digest 或 attestation 校验失败 | 没有新 Release 和正式镜像 | 修正 evidence 或候选状态；源码变化则创建新候选和版本 | 不变 |
-| GitHub Release 成功、精确版本发布失败 | Release 资产可能已存在 | 只重跑失败 job；已有 Release 资产和目标 tag 均不得覆盖 | 不变 |
-| 精确版本成功、GHCR `latest` 晋升失败 | 精确版本、候选证明和 Release 资产完整 | 只重跑 promotion job，按同一已验收 digest 晋升 | 不变，直到晋升成功 |
-| GHCR `latest` 已晋升、GitHub Latest 标记失败 | GHCR 稳定通道已更新，GitHub Release 尚未标记 | 重跑 promotion job；同 digest 的 GHCR 操作是幂等的，随后补写 GitHub 标记 | GHCR 已更新，GitHub UI 暂时落后 |
-| 历史 run 重试未完成 job | 历史 Release/镜像可能已经部分存在 | 只修复该精确版本；promotion 必须再次检查当前 main HEAD | 不得回移 |
+| Gate, candidate digest, or attestation verification fails | No new Release or final image | Correct the evidence or candidate state; source changes require a new candidate and version | Unchanged |
+| GitHub Release succeeds but exact-version publication fails | Release assets may already exist | Re-run only the failed job; neither existing Release assets nor the target tag may be overwritten | Unchanged |
+| Exact version succeeds but GHCR `latest` promotion fails | Exact version, candidate proof, and Release assets are complete | Re-run only the promotion job and promote the same accepted digest | Unchanged until promotion succeeds |
+| GHCR `latest` is promoted but the GitHub Latest flag fails | GHCR stable channel is updated, but the GitHub Release is not yet marked Latest | Re-run the promotion job; the same-digest GHCR operation is idempotent, then apply the GitHub flag | GHCR is updated; the GitHub UI temporarily lags |
+| An unfinished job from an older run is retried | The historical Release or image may already exist in part | Repair only that exact version; promotion must fetch and check the current `main` HEAD again | Must not move backwards |
 
-优先使用 GitHub Actions 的“Re-run failed jobs”。完整重跑会保留已有 Release 资产，并只允许精确版本继续指向相同 digest；若已有状态与 acceptance manifest 不一致，workflow 会失败，不能通过删除或覆盖证据掩盖冲突。先记录 GitHub Release、GHCR manifest、attestation 和 workflow run 的对应关系，再决定是否需要新的项目版本。
+Prefer GitHub Actions' **Re-run failed jobs** action. A full rerun preserves
+existing Release assets and permits the exact version only to remain on the
+same digest. If existing state disagrees with the acceptance manifest, the
+workflow must fail; do not delete or overwrite evidence to conceal the
+conflict. Record the relationship among the GitHub Release, GHCR manifest,
+attestation, and workflow run before deciding whether a new project version is
+required.
 
-如果 `latest` 因 workflow 缺陷或人工操作指向错误 digest，应按发布事故处理：记录错误和上一稳定 digest，用受控 promotion 恢复 `latest`，然后修复 workflow。不要修改任何已发布精确版本 tag 来掩盖问题。
+If `latest` points to the wrong digest because of a workflow defect or manual
+operation, handle it as a release incident. Record the incorrect and previous
+stable digests, restore `latest` through a controlled promotion, and then fix
+the workflow. Never mutate a published exact-version tag to hide the incident.
 
-## 13. 回滚
+## 13. Rollback
 
-服务端回滚使用上一稳定版本的精确 tag 或 manifest digest：
+For container deployments, roll back to the previous stable exact tag or
+manifest digest:
 
 ```bash
 docker compose pull
@@ -437,50 +612,83 @@ docker compose up -d --no-build --force-recreate
 docker compose ps
 ```
 
-同时恢复与该版本配套的 Compose 和配置。不要通过移动旧版本 tag 或把 `latest` 强行改成任意历史构建来代替节点级回滚。
+Restore the matching Compose file and configuration at the same time. Do not
+move an old version tag or force `latest` to an arbitrary historical build as a
+substitute for node-level rollback.
 
-`latest` 不会自动替换运行中的容器。选择自动跟随稳定通道的节点仍需主动执行 `docker compose pull` 与 recreate；大规模部署应分批更新，并保留上一个精确版本或 digest 作为回退点。完整容器操作见 [`deployment-docker.md`](deployment-docker.md)。
+`latest` never replaces a running container automatically. Nodes that choose
+to follow the stable channel still have to run `docker compose pull` and
+recreate the service. Roll out fleet updates in batches and retain the previous
+exact version or digest as a rollback point. See
+[`deployment-docker.md`](deployment-docker.md) for complete container
+operations.
 
-原生 systemd/OpenRC 部署回退只能使用本项目确实发布过的 tag：
+Native systemd/OpenRC deployments may roll back only to tags actually published
+by this project:
 
 ```bash
 sudo RNL_TAG=vX.Y.Z-rnl.N bash upgrade.sh --yes
 ```
 
-升级器会验证 Release 摘要和二进制版本，并按自身事务规则恢复 binary、service、support、配置和运行状态。
+The upgrader verifies Release checksums and binary versions, then restores the
+binary, service, support files, configuration, and runtime state according to
+its transaction rules.
 
-## 14. 官方版本同步
+## 14. Synchronizing with Official Releases
 
-`contract-sync` 定时检查官方 `remnawave/node` 最新 Release。检测到变化时只创建同步 Issue，不自动修改契约、项目版本、代码、tag 或镜像。
+The `contract-sync` workflow periodically checks the latest official
+`remnawave/node` Release. When it detects a change, it opens a synchronization
+issue only. It never changes the contract, project version, code, tags, or
+images automatically.
 
-处理官方新版本时：
+For a new official version:
 
-1. 记录官方 tag 和完整 commit。
-2. 审计路由、schema、错误、插件和运行行为差异。
-3. 更新契约证据、实现和测试。
-4. 选择合适的项目版本；它可以是新的 `rnl` 版本，不要求立即发布纯官方版本号。
-5. 完成真实验收后，才将契约版本更新为已验证基线。
-6. 只有完成同版本官方对齐时，才允许发布纯 `X.Y.Z`。
+1. Record the official tag and full commit.
+2. Audit differences in routes, schemas, errors, plugins, and runtime behavior.
+3. Update contract evidence, implementation, and tests.
+4. Select an appropriate project version. It may be a new `rnl` version; an
+   immediate plain official version is not required.
+5. Update the contract version to the verified baseline only after completing
+   real-environment acceptance.
+6. Publish a plain `X.Y.Z` only after same-version official alignment is
+   complete.
 
-项目版本的演进由本项目维护计划决定，官方 Release 只改变兼容工作输入，不能自动决定下一个 `rnl.N`。
+The project's own maintenance plan determines project-version progression. An
+official Release changes the compatibility work input, but cannot automatically
+determine the next `rnl.N`.
 
-## 15. 最终检查清单
+## 15. Final Checklist
 
-推送正式 tag 前逐项确认：
+Before pushing a final tag, confirm every item:
 
-- [ ] `VERSION` 使用允许的纯版本或 `rnl` 格式。
-- [ ] 纯版本与契约版本相同；`rnl` 版本的真实契约已在文档中明确。
-- [ ] 版本元数据、脚本、Compose、probe、CHANGELOG 和测试一致。
-- [ ] 代码 PR 已进入受保护 `main`，候选 `C` 是合入后的 main commit。
-- [ ] `C` 的 `ci` 与候选容器 workflow 成功。
-- [ ] 所有 evidence 绑定同一个 `C`、candidate tree 和实际验收的多架构 manifest digest。
-- [ ] 目标 Panel、两种 init、两种架构、资源与故障验收通过。
-- [ ] `compose.json` 绑定 `C` 中的单文件 Compose 和同一 digest；amd64/arm64 两条实测 run 都满足整机资源、容器限制、隔离、init/reaper、健康、停止、PIDs/zombie、日志、磁盘余量及实际回滚启动门禁。
-- [ ] 发布资料 PR 只修改最终化白名单，并 squash 为恰好一个单 parent 提交。
-- [ ] README 已移除首发前提示，roadmap 已把本版本 M8 状态更新为完成。
-- [ ] 最终提交 `F` 是当前 `origin/main` HEAD。
-- [ ] `scripts/release-check.sh` 在干净工作树通过。
-- [ ] `v${VERSION}` 是指向 `F` 的 annotated tag，且从未发布过。
-- [ ] tag push 后 GitHub Release、精确镜像、候选 attestation 验证和 `latest` promotion 全部成功。
-- [ ] 精确版本与 `latest` 都等于 acceptance digest，实际使用的候选别名仍解析为该 digest，amd64/arm64 均存在。
-- [ ] 生产更新记录了精确版本或 digest，并保留可执行的回滚目标。
+- [ ] `VERSION` uses an allowed plain or `rnl` format.
+- [ ] A plain version equals the contract version; an `rnl` version's actual
+      contract is explicit in the documentation.
+- [ ] Version metadata, scripts, Compose files, probes, `CHANGELOG.md`, and tests
+      agree.
+- [ ] The code pull request has entered protected `main`, and candidate `C` is
+      the post-merge `main` commit.
+- [ ] Both `ci` and the candidate container workflow passed for `C`.
+- [ ] Every evidence file binds the same `C`, candidate tree, and
+      multi-architecture manifest digest actually accepted.
+- [ ] The target Panel, both init systems, both architectures, resource budget,
+      and fault scenarios passed acceptance.
+- [ ] `compose.json` binds the single-file Compose template from `C` and the
+      same digest. Its amd64 and arm64 runs each pass whole-host resources,
+      container limits, isolation, init/reaper, health, shutdown, PID/zombie,
+      logging, free-disk, and real rollback-start gates.
+- [ ] The release-material pull request changes only the finalization allowlist
+      and is squashed to exactly one single-parent commit.
+- [ ] README no longer contains a pre-release notice, and the roadmap marks this
+      version's M8 milestone complete.
+- [ ] Final commit `F` is the current `origin/main` HEAD.
+- [ ] `scripts/release-check.sh` passes from a clean worktree.
+- [ ] `v${VERSION}` is an annotated tag pointing to `F` and has never been
+      published before.
+- [ ] After the tag push, the GitHub Release, exact image, candidate attestation
+      verification, and `latest` promotion all succeed.
+- [ ] The exact version and `latest` equal the acceptance digest, the candidate
+      alias used in acceptance still resolves to that digest, and both amd64
+      and arm64 are present.
+- [ ] The production rollout records an exact version or digest and retains an
+      executable rollback target.

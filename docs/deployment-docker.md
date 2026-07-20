@@ -1,62 +1,62 @@
-# Docker Compose 部署
+# Docker Compose Deployment
 
-[返回文档首页](README.md)
+[Back to the documentation index](README.md)
 
-Docker Compose 是小内存节点的首选部署方式。服务器只需要一个权限受限的 YAML 文件和 Docker Engine，不需要源码、Go 工具链或持久日志卷。
+Docker Compose is the preferred deployment method for low-memory nodes. A server needs only a permission-restricted YAML file and Docker Engine; it does not need the source tree, a Go toolchain, or a persistent log volume.
 
-本页以大量独立小节点常用的“单文件 Compose”作为主流程；仓库根目录的 `compose.yaml + .env` 仍作为集中管理或本地构建的可选方式。
+The primary workflow on this page uses the single-file Compose layout suited to fleets of independent small nodes. The repository-root `compose.yaml` plus `.env` remains available for centralized configuration or local source builds.
 
-## 部署模型
+## Deployment model
 
-容器内只有一个主进程：`remnanode-lite` 直接启动和回收 rw-core，不使用 s6 或第二个常驻 supervisor。两者共享同一个容器 cgroup：
+The container has one application supervisor: `remnanode-lite` starts and reaps rw-core directly, without s6 or another resident service supervisor. Compose enables a minimal init for PID 1 duties, while the Node and rw-core share one container cgroup with:
 
-- `448 MiB` memory hard limit，禁用额外 swap；
-- `1 CPU`、`256 PIDs`；
-- 只读 rootfs；
-- `/run/remnanode`、`/tmp`、`/var/log/remnanode` 使用总上限 `48 MiB` 的 tmpfs；
-- Docker Node 日志采用 `2 MiB x 2` 的 `json-file` 轮转；
-- 不挂载持久数据卷，重建容器会清空配置副本和日志，由 Panel 重新下发 Xray 配置。
+- a `448 MiB` hard memory limit and no additional swap;
+- `1 CPU` and `256 PIDs`;
+- a read-only root filesystem;
+- tmpfs mounts for `/run/remnanode`, `/tmp`, and `/var/log/remnanode`, capped at `48 MiB` in total;
+- Docker `json-file` rotation of `2 MiB x 2` for Node logs;
+- no persistent data volume. Recreating the container clears runtime configuration copies and logs, and the Panel sends the Xray configuration again.
 
-这些限制为整机 `512 MiB RAM / 1 vCPU / 2 GB disk` 目标预留宿主机空间，但不是对任意流量和插件组合的 SLA。资源证据与边界见[资源预算](development/resource-budget.md)。
+These limits reserve host capacity for the whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk`. They are not an SLA for every traffic pattern or plugin combination. See the [resource budget](development/resource-budget.md) for measurements and boundaries.
 
-## 选择镜像
+## Choose an image
 
-镜像位于公开 GHCR，可匿名拉取：
+The image is public on GHCR and can be pulled anonymously:
 
 ```text
 ghcr.io/luxiaba/remnanode-lite
 ```
 
-| 标签 | 行为 | 使用建议 |
+| Tag | Behavior | Recommended use |
 | --- | --- | --- |
-| `X.Y.Z-rnl.N` | 本项目经过发布验证的独立迭代 | 推荐生产使用，便于准确回滚 |
-| `X.Y.Z` | 已完成对应官方版本对齐的正式构建 | 推荐生产使用 |
-| `latest` | 最新一个经过发布验证的稳定构建 | 适合主动跟随稳定版，不适合作为回滚标识 |
-| `sha-<40位commit>` | `main` 提交对应的候选构建 | 真实服务器验收 |
-| `candidate-sha-<40位commit>` | 从 `main` 手动触发的独立候选构建 | 自动候选缺失或需要重建时验收 |
-| `edge` | 当前 `main` 的浮动候选 | 仅临时观察 |
+| `X.Y.Z-rnl.N` | Independently versioned project iteration that passed the release process | Recommended for production and precise rollback |
+| `X.Y.Z` | Formal build aligned with the corresponding official version | Recommended for production |
+| `latest` | Most recent stable build that passed the release process | Opt-in stable tracking; not a rollback identifier |
+| `sha-<40-character-commit>` | Candidate built for a `main` commit | Acceptance on real servers |
+| `candidate-sha-<40-character-commit>` | Independently rebuilt candidate manually dispatched from `main` | Acceptance when the automatic candidate is absent or must be rebuilt |
+| `edge` | Moving candidate for current `main` | Short-term observation only |
 
-精确版本、`sha-*` 和 `candidate-sha-*` 按项目政策不主动移动，但 registry tag 在技术上不是不可变对象。需要最强固定时使用 `name@sha256:...` manifest digest。首个正式 Release 发布前，`latest` 和版本标签尚不存在，应从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实候选并记录其 manifest digest。
+By project policy, exact versions, `sha-*`, and `candidate-sha-*` are not intentionally moved, but registry tags are not technically immutable. Use a `name@sha256:...` manifest digest for the strongest pin. Before the first formal Release, `latest` and exact version tags do not exist. Select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) and record its manifest digest.
 
-版本命名与晋升规则见[版本模型](versioning.md)。
+See the [version model](versioning.md) for naming and promotion rules.
 
-## 前置条件
+## Prerequisites
 
-- Linux `amd64` 或 `arm64`；
-- Docker Engine 与 Compose v2，即 `docker compose`；
-- 已在 Panel 创建节点并取得完整 `SECRET_KEY`；
-- Panel 中的 Node 端口与 `NODE_PORT` 一致；
-- 宿主机防火墙允许 Panel 访问 Node API 端口，并按实际代理配置开放入站端口。
+- Linux `amd64` or `arm64`.
+- Docker Engine with Compose v2, invoked as `docker compose`.
+- A node created in the Panel and its complete `SECRET_KEY`.
+- The Node port in the Panel matches `NODE_PORT`.
+- The host firewall permits the Panel to reach the Node API port and permits inbound proxy ports required by the deployed configuration.
 
-Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_ADMIN`，可以修改宿主网络命名空间中的项目私有 nftables 表并关闭连接；只运行受信任的镜像。
+Compose uses `network_mode: host`; do not add `ports:`. The container holds `NET_ADMIN`, so it can manage the project's private nftables table and close connections in the host network namespace. Run only trusted images.
 
-## 单文件部署
+## Single-file deployment
 
-先按当前发布阶段选择入口。首个正式 Release 尚未发布，或正在做候选验收时，必须把
-部署文件和候选镜像绑定到同一个完整 commit；正式版本发布后则优先使用 Release
-附带且经 `SHA256SUMS` 覆盖的 Compose 资产。
+Choose the entry point for the current release stage. Before the first formal Release, or while accepting a candidate, bind the deployment file and candidate image to the same full commit. After a formal version is published, prefer the Compose asset attached to that Release and covered by its `SHA256SUMS`.
 
-### 首发前或候选验收
+The maintained source template is [`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml).
+
+### Before the first Release or during candidate acceptance
 
 ```bash
 (
@@ -72,7 +72,7 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
   mkdir -p /opt/remnanode
   cd /opt/remnanode
   curl -fL \
-    "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${candidate_commit}/docs/examples/compose.single-file.yaml" \
+    "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${candidate_commit}/deploy/compose.single-file.yaml" \
     -o docker-compose.yaml
   sed -i \
     "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${candidate_tag}|" \
@@ -81,14 +81,14 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
 )
 ```
 
-从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实存在的完整 `sha-<40位commit>` 自动候选，或 `candidate-sha-<40位commit>` 手动候选，把完整 tag 填入变量。占位符、缩写 commit 或其他 tag 会在下载前失败。这样 Compose 内容和镜像始终来自同一个提交；开始验收后还必须记录并固定实际 manifest digest，验收完成前不要自行重标记为正式版本。
+Choose an existing full automatic `sha-<40-character-commit>` candidate or a manual `candidate-sha-<40-character-commit>` candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite), then place the complete tag in the variable. A placeholder, abbreviated commit, or different tag fails before download. This keeps the Compose content and image source at the same commit. Once acceptance begins, also record and pin the resolved manifest digest. Do not retag it as a formal version before acceptance is complete.
 
-### 正式版本
+### Formal Release
 
-从同一个 GitHub Release 下载单文件资产和摘要：
+Download the single-file asset and checksums from the same GitHub Release:
 
 ```bash
-VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
+VERSION=X.Y.Z-rnl.N # or X.Y.Z
 BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 mkdir -p /opt/remnanode
@@ -101,48 +101,48 @@ grep -F ' docker-compose.single-file.yaml' SHA256SUMS \
 chmod 600 docker-compose.yaml
 ```
 
-macOS 的 `shasum` 命令不是生产 Linux 部署路径；服务器示例以 GNU `sha256sum` 为准。
+The production Linux procedure uses GNU `sha256sum`; the macOS `shasum` command is not part of this server deployment path.
 
-Release workflow 会把该资产中的 `image:` 固定为对应的精确版本，而不是 `latest`。下载后只需要填写节点端口和 Secret；希望主动跟随稳定通道时再显式改成 `latest`。
+The release workflow pins `image:` in this asset to the corresponding exact version instead of `latest`. After download, only the Node port and Secret need to be supplied. Change it to `latest` explicitly only when stable-channel tracking is intentional.
 
-编辑以下字段：
+Edit these fields:
 
 ```yaml
 image: ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
 
 environment:
   NODE_PORT: "38329"
-  SECRET_KEY: "粘贴 Panel 提供的完整 base64 内容"
+  SECRET_KEY: "PASTE_THE_COMPLETE_BASE64_VALUE_FROM_THE_PANEL"
   LOW_MEMORY: "1"
 ```
 
-示例版本只用于展示格式，请替换为 GHCR 中真实存在的精确版本、`sha-*` 或 digest。
+The version above illustrates the format. Replace it with an exact version, `sha-*` candidate, or digest that actually exists in GHCR.
 
-### Secret 写法
+### Secret syntax
 
-环境变量必须使用 YAML mapping：
+Environment variables must use a YAML mapping:
 
 ```yaml
 environment:
   SECRET_KEY: "eyJ..."
 ```
 
-不要写成下面的列表形式：
+Do not use this list form:
 
 ```yaml
 environment:
   - SECRET_KEY="eyJ..."
 ```
 
-列表形式中的引号会成为变量值的一部分，通常导致：
+In the list form, the quotes become part of the value and commonly produce:
 
 ```text
 decode SECRET_KEY: illegal base64 data at input byte 0
 ```
 
-单文件部署会让 Secret 出现在 Compose 文件和本机 `docker inspect` 元数据中，因此必须保持文件权限为 `0600`，限制 Docker socket、备份和主机管理员权限。Node 启动 rw-core 时会剥离 Panel Secret，不把它继续传给子进程。
+A single-file deployment exposes the Secret in the Compose file and local `docker inspect` metadata. Keep the file at mode `0600`, and restrict access to the Docker socket, backups, and host administration. Before launching rw-core, the Node removes the Panel Secret from the child environment.
 
-## 启动与首次核验
+## Start and verify
 
 ```bash
 cd /opt/remnanode
@@ -154,25 +154,25 @@ docker compose logs --tail=100 remnanode
 ss -H -lnt "sport = :38329"
 ```
 
-不要在自动化日志中运行不带 `--quiet` 的 `docker compose config`，它会展开内联 Secret。
+Do not run `docker compose config` without `--quiet` in automation logs; it expands and prints the inline Secret.
 
-容器变为 `healthy` 证明 healthcheck 已在 2 秒内主动连接内部配置 Unix socket，即 Node 正在接受内部连接；它不证明：
+A `healthy` container proves that the healthcheck actively connected to the internal configuration Unix socket within two seconds, so the Node was accepting internal connections. It does not prove that:
 
-- Panel 能通过网络访问节点；
-- mTLS、JWT 或 Secret 正确；
-- rw-core 已经在线；
-- Panel 下发的代理入站端口可以访问。
+- the Panel can reach the Node over the network;
+- mTLS, JWT, or the Secret is correct;
+- rw-core is online;
+- proxy inbound ports sent by the Panel are reachable.
 
-Node 重启后 rw-core 初始离线是正常行为。Node 不从磁盘恢复旧 Panel 配置，Panel 后续健康轮询会重新调用 `/node/xray/start`。最终应在 Panel 确认节点在线，并检查实际代理功能。
+It is normal for rw-core to be offline immediately after a Node restart. The Node does not restore an old Panel configuration from disk. A later Panel health cycle calls `/node/xray/start` again. Complete verification in the Panel and test representative proxy traffic.
 
-## 从官方容器迁移
+## Migrate from the official container
 
-官方 `remnawave/node` 使用的 `NODE_PORT` 和完整 `SECRET_KEY` 可以继续使用；它们属于 Panel 与 Node 的外部契约，不依赖官方容器的 Node.js/s6 内部结构。迁移时不要让两个容器同时运行，因为 host network 下会争用 Node API 和代理入站端口。
+The `NODE_PORT` and complete `SECRET_KEY` used by the official `remnawave/node` image remain valid. They belong to the external Panel-to-Node contract, not to the official image's Node.js and s6 internals. Do not run both containers during migration: host networking would make them compete for the Node API and proxy inbound ports.
 
-1. 备份原 Compose，并记录原镜像精确版本，作为回滚目标。
-2. 用本页的完整单文件样本替换服务定义；至少保留 host network、两个 capability、资源限制、只读 rootfs、tmpfs 和日志限制。
-3. 沿用原 `NODE_PORT` 和 Secret，但把 `environment` 改为 YAML mapping，镜像固定为真实项目版本、`sha-*` 或 digest。
-4. 拉取并强制重建同名容器；Compose 会停止旧容器后再创建新容器。
+1. Back up the existing Compose file and record the exact official image version as the rollback target.
+2. Replace the service definition with the complete single-file template from this page. Preserve at least host networking, both capabilities, resource limits, the read-only root filesystem, tmpfs mounts, and log limits.
+3. Reuse the original `NODE_PORT` and Secret, but convert `environment` to a YAML mapping and pin the image to a real project version, `sha-*` candidate, or digest.
+4. Pull and force-recreate the container under the same service name. Compose stops the old container before creating the replacement.
 
 ```bash
 cd /opt/remnanode
@@ -183,20 +183,20 @@ docker compose ps
 docker compose logs --tail=100 remnanode
 ```
 
-5. 在 Panel 确认节点重新在线、rw-core 已启动并抽查真实代理流量。新实现的 rw-core 日志路径是 `/var/log/remnanode/xray.out.log` 和 `xray.err.log`，不是官方容器的 `/var/log/xray/current`。
+5. Confirm that the node returns online in the Panel, rw-core starts, and representative proxy traffic works. This implementation writes rw-core logs to `/var/log/remnanode/xray.out.log` and `/var/log/remnanode/xray.err.log`, not the official container's `/var/log/xray/current`.
 
-不需要迁移容器内运行状态或 Xray 配置卷：Panel 会重新下发配置。回滚时恢复备份 Compose 和原官方精确镜像，再执行同样的 pull/recreate；不要删除备份，直到新容器完成观察期。
+There is no container runtime state or Xray configuration volume to migrate; the Panel sends the configuration again. To roll back, restore the backed-up Compose file and exact official image, then repeat pull and recreate. Keep the backup until the new container has completed its observation period.
 
-## 候选镜像的自动化语义
+## Candidate image automation
 
-合入 `main` 且命中容器构建输入时，`container` workflow 先构建多架构 manifest 并生成 build attestation，成功后才发布按策略不移动的 `sha-<commit>`；只有该提交仍是当前 `main` HEAD 时才移动 `edge`。候选镜像没有 GitHub Release 资产，也不代表正式发布。部署命令见前文“首发前或候选验收”。
+When a merge to `main` changes a container build input, the `container` workflow builds a multi-architecture manifest and produces build provenance. Only after those steps succeed does it publish the policy-immutable `sha-<commit>` tag. It moves `edge` only if the commit is still the current `main` HEAD. A candidate has no GitHub Release assets and is not a formal release. Use the earlier candidate-acceptance procedure to deploy it.
 
-## 固定 digest 与验证证明
+## Pin a digest and verify provenance
 
-拉取镜像后记录 registry digest：
+After pulling an image, record its registry digest:
 
 ```bash
-VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
+VERSION=X.Y.Z-rnl.N # or X.Y.Z
 IMAGE="ghcr.io/luxiaba/remnanode-lite:${VERSION}"
 
 DIGEST_REF="$(docker image inspect \
@@ -206,13 +206,13 @@ printf '%s\n' "$DIGEST_REF" \
   | grep -Eq '^ghcr\.io/luxiaba/remnanode-lite@sha256:[0-9a-f]{64}$'
 ```
 
-将 Compose 中的镜像改成输出的完整引用：
+Use the complete output in Compose:
 
 ```yaml
 image: ghcr.io/luxiaba/remnanode-lite@sha256:...
 ```
 
-安装 GitHub CLI 后可以验证本仓库生成的证明：
+With GitHub CLI installed, verify provenance produced by this repository:
 
 ```bash
 gh attestation verify \
@@ -221,11 +221,11 @@ gh attestation verify \
   --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml
 ```
 
-tag 说明“希望引用哪个版本”，digest 说明“实际运行哪一份字节”。受控批量部署应保存后者。
+A tag states which version you intend to reference. A digest identifies the bytes actually deployed. A controlled fleet rollout should record the digest.
 
-## 更新与回滚
+## Update and rollback
 
-先备份当前 YAML，修改 `image:` 后主动拉取并重建：
+Back up the current YAML, change `image:`, then pull and recreate explicitly:
 
 ```bash
 cp -p docker-compose.yaml docker-compose.yaml.previous
@@ -236,28 +236,30 @@ docker compose ps
 docker compose logs --tail=100 remnanode
 ```
 
-回滚时恢复上一个经过验证的 YAML，或把 `image:` 改回上一个精确版本/digest，再执行同样的 `pull` 与 `up`。不要通过覆盖旧版本标签实现回滚。
+To roll back, restore the previously verified YAML or change `image:` back to the previous exact version or digest, then repeat `pull` and `up`. Never implement rollback by moving an old version tag.
 
-`latest` 不会自动替换正在运行的容器。使用它仍然需要定期、主动执行上述更新命令，并在更新前记录旧 digest。
+`latest` does not replace a running container. Tracking it still requires periodic, explicit pull and recreate operations, with the previous digest recorded before each update.
 
-## 批量上线
+## Fleet rollout
 
-批量部署只能使用已经完成 M8 验收的同一个 manifest digest。精确版本 tag 便于阅读，实际下发记录仍应保存 `name@sha256:...`；不要把 `latest` 或 `edge` 直接推送到全部节点。
+Deploy a fleet only from one manifest digest that has completed M8 acceptance. Exact version tags are readable, but deployment records must still retain `name@sha256:...`. Do not send `latest` or `edge` directly to every node.
 
-1. 按架构、发行版、地区和主要流量类型划分节点组，并为每台机器记录当前 digest、目标 digest 和回滚 Compose。
-2. 先更新能覆盖真实 `amd64`、`arm64` 和主要网络环境的少量 canary。至少跨过一个业务高峰，确认 Panel 持续在线、rw-core 成功重同步、真实代理流量正常，且没有 OOM、异常重启、zombie、磁盘或日志持续增长。
-3. 依次扩大到约 `5%`、`25%`、`50%`，最后完成余量。每一阶段都必须结束观察后再继续；单个批次不要大到无法在同一维护窗口内恢复上一 digest。
-4. 每个阶段抽查容器 health、Panel 状态、代理流量、restart/OOM 计数、内存、PID、磁盘和 Xray/nft 错误。部署系统应保存节点与 digest 的对应关系，而不是只记录可移动 tag。
-5. 任一阶段出现无法解释的节点离线、代理失败、反复 Xray 启动失败、OOM、异常重启、zombie、资源越界或同类错误集中增长时，立即停止扩批；先回滚该批次，再保留日志和 digest 关联用于定位。
+1. Group nodes by architecture, distribution, region, and primary traffic profile. Record the current digest, target digest, and rollback Compose file for every node.
+2. Start with a small canary group covering real `amd64`, `arm64`, and representative network environments. Observe at least one traffic peak. Confirm that the Panel remains connected, rw-core resynchronizes, real proxy traffic succeeds, and there is no OOM, unexpected restart, zombie process, or sustained disk or log growth.
+3. Expand in stages of approximately `5%`, `25%`, and `50%`, then deploy the remainder. Finish each observation period before continuing. Keep each batch small enough to restore its previous digest within the same maintenance window.
+4. At every stage, sample container health, Panel state, proxy traffic, restart and OOM counts, memory, PIDs, disk, and Xray or nft errors. The deployment system must map nodes to digests, not only to a moving tag.
+5. Stop expansion immediately if a stage shows unexplained node loss, proxy failure, repeated Xray startup failure, OOM, unexpected restart, zombies, resource-limit violations, or a clustered increase in similar errors. Roll back that batch first, then preserve logs and their digest association for diagnosis.
 
-回滚不依赖 Registry 移动 tag：恢复每台节点已记录的上一 Compose/digest，执行 `pull` 与 `up --force-recreate`，并重新确认 Panel 与真实流量。问题没有形成明确结论前，不要继续更新尚未触及的节点，也不要清理 canary 上的上一镜像。
+Rollback does not depend on moving a registry tag. Restore each node's recorded previous Compose file or digest, run `pull` and `up --force-recreate`, and confirm Panel connectivity and real traffic again. Until the issue has a clear conclusion, do not continue with untouched nodes or prune the previous image from canaries.
 
-## `.env` 可选模式
+The repository has not yet recorded completed M8 evidence for the first formal Release. Candidate images remain acceptance inputs, not authorization for an unobserved fleet rollout.
 
-希望把非敏感 Compose 结构和节点参数分离时，必须从同一个正式 GitHub Release 下载 `compose.yaml`、环境模板和摘要，不能把未来 `main` 的 Compose 与旧镜像版本混用：
+## Optional `.env` layout
+
+To separate non-sensitive Compose structure from node parameters, download `compose.yaml`, the environment template, and checksums from the same formal GitHub Release. Do not combine a future `main` Compose file with an older image:
 
 ```bash
-VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
+VERSION=X.Y.Z-rnl.N # or X.Y.Z
 BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 curl -fLO "${BASE_URL}/compose.yaml"
@@ -269,52 +271,52 @@ mv remnanode.env.example .env
 chmod 600 .env
 ```
 
-至少设置：
+Set at least:
 
 ```env
 REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
 NODE_PORT=38329
-SECRET_KEY=粘贴完整内容
+SECRET_KEY=PASTE_THE_COMPLETE_VALUE
 LOW_MEMORY=1
 ```
 
-`REMNANODE_IMAGE` 应保持为该 Release 的精确版本，或改为已经验证的 manifest digest。完整变量说明见[配置参考](configuration.md)。
+Keep `REMNANODE_IMAGE` at the exact version from that Release, or replace it with a verified manifest digest. See the [configuration reference](configuration.md) for every variable.
 
-## 本地源码构建
+## Local source build
 
-源码构建只适合开发、审计或 registry 暂不可用的应急场景：
+Build from source only for development, audit work, or an emergency in which the registry is unavailable:
 
 ```bash
 git clone https://github.com/luxiaba/remnanode-lite.git
 cd remnanode-lite
 cp .env.example .env
 chmod 600 .env
-# 编辑 .env
+# Edit .env
 
 docker compose -f compose.yaml -f compose.build.yaml build --pull
 docker compose -f compose.yaml -f compose.build.yaml up -d --no-build
 ```
 
-不要在磁盘仅 2 GB 的生产节点上构建。Go 工具链、基础层和 BuildKit cache 可能显著超过运行时磁盘预算。
+Do not build on a production node with only 2 GB of disk. The Go toolchain, base layers, and BuildKit cache can substantially exceed the runtime disk budget.
 
-## 日志与磁盘
+## Logs and disk
 
-Node 主进程日志：
+Follow Node process logs:
 
 ```bash
 docker compose logs -f remnanode
 ```
 
-rw-core 实时日志：
+Follow rw-core logs:
 
 ```bash
 docker exec -it remnanode tail -n 50 -F /var/log/remnanode/xray.out.log
 docker exec -it remnanode tail -n 50 -F /var/log/remnanode/xray.err.log
 ```
 
-两条 rw-core 日志各以 `4 MiB` 为轮转阈值并保留一个 `.1` 文件，存放在 `28 MiB` tmpfs；容器重建后清空。Node 的 Docker 日志由 `json-file` 限制为约 `2 MiB x 2`。本项目不要求持久日志，长期监控应由宿主机在自身磁盘预算内完成。
+Each rw-core stream rotates at `4 MiB` and retains one `.1` file inside the `28 MiB` tmpfs; recreating the container clears it. Docker limits Node `json-file` logs to approximately `2 MiB x 2`. The project does not require persistent logs. Any long-term collection must fit within the host's own disk budget.
 
-检查和清理无用镜像：
+Inspect disk use and remove unused images:
 
 ```bash
 docker system df
@@ -322,16 +324,16 @@ docker image ls ghcr.io/luxiaba/remnanode-lite
 docker image prune
 ```
 
-清理前先记录一个已验证的旧版本 tag 或 manifest digest，并确认对应镜像仍在本机；始终至少保留这一个明确的回滚镜像。`docker image prune` 默认只删除 dangling image，不要使用会把唯一回滚版本一并删除的批量清理参数。更多日常命令和故障定位见[运维与排障](operations.md)。
+Before pruning, record a verified previous version tag or manifest digest and confirm that its image remains local. Always retain at least that one explicit rollback image. By default, `docker image prune` removes only dangling images. Do not use broad pruning options that could remove the only rollback version. See the [operations guide](operations.md) for routine commands and troubleshooting.
 
-## 镜像内容与可追溯性
+## Image contents and traceability
 
-当前构建包含：
+The current image contains:
 
-- 静态链接的 `remnanode-lite`；
-- 固定版本和资产摘要的 rw-core `v26.6.27`；
-- 对应的 `geoip.dat`、`geosite.dat`；
-- 从固定 `ipverse/as-ip-blocks` commit 构建的 compact ASN 数据库；
-- Debian bookworm slim 运行环境、CA 证书和 nftables 依赖。
+- a statically linked `remnanode-lite`;
+- rw-core `v26.6.27`, pinned by version and asset digest;
+- the corresponding `geoip.dat` and `geosite.dat`;
+- a compact ASN database built from a pinned `ipverse/as-ip-blocks` commit;
+- a Debian bookworm slim runtime with CA certificates and nftables dependencies.
 
-基础镜像、rw-core 和 ASN 来源固定了 digest 或摘要，但 Debian `apt` 软件包当前未固定到 snapshot 和具体包版本，因此不能宣称字节级完全可复现。每个正式产物应通过 manifest digest、SBOM、provenance 和 attestation 共同识别。
+Base images, rw-core, and the ASN source are pinned by digest or checksum. Debian `apt` packages are not currently pinned to a snapshot and exact package versions, so the image is not claimed to be byte-for-byte reproducible. Identify every formal artifact by its manifest digest together with its SBOM, provenance, and attestation.

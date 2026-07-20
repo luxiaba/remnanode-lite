@@ -1,36 +1,36 @@
-# 512 MiB 资源预算与 M6-M8 基准
+# 512 MiB Resource Budget and M6-M8 Baselines
 
-[返回开发文档](README.md) · [运维与排障](../operations.md)
+[Back to developer documentation](README.md) · [Operations and troubleshooting](../operations.md)
 
-本文包含一组带日期的工程测量和当前资源策略。测量结果只对列出的 commit 时代、工具链、架构和测试资产成立；正式版本仍须在冻结候选上按[发布验收协议](release-acceptance.md)重跑。
+This document contains dated engineering measurements and the current resource policy. Measurements apply only to the listed commit era, toolchain, architecture, and test assets. Every formal release must rerun the [release acceptance protocol](release-acceptance.md) against its frozen candidate.
 
-## 验收边界
+## Acceptance Boundary
 
-生产目标是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。资源门禁将 Node 测试进程与真实 rw-core 放在同一个 cgroup 内，并使用以下限制：
+The production target is a whole machine with `512 MiB RAM / 1 vCPU / 2 GB disk`. The resource gate places the Node test process and a real rw-core in the same cgroup with these limits:
 
-- `448 MiB` hard memory limit，为宿主机内核与基础服务保留至少 `64 MiB`。
-- `1 CPU`、`256` 个 PID、禁用 swap 与外部网络。
-- 只读 rootfs，并提供单个 `/tmp:size=64m` 测试 tmpfs。
-- `LOW_MEMORY=1`，Go 运行时软内存上限为 `180 MiB`。
-- 大配置包含 `50,000` 个 VLESS 用户。
+- A `448 MiB` hard memory limit, leaving at least `64 MiB` for the host kernel and base services.
+- `1 CPU`, `256` PIDs, no swap, and no external network access.
+- A read-only root filesystem with one `/tmp:size=64m` test tmpfs.
+- `LOW_MEMORY=1`, which gives the Go runtime a `180 MiB` soft memory limit.
+- A large configuration containing `50,000` VLESS users.
 
-门禁脚本为 [`scripts/test-low-memory.sh`](../../scripts/test-low-memory.sh)，Linux 集成测试为 [`internal/xray/resource_linux_integration_test.go`](../../internal/xray/resource_linux_integration_test.go)。测试同时验证最小 protobuf wire client 的系统统计、inbound 用户数、VLESS 热增删和用户 IP 统计 RPC。
+The gate is [`scripts/test-low-memory.sh`](../../scripts/test-low-memory.sh), and the Linux integration test is [`internal/xray/resource_linux_integration_test.go`](../../internal/xray/resource_linux_integration_test.go). The test also verifies system statistics, inbound user counts, VLESS hot add/remove, and user-IP statistics RPCs through the minimal protobuf wire client.
 
-生产 Compose 使用不同但更贴近实际运行的 tmpfs 布局：`/run`、`/tmp` 和 rw-core 日志合计 `48 MiB`，且日志不写入持久卷。资源门禁的单个 64 MiB `/tmp` 是测试夹具，不应描述成 Compose 已经在该门禁中逐项复现；正式 M8 仍需在冻结候选容器上验证生产布局。
+Production Compose uses a different tmpfs layout that better reflects deployment: `/run`, `/tmp`, and rw-core logs total `48 MiB`, and logs are not written to a persistent volume. The gate's single 64 MiB `/tmp` is a test fixture. It must not be described as a field-by-field reproduction of the Compose layout. Formal M8 acceptance must still verify the production layout in a frozen-candidate container.
 
-下列 M6/M7 数值早于当前 M8 候选，只作为工程基线；冻结候选 `C` 后必须重新测量并写入 acceptance evidence，不能直接作为 `2.8.0-rnl.1` 发布结论。
+The M6/M7 figures below predate the current M8 candidate and are engineering baselines only. After candidate `C` is frozen, the measurements must be repeated and recorded in acceptance evidence. They are not, by themselves, a release conclusion for `2.8.0-rnl.1`.
 
-## 固定测试资产
+## Fixed Test Assets
 
-- 日期：2026-07-15
-- 容器架构：Linux arm64
-- Go：`go1.26.5`
-- Docker Engine：`29.5.2`
-- rw-core：`v26.6.27`
-- 官方资产：`Xray-linux-arm64-v8a.zip`
-- 资产 SHA-256：`13a251379bea366c2cf10363ad71e75734193d401f26f518bf0c25e5c8f8c931`
+- Date: 2026-07-15
+- Container architecture: Linux arm64
+- Go: `go1.26.5`
+- Docker Engine: `29.5.2`
+- rw-core: `v26.6.27`
+- Official asset: `Xray-linux-arm64-v8a.zip`
+- Asset SHA-256: `13a251379bea366c2cf10363ad71e75734193d401f26f518bf0c25e5c8f8c931`
 
-执行命令：
+Command:
 
 ```bash
 scripts/test-low-memory.sh \
@@ -39,71 +39,76 @@ scripts/test-low-memory.sh \
   --memory 448
 ```
 
-## 实测结果
+## Measured Results
 
-`cgroup_current` 和 `cgroup_peak` 包含 Node 测试进程、rw-core、文件页和容器开销；`node_test_rss` 只表示 Node 测试进程 RSS。因此 `cgroup_peak` 是本门禁的判定指标。
+`cgroup_current` and `cgroup_peak` include the Node test process, rw-core, file-backed pages, and container overhead. `node_test_rss` covers only the Node test process RSS. The gate therefore evaluates `cgroup_peak`.
 
-| 阶段 | cgroup current | cgroup peak | Node test RSS |
+| Stage | cgroup current | cgroup peak | Node test RSS |
 | --- | ---: | ---: | ---: |
-| 空闲，core 未启动 | 40.3 MiB | 44.3 MiB | 11.1 MiB |
-| 启动 1k 用户 | 50.2 MiB | 51.1 MiB | 13.2 MiB |
-| 1k 配置无变化同步 | 50.2 MiB | 51.1 MiB | 13.4 MiB |
-| 强制重启为 50k 用户 | 102.2 MiB | 143.9 MiB | 22.6 MiB |
-| 50k 用户热增删与统计 | 102.3 MiB | 143.9 MiB | 22.6 MiB |
+| Idle, core not started | 40.3 MiB | 44.3 MiB | 11.1 MiB |
+| Start with 1k users | 50.2 MiB | 51.1 MiB | 13.2 MiB |
+| Unchanged 1k configuration sync | 50.2 MiB | 51.1 MiB | 13.4 MiB |
+| Forced restart with 50k users | 102.2 MiB | 143.9 MiB | 22.6 MiB |
+| 50k-user hot add/remove and statistics | 102.3 MiB | 143.9 MiB | 22.6 MiB |
 
-50k 用户场景峰值为预算的 `32.1%`，距离 `448 MiB` 门禁还有约 `304 MiB`。无变化同步没有抬高峰值，说明 active 配置释放和 hash-only 状态生效。
+The 50k-user peak is `32.1%` of the budget, leaving about `304 MiB` below the `448 MiB` gate. The unchanged sync did not raise the peak, which confirms that active configuration release and hash-only retained state were working in that baseline.
 
-## 二进制与磁盘
+## Binaries and Disk
 
-使用同一 Go 工具链和 `CGO_ENABLED=0 go build -trimpath -ldflags='-s -w'` 对比优化前工程基线：
+Using the same Go toolchain and `CGO_ENABLED=0 go build -trimpath -ldflags='-s -w'`, compared with the pre-optimization engineering baseline:
 
-| 架构 | 基线 | M6 | 减少 |
+| Architecture | Baseline | M6 | Reduction |
 | --- | ---: | ---: | ---: |
 | linux/arm64 | 17,563,810 B | 12,320,930 B | 29.9% |
 | linux/amd64 | 18,874,530 B | 13,176,994 B | 30.2% |
 
-M7 使用最终安装布局补充了两类真实发行环境快照：
+M7 added two snapshots from real distribution layouts:
 
-| 环境 | 运行内存 | 项目/整机磁盘 | 说明 |
+| Environment | Runtime memory | Project/whole-system disk | Notes |
 | --- | ---: | ---: | --- |
-| Ubuntu 24.04 arm64 / systemd | Node RSS `11.9 MiB` | 项目文件约 `74 MiB` | 全新安装，真实 rw-core/geo/ASN，core 尚未由 Panel 拉起 |
-| Alpine 3.22 arm64 / OpenRC 容器 | 整容器 `44.1 MiB` | 整个 rootfs `150.2 MiB` | 容器限制 `512 MiB / 1 CPU / 256 PIDs`，真实安装依赖与服务 |
+| Ubuntu 24.04 arm64 / systemd | Node RSS `11.9 MiB` | Project files about `74 MiB` | Fresh installation with real rw-core, geo, and ASN assets; Panel had not yet started the core |
+| Alpine 3.22 arm64 / OpenRC container | Whole container `44.1 MiB` | Entire rootfs `150.2 MiB` | Container limited to `512 MiB / 1 CPU / 256 PIDs`, with real installation dependencies and service |
 
-项目文件包括约 `12 MiB` Node、`34 MiB` 的 rw-core/support 和 `28 MiB` 的 geo/ASN。当前两条 rw-core stream 使用写时 capped writer，current 与 `.1` 各以 `4 MiB` 为阈值：两条 stream 的稳定阈值预算为 `16 MiB`；两个固定 `.1.tmp` 在崩溃时最多再增加约 `8 MiB`。Docker 的 `28 MiB` 日志 tmpfs 按这个边界预留空间。
+Project files consist of roughly `12 MiB` for Node, `34 MiB` for rw-core/support, and `28 MiB` for geo/ASN assets. The two rw-core streams use capped writers. Each current file and its `.1` file has a `4 MiB` rotation threshold, giving the two streams a steady-state threshold budget of `16 MiB`; two fixed `.1.tmp` files can add about `8 MiB` after a crash. Docker's `28 MiB` log tmpfs is sized around this boundary.
 
-OpenRC 另外由 supervisor 写入 `openrc.log` 与 `openrc.err.log`。它们每 10 秒巡检并 copy-truncate，成功巡检后 `.1` 以 `4 MiB` 为阈值，但 current 在轮询窗口内可超过阈值，不能宣称数学硬上限。因此 OpenRC 四组 current + `.1` 的阈值预算为 `32 MiB`，四个固定临时文件全部残留时约为 `48 MiB`，再加两个 OpenRC current 在轮询窗口内超过阈值的增量。systemd journal 配置为每 30 秒最多接收 200 条服务日志，但字节和长期磁盘仍服从宿主机 journald 配额。M8 必须在 `2 GB` 整机磁盘下记录日志故障风暴和长期增长，不能用上述阈值替代实测。
+OpenRC additionally writes `openrc.log` and `openrc.err.log` through the supervisor. They are checked and copy-truncated every 10 seconds. After a successful check, each `.1` file uses a `4 MiB` threshold, but a current file can exceed the threshold within the polling window; this is not a mathematical hard limit. The OpenRC threshold budget for the four current-plus-`.1` pairs is therefore `32 MiB`, or about `48 MiB` if all four fixed temporary files remain, plus any growth of the two OpenRC current files within a polling interval. The systemd journal accepts at most 200 service log records every 30 seconds, but byte usage and long-term disk growth still follow the host's journald quota. M8 must measure a log fault storm and long-term growth on a whole machine with `2 GB` of disk; these thresholds cannot substitute for that measurement.
 
-安装与升级不使用可能映射到内存的 `/tmp` 保存大资产，而使用 root-only 的 `/var/lib/remnanode-installer`。五个变更型入口共同持有固定的 `/run/lock/remnanode-installer.lock`；嵌套 installer 复用并验证同一 open file description，锁路径不受 `RNL_TMP_ROOT` 影响且任何退出路径都不会删除锁 inode。包管理器、文件删除和 service mutation 等同步子进程继承锁，确保父 installer 异常退出时仍串行到该变更完成；下载、归档检查、Node/rw-core 自检、状态查询和可能派生常驻服务的 OpenRC 启动链会先关闭自己的锁 FD，避免短命工具或 supervisor 在 installer 完成后继续持锁。Release 归档限制为 `64 MiB` 压缩、`128 MiB` 解压和 `64` 个条目；rw-core zip、自定义 core、geo 与 ASN 分别具有下载和流式解压硬上限，本地 `GEO_ZAPRET_FILE` / `IP_ZAPRET_FILE` 各限制为 `64 MiB` 并使用同目录原子 staging。下载单次最长 `300s`，同时配置连接和低速超时；tar/unzip 操作最长 `120s`。升级先预留“现有备份 + `512 MiB`”；rw-core 下载完成并校验 zip 结构后，再按 installer、core、geo 与 ASN 的实际目标文件系统聚合真实 entry、可选 custom core/ASN、备份、目标 staging 和每个文件系统 `64 MiB` 安全余量。upgrade 调用 rw-core 安装器时由外层事务唯一持有备份，不再复制第二份相同资产；独立安装器若回滚不完整会保留 root-only 事务目录并返回失败，不会删除唯一备份。
+Installation and upgrade store large assets in root-only `/var/lib/remnanode-installer`, not in `/tmp`, which may be memory-backed. All five mutating entry points hold the fixed `/run/lock/remnanode-installer.lock`. Nested installers reuse and verify the same open file description. The lock path is unaffected by `RNL_TMP_ROOT`, and no exit path removes the lock inode. Synchronous child processes that mutate packages, files, or services inherit the lock so that, if the parent installer exits unexpectedly, serialization lasts until the mutation finishes. Downloads, archive inspection, Node/rw-core self-checks, status queries, and the OpenRC start chain that may spawn a resident supervisor close their own lock file descriptor first, preventing short-lived tools or a supervisor from retaining the lock after the installer finishes.
 
-生产 `node.env` 必须是普通非符号链接文件，Go 在设置内存软上限前最多读取 `1 MiB`，并限制为最多 `4096` 行、`256` 个赋值；单行上限同为 `1 MiB`，因此可迁移旧版最多 `256 KiB` 的内联 Secret。`node.env` 与 `SECRET_KEY_FILE` 都以 `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC` 打开同一文件描述符，在 `fstat -> 有界读取 -> fstat` 后才消费，避免 check/open 竞态和 FIFO 阻塞。systemd 与 OpenRC 都使用固定 `REMNANODE_ENV=/etc/remnanode/node.env` 和 `/usr/bin/env -i` 启动，只保留 `PATH/HOME/USER/LOGNAME`；`GOMEMLIMIT`、contract/core version 由同一个 Go 配置解析器校验后应用，Secret 和任意未知配置不会进入 Node 或 rw-core 环境。
+Release archives are limited to `64 MiB` compressed, `128 MiB` extracted, and `64` entries. The rw-core zip, custom core, geo, and ASN paths each have hard download and streaming-extraction limits. Local `GEO_ZAPRET_FILE` and `IP_ZAPRET_FILE` inputs are each limited to `64 MiB` and use atomic staging in the destination directory. A download may run for at most `300s` and also has connection and low-speed timeouts; tar and unzip operations may run for at most `120s`.
 
-## 保护策略
+Upgrade first reserves space for the existing backup plus `512 MiB`. After the rw-core download passes zip-structure validation, it calculates per-filesystem requirements for the installer, core, geo, and ASN target filesystems: actual archive entries, optional custom core/ASN data, backups, target staging, and a `64 MiB` safety margin for each filesystem. When upgrade invokes the rw-core installer, the outer transaction is the sole backup owner and does not make a duplicate copy of the same assets. A standalone installer that cannot complete rollback retains its root-only transaction directory and returns failure rather than deleting the only backup.
 
-- low-memory 默认请求体上限为 `16 MiB`，显式 `BODY_LIMIT_MB` 只能是 `1..1024`，`0/空` 表示自动默认。
-- decoder 的绝对压缩输入 ceiling 为 `64 MiB`、window ceiling 为 `32 MiB`；公开路由还会先取更小的逐路由上限，当前有效输入和 window 都不超过 `16 MiB`。最多两个单线程 decoder 并发。
-- 单次 gRPC 响应最多 `16 MiB`，内部 RPC 具有 deadline。
-- Unix 内部服务请求体最多 `8 KiB`，最多 `8` 个连接和 `4` 个活动 handler。
-- 解码后的 webhook 使用 `64` 条有界队列和单 worker；队列满时最多等待内部请求的 `30s` deadline，容量未恢复、请求取消或服务关闭时明确返回 `503 + Retry-After`，不会把未接纳事件伪报为成功。
-- torrent report 环形队列最多保留最新 `1024` 条。
-- Xray ready 后释放解码配置树和规范 JSON，仅保留 hash 与运行状态。
-- Debian 与 Alpine 安装器在 `MemTotal <= 512 MiB` 时自动写入 `LOW_MEMORY=1`。
-- OpenRC 校验 cgroup v2 的 `448 MiB` memory、零 swap、1 CPU、256 PID 以及启动 shell 的实际 cgroup 成员关系；controller 缺失或写入未生效时拒绝启动。停止后不依赖 OpenRC 0.62.6 的路径清理，而是将 `stop_post` 自身迁出、通过 `cgroup.kill` 清理精确 service cgroup、最多等待 5 秒确认 `populated=0` 后删除该目录。
+Production `node.env` must be a regular, non-symlink file. Go reads at most `1 MiB` before setting the memory soft limit and accepts no more than `4096` lines and `256` assignments. A single line may also be up to `1 MiB`, allowing migration of legacy inline Secrets up to `256 KiB`. Both `node.env` and `SECRET_KEY_FILE` are opened once with `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`; the same descriptor is consumed only after `fstat -> bounded read -> fstat`, avoiding check/open races and FIFO blocking. systemd and OpenRC launch with fixed `REMNANODE_ENV=/etc/remnanode/node.env` and `/usr/bin/env -i`, retaining only `PATH/HOME/USER/LOGNAME`. The same Go configuration parser validates and applies `GOMEMLIMIT` and contract/core version overrides. Secrets and unknown configuration values do not enter the Node or rw-core environment.
 
-当前上述 OpenRC 清理覆盖 init 实际执行 `stop_post` 的正常停止路径。installer 共享锁已经消除并发写入，但不提供 SIGKILL/掉电后的持久 phase journal；`supervise-daemon` 自身异常退出后也不承诺自动清理残留 cgroup。这是 `2.8.0-rnl.1` 接受的运维限制：原生部署重新运行 installer 或重启主机，容器部署重新创建容器，不作为发布阻断项。
+## Protection Policies
 
-任何修改请求解码、Xray 配置生命周期、RPC 消息、报告队列或依赖图的提交，都应重新执行此门禁并比较阶段峰值。
+- Low-memory mode defaults the request-body limit to `16 MiB`. Explicit `BODY_LIMIT_MB` must be `1..1024`; `0` or empty selects the automatic default.
+- The decoder has an absolute `64 MiB` compressed-input ceiling and a `32 MiB` window ceiling. Public routes first apply their smaller route-specific limit, so current effective input and window sizes are no more than `16 MiB`. At most two single-threaded decoders run concurrently.
+- A gRPC response is limited to `16 MiB`, and internal RPCs have deadlines.
+- The internal Unix service accepts at most `8 KiB` per request, with at most `8` connections and `4` active handlers.
+- Decoded webhooks enter a bounded queue of `64` items served by one worker. A full queue waits only within the internal request's `30s` deadline. If capacity does not recover, the request is canceled, or the service is closing, the server returns `503 + Retry-After` rather than reporting an event that was never admitted as successful.
+- The torrent-report ring retains at most the newest `1024` entries.
+- Once Xray is ready, the decoded configuration tree and canonical JSON are released; only hashes and runtime state remain.
+- Debian and Alpine installers automatically set `LOW_MEMORY=1` when `MemTotal <= 512 MiB`.
+- OpenRC verifies cgroup v2 limits of `448 MiB` memory, zero swap, 1 CPU, and 256 PIDs, plus the startup shell's actual cgroup membership. It refuses to start if a controller is unavailable or a write does not take effect. Shutdown does not depend on OpenRC 0.62.6 removing the path: `stop_post` first moves itself out, kills the exact service cgroup through `cgroup.kill`, waits up to 5 seconds for `populated=0`, and then removes the directory.
 
-## 关闭预算
+The OpenRC cleanup above covers the normal stop path where init actually runs `stop_post`. The shared installer lock removes concurrent writes, but it is not a persistent phase journal for `SIGKILL` or power loss. Nor does the project promise automatic cleanup of a residual cgroup if `supervise-daemon` itself exits abnormally. These are accepted operational limitations for `2.8.0-rnl.1`: rerun the installer or reboot for a native deployment, and recreate the container for a container deployment. They are not release blockers.
 
-| 层级 | 上限 | 语义 |
+Any change to request decoding, the Xray configuration lifecycle, RPC messages, report queues, or the dependency graph should rerun this gate and compare stage peaks.
+
+## Shutdown Budget
+
+| Layer | Limit | Semantics |
 | --- | ---: | --- |
-| Node 整体 | `25s` | 所有应用清理共享同一个 deadline，不是每项各 25 秒 |
-| rw-core | `5s + 5s` | 对独立进程组先发 SIGINT，未退出再发 SIGKILL；整组清理成功后才删除插件 nft 表 |
-| Plugin Close | `min(剩余预算, 15s)` | gate、nft 子命令和 worker join 共用剩余时间 |
-| Unix server | `5s` | 收到根 context 取消后关闭，失败则 force close |
-| HTTPS server | 整体剩余预算 | deadline 后 force close |
-| systemd | `30s` | `TimeoutStopSec`，为 25 秒应用预算保留约 5 秒外层余量 |
-| OpenRC | `TERM/30/KILL/5` | supervise-daemon 的外层兜底 |
+| Entire Node | `25s` | All application cleanup shares one deadline; this is not 25 seconds per component |
+| rw-core | `5s + 5s` | Send SIGINT to the dedicated process group, then SIGKILL if needed; remove plugin nft tables only after whole-group cleanup succeeds |
+| Plugin Close | `min(remaining budget, 15s)` | Gate wait, nft commands, and worker join share the remaining time |
+| Unix server | `5s` | Shut down after root-context cancellation; force-close on failure |
+| HTTPS server | Remaining overall budget | Force-close after the deadline |
+| systemd | `30s` | `TimeoutStopSec`, leaving about 5 seconds outside the application's 25-second budget |
+| OpenRC | `TERM/30/KILL/5` | Outer `supervise-daemon` fallback |
 
-整体 deadline 到期会返回聚合错误；外层 service manager 随后可以强杀，不能据此声称所有故障路径都在 25 秒内优雅完成。
-core 或插件清理若快速返回瞬时错误，会等待 `100ms` 后在同一 deadline 内重试一次；重试不会创建新的 25 秒预算。公开 `xray/stop` 同样先确认 core 停止，再删除插件规则，避免运行中的 core 出现无过滤窗口。`plugin sync/recreate` 与 `xray start/stop` 共用应用层 lifecycle gate，锁序固定为 `lifecycle gate -> plugin operation gate -> Manager`，不会在 core 配置启动期间提交不一致的插件快照。
+When the overall deadline expires, shutdown returns an aggregate error; the outer service manager may then force-kill the process. This does not prove that every fault path shuts down gracefully within 25 seconds.
+
+If core or plugin cleanup returns a transient error quickly, the application waits `100ms` and retries once within the same deadline. The retry does not create another 25-second budget. Public `xray/stop` likewise confirms that core has stopped before removing plugin rules, avoiding an unfiltered window while core remains online. `plugin sync/recreate` and `xray start/stop` share the application lifecycle gate. The lock order is fixed as `lifecycle gate -> plugin operation gate -> Manager`, preventing an inconsistent plugin snapshot from being committed while core configuration is starting.

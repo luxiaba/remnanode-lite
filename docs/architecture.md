@@ -1,27 +1,27 @@
-# 架构与运行时设计
+# Architecture and Runtime Design
 
-[返回文档首页](README.md) · [开发指南](development/README.md)
+[Documentation home](README.md) | [Development guide](development/README.md)
 
-本文面向第一次接触 Remnanode Lite 的维护者，描述当前代码真实采用的边界、运行流程、状态所有权和资源约束。它回答的是“系统如何工作、修改代码时应守住什么”，而不是部署参数或某个版本的发布清单。
+This document is for maintainers encountering Remnanode Lite for the first time. It describes the boundaries, runtime flows, state ownership, and resource constraints implemented by the current code. Its purpose is to explain how the system works and which invariants a code change must preserve. It is not a deployment reference or a release checklist for a particular version.
 
-部署方式见 [Docker Compose 部署](deployment-docker.md)，外部 API 的逐路由契约见 [当前官方契约基线](development/contract-2.8.0.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
+For deployment, see [Docker Compose deployment](deployment-docker.md). For the route-by-route external API contract, see the [current official contract baseline](development/contract-2.8.0.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
 
-## 1. 系统定位
+## 1. System Role
 
-Remnanode Lite 是 Remnawave Panel 与 rw-core 之间的轻量控制面。它本身不转发代理流量，主要负责：
+Remnanode Lite is a lightweight control plane between Remnawave Panel and rw-core. It does not forward proxy traffic itself. Its main responsibilities are:
 
-- 接收 Panel 通过 mTLS 和 JWT 保护的 Node API 请求。
-- 校验请求并把配置、用户和统计操作转换为 rw-core 能理解的进程或 gRPC 操作。
-- 管理 rw-core 子进程、启动配置、就绪状态和退出清理。
-- 将插件配置编译为 nftables 规则，并处理 Torrent webhook 与报告。
-- 在允许时通过 Linux `NETLINK_SOCK_DIAG` 终止指定 TCP 连接。
-- 在固定资源预算下提供有界的请求、队列、日志和并发行为。
+- Receive Node API requests protected by mTLS and JWT from Panel.
+- Validate requests and translate configuration, user, and statistics operations into process or gRPC operations understood by rw-core.
+- Manage the rw-core child process, startup configuration, readiness state, and shutdown cleanup.
+- Compile plugin configuration into nftables rules, and process Torrent webhooks and reports.
+- Terminate selected TCP connections through Linux `NETLINK_SOCK_DIAG` when permitted.
+- Keep requests, queues, logs, and concurrency bounded under a fixed resource budget.
 
-项目对齐的是官方 Node 的可观测行为和协议契约，不复制官方 TypeScript 的内部架构。项目发行版本、官方 Node 契约版本、Panel 版本和 rw-core 版本是四个不同概念；代码中分别由版本包、契约证据、验收文档和供应链 pin 管理。
+The project aligns with the observable behavior and protocol contract of the official Node. It does not reproduce the internal architecture of the official TypeScript implementation. The project release version, official Node contract version, Panel version, and rw-core version are four separate concepts. The codebase tracks them through the version package, contract evidence, acceptance documentation, and supply-chain pins respectively.
 
-生产目标是 Linux `amd64`/`arm64`，整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。非 Linux build-tag stub 用于保持代码可构建和单元测试可运行，不代表具备完整生产能力。
+The production targets are Linux `amd64` and `arm64` on a host constrained to `512 MiB RAM / 1 vCPU / 2 GB disk`. Build-tagged stubs for non-Linux systems keep the code buildable and unit tests runnable; they do not imply full production support on those systems.
 
-## 2. 系统全景
+## 2. System Overview
 
 ```mermaid
 flowchart LR
@@ -34,7 +34,7 @@ flowchart LR
     State["Plugin snapshot/report state\ninternal/plugin.State"]
     Dropper["Connection safety policy\ninternal/connections.Dropper"]
     UnixHTTP["Filesystem Unix HTTP\ninternal/unixconfig"]
-    XTLS["Minimal gRPC adapter\ninternal/xtls"]
+    RPC["Minimal gRPC adapter\ninternal/xrayrpc"]
     Core["rw-core data plane"]
     NFT["nftables"]
     Netlink["NETLINK_SOCK_DIAG"]
@@ -50,8 +50,8 @@ flowchart LR
     Handler --> Dropper
     Stats --> Xray
     Xray -->|"spawn / stop"| Core
-    Xray --> XTLS
-    XTLS -->|"gRPC over abstract Unix socket"| Core
+    Xray --> RPC
+    RPC -->|"gRPC over abstract Unix socket"| Core
     Core -->|"pull pending config"| UnixHTTP
     Core -->|"Torrent webhook"| UnixHTTP
     UnixHTTP --> Xray
@@ -64,95 +64,95 @@ flowchart LR
     Stats --> Proc
 ```
 
-控制流通常从 Panel 进入，数据流量则直接由 rw-core 在宿主网络中处理。nftables 与 socket destroy 是内核副作用，只有在 Linux 且具备 `CAP_NET_ADMIN` 时可用。
+Control flow normally enters through Panel. Proxy data traffic is handled directly by rw-core on the host network. nftables changes and socket destruction are kernel side effects, available only on Linux with `CAP_NET_ADMIN`.
 
-## 3. 包与依赖方向
+## 3. Packages and Dependency Direction
 
-组合根位于 [`cmd/remnanode-lite/main.go`](../cmd/remnanode-lite/main.go)。它创建具体组件并把小接口连接起来。运行时包之间没有全局 service locator，也没有插件式动态装载。
+The composition root is [`cmd/remnanode-lite/main.go`](../cmd/remnanode-lite/main.go). It constructs concrete components and connects them through small interfaces. Runtime packages do not use a global service locator or dynamic plugin loading.
 
-| 路径 | 主要职责 |
+| Path | Primary responsibility |
 | --- | --- |
-| `cmd/remnanode-lite` | 生产 CLI、依赖装配、daemon 启动与整体关闭 |
-| `cmd/asn-builder` | 离线构建低内存 ASN 二进制索引 |
-| `cmd/contract-probe` | 对官方和候选 Node 做受控黑盒契约比较 |
-| `cmd/release-evidence-check` | 校验发布验收记录、Git ancestry 和产物 |
-| `internal/config` | 有界配置读取、环境覆盖、默认值和 Secret 文件读取 |
-| `internal/secret` | 解码 Panel `SECRET_KEY`，提取 CA、JWT 公钥和 Node 证书/私钥 |
-| `internal/auth` | RS256 JWT 签名、`exp`/`nbf` 和可选身份 claim 校验 |
-| `internal/httpserver` | 公网 TLS、路由注册、认证、容量控制、DTO 映射和响应编码 |
-| `internal/nodeapi` | 官方请求 DTO、JSON 结构保护、Zod 兼容验证与错误模型 |
-| `internal/nodehandler` | 用户增删、批量变更和连接清理的应用服务 |
-| `internal/stats` | rw-core、插件和宿主统计的应用响应映射 |
-| `internal/xray` | rw-core 聚合根：进程状态机、配置注入、版本、哈希、日志和 gRPC 门面 |
-| `internal/xtls` | 面向 rw-core 的最小 gRPC wire adapter |
-| `internal/xtls/xrpc` | Node 实际使用的最小 protobuf 消息；`wire.pb.go` 为生成文件 |
-| `internal/unixconfig` | rw-core 专用的文件系统 Unix Socket HTTP 服务 |
-| `internal/xraywebhook` | Torrent webhook 的严格、单文档 JSON 模型 |
-| `internal/plugin` | 插件校验、plan/apply/commit、nftables 和有界 webhook worker |
-| `internal/asn` | `ReadAt + binary search` 的只读 ASN 到 CIDR 索引 |
-| `internal/connections` | 白名单和本机地址保护后的连接踢除策略 |
-| `internal/netadmin` | Linux capability 检测与 `SOCK_DESTROY` 内核适配 |
-| `internal/system` | Node.js 兼容的宿主信息和网络速率采样 |
-| `internal/bodylimit` | 原始及解压后请求体上限、压缩解码器容量控制 |
-| `internal/executil` | 带 context、输出上限和可靠收尾的外部命令执行器 |
-| `internal/doctor` | 原生部署的配置、资产、capability 与工具自检 |
-| `internal/version` | 项目发行版本与向 Panel 报告的契约版本 |
-| `internal/contract` | 独立的官方契约证据模型，不参与 daemon 运行路径 |
+| `cmd/remnanode-lite` | Production CLI, dependency assembly, daemon startup, and coordinated shutdown |
+| `cmd/asn-builder` | Offline construction of the low-memory binary ASN index |
+| `cmd/contract-probe` | Controlled black-box contract comparison between official and candidate Nodes |
+| `cmd/release-evidence-check` | Validation of release acceptance records, Git ancestry, and artifacts |
+| `internal/config` | Bounded configuration reads, environment overrides, defaults, and Secret file reads |
+| `internal/secret` | Decode Panel `SECRET_KEY` and extract the CA, JWT public key, and Node certificate/private key |
+| `internal/auth` | RS256 JWT signature verification, `exp`/`nbf` checks, and optional identity-claim validation |
+| `internal/httpserver` | Public TLS, route registration, authentication, admission control, DTO mapping, and response encoding |
+| `internal/nodeapi` | Official request DTOs, JSON structural safeguards, Zod-compatible validation, and error models |
+| `internal/nodehandler` | Application service for user add/remove, bulk mutations, and connection cleanup |
+| `internal/stats` | Application response mapping for rw-core, plugin, and host statistics |
+| `internal/xray` | rw-core aggregate root: process state machine, configuration injection, version, hashes, logs, and gRPC facade |
+| `internal/xrayrpc` | Minimal gRPC wire adapter for rw-core |
+| `internal/xrayrpc/wire` | Minimal protobuf messages used by the Node; `wire.pb.go` is generated |
+| `internal/unixconfig` | Filesystem Unix socket HTTP service dedicated to rw-core |
+| `internal/xraywebhook` | Strict, single-document JSON model for Torrent webhooks |
+| `internal/plugin` | Plugin validation, plan/apply/commit coordination, nftables, and the bounded webhook worker |
+| `internal/asn` | Read-only ASN-to-CIDR index using `ReadAt + binary search` |
+| `internal/connections` | Connection-drop policy after allowlist and local-address protection |
+| `internal/netadmin` | Linux capability detection and the `SOCK_DESTROY` kernel adapter |
+| `internal/system` | Node.js-compatible host information and network-rate sampling |
+| `internal/bodylimit` | Raw and decoded request-body limits, plus compression decoder admission |
+| `internal/executil` | External command execution with context, bounded output, and reliable finalization |
+| `internal/doctor` | Native-deployment checks for configuration, assets, capabilities, and tools |
+| `internal/version` | Project release version and the contract version reported to Panel |
+| `internal/contract` | Independent evidence model for the official contract; not part of the daemon runtime path |
 
-核心依赖方向如下：
+The core dependency direction is:
 
 ```text
 cmd/remnanode-lite
   -> version
   -> httpserver -> nodeapi
                 -> nodehandler -> connections -> netadmin
-                               -> xtls
+                               -> xrayrpc
                 -> stats       -> system
-                               -> xtls
+                               -> xrayrpc
                 -> plugin      -> connections / xraywebhook
                 -> xray
   -> unixconfig
-  -> xray       -> xtls / executil / system / netadmin
+  -> xray       -> xrayrpc / executil / system / netadmin
   -> config     -> secret
 ```
 
-`nodehandler`、`stats`、`plugin` 都在消费方定义小接口，由 `xray.Manager`、`plugin.State` 或 `connections.Dropper` 实现。这样可以替换副作用并做确定性测试，同时避免 `xray` 与 `plugin` 形成包循环。
+`nodehandler`, `stats`, and `plugin` define small interfaces on the consuming side. `xray.Manager`, `plugin.State`, and `connections.Dropper` implement those interfaces. This makes side effects replaceable for deterministic tests and prevents a package cycle between `xray` and `plugin`.
 
-这不是严格的“纯领域层”架构。例如 `nodehandler` 的端口使用 `xtls` 值类型，`stats` 直接组装 `system` 数据，`httpserver` 还拥有 admission 与跨组件生命周期协调。维护者应以当前能力边界为准，不要仅凭包名推断依赖层级。
+This is not a strict "pure domain layer" architecture. For example, `nodehandler` ports use value types from `xrayrpc`, `stats` assembles `system` data directly, and `httpserver` owns admission control and cross-component lifecycle coordination. Maintainers should reason from these actual capability boundaries rather than infer dependency layers from package names alone.
 
-## 4. 启动流程
+## 4. Startup Flow
 
-daemon 入口是 `runNode`，没有 CLI 参数时由 `main` 调用。入口立即建立 `SIGINT`/`SIGTERM` 根 context，后续初始化和后台任务都从它派生取消语义。启动顺序有意让配置和安全错误在监听端口前失败：
+The daemon entry point is `runNode`, which `main` calls when no CLI arguments are supplied. It immediately creates a root context for `SIGINT` and `SIGTERM`. All later initialization and background work derive their cancellation semantics from that context. The startup order deliberately surfaces configuration and security failures before opening listeners:
 
-1. 解析运行配置。
-   - `REMNANODE_ENV` 显式指定路径时优先。
-   - 否则优先已有的 `/etc/remnanode/node.env`，最后回退 `.env`。
-   - 配置文件值先加载，已知且非空的进程环境变量再覆盖它们。
-2. 创建公开 `/node` server 的不可变请求体预算；经过配置解析的 contract/core 版本值保留在 `Config`，不写回进程环境。
-3. 应用 Go 内存软上限。显式 `GOMEMLIMIT` 优先于 `LOW_MEMORY=1` 的 `180 MiB` 默认值。
-4. 检查 `CAP_NET_ADMIN`。缺失只记录降级警告，不阻止基础 Panel API 启动。
-5. 解析 `SECRET_KEY` 中的 Node TLS 材料、客户端 CA 和 JWT 公钥，并构建 JWT validator。
-6. 创建 `plugin.State` 并尝试打开 ASN 数据库。
-   - ASN 文件缺失或无效时插件 `asList` 降级为空，daemon 继续启动。
-7. 显式创建 `system.NetworkMonitor` 和共享的 `system.Collector`，并立即登记 monitor 清理。
-8. 创建 `xray.Manager`。
-   - 生成本进程唯一的 rw-core gRPC abstract socket 名称。
-   - 注入冻结的 Node/core 版本、共享 Collector 与 Torrent 配置 provider。
-   - 尝试探测 rw-core 版本；失败时保留 unknown，后续 health 调用可节流重试。
-9. 创建 `connections.Dropper` 和 `plugin.Service`。
-   - Plugin webhook 单 worker 在 Service 构造时启动。
-   - nftables 初始化使用根 context；失败是受支持的降级模式，但启动取消会立即返回。
-10. 显式创建 `stats.Service` 和 `nodehandler.Service`，再将已构造依赖交给 `httpserver.New`。
-11. 创建公网 HTTPS server 和文件系统 Unix HTTP server。公网 server 在此校验 Node 证书/私钥并构建客户端 CA pool。
-12. 并行启动公网 HTTPS、内部 Unix HTTP 和日志轮转，等待根 context 取消或任一 server 异常退出。
+1. Parse runtime configuration.
+   - An explicitly configured `REMNANODE_ENV` path has priority.
+   - Otherwise, use `/etc/remnanode/node.env` if it exists, then fall back to `.env`.
+   - Load file values first, then override them with known, non-empty process environment variables.
+2. Create the immutable request-body budget for the public `/node` server. Parsed contract and core version values remain in `Config` and are not written back to the process environment.
+3. Apply the Go soft memory limit. An explicit `GOMEMLIMIT` takes precedence over the `180 MiB` default selected by `LOW_MEMORY=1`.
+4. Check `CAP_NET_ADMIN`. Its absence emits a degradation warning but does not prevent the base Panel API from starting.
+5. Parse the Node TLS material, client CA, and JWT public key from `SECRET_KEY`, then construct the JWT validator.
+6. Create `plugin.State` and attempt to open the ASN database.
+   - If the ASN file is absent or invalid, plugin `asList` resolution degrades to an empty result and the daemon continues starting.
+7. Explicitly create `system.NetworkMonitor` and the shared `system.Collector`, and immediately register monitor cleanup.
+8. Create `xray.Manager`.
+   - Generate a process-unique rw-core gRPC abstract socket name.
+   - Inject frozen Node/core versions, the shared Collector, and the Torrent configuration provider.
+   - Attempt to probe the rw-core version. On failure, keep it unknown; later health calls may retry with throttling.
+9. Create `connections.Dropper` and `plugin.Service`.
+   - The single Plugin webhook worker starts in the Service constructor.
+   - nftables initialization uses the root context. Failure is a supported degraded mode, while startup cancellation returns immediately.
+10. Explicitly create `stats.Service` and `nodehandler.Service`, then pass the already-constructed dependencies to `httpserver.New`.
+11. Create the public HTTPS server and the filesystem Unix HTTP server. The public server validates the Node certificate/private key and builds the client CA pool at this point.
+12. Start public HTTPS, internal Unix HTTP, and log rotation concurrently. Wait for root-context cancellation or an unexpected exit from either server.
 
-`internal/system` 不在包加载时创建默认 monitor，也不隐式启动 goroutine。组合根创建唯一的 `NetworkMonitor`，将同一 `Collector` 注入 Xray 和 stats，并在退出时停止 poller。每获得一个需要关闭的组件就登记清理，因此后续初始化失败也不会泄漏已启动的资源。
+`internal/system` does not create a default monitor during package initialization and does not start a goroutine implicitly. The composition root constructs the sole `NetworkMonitor`, injects the same `Collector` into Xray and stats, and stops the poller during shutdown. Cleanup is registered as soon as each closeable component is acquired, so a later initialization failure cannot leak resources that have already started.
 
-## 5. Panel 请求流程
+## 5. Panel Request Flow
 
-### 5.1 公网请求链
+### 5.1 Public Request Chain
 
-公网 server 只暴露固定的 26 条 `/node/*` 路由。请求按以下顺序进入：
+The public server exposes exactly 26 fixed `/node/*` routes. Requests pass through the following sequence:
 
 ```text
 TLS >= 1.3 mTLS handshake
@@ -172,104 +172,104 @@ TLS >= 1.3 mTLS handshake
   -> application service / runtime coordinator
 ```
 
-TLS 配置把最低版本设为 1.3，未固定未来协议的最高版本；它强制使用 Secret 中 CA 验证客户端证书，并显式关闭 Go HTTP/2 自动协商。无效 JWT、未知 path 或错误 method 会终止当前连接，不返回可枚举的 401/404/405 body，这是官方兼容行为，不应改成常规 REST 错误页。
+TLS has a minimum version of 1.3 without pinning the maximum version of future protocols. It requires a client certificate signed by the CA embedded in the Secret and explicitly disables Go's automatic HTTP/2 negotiation. An invalid JWT, unknown path, or wrong method terminates the current connection without returning an enumerable 401/404/405 body. This is official compatibility behavior and must not be replaced with conventional REST error pages.
 
-请求分为四组：
+The requests fall into four groups:
 
-- Xray：start、stop、healthcheck，共 3 条。
-- Stats：用户在线、流量、系统和 IP 统计，共 10 条。
-- Handler：用户热更新和连接踢除，共 8 条。
-- Plugin：同步、报告收集和 nftables 操作，共 5 条。
+- Xray: start, stop, and healthcheck, for 3 routes.
+- Stats: user online state, traffic, system, and IP statistics, for 10 routes.
+- Handler: hot user updates and connection termination, for 8 routes.
+- Plugin: synchronization, report collection, and nftables operations, for 5 routes.
 
-权威注册表是 [`internal/httpserver/node_routes.go`](../internal/httpserver/node_routes.go)。新增或修改路由时，不要在其他文件维护第二份运行时注册表。
+The authoritative registry is [`internal/httpserver/node_routes.go`](../internal/httpserver/node_routes.go). Do not maintain a second runtime route registry elsewhere when adding or changing routes.
 
-### 5.2 请求资源与 JSON 边界
+### 5.2 Request Resources and JSON Boundaries
 
-逐路由 body 上限为：
+Per-route body limits are:
 
-| 类别 | 上限 | 典型路由 |
+| Class | Limit | Typical routes |
 | --- | ---: | --- |
-| small | `64 KiB` | 查询、stop、health、remove user |
-| medium | `256 KiB` | add user、block/unblock IP |
-| bulk | `16 MiB` | Xray start、批量用户、连接批量、plugin sync |
+| small | `64 KiB` | Queries, stop, health, and remove user |
+| medium | `256 KiB` | Add user and block/unblock IP |
+| bulk | `16 MiB` | Xray start, bulk users, bulk connections, and plugin sync |
 
-`BODY_LIMIT_MB` 是公开 `/node` HTTPS server 的额外上限，最终值取 server 配置和路由上限的较小者。因此当前公开 API 即使在普通模式也不会接受超过 `16 MiB` 的请求。`LOW_MEMORY=1` 时该 server 默认上限是 `16 MiB`，显式配置更大值会在启动时失败；内部 Unix webhook 不读取此变量，固定为 `8 KiB`。
+`BODY_LIMIT_MB` is an additional ceiling for the public `/node` HTTPS server. The effective value is the smaller of the server configuration and the route-specific limit. Consequently, the current public API never accepts a request larger than `16 MiB`, even in normal mode. With `LOW_MEMORY=1`, the server default is `16 MiB` and an explicitly larger value causes startup to fail. The internal Unix webhook does not read this setting and always uses `8 KiB`.
 
-支持 `gzip`、`deflate`、`br` 和 `zstd`。最多同时运行两个 decoder；zstd 使用单线程、low-memory 模式和有界 window。wire body、解压结果和 charset 转码结果都会再次受限，不能用压缩比绕过预算。
+Supported content encodings are `gzip`, `deflate`, `br`, and `zstd`. At most two decoders may run concurrently. zstd uses one thread, low-memory mode, and a bounded window. The wire body, decompressed result, and charset-transcoded result are all bounded again, so compression ratio cannot bypass the budget.
 
-JSON DTO 边界具备以下行为：
+The JSON DTO boundary has these properties:
 
-- 只解析一个顶层 object 或 array，拒绝尾随第二份文档。
-- 官方 Zod object 的未知字段按兼容语义忽略。
-- 拒绝重复 key、仅大小写不同的影射 key、超过 64 层嵌套、超长 key 和超预算 token/集合。
-- 支持 UTF-8/BOM、UTF-16 LE/BE；不支持任意 `application/*+json`。
-- 最多返回 64 个 validation issue，并限制错误文字、path 和 options 大小。
+- It parses exactly one top-level object or array and rejects a trailing second document.
+- Unknown fields in official Zod objects are ignored for compatibility.
+- It rejects duplicate keys, case-only shadow keys, nesting deeper than 64 levels, overlong keys, and tokens or collections that exceed their budgets.
+- It accepts UTF-8 with or without BOM and UTF-16 LE/BE. It does not accept arbitrary `application/*+json` media types.
+- It returns at most 64 validation issues and bounds error text, paths, and option lists.
 
-6 条没有 DTO 的路由允许空 body；如果调用者发送 `application/json` body，仍须是单一合法 object/array，不能笼统描述为“忽略任何 body”。
+Six routes without DTOs permit an empty body. If a caller sends an `application/json` body, it must still be one valid object or array. These routes must not be described as ignoring any arbitrary body.
 
-### 5.3 响应与错误
+### 5.3 Responses and Errors
 
-- 正常结果统一使用 HTTP 200 和 `{ "response": ... }` envelope。
-- DTO 验证通常返回 400，请求过大返回 413，不支持的 charset/encoding 返回 415。
-- 等待 admission 或生命周期 lease 超时返回 503、`Retry-After: 1` 并关闭连接；客户端主动取消则直接终止处理。
-- Stats 和查询类应用错误使用 `A010` 至 `A017`；未分类错误在日志中记录并映射为 `E000`。
-- Xray start 的业务失败位于 HTTP 200 response 内的 `isStarted=false/error`。
-- 用户批量操作的部分失败位于 HTTP 200 的 `success=false/error`，不是跨多个 gRPC 调用的数据库事务。
-- Plugin 操作使用 `accepted` 表达协议结果；它不总是“宿主机所有可选副作用均成功”的同义词。
+- Successful results consistently use HTTP 200 with a `{ "response": ... }` envelope.
+- DTO validation normally returns 400, oversized requests return 413, and unsupported charsets or encodings return 415.
+- A timeout while waiting for admission or a lifecycle lease returns 503 with `Retry-After: 1` and closes the connection. Client cancellation stops processing directly.
+- Stats and query application errors use `A010` through `A017`. Unclassified errors are logged and mapped to `E000`.
+- An Xray start business failure appears inside an HTTP 200 response as `isStarted=false/error`.
+- Partial failure during bulk user operations appears inside an HTTP 200 response as `success=false/error`. The sequence of gRPC calls is not a database transaction.
+- Plugin operations use `accepted` to express the protocol result. It is not always synonymous with successful completion of every optional host-side effect.
 
-### 5.4 用户和统计数据流
+### 5.4 User and Statistics Data Flow
 
-`nodehandler.Service` 将所有 add/remove mutation 通过容量为 1 的可取消 gate 串行。顶层操作只取得一次 Manager process lease，并将返回的 context 传给 inbound/IP 查询、所有 Handler RPC、连接清理和本地用户哈希提交。该 lease 绑定具体 `process epoch + abstract socket`，并使 `Start`/`Stop` 在完整 mutation 结束前等待；已释放或属于其它 Manager 的 token 会被拒绝。
+`nodehandler.Service` serializes all add/remove mutations through a cancelable gate with capacity 1. A top-level operation acquires one Manager process lease and passes the returned context through inbound/IP queries, all Handler RPCs, connection cleanup, and the local user-hash commit. The lease is bound to a specific `process epoch + abstract socket` and makes `Start` and `Stop` wait until the complete mutation finishes. A released token or a token issued by another Manager is rejected.
 
-批量用户操作可能已有前序 RPC 成功，代码不会伪造回滚。它保证的是本地哈希不领先于 rw-core、返回第一个明确错误，并让 Panel 可以安全重试。
+Earlier RPCs in a bulk user operation may already have succeeded; the implementation does not pretend to roll them back. Its guarantees are that the local hash never advances beyond rw-core, that the first explicit error is returned, and that Panel can retry safely.
 
-删除用户前会以 `reset=false` 获取其在线 IP；只有相关 inbound 删除成功后才执行连接踢除。连接层会规范化、去重并过滤白名单，同时拒绝本机、loopback、link-local、multicast、unspecified、scoped 和 IPv4 broadcast 地址。
+Before deleting a user, the service retrieves that user's online IPs with `reset=false`. It drops connections only after the relevant inbound removal succeeds. The connection layer normalizes and deduplicates addresses, applies the allowlist, and rejects local, loopback, link-local, multicast, unspecified, scoped, and IPv4 broadcast addresses.
 
-`stats.Service` 是响应映射层，底层数据来自三处：
+`stats.Service` is a response-mapping layer. Its underlying data comes from three sources:
 
-- rw-core Stats gRPC：流量、在线、IP 和 runtime stats。
-- `plugin.Service`：待收集 Torrent report 数量。
-- `internal/system`：`uname`、`/proc/meminfo`、`/proc/loadavg`、`/proc/uptime`、`/proc/cpuinfo` 和默认接口速率。
+- rw-core Stats gRPC for traffic, online state, IPs, and runtime statistics.
+- `plugin.Service` for the number of pending Torrent reports.
+- `internal/system` for `uname`, `/proc/meminfo`, `/proc/loadavg`, `/proc/uptime`, `/proc/cpuinfo`, and the default-interface rate.
 
-Manager 为每次 Handler/Stats 操作创建短生命周期 gRPC client，调用完成即关闭。普通 RPC 默认 5 秒，Ping 为 3 秒，接收消息上限为 `16 MiB`。全用户 IP 优先使用 rw-core 扩展 RPC；遇到 `Unimplemented` 后缓存 legacy 能力并用最多 8 个 worker 查询单用户 IP。
+The Manager creates a short-lived gRPC client for each Handler or Stats operation and closes it when the call completes. Ordinary RPCs default to 5 seconds, Ping to 3 seconds, and the receive-message limit is `16 MiB`. The all-user IP path prefers the rw-core extension RPC. After an `Unimplemented` response, it caches legacy capability and queries per-user IPs with at most 8 workers.
 
-由 map 聚合的用户和 tag 统计结果没有稳定顺序保证，调用方不应依赖排序。
+User and tag statistics aggregated from maps have no stable ordering guarantee. Callers must not rely on their order.
 
-## 6. 两条 Unix 通道
+## 6. Two Unix Channels
 
-代码中存在两条用途和安全边界不同的 Unix 通道，文档和日志中必须准确区分。
+The code has two Unix channels with different purposes and security boundaries. Documentation and logs must distinguish them accurately.
 
-| 通道 | 默认标识 | 所有者与协议 | 用途 | 安全边界 |
+| Channel | Default identifier | Owner and protocol | Purpose | Security boundary |
 | --- | --- | --- | --- | --- |
-| 文件系统 Unix Socket | `/run/remnanode/internal.sock` | Node 提供 HTTP，rw-core 作为客户端 | 拉取 pending config；投递 Torrent webhook | 文件 mode `0600`、稳定文件检查、内部 token |
-| Linux abstract Unix Socket | `@remnanode-xtls-<16hex>` | rw-core 提供 gRPC，Node 作为客户端 | Handler 与 Stats RPC、readiness Ping | 同一 network namespace、随机名称、无内部 TLS |
+| Filesystem Unix socket | `/run/remnanode/internal.sock` | Node serves HTTP; rw-core is the client | Retrieve pending configuration; deliver Torrent webhooks | File mode `0600`, stable-file checks, internal token |
+| Linux abstract Unix socket | `@remnanode-xtls-<16hex>` | rw-core serves gRPC; Node is the client | Handler and Stats RPCs; readiness Ping | Same network namespace, random name, no internal TLS |
 
-### 6.1 文件系统 Unix HTTP
+### 6.1 Filesystem Unix HTTP
 
-[`internal/unixconfig/server.go`](../internal/unixconfig/server.go) 提供：
+[`internal/unixconfig/server.go`](../internal/unixconfig/server.go) serves:
 
 - `GET /internal/get-config`
 - `POST /internal/webhook`
 
-Server 拒绝替换 symlink、普通文件或仍在监听的 socket；只删除经过前后 identity 核对的 stale socket。目录使用非阻塞 `flock` 防止两个 Node 同时拥有同一路径，新 socket 设置为 `0600`。
+The server refuses to replace a symlink, regular file, or socket that is still listening. It removes a stale socket only after its identity has been checked both before and after the decision. A non-blocking `flock` on the directory prevents two Nodes from owning the same path, and a new socket is set to mode `0600`.
 
-连接上限为 8，活动 handler 上限为 4，webhook 最多使用其中 3 个槽，为 rw-core 拉取启动配置保留容量。header 上限 `8 KiB`，request deadline 30 秒，webhook body 上限 `8 KiB`。
+The connection limit is 8 and the active-handler limit is 4. Webhooks may use at most 3 of those handler slots, preserving capacity for rw-core to retrieve its startup configuration. Headers are limited to `8 KiB`, the request deadline is 30 seconds, and webhook bodies are limited to `8 KiB`.
 
-内部认证优先使用 `X-Internal-Token`；query token 仅为兼容旧路径。请求未提供 token 时依赖 owner-only socket 权限。未配置 `INTERNAL_REST_TOKEN` 时，Node 每次启动生成 48 个随机字节的 URL-safe token。
+Internal authentication prefers `X-Internal-Token`. A query token exists only for compatibility with the legacy path. If a request supplies no token, access relies on owner-only socket permissions. When `INTERNAL_REST_TOKEN` is not configured, the Node generates a URL-safe token from 48 random bytes on every start.
 
 ### 6.2 Abstract gRPC
 
-Manager 构造时生成随机 abstract socket 前缀，每个新 rw-core 进程再追加唯一 process epoch，并把该完整名称注入 tunnel inbound。因此旧进程的延迟 gRPC client 无法意外连到替换后的 core。`internal/xtls` 使用 `grpc.ClientConnInterface.Invoke` 和显式 method path，不依赖完整 Xray Go SDK。
+The Manager constructor generates a random abstract socket prefix. Each new rw-core process appends its unique process epoch, and the complete name is injected into the tunnel inbound. A delayed gRPC client from an old process therefore cannot accidentally connect to the replacement core. `internal/xrayrpc` uses `grpc.ClientConnInterface.Invoke` with explicit method paths and does not depend on the complete Xray Go SDK.
 
-这里使用 insecure gRPC transport，因为它不是公网 TCP 边界；但 abstract socket 并非“只有当前进程可以访问”，它位于同一 network namespace。随机名称降低发现概率，容器或宿主的 namespace 隔离仍是安全模型的一部分。
+The channel uses insecure gRPC transport because it is not a public TCP boundary. However, an abstract socket is not private to the current process; it is accessible within the same network namespace. The random name reduces discoverability, while container or host namespace isolation remains part of the security model.
 
-[`internal/xtls/xrpc/wire.proto`](../internal/xtls/xrpc/wire.proto) 只声明 Node 真正使用的字段，字段号和 wire type 必须与 rw-core 一致。`wire.pb.go` 是生成文件，不应手工编辑；method path、TypedMessage type name 和黄金 wire bytes由 `internal/xtls/wire_golden_test.go` 固定。
+[`internal/xrayrpc/wire/wire.proto`](../internal/xrayrpc/wire/wire.proto) declares only the fields actually used by the Node. Field numbers and wire types must match rw-core. `wire.pb.go` is generated and must not be edited manually. Method paths, TypedMessage type names, and golden wire bytes are fixed by `internal/xrayrpc/wire_golden_test.go`.
 
-## 7. Xray start 流程
+## 7. Xray Start Flow
 
-### 7.1 状态机与所有权
+### 7.1 State Machine and Ownership
 
-`xray.Manager` 是 rw-core 的唯一进程所有者：
+`xray.Manager` is the sole owner of the rw-core process:
 
 ```mermaid
 stateDiagram-v2
@@ -285,23 +285,23 @@ stateDiagram-v2
     stopping --> stopping: cleanup failed; later stop retries
 ```
 
-核心同步字段：
+The core synchronization fields are:
 
-- `Manager.mu` 保护状态、operation/process epoch、process、pending config、哈希、inbound tags 和版本。
-- `Manager.lifecycleMu` 表示长时间持有的进程生命周期所有权，一次只有一个 Start/Stop owner。
-- `processState.mutationGate` 使已接受的用户/stats mutation 绑定当前进程，生命周期 writer 在替换或终止它前等待。
-- `processState.finalizeMu` 保证 signal、kill、Wait 与进程组清理不会并行重复。
-- `operationEpoch` 识别当前 Start/Stop 所有者；`process.epoch + socket` 识别真实 rw-core 实例，两者不混用。
+- `Manager.mu` protects state, operation and process epochs, the process, pending configuration, hashes, inbound tags, and version.
+- `Manager.lifecycleMu` represents long-held process lifecycle ownership. Only one Start/Stop owner may hold it at a time.
+- `processState.mutationGate` binds accepted user and stats mutations to the current process. A lifecycle writer waits for them before replacing or terminating that process.
+- `processState.finalizeMu` prevents signal, kill, Wait, and process-group cleanup from running in duplicate or in parallel.
+- `operationEpoch` identifies the current Start/Stop owner. `process.epoch + socket` identifies the actual rw-core instance. The two identities are not interchangeable.
 
-HTTP 层还有一层 `xrayLifecycleGate`：
+The HTTP layer adds an `xrayLifecycleGate`:
 
-- start 使用共享 lease，最多两个请求进入，让第二个请求可得到官方兼容的 `Request already in progress`。
-- stop、plugin sync/recreate、用户 mutation 和会 reset 的 stats 使用独占 lease。
-- 已等待的独占请求会阻止后续 start 插队。
+- Start takes a shared lease, with at most two admitted requests, so the second request can receive the officially compatible `Request already in progress` result.
+- Stop, plugin sync/recreate, user mutations, and stats operations with reset take an exclusive lease.
+- A waiting exclusive request prevents later starts from cutting ahead of it.
 
-这两层职责不同：HTTP gate 协调跨组件操作，Manager 锁维护真实进程所有权。
+These two layers have different responsibilities: the HTTP gate coordinates cross-component operations, while Manager locks preserve actual process ownership.
 
-### 7.2 详细启动链
+### 7.2 Detailed Startup Sequence
 
 ```mermaid
 sequenceDiagram
@@ -334,93 +334,93 @@ sequenceDiagram
     H-->>P: HTTP 200 response envelope
 ```
 
-实际步骤：
+The concrete steps are:
 
-1. 拒绝正在 starting/stopping 的并发请求，或被前次失败清理保留的 unclean process。
-2. 若 core 已 running、不是 force restart 且哈希检查开启，先实时 Ping gRPC，再比较 base hash、inbound 集合和用户 HashedSet；一致则复用当前进程。
-3. 就地接管请求中的 `xrayConfig`，避免大配置完整 clone。
-4. 覆盖/注入 stats、API、policy、abstract tunnel inbound 和 API routing rule。
-5. 根据已提交且有效的 Plugin snapshot 注入 Torrent blackhole outbound、routing rule 和 webhook。
-6. 构建紧凑 hash state，并把最终配置序列化为最多 `20 MiB`、128 层的 canonical JSON。
-7. 停止并确认上一进程已清理。
-8. 把 JSON 放入 `pendingConfigJSON`，启动 rw-core：
+1. Reject a concurrent request while the Manager is starting or stopping, or while an unclean process retained by an earlier cleanup failure still exists.
+2. If the core is running, force restart is false, and hash checks are enabled, Ping gRPC in real time before comparing the base hash, inbound set, and user `HashedSet`. Reuse the current process when all values match.
+3. Take ownership of `xrayConfig` from the request in place to avoid cloning the complete large configuration.
+4. Override or inject stats, API, policy, the abstract tunnel inbound, and the API routing rule.
+5. Inject the Torrent blackhole outbound, routing rule, and webhook according to the committed and valid Plugin snapshot.
+6. Build compact hash state, then serialize the final configuration as canonical JSON bounded to `20 MiB` and 128 levels.
+7. Stop the previous process and verify its cleanup.
+8. Store the JSON in `pendingConfigJSON` and start rw-core:
 
    ```text
    rw-core -config http+unix://<filesystem-socket>/internal/get-config -format json
    ```
 
-9. 等待 abstract gRPC ready。普通模式默认 20 秒，`LOW_MEMORY=1` 默认 90 秒，每 2 秒探测。
-10. 确认当前 operation 仍拥有该 process epoch 且进程未退出，探测 core 版本，原子发布 running、hash state 和 version。
-11. 立即释放完整 JSON，只保留紧凑哈希与 inbound tag。
+9. Wait for abstract gRPC readiness. The default is 20 seconds in normal mode and 90 seconds with `LOW_MEMORY=1`, probing every 2 seconds.
+10. Verify that the current operation still owns the process epoch and that the process has not exited, probe the core version, and atomically publish running state, hash state, and version.
+11. Release the complete JSON immediately, retaining only compact hashes and inbound tags.
 
-`CurrentConfigJSON()` 不是运行期 dump-config。它只在启动阶段返回 pending JSON；rw-core ready 后返回 `{}`。Node 重启后也不会从磁盘恢复旧 Panel 配置，而是等待 Panel 重新下发 start。
+`CurrentConfigJSON()` is not a runtime dump-config endpoint. It returns pending JSON only during startup and returns `{}` after rw-core becomes ready. After a Node restart, it also does not restore an old Panel configuration from disk; it waits for Panel to send a new start request.
 
-`Health()` 同样不是实时 gRPC 探活：`IsAlive` 表示 Node 进程响应，`XrayInternalStatusCached` 来自本地生命周期缓存。需要判断 rw-core 是否真实 ready 时，应看 start/readiness 路径，而不是扩展 health 的现有契约语义。
+`Health()` is likewise not a live gRPC probe. `IsAlive` means the Node process is responding, while `XrayInternalStatusCached` comes from the local lifecycle cache. Code that needs to determine whether rw-core is actually ready must use the start/readiness path rather than extend the existing health contract semantics.
 
-### 7.3 子进程与 Secret 边界
+### 7.3 Child Process and Secret Boundary
 
-Linux 上 rw-core 被放入独立 process group，并设置 `Pdeathsig=SIGKILL`。停止时先对整个组发 SIGINT，默认等待 5 秒，再发 SIGKILL 并等待 5 秒。实现暂不回收已退出的 leader PID，先扫描 `/proc` 确认没有存活的非 leader 后代，再执行唯一一次 `Wait`，避免 PID 重用导致误伤其他进程组。
+On Linux, rw-core runs in its own process group with `Pdeathsig=SIGKILL`. Shutdown sends SIGINT to the entire group, waits 5 seconds by default, sends SIGKILL, and waits another 5 seconds. The implementation deliberately does not reap an exited leader PID immediately. It first scans `/proc` to verify that no non-leader descendants remain alive, then performs exactly one `Wait`. This avoids harming another process group after PID reuse.
 
-rw-core 子进程环境由 `rwCoreEnvironment` 显式整理：
+`rwCoreEnvironment` explicitly sanitizes the rw-core child environment:
 
-- 移除 `SECRET_KEY`、`SECRET_KEY_FILE`、`INTERNAL_REST_TOKEN` 和 `REMNANODE_ENV`。
-- 移除调用方可能预置的 asset path 和 rw-core 内部 token，再写入本次受控值。
-- 保留其它非受管环境变量，并用本次受控值覆盖 `XRAY_LOCATION_ASSET` 和 `RNL_INTERNAL_REST_TOKEN`。
+- Remove `SECRET_KEY`, `SECRET_KEY_FILE`, `INTERNAL_REST_TOKEN`, and `REMNANODE_ENV`.
+- Remove any caller-provided asset path and rw-core internal token before writing the controlled values for this invocation.
+- Preserve other unmanaged environment variables, while overriding `XRAY_LOCATION_ASSET` and `RNL_INTERNAL_REST_TOKEN` with controlled values.
 
-因此 Panel TLS 私钥、CA 和 JWT 公钥只需留在 Go Node 进程，不会作为环境变量继续传给 rw-core。内部 token 是特意传递给 rw-core 的例外，用于文件系统 Unix HTTP/webhook 协作。
+The Panel TLS private key, CA, and JWT public key therefore remain only in the Go Node process and are not propagated to rw-core as environment variables. The internal token is an intentional exception passed to rw-core for filesystem Unix HTTP and webhook coordination.
 
-`Pdeathsig` 只直接作用于 leader。Node 或外层 supervisor 被强杀时不保证所有后代一定自动回收；恢复策略仍是重启服务、主机或重建容器。
+`Pdeathsig` applies directly only to the leader. If the Node or its outer supervisor is force-killed, not every descendant is guaranteed to be reaped automatically. The recovery strategy remains restarting the service or host, or recreating the container.
 
-## 8. Plugin sync 与 webhook 流程
+## 8. Plugin Sync and Webhook Flow
 
-### 8.1 状态与 plan/apply/commit
+### 8.1 State and Plan/Apply/Commit
 
-`plugin.Service` 负责副作用事务编排，`plugin.State` 负责发布只读状态。`pluginSnapshot` 发布后不可变，只保存：
+`plugin.Service` coordinates side-effect transactions, while `plugin.State` publishes read-only state. Once published, a `pluginSnapshot` is immutable and stores only:
 
-- 原始 source hash 和官方 object-hash 兼容 config hash。
-- Plugin UUID/name。
-- firewall readiness。
-- 连接踢除白名单 matcher。
-- Torrent 派生设置。
-- 静态 firewall plan。
+- The original source hash and the official object-hash-compatible configuration hash.
+- Plugin UUID and name.
+- Firewall readiness.
+- The connection-drop allowlist matcher.
+- Derived Torrent settings.
+- The static firewall plan.
 
-完整插件 JSON 不会长期保留。一次 sync 的主要步骤是：
+The complete plugin JSON is not retained long term. A sync follows these main steps:
 
-1. 获取容量为 1、支持取消的 Plugin operation lease。
-2. 对相同 source hash 和相同 firewall readiness 走快速路径，只更新身份。
-3. 否则在副作用前完成 JSON、schema、collection 和资源预算校验。
-4. 展开 shared IP list 和 ASN list，生成不可变 plan。
-5. 与现有行为等价时只发布新 snapshot，保留动态 Torrent block。
-6. 行为变化时按所需顺序协调 nftables 与 Xray。
-7. 两侧成功后才提交 snapshot；可回滚失败会重放上一份静态 firewall plan。
+1. Acquire the cancelable Plugin operation lease with capacity 1.
+2. For an identical source hash and identical firewall readiness, take the fast path and update identity only.
+3. Otherwise, complete JSON, schema, collection, and resource-budget validation before any side effect.
+4. Expand shared IP lists and ASN lists into an immutable plan.
+5. If behavior is equivalent to the current state, publish only the new snapshot and preserve dynamic Torrent blocks.
+6. If behavior changes, coordinate nftables and Xray in the required order.
+7. Commit the snapshot only after both sides succeed. A rollback-capable failure replays the previous static firewall plan.
 
-普通启用/更新通常先应用 firewall，再协调 Xray。关闭 Torrent、清理或破坏性 reset 先协调或停止 Xray，再 reset firewall，避免 running core 暂时失去过滤。
+Ordinary enable and update operations normally apply the firewall first, then coordinate Xray. Disabling Torrent, cleanup, or a destructive reset coordinates or stops Xray first and then resets the firewall, preventing a running core from temporarily losing filtering.
 
-Torrent 启停或 `includeRuleTags` 变化可能调用 `StopIfOnline`。它只停止 rw-core，不自动重新启动；后续 start 由 Panel 的正常同步流程触发。无 include tags 的 Torrent 关闭可以通过 Handler gRPC 热删除专用 outbound。
+Enabling or disabling Torrent, or changing `includeRuleTags`, may invoke `StopIfOnline`. It stops rw-core but does not restart it automatically. A later start comes from Panel's normal synchronization flow. Disabling Torrent without include tags can hot-remove the dedicated outbound through Handler gRPC.
 
-非法插件配置不会简单保留旧配置：Service 会尝试停止 Xray、清理 Plugin snapshot 并 reset firewall，同时保留尚未被 Panel collect 的报告。
+An invalid plugin configuration does not simply leave the previous configuration in place. The Service attempts to stop Xray, clear the Plugin snapshot, and reset the firewall while preserving reports not yet collected by Panel.
 
-缺少 `CAP_NET_ADMIN` 或 nft 初始化失败时，合法配置仍可按官方语义被接受为 degraded snapshot，但 nft 过滤和有效 Torrent blocker 保持禁用。文档不得把 `accepted=true` 写成“所有宿主机可选功能都已生效”。
+When `CAP_NET_ADMIN` is absent or nft initialization fails, valid configuration may still be accepted as a degraded snapshot under official semantics, but nft filtering and the effective Torrent blocker remain disabled. Documentation must not equate `accepted=true` with every optional host-side feature having taken effect.
 
-### 8.2 nftables 所有权
+### 8.2 nftables Ownership
 
-Linux backend 管理固定表：
+The Linux backend manages fixed tables:
 
-- IPv4：`remnanode`
-- IPv6：`remnanode6`
+- IPv4: `remnanode`
+- IPv6: `remnanode6`
 
-每族包含 Torrent、ingress、egress IP set 和 egress port set。input/forward 按 source IP 过滤，output 按 destination IP 或 TCP/UDP destination port 过滤，chain policy 保持 accept。
+Each family contains Torrent, ingress, and egress IP sets, plus an egress port set. Input and forward filter on source IP; output filters on destination IP or TCP/UDP destination port. Chain policy remains accept.
 
-- `Apply` 只替换静态 sets，保留动态 Torrent elements。
-- `Reset` 重建双栈表并重放静态 plan，会清空动态 Torrent elements。
-- `BlockIPs` 使用双栈批量事务。
-- `UnblockIPs` 按地址和 set 分开执行，避免一个不存在的元素回滚其他删除。
-- `RecreateTables` 使用 Reset，因此不保留动态 timed blocks，只重放已提交静态计划。
-- `Close` 只删除当前进程认为自己 owned 的表。
+- `Apply` replaces only static sets and preserves dynamic Torrent elements.
+- `Reset` recreates the dual-stack tables and replays the static plan, clearing dynamic Torrent elements.
+- `BlockIPs` uses a batched dual-stack transaction.
+- `UnblockIPs` separates operations by address and set so one missing element cannot roll back other deletions.
+- `RecreateTables` uses Reset, so it does not preserve dynamic timed blocks and replays only the committed static plan.
+- `Close` deletes only tables that the current process believes it owns.
 
-表名不是实例唯一名称。同一 network namespace 只支持一个 Remnanode Lite 实例；在 host network 下运行多个实例会竞争同一组 nftables 表。
+Table names are not unique per instance. Only one Remnanode Lite instance is supported in a network namespace. Multiple instances using host networking compete for the same nftables tables.
 
-### 8.3 Torrent webhook
+### 8.3 Torrent Webhook
 
 ```mermaid
 sequenceDiagram
@@ -446,19 +446,19 @@ sequenceDiagram
     S-->>P: atomic drain
 ```
 
-Webhook 必须提供 email 和 source。IP 会规范化，并拒绝 scoped、unspecified、loopback、multicast、link-local 和 IPv4 broadcast；ignored user/IP/CIDR 不产生封禁。
+A webhook must provide an email and source. IP addresses are normalized, and scoped, unspecified, loopback, multicast, link-local, and IPv4 broadcast addresses are rejected. Ignored users, IPs, and CIDRs do not produce a block.
 
-畸形 webhook payload 会记录受限诊断并返回 200，以保持当前兼容语义；只有请求未被有界队列接纳时才返回可重试的 503。
+A malformed webhook payload emits bounded diagnostics and returns 200 to preserve current compatibility semantics. A retryable 503 is returned only when the bounded queue does not accept the request.
 
-队列满时请求会在其 30 秒 context 内等待容量，而不是无界增长或静默丢弃。服务关闭、请求取消或容量始终不可用时返回 503。单 worker 获取与 sync/block/unblock 相同的 operation gate，确保 Plugin 副作用串行。
+When the queue is full, the request waits for capacity within its 30-second context instead of growing without bound or being dropped silently. Service shutdown, request cancellation, or capacity remaining unavailable returns 503. The single worker acquires the same operation gate as sync, block, and unblock, serializing Plugin side effects.
 
-报告使用最多 1024 条的时间顺序环形队列；满时覆盖最旧记录并累计 dropped count，Panel collect 时原子 drain。nft block 成功后报告记为 blocked；后续 socket drop 是 best effort，其失败不会反向修改 `accepted` 或 blocked 状态。
+Reports use a chronological ring buffer with a maximum of 1024 entries. At capacity, it overwrites the oldest record and increments a dropped counter; Panel collection drains the ring atomically. After an nft block succeeds, the report is marked blocked. The later socket drop is best effort, and its failure does not retroactively change `accepted` or blocked state.
 
-连接踢除只针对 connected TCP socket，不支持 UDP、LISTEN 或 TIME_WAIT。`netadmin` 对 IPv6 和 IPv4 各做一次流式 socket dump，逐条验证 `SOCK_DESTROY` ACK，`ENOENT` 视为幂等成功。
+Connection termination targets only connected TCP sockets. It does not support UDP, LISTEN, or TIME_WAIT. `netadmin` performs one streaming socket dump for IPv6 and another for IPv4, validates every `SOCK_DESTROY` acknowledgment, and treats `ENOENT` as idempotent success.
 
-## 9. 关闭流程
+## 9. Shutdown Flow
 
-根 context 因信号或 server 异常取消后，所有应用清理共享一个 25 秒 deadline，不为每个组件重新计时。
+After a signal or server failure cancels the root context, all application cleanup shares one 25-second deadline. The budget is not restarted for each component.
 
 ```mermaid
 flowchart TD
@@ -480,173 +480,173 @@ flowchart TD
     Plugin --> Wait
 ```
 
-具体语义：
+The detailed semantics are:
 
-- Network monitor 先收到停止信号。
-- Manager 的后台版本恢复可与业务清理并行关闭。
-- 业务顺序固定为 `stop rw-core -> close Plugin/nft`，在 core 确认停止前保持过滤规则。
-- rw-core 或 Plugin 快速返回瞬时清理错误时，等待 100 ms 后在同一 deadline 内重试一次。
-- HTTPS 尝试 graceful shutdown，失败后 force close。
-- Unix server 在根 context 取消后使用自身最多 5 秒的 shutdown；Plugin cleanup 默认最多使用剩余预算中的 15 秒。
-- WaitGroup 等待 HTTPS、Unix server 和日志轮转退出，所有错误通过 `errors.Join` 聚合。
+- The network monitor receives its stop signal first.
+- The Manager's background version recovery shuts down in parallel with application cleanup.
+- Application ordering is fixed as `stop rw-core -> close Plugin/nft`, retaining filtering until the core is confirmed stopped.
+- If rw-core or Plugin immediately returns a transient cleanup error, cleanup waits 100 ms and retries once within the same deadline.
+- HTTPS attempts graceful shutdown and force-closes on failure.
+- After root-context cancellation, the Unix server uses its own shutdown budget of at most 5 seconds. Plugin cleanup may use at most 15 seconds of the remaining budget by default.
+- A WaitGroup joins HTTPS, the Unix server, and log rotation. All errors are aggregated with `errors.Join`.
 
-外层 systemd/Compose 的 stop grace 必须大于应用 25 秒预算，给 runtime 强杀和容器收尾留出余量。应用返回并不承诺掉电、`SIGKILL` 或 supervisor 自身崩溃时的持久事务恢复。
+The outer systemd or Compose stop grace must exceed the application's 25-second budget, leaving time for runtime force termination and container finalization. A clean application return does not promise persistent transaction recovery after power loss, `SIGKILL`, or a supervisor crash.
 
-## 10. 状态所有权与持久化
+## 10. State Ownership and Persistence
 
-| 状态 | 唯一所有者 | 同步方式 | 生命周期 |
+| State | Sole owner | Synchronization | Lifetime |
 | --- | --- | --- | --- |
-| rw-core process/state/epochs | `xray.Manager` | `mu` + `lifecycleMu` + process mutation gate | Node 进程内 |
-| pending Xray JSON | `xray.Manager` | `mu` | 仅 start 到 gRPC ready |
-| inbound tags/user hash | `xray.Manager` | `mu` + process lease identity | 当前 rw-core process epoch |
-| rw-core version与 stats capability | `xray.Manager` | mutex / atomic | Node 进程内 |
-| committed Plugin snapshot | `plugin.State` | RWMutex，发布后不可变 | Node 进程内 |
-| Torrent report ring | `plugin.State` | RWMutex | Node 进程内，collect 后清空 |
-| Plugin mutation/worker lifecycle | `plugin.Service` | channel gate、atomic fence、stop channels | Node 进程内 |
-| 用户 mutation serialization | `nodehandler.Service` | capacity-1 channel gate | Node 进程内 |
-| host network sample | `system.NetworkMonitor` | RWMutex + 3 秒 poller | Node 进程内 |
-| ASN prefix data | `asn.DB` | read-only file + `ReadAt` | 磁盘只读资产 |
-| nftables rules | Linux kernel | Plugin transaction + backend mutex | network namespace |
-| rw-core logs | capped writers / periodic rotation | writer mutex / rotation mutex | `LOG_DIR`，容器通常为 tmpfs |
+| rw-core process/state/epochs | `xray.Manager` | `mu` + `lifecycleMu` + process mutation gate | Node process |
+| Pending Xray JSON | `xray.Manager` | `mu` | Start through gRPC readiness only |
+| Inbound tags/user hash | `xray.Manager` | `mu` + process lease identity | Current rw-core process epoch |
+| rw-core version and stats capability | `xray.Manager` | Mutex / atomic | Node process |
+| Committed Plugin snapshot | `plugin.State` | RWMutex; immutable after publication | Node process |
+| Torrent report ring | `plugin.State` | RWMutex | Node process; cleared after collection |
+| Plugin mutation/worker lifecycle | `plugin.Service` | Channel gate, atomic fence, stop channels | Node process |
+| User mutation serialization | `nodehandler.Service` | Capacity-1 channel gate | Node process |
+| Host network sample | `system.NetworkMonitor` | RWMutex + 3-second poller | Node process |
+| ASN prefix data | `asn.DB` | Read-only file + `ReadAt` | Read-only on-disk asset |
+| nftables rules | Linux kernel | Plugin transaction + backend mutex | Network namespace |
+| rw-core logs | Capped writers / periodic rotation | Writer mutex / rotation mutex | `LOG_DIR`, normally tmpfs in a container |
 
-Node 不持久化 Panel 下发的完整 Xray 配置、Plugin snapshot、用户哈希或 Torrent report。进程重启后的正确恢复来源是 Panel 重新同步，而不是读取本地旧状态。
+The Node does not persist the complete Xray configuration received from Panel, the Plugin snapshot, user hashes, or Torrent reports. Correct recovery after a process restart comes from Panel synchronizing state again, not from reading stale local state.
 
-ASN 数据库使用自定义 `RWASNDB\x01` 小端格式。它只在命中 ASN 时读取对应 prefix blob，不 mmap、也不把全库加载到内存。启动只验证 header/magic；后部损坏通常在 lookup 时表现为空结果，不能描述为“启动时完成全库校验”。
+The ASN database uses the custom little-endian `RWASNDB\x01` format. It reads a matching ASN's prefix blob only when needed; it neither mmaps nor loads the entire database into memory. Startup validates only the header and magic. Corruption later in the file normally appears as an empty lookup result, so this must not be described as full-database validation at startup.
 
-## 11. 并发与资源边界
+## 11. Concurrency and Resource Boundaries
 
-所有高风险资源必须有显式上限。当前主要预算如下：
+Every high-risk resource must have an explicit bound. The principal current budgets are:
 
-| 资源 | 普通模式 | `LOW_MEMORY=1` / 固定值 |
+| Resource | Normal mode | `LOW_MEMORY=1` / fixed value |
 | --- | ---: | ---: |
 | Public TCP connections | 128 | 16 |
 | Active HTTP handlers | 32 | 4 |
 | Non-start bulk handlers | 1 | 1 |
 | Concurrent admitted starts | 2 | 2 |
 | Compression decoders | 2 | 2 |
-| Public route body | 最大 16 MiB | 最大 16 MiB |
-| Prepared rw-core JSON | 20 MiB / 128 层 | 同左 |
-| gRPC receive message | 16 MiB | 同左 |
-| Unix connections / handlers | 8 / 4 | 同左 |
-| Unix webhook handlers | 最多 3 | 同左 |
-| Plugin config | 2 MiB | 同左 |
-| Plugin mutation | 1 | 同左 |
-| Webhook queue / workers | 64 / 1 | 同左 |
-| Torrent reports | 1024 | 同左 |
-| Resolved Plugin IP items | 32768 | 同左 |
-| Dynamic nft elements per family | 16384 | 同左 |
-| NFT block / unblock batch | 1024 / 128 | 同左 |
-| Legacy IP lookup workers | 8 | 同左 |
-| 每条 rw-core/OpenRC 日志阈值 | 4 MiB + 一个 `.1` | 同左 |
-| Go soft memory limit | 由 runtime 决定 | 默认 180 MiB |
+| Public route body | At most 16 MiB | At most 16 MiB |
+| Prepared rw-core JSON | 20 MiB / 128 levels | Same |
+| gRPC receive message | 16 MiB | Same |
+| Unix connections / handlers | 8 / 4 | Same |
+| Unix webhook handlers | At most 3 | Same |
+| Plugin configuration | 2 MiB | Same |
+| Plugin mutation | 1 | Same |
+| Webhook queue / workers | 64 / 1 | Same |
+| Torrent reports | 1024 | Same |
+| Resolved Plugin IP items | 32768 | Same |
+| Dynamic nft elements per family | 16384 | Same |
+| NFT block / unblock batch | 1024 / 128 | Same |
+| Legacy IP lookup workers | 8 | Same |
+| Per rw-core/OpenRC log threshold | 4 MiB + one `.1` file | Same |
+| Go soft memory limit | Runtime default | 180 MiB by default |
 
-Public handler 的“优先容量分类”会为 mutation 保留至少一个总 handler 槽。代码中的 `nodeRouteIsReadOnly` 是 admission 分类名，其中部分 stats DTO 仍允许 `reset=true`；不要把它解释为严格的无副作用安全属性。
+The public handler's priority-based capacity classes reserve at least one total handler slot for mutations. `nodeRouteIsReadOnly` is an admission-classification name in the code, but some stats DTOs in that class still allow `reset=true`. Do not interpret the name as a strict side-effect-free safety property.
 
-跨组件锁序是：
+The cross-component lock order is:
 
 ```text
 HTTP Xray lifecycle lease -> Plugin operation gate / nodehandler mutation gate -> xray process lease -> Manager state
 ```
 
-HTTP 边界对 start 使用可共享 lease，对 stop、Plugin mutation、用户 mutation 和会 reset 的 stats 使用独占 lease。用户应用服务还会取得一个绑定当前 rw-core `process epoch + abstract socket` 的进程 lease；用户 RPC、IP 查询、连接清理和本地 hash 提交全部在其内，`Start`/`Stop` 需等它释放后才能替换或终止进程。`operationEpoch` 只标识生命周期操作所有权，不代替进程身份。未来新增绕过 HTTP 的内部 mutation 入口时，必须复用 Manager 的进程 lease，不能直接组合多个 RPC 并自创锁序。
+At the HTTP boundary, start takes a shareable lease, while stop, Plugin mutations, user mutations, and stats operations with reset take an exclusive lease. The user application service also acquires a process lease bound to the current rw-core `process epoch + abstract socket`. User RPCs, IP queries, connection cleanup, and the local hash commit all run within that lease. `Start` and `Stop` must wait for its release before replacing or terminating the process. `operationEpoch` identifies only lifecycle-operation ownership and does not substitute for process identity. Any future internal mutation path that bypasses HTTP must reuse the Manager process lease rather than compose multiple RPCs under a new lock order.
 
-## 12. 安全边界
+## 12. Security Boundaries
 
-### 12.1 外部信任边界
+### 12.1 External Trust Boundary
 
-- 公网 API 默认可能绑定所有地址；端口暴露范围由部署防火墙控制。
-- mTLS 证明客户端证书由 Panel Secret 中 CA 签发。
-- JWT 只允许 RS256，校验签名，并在 claim 存在时校验 `exp`/`nbf`。
-- 当前 daemon 使用空的 issuer/audience/subject expectations，不应在文档中宣称已强制这些 claim。
-- 无效认证和未知路由直接断开，降低接口枚举面。
+- The public API may bind all addresses by default. Deployment firewall policy controls the exposed port range.
+- mTLS proves that the client certificate was signed by the CA in the Panel Secret.
+- JWT accepts only RS256, verifies the signature, and validates `exp` and `nbf` when those claims are present.
+- The current daemon uses empty issuer, audience, and subject expectations. Documentation must not claim that those claims are enforced.
+- Invalid authentication and unknown routes close the connection directly, reducing the enumerable API surface.
 
-### 12.2 Secret 与文件边界
+### 12.2 Secret and File Boundary
 
-- `SECRET_KEY` 最大编码长度为 256 KiB，兼容标准/URL-safe base64 的 padded/raw 形式。
-- Secret JSON 必须是单一 object，拒绝重复字段，要求 CA、JWT 公钥、Node 证书和私钥。
-- `SECRET_KEY` 环境值优先于 `SECRET_KEY_FILE`。
-- 配置和 Secret 文件必须是稳定的普通非 symlink 文件；Linux/macOS 使用 `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`，同一 fd 在读取前后核对 identity/size/mtime。
-- rw-core 环境按 7.3 节过滤已知 Node Secret，并覆盖受控内部 token 与 asset path；其它非受管环境仍继承。
+- `SECRET_KEY` has a maximum encoded length of 256 KiB and accepts padded or raw standard and URL-safe base64 forms.
+- Secret JSON must be exactly one object, reject duplicate fields, and contain the CA, JWT public key, Node certificate, and private key.
+- The `SECRET_KEY` environment value takes precedence over `SECRET_KEY_FILE`.
+- Configuration and Secret files must be stable, regular, non-symlink files. Linux and macOS use `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC` and verify identity, size, and mtime on the same file descriptor before and after reading.
+- As described in section 7.3, the rw-core environment removes known Node secrets and overrides the controlled internal token and asset path. Other unmanaged environment variables are still inherited.
 
-### 12.3 内核能力边界
+### 12.3 Kernel Capability Boundary
 
-`CAP_NET_ADMIN` 用于 nftables 和 socket destroy。缺失时：
+`CAP_NET_ADMIN` is required for nftables and socket destruction. Without it:
 
-- Node API、mTLS、Xray 生命周期和不依赖 nft 的能力仍可运行。
-- Plugin firewall 进入 degraded/unavailable 状态。
-- 连接踢除返回失败或被上层按契约映射。
+- The Node API, mTLS, Xray lifecycle, and capabilities that do not depend on nft can still run.
+- The Plugin firewall enters a degraded or unavailable state.
+- Connection termination fails or is mapped by the upper layer according to the contract.
 
-Node 只拥有固定的项目表和自己创建的 rw-core process group，不应修改宿主机的通用 Xray 路径或其他 nftables 表。需要注意，底层 socket destroy 会匹配同一 network namespace 中本地地址或远端地址等于目标 IP 的 connected TCP socket，不按 PID 判断归属；共享宿主上的其它进程也可能被关闭。Panel 业务路径会先过滤本机和特殊地址，但 `remnanode-lite kill-sockets` 是直接管理命令，不经过该保护。生产部署因此应使用专用节点网络环境，且不能对宿主本机 IP 执行该 CLI。低端口监听是否需要 `CAP_NET_BIND_SERVICE` 由部署端口决定。
+The Node owns only its fixed project tables and the rw-core process group it created. It must not modify generic host Xray paths or other nftables tables. The underlying socket-destroy operation matches connected TCP sockets in the same network namespace whose local or remote address equals the target IP; it does not determine ownership by PID. It may therefore close sockets belonging to other processes on a shared host. Panel business paths first reject local and special addresses, but the direct administrative command `remnanode-lite kill-sockets` bypasses that protection. Production deployments should therefore use a dedicated node network environment and must not run this CLI against a host-local IP. Whether a low-numbered listener requires `CAP_NET_BIND_SERVICE` depends on the deployment port.
 
-## 13. 修改代码时从哪里开始
+## 13. Where to Start When Changing Code
 
-### 新增或修改公开路由
+### Add or Change a Public Route
 
-1. 更新 `internal/httpserver/node_routes.go` 的唯一注册表和 body/admission 分类。
-2. 在 `internal/nodeapi` 定义 DTO、结构 schema 和验证语义。
-3. 在 `httpserver` 只做 decode、映射和 response adapter，不把 HTTP 类型带入应用服务。
-4. 在 `nodehandler`、`stats`、`plugin` 或 `xray` 实现业务行为。
-5. 同步 `internal/contract` 的路由、schema、合法样例和副作用；用 `contract-source-check -write` 从固定官方 Git object 重建 source manifest，并评审内容摘要与机器提取路由的 diff。
-6. 增加“非法输入不触发副作用”以及真实 dispatcher response schema 测试。
+1. Update the sole registry in `internal/httpserver/node_routes.go`, including its body and admission classifications.
+2. Define DTOs, structural schemas, and validation semantics in `internal/nodeapi`.
+3. Keep `httpserver` limited to decoding, mapping, and response adaptation. Do not carry HTTP types into application services.
+4. Implement business behavior in `nodehandler`, `stats`, `plugin`, or `xray`.
+5. Synchronize the routes, schemas, valid examples, and side effects in `internal/contract`. Rebuild the source manifest from the pinned official Git object with `contract-source-check -write`, then review the content-digest and machine-extracted route diff.
+6. Add tests proving that invalid input causes no side effects and tests for the real dispatcher response schema.
 
-### 修改 Xray 生命周期
+### Change the Xray Lifecycle
 
-- 保持 `Manager` 是唯一进程 owner。
-- 任何异步生命周期结果提交前检查 operation epoch、process identity 和 state。
-- 只有 gRPC ready 且进程仍存活时发布 running。
-- 启动失败必须回收已 spawn 的进程，并明确 stopped 或可重试的 stopping。
-- 不在 ready 后保留第二份完整配置。
-- 覆盖并发 start、start/stop 交错、取消、超时、自然退出和清理重试测试。
+- Keep `Manager` as the sole process owner.
+- Before committing any asynchronous lifecycle result, verify the operation epoch, process identity, and state.
+- Publish running state only when gRPC is ready and the process is still alive.
+- A startup failure must reap the spawned process and establish either stopped state or a retryable stopping state explicitly.
+- Do not retain a second complete configuration after readiness.
+- Cover concurrent starts, start/stop interleavings, cancellation, timeout, natural exit, and cleanup retries.
 
-### 修改 Plugin 或 nftables
+### Change Plugin or nftables Behavior
 
-- 遵循 `validate/build plan -> apply side effects -> commit immutable snapshot`。
-- 在任何副作用前完成 collection 和 expansion 预算校验。
-- 说明使用 Apply 还是破坏性的 Reset，以及动态 Torrent elements 是否保留。
-- 保持 core 停止与 firewall 删除的安全顺序。
-- 同步单元测试和 Linux network namespace 集成测试。
+- Follow `validate/build plan -> apply side effects -> commit immutable snapshot`.
+- Complete collection and expansion budget validation before any side effect.
+- State whether the operation uses Apply or destructive Reset, and whether dynamic Torrent elements survive.
+- Preserve the safe order between stopping the core and deleting firewall state.
+- Update unit tests and Linux network-namespace integration tests together.
 
-### 修改 gRPC wire
+### Change the gRPC Wire Contract
 
-- 以 rw-core 实际字段号和 method path 为依据修改 `wire.proto` 或显式常量。
-- 运行 `scripts/generate-protobuf.sh`，使用固定的 `protoc 35.1` 与 `protoc-gen-go v1.36.11` 重新生成 `wire.pb.go`，不要手工编辑生成文件。
-- 更新 wire golden、Handler/Stats tests 和真实 rw-core integration test。
-- 提交前运行 `scripts/generate-protobuf.sh --check`，逐字节确认生成文件与 schema 一致。
+- Base changes to `wire.proto` or explicit constants on the actual rw-core field numbers and method paths.
+- Run `scripts/generate-protobuf.sh` to regenerate `wire.pb.go` with pinned `protoc 35.1` and `protoc-gen-go v1.36.11`. Never edit the generated file manually.
+- Update wire golden tests, Handler and Stats tests, and the real rw-core integration test.
+- Before committing, run `scripts/generate-protobuf.sh --check` and verify byte-for-byte agreement between generated code and the schema.
 
-### 修改 Linux 专用能力
+### Change a Linux-Specific Capability
 
-- Linux 实现在带 build tag 文件中完成。
-- 同时提供清晰失败或降级的非 Linux stub，保证包可构建。
-- 不把 stub 存在描述为该平台生产支持。
-- 涉及 nft/netlink/process group 时使用隔离 namespace 或真实进程测试。
+- Implement the Linux behavior in files with the appropriate build tag.
+- Provide a clear failure or degraded non-Linux stub so the package remains buildable.
+- Do not describe the existence of a stub as production support for that platform.
+- For nft, netlink, or process-group changes, use an isolated namespace or a real-process test.
 
-## 14. 测试与真相源
+## 14. Tests and Sources of Truth
 
-架构约束主要由可执行测试而不是文档自证：
+Architecture constraints are primarily enforced by executable tests, not asserted by documentation:
 
-- 常规：`go test ./...`
-- 并发：`go test -race ./...`
-- 静态：`go vet ./...`、`gofmt`、`go mod tidy -diff`
-- 官方源码证据：`go run ./cmd/contract-source-check -source <official-git-repository>`
-- nftables 集成：`REMNANODE_NFT_INTEGRATION=1`
-- socket destroy 集成：`REMNANODE_SOCKET_KILL_INTEGRATION=1`
-- 低内存真实 core：`scripts/test-low-memory.sh`
+- Regular: `go test ./...`
+- Concurrency: `go test -race ./...`
+- Static: `go vet ./...`, `gofmt`, and `go mod tidy -diff`
+- Official source evidence: `go run ./cmd/contract-source-check -source <official-git-repository>`
+- nftables integration: `REMNANODE_NFT_INTEGRATION=1`
+- Socket-destroy integration: `REMNANODE_SOCKET_KILL_INTEGRATION=1`
+- Real core under low memory: `scripts/test-low-memory.sh`
 
-`internal/contract` 是从固定官方源码人工蒸馏出的可执行 Zod 子集，不是 TypeScript schema 的自动生成物。source manifest 保存固定 commit 中全部登记证据 blob 的 SHA-256；窄提取器禁用 Git replace refs，独立解析官方 `REST_API`、全局 prefix 和 controller decorators，并从 Git tree 核对真实 bootstrap、静态 import、严格 module metadata、controller/decorator ownership、注册可达性和内部 prefix exclusions。它只接受当前明确支持的 TypeScript 子集，未知语法 fail closed，防止手工 method/path 表或宽松 token 扫描自我通过，但不冒充完整 Zod 翻译器。需要确认两个运行实例的真实可观测语义时，使用 `cmd/contract-probe` 做受控黑盒比较。
+`internal/contract` is an executable Zod subset manually distilled from pinned official source; it is not generated automatically from TypeScript schemas. The source manifest records SHA-256 hashes for every registered evidence blob in the pinned commit. A narrow extractor disables Git replace refs, independently parses the official `REST_API`, global prefix, and controller decorators, and validates the real bootstrap, static imports, strict module metadata, controller and decorator ownership, registration reachability, and internal prefix exclusions against the Git tree. It accepts only the explicitly supported TypeScript subset and fails closed on unknown syntax. This prevents a hand-maintained method/path table or permissive token scan from validating itself, but does not claim to be a complete Zod translator. Use `cmd/contract-probe` for controlled black-box comparison when the observable semantics of two running instances must be confirmed.
 
-查阅或修改行为时按以下文件作为真相源：
+Use the following files as sources of truth when inspecting or changing behavior:
 
-| 问题 | 真相源 |
+| Question | Source of truth |
 | --- | --- |
-| 实际公开 method/path | `internal/httpserver/node_routes.go` |
-| 官方兼容目标与响应 schema | `internal/contract` + source manifest + 固定官方 Git object |
-| 请求 DTO/验证错误 | `internal/nodeapi` |
-| 配置键、默认值、优先级 | `internal/config/config.go` |
-| Xray 状态机与进程语义 | `internal/xray/lifecycle.go`、`process_linux.go` |
-| Plugin 事务和状态 | `internal/plugin/service.go`、`state.go` |
-| 资源硬上限 | `internal/bodylimit`、`internal/plugin/resource_limits.go`、相关常量与测试 |
-| protobuf wire | `internal/xtls/xrpc/wire.proto` + wire golden tests |
-| 项目版本和契约版本 | `internal/version`、`internal/version/contract.version` |
-| 容器运行边界 | `compose.yaml`、`Dockerfile` |
+| Actual public methods and paths | `internal/httpserver/node_routes.go` |
+| Official compatibility target and response schemas | `internal/contract` + source manifest + pinned official Git object |
+| Request DTOs and validation errors | `internal/nodeapi` |
+| Configuration keys, defaults, and precedence | `internal/config/config.go` |
+| Xray state machine and process semantics | `internal/xray/lifecycle.go` and `process_linux.go` |
+| Plugin transactions and state | `internal/plugin/service.go` and `state.go` |
+| Hard resource limits | `internal/bodylimit`, `internal/plugin/resource_limits.go`, related constants, and tests |
+| Protobuf wire contract | `internal/xrayrpc/wire/wire.proto` + wire golden tests |
+| Project and contract versions | `internal/version` and `internal/version/contract.version` |
+| Container runtime boundary | `compose.yaml` and `Dockerfile` |
 
-文档用于解释这些约束及其理由。当文档与可执行真相源不一致时，应先核对代码和测试，再在同一变更中修正文档，避免把历史里程碑或一次验收数据当成永久架构事实。
+Documentation explains these constraints and their rationale. When documentation disagrees with an executable source of truth, inspect the code and tests first, then correct the documentation in the same change. Historical milestones and one-time acceptance measurements must not be treated as permanent architectural facts.

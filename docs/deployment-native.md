@@ -1,85 +1,85 @@
-# 原生 Linux 部署
+# Native Linux Deployment
 
-[返回文档索引](README.md)
+[Back to the documentation index](README.md)
 
-本文说明如何通过 GitHub Release 二进制在 systemd 或 OpenRC 主机上安装 Remnanode Lite。资源很小、只需要容器运行的节点优先参考 [Docker Compose 部署](deployment-docker.md)；原生部署适合希望避免 Docker daemon 开销，或希望由宿主服务管理器直接管理进程的环境。
+This guide installs Remnanode Lite from GitHub Release binaries on a systemd or OpenRC host. For a very small node that only needs a container runtime, start with [Docker Compose deployment](deployment-docker.md). Native deployment avoids Docker daemon overhead and lets the host service manager own the processes directly.
 
-项目展示名和二进制名分别是 `Remnanode Lite`、`remnanode-lite`。原生 service 名及仓库中的 unit/init 文件仍保留 `remnawave-node`，用于兼容已经部署的升级、监控和运维命令；这只是稳定的系统接口，不表示本仓库与官方项目存在代码上游关系。
+The display name is `Remnanode Lite`, and the binary is `remnanode-lite`. The native service name and the repository's unit and init files retain `remnawave-node` to preserve compatibility with existing upgrades, monitoring, and operational commands. This is a stable system interface; it does not imply an upstream code relationship with the official project.
 
-## 支持边界
+## Support boundary
 
-项目构建和 CI 支持 Linux `amd64`、`arm64`。现有文档化的真实安装与服务管理工程快照为：
+Builds and CI cover Linux `amd64` and `arm64`. The currently documented real installation and service-management engineering snapshots are:
 
-| 平台 | 服务管理器 | 架构 |
+| Platform | Service manager | Architecture |
 | --- | --- | --- |
 | Ubuntu 24.04 | systemd | arm64 |
 | Alpine 3.22 | OpenRC | arm64 |
 
-CI 会交叉构建 amd64/arm64，并在 Ubuntu runner 执行 Linux 网络管理测试，但这不等于两种 init 与两种架构组合都已经完成正式发行验收。M8 要求 systemd/OpenRC 的架构并集覆盖 amd64、arm64；正式支持范围以对应 Release evidence 为准。其它现代 systemd 发行版预期可用，但并非已验证基线。非 Debian/Ubuntu 系统需要提前自行安装脚本所需命令。
+CI cross-compiles amd64 and arm64 and runs Linux network-administration tests on an Ubuntu runner. That does not mean both init systems on both architectures have completed formal release acceptance. M8 requires the combined systemd and OpenRC evidence to cover amd64 and arm64. The evidence attached to a specific Release defines its formally accepted scope. Other modern systemd distributions are expected to work but are not a verified baseline. On non-Debian/Ubuntu systems, install the commands required by the scripts in advance.
 
-目标 tag 必须已经发布 GitHub Release，并包含二进制归档、support 文件、`SHA256SUMS` 和 ASN 数据库。`edge` 或 `sha-*` GHCR 候选镜像不能替代原生 Release 资产。
+The target tag must have a published GitHub Release containing binary archives, support files, `SHA256SUMS`, and the ASN database. An `edge` or `sha-*` GHCR candidate image cannot substitute for native Release assets.
 
-## 前置条件
+## Prerequisites
 
-- root 权限。
-- Linux amd64 或 arm64。
-- Panel 中已创建节点，并取得完整 Secret Key。
-- Panel 配置的 Node 端口与主机 `NODE_PORT` 一致。
-- 正确的系统时间和可用网络。
-- 首次安装或同步 rw-core 前建议至少保留 1 GiB 可用磁盘；安装器会按下载、解压、目标 staging 和已有备份逐文件系统计算实际预算。
-- bootstrap 前已经安装 Bash、curl 和 util-linux 的 `flock`。
-- 宿主防火墙允许 Panel 访问 Node API 端口，并按实际代理配置开放入站端口。
+- Root access.
+- Linux amd64 or arm64.
+- A node created in the Panel and its complete Secret Key.
+- The Node port configured in the Panel matches the host's `NODE_PORT`.
+- Correct system time and working network access.
+- At least 1 GiB of free disk is recommended before the first installation or an rw-core asset synchronization. The installer calculates the actual per-filesystem budget for downloads, extraction, target staging, and existing backups.
+- Bash, curl, and util-linux `flock` installed before bootstrap.
+- A host firewall that permits the Panel to reach the Node API port and permits inbound proxy ports required by the deployed configuration.
 
-systemd/OpenRC 模板都把服务限制为 `448 MiB RAM / 0 swap / 1 CPU / 256 tasks`。OpenRC 额外要求 cgroup v2 的 memory、cpu 和 pids controller 可写且实际生效；缺少任一 controller 时服务拒绝启动。
+Both systemd and OpenRC templates limit the service to `448 MiB RAM / 0 swap / 1 CPU / 256 tasks`. OpenRC additionally requires writable, effective memory, CPU, and PIDs controllers under cgroup v2. The service refuses to start if any controller is unavailable.
 
-### Bootstrap 依赖
+### Bootstrap dependencies
 
-Ubuntu/Debian：
+Ubuntu or Debian:
 
 ```bash
 sudo apt-get update
 sudo apt-get install --yes curl util-linux
 ```
 
-Alpine：
+Alpine:
 
 ```bash
 apk add --no-cache bash curl util-linux
 ```
 
-安装器随后会补齐 ca-certificates、tar、unzip、iproute2 和 nftables 等运行依赖。
+The installer then supplies runtime dependencies such as CA certificates, tar, unzip, iproute2, and nftables.
 
-## systemd 安装
+## Install on systemd
 
-先选择一个已经发布的精确 tag。项目允许纯正式版本和自主迭代版本：
+Select an exact tag that already has a published Release. Both official-aligned versions and independent project iterations are valid:
 
 ```bash
-release_tag='vX.Y.Z-rnl.N' # 或 vX.Y.Z
+release_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
 ```
 
-交互安装会询问端口和 Secret：
+Interactive installation prompts for the port and Secret:
 
 ```bash
 curl -fsSL \
-  "https://raw.githubusercontent.com/Luxiaba/remnanode-lite/${release_tag}/scripts/install-node.sh" \
+  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node.sh" \
   | sudo env RNL_TAG="${release_tag}" bash
 ```
 
-非交互安装推荐通过受限文件传入 Secret，避免把它留在 shell history：
+For non-interactive installation, pass the Secret through a restricted file so it does not remain in shell history:
 
 ```bash
 umask 077
-printf '%s' '粘贴 Panel 提供的完整 Secret Key' > /tmp/remnanode-secret.key
+printf '%s' 'PASTE_THE_COMPLETE_SECRET_KEY_FROM_THE_PANEL' > /tmp/remnanode-secret.key
 
 curl -fsSL \
-  "https://raw.githubusercontent.com/Luxiaba/remnanode-lite/${release_tag}/scripts/install-node.sh" \
+  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node.sh" \
   | sudo env RNL_TAG="${release_tag}" bash -s -- \
       --install --yes --port 2222 --secret-file /tmp/remnanode-secret.key
 
 rm -f /tmp/remnanode-secret.key
 ```
 
-安装完成后检查：
+Verify the installation:
 
 ```bash
 sudo systemctl --no-pager status remnawave-node
@@ -87,28 +87,28 @@ sudo ss -H -lntp 'sport = :2222'
 sudo remnanode-lite doctor
 ```
 
-## Alpine/OpenRC 安装
+## Install on Alpine/OpenRC
 
-Alpine 使用专用入口：
+Alpine has a dedicated entry point:
 
 ```bash
-release_tag='vX.Y.Z-rnl.N' # 或 vX.Y.Z
+release_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
 
 curl -fsSL \
-  "https://raw.githubusercontent.com/Luxiaba/remnanode-lite/${release_tag}/scripts/install-node-alpine.sh" \
+  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node-alpine.sh" \
   | env RNL_TAG="${release_tag}" bash
 ```
 
-非交互参数与 systemd 入口相同：
+The non-interactive options are the same as for systemd:
 
 ```bash
 curl -fsSL \
-  "https://raw.githubusercontent.com/Luxiaba/remnanode-lite/${release_tag}/scripts/install-node-alpine.sh" \
+  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node-alpine.sh" \
   | env RNL_TAG="${release_tag}" bash -s -- \
       --install --yes --port 2222 --secret-file /root/remnanode-secret.key
 ```
 
-安装完成后检查：
+Verify the installation:
 
 ```bash
 rc-service remnawave-node status
@@ -116,76 +116,78 @@ ss -H -lntp 'sport = :2222'
 remnanode-lite doctor
 ```
 
-`doctor` 当前包含 systemd unit 检查，因此 OpenRC 上出现“systemd unit 未找到”的 WARN 属于预期；ERROR 才影响退出码和核心结论。Panel 端到端连通仍需在 Panel 中确认。
+`doctor` currently includes a systemd unit check, so a WARN that the systemd unit is absent is expected on OpenRC. ERROR findings affect the exit code and core result. End-to-end Panel connectivity must still be confirmed in the Panel.
 
-## 安装参数
+## Installer options
 
-两个入口提供相同的常用参数：
+Both entry points provide the same common options:
 
-| 参数 | 说明 |
+| Option | Description |
 | --- | --- |
-| `--install` | 全新安装。检测到完整安装时改走可回滚升级，并默认同步目标 Release 的 rw-core/geo/ASN；加 `--skip-xray` 才保留现有资产。 |
-| `--upgrade` | 显式升级 Node/service/support，默认保留 rw-core。 |
-| `--uninstall` | 打开卸载流程。 |
-| `--yes`, `-y` | 跳过确认。没有 Secret 时安装完成但不启动服务。 |
-| `--dry-run` | 预览操作，不修改系统。 |
-| `--skip-xray` | 不安装 rw-core。仅适合已自行准备兼容 core 的高级场景。 |
-| `--low-memory` | 强制写入 `LOW_MEMORY=1`。小内存节点建议开启。 |
-| `--port PORT` | Node HTTPS 端口，范围 `1..65535`，默认 2222。 |
-| `--secret-file PATH` | 从普通文件安全读取、规范化并验证 Secret。 |
+| `--install` | Fresh installation. If a complete installation is detected, switch to a rollback-capable upgrade and synchronize rw-core, geo, and ASN assets from the target Release by default. Add `--skip-xray` to retain existing assets. |
+| `--upgrade` | Explicitly upgrade Node, service, and support files while preserving rw-core by default. |
+| `--uninstall` | Enter the uninstall flow. |
+| `--yes`, `-y` | Skip confirmation. If no Secret is available, installation completes without starting the service. |
+| `--dry-run` | Preview actions without modifying the system. |
+| `--skip-xray` | Do not install rw-core. Intended only for advanced environments that supply a compatible core independently. |
+| `--low-memory` | Force `LOW_MEMORY=1` into configuration. Recommended for small-memory nodes. |
+| `--port PORT` | Node HTTPS port in the range `1..65535`; defaults to 2222. |
+| `--secret-file PATH` | Read, canonicalize, and validate the Secret safely from a regular file. |
 
-整机 `MemTotal <= 512 MiB` 时，安装器会自动启用低内存模式。已经存在 `node.env` 时，未明确传入端口或低内存选项的配置会保留。
+The installer enables low-memory mode automatically when whole-machine `MemTotal <= 512 MiB`. If `node.env` already exists, the existing port and low-memory choice are preserved unless explicitly overridden.
 
-## 安装流程
+## Installation transaction
 
-安装器执行以下操作：
+The installer:
 
-1. 获取全局 installer 锁，拒绝并发安装、升级、rw-core 更新或卸载。
-2. 检查架构、磁盘预算和基础命令。
-3. 创建专用 `remnanode:remnanode` 系统账号与受限目录。
-4. 下载目标 Release 的 `SHA256SUMS` 和架构归档，验证摘要、结构与二进制版本。
-5. 安装 Node、support、固定 rw-core、geo 和 compact ASN 数据库。
-6. 验证并保存 Secret，安装 service 文件与日志辅助命令。
-7. 启动服务，确认唯一目标 Node 进程实际持有配置的 TCP 端口。
+1. Acquires the global installer lock, rejecting concurrent installation, upgrade, rw-core update, or uninstall operations.
+2. Checks architecture, disk budget, and base commands.
+3. Creates the dedicated `remnanode:remnanode` system account and restricted directories.
+4. Downloads the target Release's `SHA256SUMS` and architecture archive, then validates checksums, structure, and binary version.
+5. Installs the Node, support files, pinned rw-core, geo data, and compact ASN database.
+6. Validates and stores the Secret, and installs the service definition and log helper commands.
+7. Starts the service and confirms that exactly one target Node process owns the configured TCP port.
 
-重复执行 `--install` 时，如果发现完整安装，会委托 `upgrade.sh` 完成事务升级，并默认同步目标 Release 的 rw-core、geo 和 ASN。显式 `--upgrade` 则默认只升级 Node/service/support、保留现有 core 资产；需要同步时追加 `--upgrade-xray`。如果只发现部分文件，`--install` 按安装恢复流程补齐，不把不完整状态误判为正常升级。
+When `--install` is run again and detects a complete installation, it delegates a transactional upgrade to `upgrade.sh` and synchronizes rw-core, geo, and ASN assets from the target Release by default. Explicit `--upgrade` updates only Node, service, and support files by default, retaining existing core assets; add `--upgrade-xray` to synchronize them. If only a partial installation exists, `--install` follows the installation-recovery path and does not misclassify the incomplete state as a normal upgrade.
 
-## 文件布局
+## Filesystem layout
 
-| 路径 | 所有者/用途 |
+| Path | Owner or purpose |
 | --- | --- |
-| `/usr/local/bin/remnanode-lite` | Node 主程序。 |
-| `/usr/local/bin/remnanode-xlogs` | 跟随 rw-core stdout。 |
-| `/usr/local/bin/remnanode-xerrors` | 跟随 rw-core stderr。 |
-| `/etc/remnanode/node.env` | `root:remnanode 0640`，运行时配置。 |
-| `/etc/remnanode/secret.key` | `root:remnanode 0640`，Panel Secret。 |
-| `/usr/local/lib/remnanode/rw-core` | 项目私有 rw-core。 |
-| `/usr/local/lib/remnanode/support/<tag>` | 与已安装 Release 匹配的 service/installer support。 |
-| `/usr/local/lib/remnanode/support-current` | 指向当前 support 的受控符号链接。 |
-| `/usr/local/share/remnanode/xray` | geo 和可选 zapret 数据。 |
-| `/usr/local/share/remnanode/asn/asn-prefixes.bin` | compact ASN 数据库。 |
-| `/var/lib/remnanode` | 服务工作目录。Node 不在这里持久化 Panel Xray 配置。 |
-| `/var/log/remnanode` | rw-core 日志；OpenRC 还保存 supervisor 日志。 |
-| `/run/remnanode` | 重启即清空的 Unix Socket 目录。 |
-| `/var/lib/remnanode-installer` | root-only 下载、解压和事务目录。 |
-| `/run/lock/remnanode-installer.lock` | 所有变更型安装入口共享的锁。 |
+| `/usr/local/bin/remnanode-lite` | Main Node program. |
+| `/usr/local/bin/remnanode-xlogs` | Follow rw-core stdout. |
+| `/usr/local/bin/remnanode-xerrors` | Follow rw-core stderr. |
+| `/etc/remnanode/node.env` | `root:remnanode 0640`; runtime configuration. |
+| `/etc/remnanode/secret.key` | `root:remnanode 0640`; Panel Secret. |
+| `/usr/local/lib/remnanode/rw-core` | Project-private rw-core. |
+| `/usr/local/lib/remnanode/support/<tag>` | Service and installer support matching the installed Release. |
+| `/usr/local/lib/remnanode/support-current` | Controlled symlink to the current support directory. |
+| `/usr/local/share/remnanode/xray` | Geo and optional zapret data. |
+| `/usr/local/share/remnanode/asn/asn-prefixes.bin` | Compact ASN database. |
+| `/var/lib/remnanode` | Service working directory. The Node does not persist Panel Xray configuration here. |
+| `/var/log/remnanode` | rw-core logs; OpenRC also stores supervisor logs here. |
+| `/run/remnanode` | Unix socket directory cleared on reboot. |
+| `/var/lib/remnanode-installer` | Root-only download, extraction, and transaction directory. |
+| `/run/lock/remnanode-installer.lock` | Lock shared by all mutating installer entry points. |
 
-项目不会接管或删除通用 `/usr/local/bin/xray`、`/usr/local/share/xray`。
+The project does not own or remove generic `/usr/local/bin/xray` or `/usr/local/share/xray` paths.
 
-## 服务安全模型
+Repository service definitions are maintained at [`deploy/remnawave-node.service`](../deploy/remnawave-node.service) and [`deploy/remnawave-node.openrc`](../deploy/remnawave-node.openrc).
 
-原生服务不以 root 运行。systemd 和 OpenRC 都使用专用 `remnanode` 用户，只授予：
+## Service security model
 
-- `CAP_NET_ADMIN`：管理项目 nftables 表和执行 `NETLINK_SOCK_DIAG` socket destroy。
-- `CAP_NET_BIND_SERVICE`：允许 rw-core 监听 1-1023 端口。
+The native service does not run as root. Both systemd and OpenRC use the dedicated `remnanode` user and grant only:
 
-systemd 还启用 capability bounding、`NoNewPrivileges`、只读系统目录、namespace/syscall/address-family 限制和私有临时目录。OpenRC 使用 `supervise-daemon`、`no_new_privs` 和 cgroup v2 限额。
+- `CAP_NET_ADMIN` to manage the project's nftables table and perform `NETLINK_SOCK_DIAG` socket destruction.
+- `CAP_NET_BIND_SERVICE` to let rw-core listen on ports 1 through 1023.
 
-`node.env` 不由服务管理器导出。Node 启动 rw-core 前会过滤 Panel Secret、Secret 文件路径和 Node 配置文件路径，并注入 core 所需的资产路径与内部 token。
+systemd also applies a capability bounding set, `NoNewPrivileges`, read-only system directories, namespace, syscall, and address-family restrictions, and private temporary directories. OpenRC uses `supervise-daemon`, `no_new_privs`, and cgroup v2 limits.
 
-## 服务管理
+The service manager does not export `node.env`. Before launching rw-core, the Node removes the Panel Secret, Secret file path, and Node configuration file path from the child environment, then supplies the asset paths and internal token required by the core.
 
-systemd：
+## Service management
+
+systemd:
 
 ```bash
 sudo systemctl status remnawave-node
@@ -194,7 +196,7 @@ sudo systemctl stop remnawave-node
 sudo journalctl -u remnawave-node -f
 ```
 
-OpenRC：
+OpenRC:
 
 ```bash
 rc-service remnawave-node status
@@ -203,89 +205,89 @@ rc-service remnawave-node stop
 tail -F /var/log/remnanode/openrc.log
 ```
 
-rw-core 日志在两种平台上都可以使用：
+On either platform, follow rw-core logs with:
 
 ```bash
 remnanode-xlogs
 remnanode-xerrors
 ```
 
-服务重启后 Node 会先报告 rw-core 离线，等待 Panel 重新下发 start。这是预期行为，不表示本地配置丢失或服务启动失败。
+After a service restart, the Node initially reports rw-core offline and waits for the Panel to send another start request. This is expected; it does not mean local configuration was lost or service startup failed.
 
-## 升级
+## Upgrade
 
-选择目标 Release tag：
+Select the target Release tag:
 
 ```bash
-target_tag='vX.Y.Z-rnl.N' # 或 vX.Y.Z
+target_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
 
 curl -fsSL \
-  "https://raw.githubusercontent.com/Luxiaba/remnanode-lite/${target_tag}/scripts/upgrade.sh" \
+  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${target_tag}/scripts/upgrade.sh" \
   | sudo env RNL_TAG="${target_tag}" bash -s -- --yes
 ```
 
-默认只升级 Node、service 和 support，保留现有 rw-core。目标 Release 明确要求同步 core，或需要刷新 geo/ASN 时：
+By default, this upgrades only the Node, service, and support files and preserves the installed rw-core. If the target Release explicitly requires a matching core, or geo and ASN data need refreshing:
 
 ```bash
 curl -fsSL \
-  "https://raw.githubusercontent.com/Luxiaba/remnanode-lite/${target_tag}/scripts/upgrade.sh" \
+  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${target_tag}/scripts/upgrade.sh" \
   | sudo env RNL_TAG="${target_tag}" bash -s -- --yes --upgrade-xray
 ```
 
-升级事务会：
+The upgrade transaction:
 
-1. 记录服务运行状态；由 install 委托时还记录开机启用状态。
-2. 备份 binary、service、support、`node.env`、`secret.key` 和可选 rw-core/geo/ASN。
-3. 停止并确认 Node 与配置指向的 rw-core 已全部退出。
-4. 原子替换目标文件并迁移受支持的旧配置。
-5. 只在升级前运行中或 install 委托要求启动时恢复运行。
-6. 验证二进制版本，并确认唯一目标进程实际持有配置端口后提交。
+1. Records whether the service is running; when delegated from install, it also records whether the service is enabled at boot.
+2. Backs up the binary, service definition, support files, `node.env`, `secret.key`, and optional rw-core, geo, and ASN assets.
+3. Stops and confirms the exit of the Node and the rw-core process referenced by configuration.
+4. Atomically replaces target files and migrates supported legacy configuration.
+5. Restores the running state only if the service was running before upgrade or delegated install requires it to start.
+6. Verifies the binary version and commits only after exactly one target process owns the configured port.
 
-显式升级一个原本 stopped 的服务会保持 stopped。任何验证失败都会尝试恢复原文件、开机注册和运行状态；回滚不完整时备份保留在 root-only installer 目录，并以非零状态结束。
+An explicit upgrade keeps a previously stopped service stopped. Any validation failure attempts to restore the original files, boot registration, and running state. If rollback is incomplete, the backup remains in the root-only installer directory and the operation exits nonzero.
 
-修改 `node.env` 或 Secret 不需要重新安装。按 [配置参考](configuration.md) 修改权限正确的文件后重启服务即可。
+Changing `node.env` or the Secret does not require reinstallation. Update the correctly permissioned files as described in the [configuration reference](configuration.md), then restart the service.
 
-## 回退到旧版本
+## Roll back to an older version
 
-只使用项目确实发布过的旧 tag：
+Use only an older tag that this project has actually released:
 
 ```bash
-old_tag='vX.Y.Z-rnl.N' # 或 vX.Y.Z
+old_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
 
 curl -fsSL \
-  "https://raw.githubusercontent.com/Luxiaba/remnanode-lite/${old_tag}/scripts/upgrade.sh" \
+  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${old_tag}/scripts/upgrade.sh" \
   | sudo env RNL_TAG="${old_tag}" bash -s -- --yes
 ```
 
-如果旧版本要求对应 rw-core，追加 `--upgrade-xray`。回退前先阅读两个版本的 Release notes，确认配置和契约基线兼容。
+Add `--upgrade-xray` if the older version requires its corresponding rw-core. Before rollback, read both Releases' notes and confirm that configuration and contract baselines are compatible.
 
-## 卸载
+## Uninstall
 
-优先使用当前安装随附的 support 脚本：
+Prefer the support script installed with the current version:
 
 ```bash
 sudo bash /usr/local/lib/remnanode/support-current/scripts/uninstall.sh
 ```
 
-非交互模式：
+Non-interactive modes:
 
-| 模式 | 命令 | 保留内容 |
+| Mode | Command | Retained data |
 | --- | --- | --- |
-| 保留配置 | `--keep-config --yes` | `node.env`、Secret、日志、数据、rw-core/geo/ASN。 |
-| 清除运行数据 | `--purge --yes` | 保留 rw-core/geo/ASN。 |
-| 完全卸载项目资产 | `--full` | 不保留项目配置、日志、数据、rw-core/geo/ASN。 |
-| 预览 | 加 `--dry-run` | 不实际修改。 |
+| Keep configuration | `--keep-config --yes` | `node.env`, Secret, logs, data, and rw-core/geo/ASN. |
+| Purge runtime data | `--purge --yes` | rw-core/geo/ASN. |
+| Remove all project assets | `--full` | No project configuration, logs, data, or rw-core/geo/ASN. |
+| Preview | Add `--dry-run` | No changes are made. |
 
-卸载只有在确认 service manager 已停止，且目标 Node/rw-core 进程全部退出后才删除文件。它还会清理项目私有 nftables 表，但不会终止无关的同名进程或删除通用 Xray 路径。
+Files are deleted only after the uninstaller confirms that the service manager has stopped and that the target Node and rw-core processes have exited. It also removes the project's private nftables table, but it does not terminate unrelated processes with similar names or remove generic Xray paths.
 
-即使执行 `--full`，以下系统状态仍会保留：
+Even with `--full`, these system-level items remain:
 
-- `remnanode` 系统用户和组。
-- 安装器安装的通用系统软件包。
-- `/var/lib/remnanode-installer` 的 root-only marker 目录。
+- the `remnanode` system user and group;
+- general system packages installed by the installer;
+- the root-only marker directory at `/var/lib/remnanode-installer`.
 
-这些保留项便于安全重装，也意味着 `--full` 不等于恢复一台从未安装过本项目的主机。
+These retained items support safe reinstallation. They also mean that `--full` does not return the host to a state in which this project was never installed.
 
-## 后续运维
+## Ongoing operations
 
-健康检查、日志预算、更新策略和故障处理见 [运维手册](operations.md)。
+See the [operations guide](operations.md) for health checks, log budgets, update policy, and troubleshooting.

@@ -1,139 +1,139 @@
-# 项目定位与目标
+# Project Scope and Goals
 
-[返回文档索引](README.md)
+[Back to the documentation index](README.md)
 
-Remnanode Lite 是面向 Remnawave Panel 的轻量级 Go Node 实现。项目关注两件事：对 Panel 保持可验证的行为兼容，以及在资源紧张的 Linux 节点上维持清晰、可预测的运行边界。
+Remnanode Lite is a lightweight Go implementation of a Remnawave Node. It has two primary concerns: verifiable behavioral compatibility with Remnawave Panel and a clear, predictable operating envelope on resource-constrained Linux nodes.
 
-本项目是独立维护的代码库。它拥有自己的实现、架构、版本、发布历史和工程决策；官方 `remnawave/node` 只作为外部行为与协议契约的参考，不是本仓库的 Git 上游，也不是需要逐行翻译或复制的内部架构模板。
+This is an independently maintained codebase with its own implementation, architecture, versioning, history, and engineering decisions. Official `remnawave/node` is a reference for the external protocol and observable behavior. It is not this repository's Git upstream, and its internal architecture is not a template that must be copied line by line.
 
-对外项目名为 **Remnanode Lite**，可执行文件为 `remnanode-lite`。原生部署继续使用 `remnawave-node.service` 和同名 OpenRC service，是为了保持既有主机的升级与运维接口稳定，不代表继承官方仓库身份。
+The public project name is **Remnanode Lite**, and the executable is `remnanode-lite`. Native installations retain the service name `remnawave-node.service` and its OpenRC counterpart to keep existing host upgrade and operations interfaces stable. Those service names do not imply ownership of or continuity with the official repository.
 
-## 项目起点
+## Origin
 
-项目最初采用一份社区编写的 Go 版本作为代码起点，而不是从空目录重新实现。接手审计发现，这份起点在契约证据、进程所有权、并发状态、插件事务、输入边界、安装回滚和资源控制方面存在明显缺口，因此不能把“已有功能”直接视为正确或可维护。
+The project initially used a community-written Go implementation as a starting point rather than beginning from an empty directory. The takeover audit found material gaps in contract evidence, process ownership, concurrent state, plugin transactions, input bounds, installation rollback, and resource control. Existing functionality therefore could not be assumed correct or maintainable.
 
-随后仓库重置为独立历史，并按本项目的工程标准重新审计、重构和补齐实现。当前维护原则是：保留经过验证且设计合理的代码，任何不满足契约、正确性、安全性或可维护性要求的部分都可以重写。这个历史说明代码从何而来，但不建立 Git 上游关系，也不要求延续原实现的架构选择。
+The repository was subsequently reset to an independent history and re-audited, refactored, and completed against this project's engineering standards. Code that is both verified and well designed may remain; anything that fails contract, correctness, security, or maintainability requirements may be replaced. This history explains the starting point but creates no upstream relationship and imposes no obligation to preserve the original architecture.
 
-## 为什么需要这个项目
+## Motivation
 
-很多边缘节点只有有限的 CPU、内存和磁盘，但仍需要完整接入 Remnawave Panel、管理 rw-core，并支持用户热更新、统计和插件能力。通用部署方案往往优先照顾资源更充足的机器，而小型节点更容易受到以下问题影响：
+Many edge nodes have limited CPU, memory, and disk but still need full Panel connectivity, rw-core management, live user changes, statistics, and plugin support. General-purpose deployments often favor larger machines, while small nodes are disproportionately affected by:
 
-- 多个常驻进程、无界队列或重复配置副本放大内存占用；
-- 日志、镜像缓存和安装临时文件逐渐挤满磁盘；
-- 生命周期与并发所有权不清晰，异常路径产生状态漂移；
-- 只对齐接口名称，却没有验证请求、响应、错误和副作用语义；
-- 安装、升级和外部资产缺少明确的完整性与回滚边界。
+- multiple resident processes, unbounded queues, or duplicate configuration copies that amplify memory use;
+- logs, image caches, and installation staging that gradually consume the disk;
+- unclear lifecycle and concurrency ownership that allows state to drift on failure paths;
+- matching endpoint names without verifying request, response, error, and side-effect semantics;
+- installation, upgrade, and external assets without explicit integrity and rollback boundaries.
 
-Remnanode Lite 以一个 Go 主进程管理 Node API、rw-core 生命周期和插件协调，在不改变 Panel 可观察行为的前提下，为请求体、并发、队列、日志和运行内存建立上限。项目并不以“代码更短”作为最终目标，而是希望在低资源条件下仍能保持正确、可维护和可诊断。
+Remnanode Lite uses one Go application process to coordinate the Node API, rw-core lifecycle, and plugins. It bounds request bodies, concurrency, queues, logs, and runtime memory without intentionally changing Panel-observable behavior. Shorter code is not the end goal. The objective is a correct, maintainable, and diagnosable system under tight resource constraints.
 
-## 与官方 Node 的关系
+## Relationship to Official Node
 
-官方 Node 定义需要兼容的外部行为，包括：
+Official Node defines the external behavior that must be considered for compatibility, including:
 
-- `/node` API 的 HTTP 方法、请求与响应结构；
-- mTLS、JWT 和连接处理语义；
-- Xray 启停、状态和配置同步行为；
-- 用户、统计、连接和插件操作的结果与错误；
-- Panel 与 Node 之间可观察到的副作用顺序。
+- HTTP methods and request and response shapes for the `/node` API;
+- mTLS, JWT, and connection-handling semantics;
+- Xray start, stop, status, and configuration synchronization;
+- results and errors for users, statistics, connections, and plugins;
+- ordering of side effects observable between Panel and Node.
 
-本项目通过固定的官方版本与提交、可执行契约测试和必要的黑盒差分来保存这些证据。官方发布新版本时，仓库只创建同步提醒；维护者需要重新固定源码、审计差异、调整实现并完成验证，才可以更新实际契约版本。
+This project preserves evidence through a pinned official version and commit, executable contract tests, and controlled black-box comparison where required. When official Node publishes a new version, automation only opens a synchronization reminder. Maintainers must pin the new source, audit differences, adjust the implementation, and complete verification before changing the implemented contract version.
 
-以下内容不要求与官方一致：
+The following do not need to match official Node internally:
 
-- 编程语言、目录布局和框架；
-- 进程监督与容器内部结构；
-- 内部接口、状态机和依赖注入方式；
-- 在不改变外部契约前提下采用的资源保护；
-- 自有的诊断、测试与发布工具。
+- implementation language, directory layout, or framework;
+- process supervision and container structure;
+- internal interfaces, state machines, or dependency injection;
+- resource protection that does not change the external contract;
+- project-specific diagnostics, tests, and Release tooling.
 
-因此，“兼容官方 Node”表示对指定契约基线的行为兼容，不表示本项目是官方产品、官方镜像的重新打包版本，或官方仓库的下游分支。
+Compatibility therefore means behavioral compatibility with a stated contract baseline. It does not mean that Remnanode Lite is an official product, a repackaged official image, or a downstream fork of the official repository.
 
-## 核心目标
+## Goals
 
-### 行为兼容
+### Verifiable behavior
 
-- 对固定官方源码证据维护可执行的 API 契约。
-- 在产生外部副作用前完成完整输入校验。
-- 对齐成功响应、应用错误、连接关闭和重试语义。
-- 通过真实 Panel、rw-core 和 Linux 环境验证静态测试无法证明的行为。
+- Maintain an executable API contract backed by pinned official source evidence.
+- Complete input validation before externally visible side effects.
+- Align success responses, application errors, connection closure, and retry semantics.
+- Use real Panel, rw-core, and Linux environments for behavior that static tests cannot prove.
 
-### 资源可控
+### Bounded resources
 
-- 生产目标为整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。
-- 面向 Linux `amd64` 与 `arm64` 提供一致的构建和容器镜像。
-- 对内存、请求体、并发、队列、临时文件和日志设置明确上限。
-- 默认使用临时、可回收的容器运行日志，不要求生产节点持久保存日志。
+- Target a complete production host with `512 MiB RAM / 1 vCPU / 2 GB disk`.
+- Provide consistent Linux `amd64` and `arm64` builds and container images.
+- Set explicit limits for memory, request bodies, concurrency, queues, temporary files, and logs.
+- Use ephemeral and reclaimable container runtime logs by default; production nodes do not require persistent logs.
 
-### 正确且可恢复
+### Correct and recoverable state
 
-- 每类进程、状态、socket 和 nftables 规则都有唯一所有者。
-- 外部操作成功后才提交本地状态，失败结果必须可见。
-- 并发 mutation 具有固定顺序、取消传播和有界等待。
-- 安装与升级校验下载资产，并在承诺的边界内回滚。
+- Give every process, state object, socket, and nftables rule set one owner.
+- Commit local state only after required external effects succeed, and keep failures observable.
+- Give concurrent mutations fixed ordering, cancellation propagation, and bounded waits.
+- Verify downloaded installation and upgrade assets and roll back within the documented transaction boundary.
 
-### 长期可维护
+### Long-term maintainability
 
-- 业务层不依赖 HTTP 细节，系统副作用通过小接口隔离。
-- 复杂状态转换由状态机和测试表达，不依赖隐含布尔组合。
-- CI 覆盖代码质量、契约、安装器、Linux 网络管理和容器构建。
-- 文档解释设计原因、支持边界和验证方式，而不只罗列命令。
+- Keep HTTP details out of application services and isolate system effects behind narrow interfaces.
+- Express complex transitions with explicit states and tests instead of implicit Boolean combinations.
+- Cover code quality, the official contract, installers, Linux network administration, and containers in CI.
+- Document design rationale, support limits, and verification methods rather than only listing commands.
 
-## 非目标
+## Non-goals
 
-为了保持范围清晰，本项目不以以下事项为目标：
+To keep the project focused, it does not attempt to:
 
-- 复制官方 TypeScript 项目的内部模块或双进程运行结构；
-- 在尚未完成差分与验收时提前宣称兼容新的官方版本；
-- 成为通用 Xray 管理器、通用代理面板或宿主机防火墙管理工具；
-- 接管不属于本项目的进程、通用 Xray 路径或宿主机全局防火墙策略；
-- 在本地持久保存 Panel 下发的完整 Xray 配置并在重启后自行恢复；
-- 为同一 network namespace 中的多个 Node 实例提供隔离；
-- 将非 Linux 平台作为生产支持目标；
-- 为掉电、进程被强制杀死等所有极端故障建立分布式事务或高可用系统。
+- reproduce the official TypeScript module layout or its internal multi-process structure;
+- claim compatibility with a new official version before comparison and acceptance are complete;
+- become a general Xray manager, proxy panel, or host firewall manager;
+- take ownership of unrelated processes, generic Xray paths, or the host's global firewall policy;
+- persist the complete Panel-provided Xray configuration locally and restore it independently after restart;
+- isolate multiple Node instances in the same network namespace;
+- treat non-Linux platforms as production targets;
+- build distributed transactions or high-availability recovery for every extreme event, including power loss and forced process termination.
 
-当容器状态不可恢复时，重新创建容器是被接受的运维手段。原生部署的恢复承诺以安装器、服务管理器和发布说明中明确记录的范围为准。
+Recreating a container is an accepted operational recovery method when its runtime state cannot be recovered safely. Native recovery guarantees are limited to the boundaries documented by the installers, service manager, and relevant Release notes.
 
-## 面向谁
+## Intended audience
 
-| 角色 | 主要关注点 | 推荐入口 |
+| Role | Primary concern | Recommended entry point |
 | --- | --- | --- |
-| 节点部署者 | 快速接入 Panel、低资源配置、镜像选择 | [Docker Compose 部署](deployment-docker.md) |
-| 日常运维者 | 日志、健康检查、更新、回滚和故障定位 | [文档中心](README.md) 的运维路径 |
-| Go 开发者 | 包边界、生命周期、测试和变更规范 | [架构设计](architecture.md)、[开发指南](development/README.md) |
-| 发布维护者 | 版本、兼容证据、镜像标签和发布门禁 | [版本策略](versioning.md)、[发布流程](release.md) |
-| 安全与兼容审计者 | 官方证据、资源边界、供应链与已知差异 | [契约基线](development/contract-2.8.0.md)、[资源预算](development/resource-budget.md) |
+| Node deployer | Panel onboarding, low-resource settings, image selection | [Docker Compose deployment](deployment-docker.md) |
+| Operator | Health, logs, updates, rollback, and fault diagnosis | Operations path in the [documentation index](README.md) |
+| Go developer | Package boundaries, lifecycle, testing, and change standards | [Architecture](architecture.md), [development guide](development/README.md) |
+| Release maintainer | Versions, compatibility evidence, image tags, and gates | [Versioning](versioning.md), [Release process](release.md) |
+| Security or compatibility auditor | Official evidence, resource boundaries, supply chain, and known differences | [Contract baseline](development/contract-2.8.0.md), [resource budget](development/resource-budget.md) |
 
-## 当前工程状态
+## Engineering status
 
-当前仓库已经建立独立 Git 历史、Go 实现、自动化测试和 GHCR 候选镜像流程。代码中固定的兼容基线仍以 [`internal/version/contract.version`](../internal/version/contract.version) 为准；对应的官方证据与已知差异记录在版本化的[契约基线](development/contract-2.8.0.md)中。
+The repository has an independent Git history, a Go implementation, automated tests, and a GHCR candidate-image workflow. The contract baseline compiled into the code remains authoritative in [`internal/version/contract.version`](../internal/version/contract.version); pinned official evidence and known differences are recorded in the versioned [contract baseline](development/contract-2.8.0.md).
 
-代码中的 `Version` 表示正在构建的项目版本，不等于该版本已经公开发布。是否存在正式版本、发布资产及稳定镜像，应以仓库的 Git tag、GitHub Releases 和对应发布记录为准。候选镜像通过真实 Panel 成功连接是重要验证，但不替代该版本声明范围内的完整兼容与发布验收。
+The source `Version` identifies what is being built. It does not prove that the version has been published. Determine formal availability from the repository's Git tags, GitHub Releases, exact GHCR tags, and associated Release records. A candidate that connects successfully to a real Panel is valuable evidence, but it does not replace the complete compatibility and Release acceptance declared for that version.
 
-项目版本、官方契约版本、Panel 验证目标和 rw-core 版本是四个不同维度。它们的关系与发布规则见[版本策略](versioning.md)。
+Project version, official contract version, Panel acceptance target, and rw-core version are four separate dimensions. Their relationship and publication rules are defined in [Versioning and image tags](versioning.md).
 
-## 工程决策原则
+## Engineering decision order
 
-后续设计和审查默认遵循以下顺序：
+Design and review decisions generally follow this order:
 
-1. 先保证对已声明契约的正确实现。
-2. 再保证错误、取消和并发路径不会发布虚假成功状态。
-3. 为所有可能随输入增长的资源建立可测试上限。
-4. 优先复用现有清晰边界，避免为假设中的未来需求提前抽象。
-5. 对低概率极端恢复能力按实际运维成本取舍，不让它阻塞核心兼容实现。
-6. 任何兼容结论都应能追溯到源码证据、自动化测试或明确的环境验收。
+1. Implement the declared external contract correctly.
+2. Ensure error, cancellation, and concurrency paths cannot publish false success.
+3. Establish testable limits for every resource that can grow with input.
+4. Reuse clear existing boundaries before introducing abstractions for hypothetical future requirements.
+5. Balance low-probability extreme recovery against real operational cost without blocking core compatibility work.
+6. Make every compatibility conclusion traceable to source evidence, automated tests, or explicit environment acceptance.
 
-## 项目边界速览
+## Boundary at a glance
 
 ```text
 Remnawave Panel
       |
-      | mTLS + JWT / HTTPS
+      | mTLS + JWT over HTTPS
       v
 remnanode-lite
       |-- rw-core lifecycle and gRPC
-      |-- user, stats and connection operations
+      |-- user, statistics, and connection operations
       |-- plugin state and bounded webhook queue
       `-- project-owned nftables rules
 ```
 
-详细的组件所有权、依赖方向和运行时数据流见[架构与运行时设计](architecture.md)。
+See [Architecture and runtime design](architecture.md) for component ownership, dependency direction, and runtime data flows.

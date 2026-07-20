@@ -1,41 +1,39 @@
-# 测试指南
+# Testing Guide
 
-[返回开发文档](README.md) · [贡献指南](../../CONTRIBUTING.md)
+[Back to developer documentation](README.md) · [Contribution guide](../../CONTRIBUTING.md)
 
-本文说明 Remnanode Lite 的测试层级、平台边界和可执行命令。目标不是让每次修改都
-重复最昂贵的门禁，而是让验证范围与改动风险匹配，并清楚区分“本机通过”和
-“Linux/Panel 生产语义已经验证”。
+This guide describes Remnanode Lite's test layers, platform boundaries, and executable commands. The goal is not to repeat the most expensive gate after every edit. It is to match verification cost to change risk and to distinguish clearly between “passed on this workstation” and “verified for Linux/Panel production semantics.”
 
-## 基本原则
+## Principles
 
-- 开发过程中优先运行目标包，逻辑批次结束后再扩大范围。
-- 状态、锁、goroutine、取消或生命周期变化必须运行 race test。
-- 官方可见行为变化必须运行固定源码契约测试。
-- Linux capability、netlink、nftables、进程组和 cgroup 结论只能由 Linux 测试支持。
-- 真实 Panel、真实 rw-core、资源门禁和 soak 是候选验收，不是普通单元测试的替代品。
-- 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应。
+- Run the owning package first during development, then expand the scope after a coherent batch.
+- Changes to state, locks, goroutines, cancellation, or lifecycle behavior require race testing.
+- Changes to officially observable behavior require the pinned-source contract tests.
+- Only Linux tests can support claims about capabilities, netlink, nftables, process groups, or cgroups.
+- Real Panel, real rw-core, the resource gate, and soak tests are candidate acceptance; unit tests do not replace them.
+- Test data must not contain real Secrets, JWTs, certificates, private keys, node IPs, hostnames, or raw responses.
 
-## 快速选择
+## Quick Selection
 
-| 场景 | 命令 | 预期成本 |
+| Scenario | Command | Expected cost |
 | --- | --- | --- |
-| 修改一个 Go 包 | `go test -count=1 ./internal/<package>` | 低 |
-| 修改并发或共享状态 | `go test -race -count=1 ./internal/<package>` | 中 |
-| 普通 Go 回归 | `go test -count=1 ./...` | 中 |
-| Go 提交前检查 | `bash scripts/check-go.sh` | 中至高 |
-| Shell、Docker、workflow 或供应链 | `bash scripts/check-repository.sh` | 中至高 |
-| Installer 事务 | `bash scripts/test-install-ops.sh` | 高 |
-| 完整仓库门禁 | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | 高 |
-| Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
-| 低内存预算 | `scripts/test-low-memory.sh --rw-core ...` | Docker/真实 core |
-| 官方与候选行为比较 | `go run ./cmd/contract-probe ...` | 隔离验收环境 |
-| 正式发布 | `bash scripts/release-check.sh` | 冻结候选专用 |
+| Change one Go package | `go test -count=1 ./internal/<package>` | Low |
+| Change concurrency or shared state | `go test -race -count=1 ./internal/<package>` | Medium |
+| Normal Go regression | `go test -count=1 ./...` | Medium |
+| Go pre-commit gate | `bash scripts/check-go.sh` | Medium to high |
+| Shell, Docker, workflow, or supply chain | `bash scripts/check-repository.sh` | Medium to high |
+| Installer transaction | `bash scripts/test-install-ops.sh` | High |
+| Complete repository gate | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | High |
+| Linux network management | Two network-namespace integration tests | Linux/root |
+| Low-memory budget | `scripts/test-low-memory.sh --rw-core ...` | Docker/real core |
+| Official-versus-candidate behavior | `go run ./cmd/contract-probe ...` | Isolated acceptance environment |
+| Formal release | `bash scripts/release-check.sh` | Frozen candidate only |
 
-## Go 测试
+## Go Tests
 
-### 目标包循环
+### Targeted Package Loop
 
-在编辑期间优先运行最接近的包：
+During an edit, run the nearest package first:
 
 ```bash
 go test -count=1 ./internal/httpserver
@@ -43,47 +41,41 @@ go test -run '^TestName$' -count=1 ./internal/httpserver
 go test -race -count=1 ./internal/httpserver
 ```
 
-`-count=1` 禁用 Go 测试结果缓存，避免把旧成功结果误认为当前实现已经通过。
-定位并发问题时保留 `-race`；不要通过增加 sleep 掩盖缺少同步或取消传播的问题。
-Go race detector 需要 CGO 和可用的 C 编译器；缺少编译工具链时应先修复开发环境，不能把跳过 race test 记为通过。
+`-count=1` disables Go's test-result cache so that an earlier success is not mistaken for a result from the current implementation. Keep `-race` while diagnosing concurrency. Do not add sleeps to hide missing synchronization or cancellation propagation.
 
-### 普通全量回归
+The Go race detector requires CGO and a working C compiler. If the build toolchain is missing, repair the development environment; a skipped race test is not a passing result.
+
+### Normal Full Regression
 
 ```bash
 go test -count=1 ./...
 ```
 
-该命令会运行当前平台能编译的所有普通测试。仓库中的真实集成测试还受环境变量保护，
-未显式启用时会 `Skip`。
+This runs every ordinary test that compiles on the current platform. Real integration tests in the repository remain protected by environment variables and call `Skip` unless explicitly enabled.
 
-在 macOS 上，带 `//go:build linux` 的测试和实现不会参与编译，包括 Linux 进程、
-nftables 与 netlink socket destroy。因此 macOS 的 `go test ./...` 适合快速回归，
-但不等于 Linux 全量通过。Linux 上的普通 `go test ./...` 会编译 Linux 单元测试，
-network namespace 与真实 rw-core 测试仍需显式开启。
+On macOS, files guarded by `//go:build linux` do not compile into the test, including Linux process, nftables, and netlink socket-destruction implementations. `go test ./...` on macOS is useful for fast regression but is not a complete Linux result. On Linux, the same command compiles Linux unit tests; network-namespace and real rw-core tests still require explicit activation.
 
-### 标准 Go 门禁
+### Standard Go Gate
 
 ```bash
 bash scripts/check-go.sh
 ```
 
-该脚本依次执行：
+The script performs, in order:
 
-1. 工作树与暂存区 whitespace 检查。
-2. 所有已跟踪和未忽略 Go 文件的 `gofmt` 检查。
-3. 项目版本格式、契约版本格式、跨文件同步和正式对齐版本约束检查。
-4. `go mod verify` 与 `go mod tidy -diff`。
-5. 普通全量测试。
-6. 全量 race test。
-7. `go vet ./...`。
+1. Whitespace checks for the worktree and index.
+2. `gofmt` verification for every tracked and unignored Go file.
+3. Project-version format, contract-version format, cross-file synchronization, and official-alignment version checks.
+4. `go mod verify` and `go mod tidy -diff`.
+5. The normal full test suite.
+6. The full race test suite.
+7. `go vet ./...`.
 
-脚本不会自动准备官方源码。未设置 `REMNANODE_OFFICIAL_SOURCE` 时，固定 Git object
-重建会跳过，但已提交 source manifest 与本地 Go 路由契约的离线对照始终执行；因此
-需要对齐官方行为的改动仍应先按下一节准备官方 Git repository。
+The script does not prepare official source automatically. Without `REMNANODE_OFFICIAL_SOURCE`, regeneration from the pinned Git object is skipped, but the checked-in source manifest is still compared offline with the local Go route contract. A change that aligns official behavior should therefore prepare the official Git repository as described below.
 
-## 固定官方源码契约测试
+## Pinned Official Source Contract Tests
 
-从 `internal/version/contract.version` 读取当前契约版本，避免在命令中复制版本号：
+Read the contract version from `internal/version/contract.version` instead of duplicating it in commands:
 
 ```bash
 contract_version="$(tr -d '[:space:]' < internal/version/contract.version)"
@@ -97,33 +89,28 @@ go run ./cmd/contract-source-check
 go test -count=1 ./internal/contract
 ```
 
-`contract-source-check` 直接读取固定 commit object，禁用 replace refs，不信任 checkout、index 或 HEAD。
-它逐个校验证据 blob 摘要，并从官方 `REST_API`、全局 prefix、route constants 和
-controller decorators 重建 method/path manifest；还会从 Git tree 枚举 controller/module，
-绑定真实 Nest bootstrap、静态 import、严格 metadata、decorator ownership、module 注册可达性以及内部 controller 的 prefix exclusions。未知条件、spread、alias、复合 decorator 或未批准 dynamic module 会直接失败，不会猜测提取。随后运行 Go 门禁时可保留环境变量，
-使 contract package 测试也执行同一证据检查：
+`contract-source-check` reads the pinned commit object directly, disables replace refs, and does not trust the checkout, index, or `HEAD`. It verifies every evidence-blob digest and reconstructs the method/path manifest from the official `REST_API`, global prefix, route constants, and controller decorators. It also enumerates controllers and modules from the Git tree and binds the real Nest bootstrap, static imports, strict metadata, decorator ownership, module-registration reachability, and prefix exclusions for internal controllers.
+
+Unknown conditions, spreads, aliases, composite decorators, or unapproved dynamic modules fail closed rather than being guessed. Keep the environment variable when running the Go gate so the contract package repeats the source verification:
 
 ```bash
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
   bash scripts/check-go.sh
 ```
 
-适用改动包括：
+This is required for changes to:
 
-- `/node` method/path 或路由数量。
-- 请求字段、联合类型、默认值或未知字段处理。
-- 成功响应、应用错误、HTTP 状态或传输关闭语义。
-- stats reset、用户 mutation、插件同步等副作用。
-- 官方契约版本或固定 commit 更新。
+- `/node` methods, paths, or route count.
+- Request fields, unions, defaults, or unknown-field handling.
+- Success responses, application errors, HTTP status, or transport-close semantics.
+- Side effects such as stats reset, user mutations, or plugin synchronization.
+- The official contract version or pinned commit.
 
-这些命令不会启动官方 Node。机器提取只证明固定源码内容与公开路由映射，没有声称把
-完整 Zod 自动翻译为 Go；本地可执行 schema 仍由边界测试覆盖，真实服务行为差分使用
-后文的 `contract-probe`。
+These commands do not start the official Node. Machine extraction proves pinned source contents and public route mapping; it does not claim to translate complete Zod semantics into Go. Local executable schemas remain covered by boundary tests, and real service behavior is compared with `contract-probe` later in this guide.
 
-### 外部插件 schema 证据
+### External Plugin Schema Evidence
 
-官方 Node 的插件 `config` schema 来自独立 npm 包，不在固定源码 checkout 内。当前
-`@remnawave/node-plugins@0.4.5` tarball 可以在隔离临时目录中复核：
+The official Node's plugin `config` schema comes from a separate npm package and is not part of the pinned source repository. Recheck the current `@remnawave/node-plugins@0.4.5` tarball in an isolated temporary directory:
 
 ```bash
 plugin_tgz="$(mktemp)"
@@ -138,62 +125,61 @@ test "$(openssl dgst -sha1 "$plugin_tgz" | awk '{print $NF}')" = \
   3bfc3988278790ec40a93d6e6169f893c31bf62d
 test "sha512-$(openssl dgst -sha512 -binary "$plugin_tgz" | openssl base64 -A)" = \
   'sha512-r9Lce/l/kHQATNhWbcutApFSJ5hH/Yu6Kv0+/qjpUDIEa1+DFb54Q8IwuvqWzxxbGkG9oO0cAeN4busBzz0a5Q=='
+
 tar -tzf "$plugin_tgz" \
   | grep -Fx 'package/build/backend/models/node-plugins.schema.js'
 ```
 
-检查实际 schema 时使用 `tar -xOf` 从上述固定路径读取，不要安装包或执行其中代码。
-当前 CI 不联网下载该 tarball；自动源码证据测试只覆盖官方 Git checkout 中登记的
-路径。升级插件版本时必须同时核对官方 `package.json`/`package-lock.json`、更新摘要、
-重新审计 schema，并调整 `internal/nodeapi`、`internal/plugin` 和相关契约测试。
+Read the actual schema with `tar -xOf` from that pinned path; do not install the package or execute its code. CI does not download this tarball. Automated source evidence covers only registered paths in the official Git repository.
 
-## 仓库与静态检查
+An upgrade to the plugin version must reconcile official `package.json` and `package-lock.json`, update both digests, re-audit the schema, and adjust `internal/nodeapi`, `internal/plugin`, and the related contract tests.
 
-### 工具版本
+## Repository and Static Checks
 
-`scripts/check-repository.sh` 要求：
+### Tool Versions
 
-- Go toolchain 与 `go.mod` 完全一致。
-- ShellCheck 恰好为 `0.11.0`。
-- actionlint 可执行；为复现 CI，使用 `1.7.7`。
+`scripts/check-repository.sh` requires:
 
-安装 Go 工具：
+- A Go toolchain exactly matching `go.mod`.
+- ShellCheck exactly `0.11.0`.
+- An available actionlint executable; use `1.7.7` for CI parity.
+
+Install the Go tools with:
 
 ```bash
 go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 ```
 
-不要在本地调用 `scripts/install-ci-checks.sh`。它是 GitHub Runner bootstrap，依赖
-`GITHUB_PATH`、`RUNNER_TEMP`、Linux 归档和 `sha256sum`。
+Do not call `scripts/install-ci-checks.sh` locally. It is a GitHub Runner bootstrap and depends on `GITHUB_PATH`, `RUNNER_TEMP`, Linux archives, and `sha256sum`.
 
-### 仓库门禁
+### Repository Gate
 
 ```bash
 bash scripts/check-repository.sh
 ```
 
-该脚本执行：
+The script runs:
 
-- `git diff --check`。
-- `go run ./cmd/docs-check`，检查 Markdown H1、围栏、本地链接、锚点和入口可达性。
-- ShellCheck、所有 Bash 脚本的 `bash -n` 和 OpenRC 脚本的 `sh -n`。
-- actionlint。
-- Docker/Compose 打包策略检查。
-- 下载源、固定摘要、Action SHA 和 installer bootstrap 等供应链检查。
-- 使用精确 Go toolchain 交叉构建 Linux `amd64` 与 `arm64` 二进制。
+- `git diff --check`.
+- `go run ./cmd/docs-check`, which checks Markdown H1s, fences, local links, anchors, and entry-point reachability.
+- ShellCheck, `bash -n` for every Bash script, and `sh -n` for the OpenRC script.
+- actionlint.
+- Docker/Compose packaging-policy checks.
+- Supply-chain checks for download sources, pinned digests, Action SHAs, and installer bootstrap.
+- Cross-builds of Linux `amd64` and `arm64` binaries with the exact Go toolchain.
 
-如果 Docker Compose 可用，打包测试还会执行 Compose schema 校验；如果不可用，脚本
-会明确输出跳过信息，但其他静态策略仍会运行。需要宣称 Compose 已验证时，不应忽略
-这条 skip。
+When Docker Compose is available, the packaging test also validates the Compose schema. If it is unavailable, the script prints an explicit skip while continuing the other static policy checks. Do not ignore that skip when claiming Compose validation.
 
-### 漏洞扫描与完整仓库检查
+### Vulnerability Scan and Complete Repository Check
+
+Run the scanner directly with:
 
 ```bash
 govulncheck ./...
 ```
 
-日常完整仓库入口是：
+The normal complete-repository entry point is:
 
 ```bash
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
@@ -201,33 +187,26 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` 组合 Go 门禁、仓库门禁、离线 installer 测试和 govulncheck。若未设置
-`REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，它会跳过漏洞扫描；因此发布前和
-需要报告完整结果时必须显式要求该工具。
+`check.sh` combines the Go gate, repository gate, offline installer tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. Release checks and reports that claim complete results must require it explicitly.
 
-即便该命令成功，它也不包含 Linux network namespace、真实 rw-core、Panel 黑盒、
-资源门禁或长期 soak，不应描述为生产验收完成。
+Even a successful run does not include Linux network namespaces, a real rw-core, Panel black-box tests, the resource gate, or a long-running soak. Do not describe it as completed production acceptance.
 
-## Installer 测试
+## Installer Tests
 
-安装、升级、卸载、service unit、OpenRC 或 `install-env-helpers.sh` 变化至少运行：
+A change to installation, upgrade, uninstall, service definitions, OpenRC, or `install-env-helpers.sh` requires at least:
 
 ```bash
 bash scripts/test-install-ops.sh
 bash scripts/check-repository.sh
 ```
 
-`test-install-ops.sh` 使用临时目录和命令 mock，离线验证锁、权限、路径安全、Secret
-迁移、原子替换、失败回滚、systemd/OpenRC 状态转换和卸载隔离。它不会改动真实
-`/etc/remnanode` 或启动本机服务。
+`test-install-ops.sh` uses temporary directories and command mocks to verify locking, permissions, path safety, Secret migration, atomic replacement, failure rollback, systemd/OpenRC state transitions, and uninstall isolation without changing real `/etc/remnanode` state or starting local services.
 
-测试中的部分 `flock` 分支只有系统存在 `flock` 时才运行。macOS 结果不能替代
-Ubuntu/OpenRC 的真实安装验收；installer 行为变化仍应等待 CI 的 Ubuntu job，并在
-候选阶段按发布验收协议验证真实主机。
+Some `flock` branches run only when the system provides `flock`. A macOS result cannot replace real Ubuntu/OpenRC installation acceptance. Installer behavior changes must still pass the Ubuntu CI job and the real-host release acceptance protocol for a frozen candidate.
 
-## Linux 网络管理集成测试
+## Linux Network-Management Integration Tests
 
-在具备 user/network namespace、nftables 和 root 权限的 Linux 主机上：
+On a Linux host with user/network namespaces, nftables, and root privileges:
 
 ```bash
 sudo env "PATH=$PATH" REMNANODE_NFT_INTEGRATION=1 \
@@ -239,20 +218,18 @@ sudo env "PATH=$PATH" REMNANODE_SOCKET_KILL_INTEGRATION=1 \
   -run '^TestKillSocketsInNetworkNamespace$' -count=1 -v
 ```
 
-推荐使用 Ubuntu 24.04，与 CI 一致：
+Ubuntu 24.04 is recommended for CI parity:
 
 ```bash
 sudo apt-get update
 sudo apt-get install --yes iproute2 nftables
 ```
 
-这些测试只操作隔离 namespace。不要删掉环境变量保护，也不要把测试改为直接操作
-开发机默认 network namespace。
+These tests operate only inside isolated namespaces. Do not remove their environment-variable guards or modify them to operate on the development host's default network namespace.
 
-## 低内存资源门禁
+## Low-Memory Resource Gate
 
-资源测试将测试进程与真实 rw-core 放在同一个 Docker cgroup 中，默认使用
-`448 MiB / 1 CPU / no swap / 256 PIDs / 50,000 users`：
+The resource test places the test process and a real rw-core in the same Docker cgroup. Its defaults are `448 MiB / 1 CPU / no swap / 256 PIDs / 50,000 users`:
 
 ```bash
 scripts/test-low-memory.sh \
@@ -261,44 +238,40 @@ scripts/test-low-memory.sh \
   --memory 448
 ```
 
-前置条件：
+Prerequisites:
 
-- Docker daemon 正常运行。
-- `--rw-core` 指向与 Docker 架构相同的可执行 Linux rw-core。
-- 宿主机支持 Docker memory、CPU、swap 和 PID 限制。
+- A running Docker daemon.
+- `--rw-core` points to an executable Linux rw-core for the same architecture as Docker.
+- The host supports Docker memory, CPU, swap, and PID limits.
 
-资源、请求解析、配置保留、队列、日志、并发上限或 rw-core 生命周期变化时需要运行。
-结果应记录 cgroup peak；单独的 Go 进程 RSS 不是门禁判定值。详细基线见
-[资源预算](resource-budget.md)。
+Run this gate after changes to resource handling, request parsing, retained configuration, queues, logs, concurrency limits, or the rw-core lifecycle. Record the cgroup peak; the Go process RSS alone is not the gate metric. See the [resource budget](resource-budget.md) for the dated baseline.
 
-## Docker 与镜像测试
+## Docker and Image Tests
 
-只验证策略和 Compose schema：
+To validate only packaging policy and the Compose schema:
 
 ```bash
 bash scripts/test-docker-packaging.sh
 ```
 
-本地源码镜像构建会下载固定的基础镜像、rw-core、geo 和 ASN 资产，成本明显高于
-Go build，仅在 Dockerfile、构建参数或运行资产发生变化时执行：
+A local source-image build downloads pinned base images plus rw-core, geo, and ASN assets. It costs substantially more than a Go build and is appropriate only after changes to the Dockerfile, build arguments, or runtime assets:
 
 ```bash
 SECRET_KEY=packaging-check \
   docker compose -f compose.yaml -f compose.build.yaml build
 ```
 
-`packaging-check` 只用于 Compose 解析，不能启动节点。真实启动必须使用 Panel 生成的
-完整 Secret，并遵循 [Docker 部署文档](../deployment-docker.md)的安全要求。
+`packaging-check` is only a Compose-parsing placeholder and cannot start a node. A real start requires the complete Secret generated by Panel and the security requirements in the [Docker deployment guide](../deployment-docker.md).
 
-## 黑盒契约比较
+## Black-Box Contract Comparison
 
-先查看路由及其是否允许默认探测：
+List the routes and their default safety class:
 
 ```bash
 go run ./cmd/contract-probe -list
 ```
 
-准备由同一 CA 签发的 Panel 客户端证书和单独保存的 JWT：
+Prepare a Panel client certificate signed by the same CA and keep the JWT in a separate file:
 
 ```bash
 export REMNANODE_CONTRACT_CA=/secure/ca.pem
@@ -311,14 +284,11 @@ go run ./cmd/contract-probe \
   -target candidate=https://127.0.0.1:3222
 ```
 
-第一个 target 是比较基线。默认只运行无破坏性的安全路由；启动、停止、用户增删、
-连接清理、统计 reset、report drain 和 nftables 操作必须同时显式指定 `-routes` 与
-`-allow-mutating`，并且只能在隔离验收环境执行。
+The first target is the comparison baseline. By default, the probe runs only non-destructive safe routes. Start, stop, user mutations, connection cleanup, statistics reset, report draining, and nftables operations require both explicit `-routes` and `-allow-mutating`, and must run only in an isolated acceptance environment.
 
-探针不会输出 JWT 或原始响应 body。证书只包含 DNS 名称但 target 使用 IP 时，传入
-`-server-name`；工具不提供跳过 TLS 验证的选项。
+The probe never prints the JWT or raw response bodies. If a certificate contains only DNS names while the target uses an IP address, pass `-server-name`; there is no option to disable TLS verification.
 
-## 发布门禁
+## Release Gate
 
 ```bash
 RELEASE_TAG=<tag> \
@@ -327,71 +297,63 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-该脚本只适用于已经冻结且具备真实 acceptance evidence 的发布候选。它要求工作树
-干净、release note 和 CHANGELOG 已最终化、证据 manifest 可校验、候选 ancestry
-合法，并运行完整仓库检查。普通开发分支缺少这些资料时失败是正常行为，不要通过
-伪造 evidence、放宽检查或提前修改发布状态让它变绿。
+This script is only for a frozen release candidate with real acceptance evidence. It requires a clean worktree, finalized Release notes and `CHANGELOG.md`, a valid evidence manifest, and valid candidate ancestry, then runs the complete repository checks. Failure on an ordinary development branch that lacks these materials is expected. Do not fabricate evidence, weaken the checks, or advance release state merely to make it pass.
 
-具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
-[发布流程](../release.md)。
+See the [versioning policy](../versioning.md) for tag, version, and `latest` semantics, and the [release process](../release.md) for candidate freeze and release steps.
 
-## 按改动选择测试
+## Selecting Tests by Change
 
-| 改动 | 最低验证 | 提升验证 |
+| Change | Minimum verification | Expanded verification |
 | --- | --- | --- |
-| 纯文档 | `go run ./cmd/docs-check`、`git diff --check`；人工复核命令事实 | 涉及发布/部署时运行对应脚本 |
-| 普通 Go 逻辑 | 目标包普通测试 | `bash scripts/check-go.sh` |
-| 锁、状态、worker、关闭 | 目标包 race test | 全量 race 与相关生命周期测试 |
-| HTTP/API/schema | `nodeapi`、`httpserver`、`contract` | 固定源码契约与黑盒差分 |
-| Xray 生命周期 | `xray`、`httpserver` race | 真实 rw-core、Panel、资源门禁 |
-| 用户与 stats | `nodehandler`、`stats`、`xtls` | contract response 与 Panel 差分 |
-| 插件纯逻辑 | `plugin` race | HTTP lifecycle 交错测试 |
-| nftables/socket destroy | 对应 Linux unit test | 两条 namespace 集成测试 |
-| 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
-| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 真实 systemd/OpenRC |
-| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与候选部署 |
-| 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
-| 项目版本 | `bash scripts/check-version.sh` | release preflight |
-| 官方契约升级 | 全契约与固定源码测试 | 全部注册路由黑盒、Panel 全流程 |
-| protobuf wire | `scripts/generate-protobuf.sh --check`、`go test ./internal/xtls` | 真实 rw-core 与 golden wire 回归 |
-| 资源上限 | 相关 unit/race | `test-low-memory.sh` 与 soak |
+| Documentation only | `go run ./cmd/docs-check`, `git diff --check`; manually verify command facts | Run the relevant script for release/deployment documentation |
+| Ordinary Go logic | Owning package tests | `bash scripts/check-go.sh` |
+| Locks, state, workers, shutdown | Owning package race test | Full race suite and related lifecycle tests |
+| HTTP/API/schema | `nodeapi`, `httpserver`, `contract` | Pinned-source contract tests and black-box comparison |
+| Xray lifecycle | `xray` and `httpserver` race tests | Real rw-core, Panel, and resource gate |
+| Users and statistics | `nodehandler`, `stats`, `xrayrpc` | Contract response tests and Panel differential testing |
+| Plugin pure logic | `plugin` race test | HTTP lifecycle interleaving tests |
+| nftables/socket destruction | Corresponding Linux unit test | Both namespace integration tests |
+| Configuration/Secret/JWT | `config`, `secret`, `auth`, server security | Installer Secret flow |
+| Shell/service | `bash scripts/check-repository.sh`, `bash scripts/test-install-ops.sh` | Real systemd/OpenRC |
+| Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build and candidate deployment |
+| Dependency or downloadable asset | `go mod tidy -diff`, supply-chain checks, govulncheck | Dual-architecture build, SBOM, and attestation |
+| Project version | `bash scripts/check-version.sh` | Release preflight |
+| Official contract upgrade | Full contract and pinned-source tests | Black-box all registered routes and complete Panel flow |
+| Protobuf wire | `scripts/generate-protobuf.sh --check`, `go test ./internal/xrayrpc` | Real rw-core and golden-wire regression |
+| Resource limit | Related unit/race tests | `test-low-memory.sh` and soak |
 
-“最低验证”适合开发循环，不代表 PR 一定只需要这一列。改动跨越多个组件时取各行并集。
+“Minimum verification” is for the development loop, not necessarily the entire pull-request requirement. For a cross-component change, take the union of the applicable rows.
 
-## CI 对应关系
+## CI Mapping
 
-`.github/workflows/test.yml` 的 required gate 汇总四组并行 job：
+The required gate in `.github/workflows/ci.yml` aggregates four parallel jobs:
 
-| CI job | 主要命令 |
+| CI job | Primary command |
 | --- | --- |
-| `go` | 固定官方源码 + `scripts/check-go.sh` |
-| `repository` | 安装固定静态工具 + `scripts/check-repository.sh` |
+| `go` | Pinned official source plus `scripts/check-go.sh` |
+| `repository` | Install pinned static tools plus `scripts/check-repository.sh` |
 | `installer` | `scripts/test-install-ops.sh` |
-| `netadmin` | 两条 Linux namespace 集成测试 |
-| `gate` | 要求上述所有 job 都为 success |
+| `netadmin` | Both Linux namespace integration tests |
+| `gate` | Requires every job above to report success |
 
-容器 workflow 按路径触发，不是所有 PR 都有 container check。`main` 上命中容器输入
-时会先构建并证明 manifest，再发布不可移动的候选 tag；正式版本由 tag release workflow
-晋升 acceptance manifest 绑定的同一 digest。不要把路径条件导致的
-“未运行”误判为失败，也不要把可选 container job 配成永远要求出现的通用门禁。
+The container workflow is path-filtered, so not every pull request has a container check. When container inputs change on `main`, it builds and attests a manifest before publishing an immutable candidate tag. The tag-triggered release workflow promotes the same digest bound by the acceptance manifest. Do not treat a path-filtered “not run” as failure, and do not make an optional container job a universally required check that can never appear.
 
-## 编写测试
+## Writing Tests
 
-- 优先使用标准库 `testing`、局部 fake 和窄接口，不为断言语法引入依赖。
-- 使用 `t.TempDir()`、`t.Setenv()` 和测试专属端口，禁止写真实系统路径。
-- 并发测试使用 channel、context 或明确同步信号，不依赖脆弱 sleep 排序。
-- 每个可能阻塞的测试都有 deadline；失败消息说明实际值、期望值和操作阶段。
-- Linux 集成测试必须有 build tag 与显式环境变量保护。
-- 契约测试同时覆盖合法输入、缺失字段、错类型、联合类型、额外字段和响应 schema。
-- 资源测试关注有界峰值和失败语义，不只记录平均值或单进程 RSS。
-- 修复 bug 时先添加可稳定复现的回归测试，再修改实现。
+- Prefer the standard `testing` package, local fakes, and narrow interfaces; do not add a dependency only for assertion syntax.
+- Use `t.TempDir()`, `t.Setenv()`, and test-only ports. Never write to real system paths.
+- Synchronize concurrent tests with channels, contexts, or explicit signals rather than fragile sleep ordering.
+- Give every potentially blocking test a deadline. Failure messages should include the actual value, expected value, and operation stage.
+- Linux integration tests require a build tag and explicit environment-variable guard.
+- Contract tests cover valid input, missing fields, wrong types, unions, extra fields, and response schemas together.
+- Resource tests assert bounded peaks and failure semantics, not only averages or one process's RSS.
+- For a bug fix, add a stable reproducer before changing the implementation.
 
-## 常见误区
+## Common Pitfalls
 
-- `go test ./...` 显示成功，但官方源码证据测试可能因未设置环境变量而跳过。
-- macOS 成功不覆盖任何 `//go:build linux` 文件。
-- `check.sh` 在未安装 govulncheck 时默认允许跳过，完整报告应设置
-  `REQUIRE_GOVULNCHECK=1`。
-- `check-repository.sh` 在没有 Docker Compose 时允许跳过 Compose schema 验证。
-- `release-check.sh` 不是普通开发命令，未完成候选证据时预期失败。
-- 成功构建 Go 二进制不代表 Docker 固定资产、多架构或 Linux capability 已验证。
+- `go test ./...` may succeed while official-source evidence verification was skipped because its environment variable was absent.
+- A macOS success covers no `//go:build linux` file.
+- `check.sh` may skip govulncheck when it is not installed; set `REQUIRE_GOVULNCHECK=1` for a complete report.
+- `check-repository.sh` may skip Compose schema validation when Docker Compose is unavailable.
+- `release-check.sh` is not a normal development command and is expected to fail before candidate evidence exists.
+- A successful Go binary build does not prove pinned Docker assets, multiple architectures, or Linux capabilities.

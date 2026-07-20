@@ -1,69 +1,165 @@
-# 安全策略
+# Security Policy
 
-本文说明 Remnanode Lite 的漏洞报告方式、受支持范围和运行信任边界。部署加固与实现细节另见[架构说明](docs/architecture.md)和[运维文档](docs/operations.md)。
+This document defines how to report vulnerabilities in Remnanode Lite, which
+releases receive security support, and the trust boundaries operators must
+understand. For deployment hardening and implementation details, see
+[Architecture](docs/architecture.md) and [Operations](docs/operations.md).
 
-## 报告漏洞
+## Reporting a Vulnerability
 
-请使用 GitHub 的[私密漏洞报告](https://github.com/luxiaba/remnanode-lite/security/advisories/new)提交安全问题。不要在公开 Issue、Discussion、日志或截图中披露以下内容：
+Report security issues through
+[GitHub private vulnerability reporting](https://github.com/luxiaba/remnanode-lite/security/advisories/new).
+Do not disclose any of the following in a public issue, discussion, log, or
+screenshot:
 
-- `SECRET_KEY`、JWT、CA、节点证书或私钥；
-- Panel URL、真实 IP、hostname 或可识别节点的信息；
-- 未经脱敏的请求、响应、配置或运行日志；
-- 在修复发布前可直接复现攻击的完整利用细节。
+- `SECRET_KEY`, JWTs, certificate authorities, node certificates, or private
+  keys.
+- Panel URLs, real IP addresses, hostnames, or other identifying node details.
+- Unredacted requests, responses, configuration, or runtime logs.
+- Complete exploitation instructions that would enable an attack before a fix
+  is released.
 
-报告应尽量包含受影响版本或 commit、部署方式、影响范围、最小复现步骤和建议缓解方式。请使用虚构地址和脱敏材料复现；维护者需要更多信息时会在私密 advisory 中继续沟通。
+Include the affected version or commit, deployment method, expected impact,
+minimal reproduction, and any known mitigation where possible. Reproduce the
+problem with fictional addresses and sanitized material. Maintainers will ask
+for additional details inside the private advisory when needed.
 
-## 支持范围
+If a secret may have been exposed, rotate it immediately. Removing the value in
+a later commit does not remove it from Git history, logs, caches, registries, or
+other copies.
 
-首个正式 Release 发布前，`edge` 与 `sha-*` 都属于候选构建，不承诺长期安全维护。正式发布后：
+## Supported Versions
 
-| 版本 | 安全修复策略 |
+The first final release has not yet been published. Until it is, `edge`,
+`sha-*`, and `candidate-sha-*` are candidate builds and carry no long-term
+security maintenance commitment.
+
+After the first final release, support follows this policy:
+
+| Version | Security support |
 | --- | --- |
-| `latest` 指向的稳定版本 | 接收安全修复 |
-| 同一版本线的上一个稳定版本 | 在可合理回滚或升级的范围内处理高影响问题 |
-| `edge`、历史候选与更早版本 | 不保证修复，请升级到受支持版本 |
+| Stable release referenced by `latest` | Receives security fixes |
+| Previous stable release on the same release line | High-impact issues are addressed where upgrade or rollback remains practical |
+| `edge`, historical candidates, and older releases | No guaranteed fixes; upgrade to a supported release |
 
-确切支持范围会在对应 GitHub Security Advisory 和 Release note 中说明。
+The applicable GitHub Security Advisory and release notes may narrow or extend
+support for a specific issue.
 
-## 运行信任边界
+## Runtime Trust Boundaries
 
-Remnanode Lite 是具有网络管理权限的节点软件，不是普通无特权 Web 服务：
+Remnanode Lite is a network-management node, not an ordinary unprivileged web
+service:
 
-- Panel 到 Node 的公开接口要求最低 TLS 1.3、双向认证和 RS256 Bearer JWT。
-- Docker 使用宿主网络；`NET_ADMIN` 允许管理本项目 nftables 表并通过 `NETLINK_SOCK_DIAG` 关闭连接，`NET_BIND_SERVICE` 允许监听低端口。
-- 当前容器以 root UID 启动，但会丢弃其它 capability，启用 `no-new-privileges` 和只读 rootfs。host network 与 `NET_ADMIN` 仍然构成明确的宿主机信任边界。
-- 只应运行来自本仓库、已验证的镜像。生产优先固定精确版本或 manifest digest，并验证 build attestation。
-- Node 不持久化 Panel 下发的完整 Xray 配置；重启后由 Panel 重新同步。运行日志同样可以是临时数据。
+- The public Panel-to-Node API requires TLS 1.3 or later, mutual TLS, and an
+  RS256 Bearer JWT.
+- Docker uses the host network namespace. `NET_ADMIN` permits the container to
+  manage this project's nftables tables and destroy matching connections with
+  `NETLINK_SOCK_DIAG`; `NET_BIND_SERVICE` permits listeners on privileged ports.
+- The current container starts as root, drops every other capability, enables
+  `no-new-privileges`, and uses a read-only root filesystem. Host networking and
+  `NET_ADMIN` nevertheless remain an explicit host trust boundary.
+- Run only verified images produced by this repository. Pin an exact version or
+  manifest digest in production and verify its build attestation.
+- The Node does not persist the complete Xray configuration received from
+  Panel. Panel resynchronizes it after a restart. Runtime logs may likewise be
+  kept only in bounded temporary storage.
 
-## Secret 处理
+The supported single-file production template is
+[`deploy/compose.single-file.yaml`](deploy/compose.single-file.yaml). Keep its
+capability, read-only filesystem, tmpfs, process, memory, CPU, healthcheck, and
+log-rotation controls unless a reviewed deployment change explicitly replaces
+them.
 
-原生 systemd/OpenRC 部署推荐将 Secret 存放在 `/etc/remnanode/secret.key`，权限为 `root:remnanode 0640`。配置与 Secret 由 Go 进程使用有界、拒绝符号链接的文件读取路径加载，不会把整份 `node.env` 导出到服务环境。
+## Secret Handling
 
-单文件 Compose 必须将 Secret 内联，因此它会出现在 `docker inspect` 可读取的容器元数据中。应执行：
+For native systemd and OpenRC deployments, store the secret in
+`/etc/remnanode/secret.key` with owner and mode `root:remnanode 0640`. The Go
+process reads configuration and secret files through bounded, no-symlink file
+paths; it does not export the complete `node.env` as the service environment.
+
+The single-file Compose deployment necessarily stores the secret inline. It is
+therefore visible in container metadata readable through `docker inspect`.
+Protect the file with:
 
 ```bash
 chmod 600 docker-compose.yaml
 ```
 
-同时限制 Docker socket、备份、终端历史和主机管理员权限。Node 启动 rw-core 前会从继承环境中剥离 `SECRET_KEY`、`SECRET_KEY_FILE`、`INTERNAL_REST_TOKEN` 与 `REMNANODE_ENV`，并覆盖资源路径和内部 webhook token；该 token 默认每次启动随机生成，显式配置时使用经过 Go 配置解析的值。其它非受管环境变量仍会继承，因此不要向 Node 容器注入无关 Secret。
+Also restrict access to the Docker socket, backups, shell history, and host
+administrator accounts. Before starting rw-core, the Node removes
+`SECRET_KEY`, `SECRET_KEY_FILE`, `INTERNAL_REST_TOKEN`, and `REMNANODE_ENV` from
+the inherited environment. It replaces managed resource paths and the internal
+webhook token. That token is generated randomly at every start by default; an
+explicit value is accepted only after Go configuration parsing. Other
+unmanaged environment variables are still inherited, so do not inject
+unrelated secrets into the Node container or native service.
 
-## 供应链
+Never commit `.env`, an expanded Compose file containing a real secret,
+`/etc/remnanode/node.env`, `secret.key`, certificates, private keys, or raw
+acceptance captures.
 
-仓库当前采用以下控制：
+## Supply-Chain Controls
 
-- GitHub Actions 固定到完整 commit SHA；
-- Go module 校验并执行 `govulncheck` 定时扫描；
-- 基础镜像固定 manifest digest；
-- rw-core、geo 与 ASN 来源固定版本/commit，并校验下载摘要；
-- Release 镜像包含 SBOM、BuildKit provenance 和 GitHub build attestation；
-- Release 二进制、Compose 和数据资产由 `SHA256SUMS` 覆盖。
+The repository currently applies these controls:
 
-这不等于字节级完全可复现构建：Dockerfile 内 Debian 软件包目前没有固定到 snapshot 和具体包版本。同一源码的正式产物必须以 registry manifest digest、SBOM、provenance 与 attestation 共同识别，不能只相信 tag 名称。
+- GitHub Actions are pinned to complete commit SHAs.
+- Go modules are verified, and the scheduled
+  [security workflow](.github/workflows/security.yml) runs `govulncheck` against
+  reachable Go code.
+- Container base images are pinned by manifest digest.
+- rw-core, geo data, and ASN sources are pinned by version or commit and checked
+  against download digests.
+- Release images include an SBOM, BuildKit provenance, and a GitHub build
+  attestation.
+- Release binaries, the Compose asset, and data assets are covered by
+  `SHA256SUMS`.
 
-## 安全设计原则
+These controls do not make builds byte-for-byte reproducible. Debian packages
+installed by the Dockerfile are not yet pinned to a snapshot and exact package
+versions. Identify a final artifact by its registry manifest digest, SBOM,
+provenance, and attestation together; do not trust a tag name alone.
 
-- 所有外部输入必须在副作用前完成认证、解压边界、JSON 解码和契约校验。
-- 进程、队列、请求体、并发、外部命令输出和关闭时间必须有界。
-- rw-core、插件快照和 nftables 状态各有唯一所有者；失败不能提前提交本地成功状态。
-- Node 只拥有项目 rw-core 进程、内部 socket 和固定 nftables 表，不接管宿主机整体防火墙策略。连接销毁是按目标 IP 扫描宿主 network namespace 的内核操作，可能关闭其它进程命中同一 IP 的 TCP 连接，因此生产节点应视为专用网络执行环境。
-- 发布验收材料不得包含可还原用户或生产环境的数据。
+Repository CI is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+The root [`CHANGELOG.md`](CHANGELOG.md) records user-visible release changes.
+Files under `docs/archive/`, such as the
+[2026 audit remediation record](docs/archive/2026-07-audit-remediation.md),
+preserve historical context and must not be treated as the current security
+posture or release status.
+
+## Security Design Principles
+
+- Authenticate and enforce decompression, body-size, JSON-decoding, and
+  contract limits on external input before side effects.
+- Bound processes, queues, request bodies, concurrency, external-command
+  output, and shutdown duration.
+- Keep a single owner for rw-core, plugin snapshots, and nftables state. A
+  failed side effect must not commit a false local success state.
+- Own only this project's rw-core process, internal sockets, and fixed nftables
+  tables. Do not take over the host's general firewall policy.
+- Treat connection destruction as a host-network operation. It scans the host
+  network namespace for TCP connections matching a target IP and may close a
+  connection owned by another process when that process uses the same IP.
+  Production nodes should therefore be dedicated network execution
+  environments. The Panel path filters local and special addresses, but the
+  administrative `remnanode-lite kill-sockets` command calls the kernel adapter
+  directly and does not provide that business-layer protection.
+- Keep release acceptance data sanitized. Evidence and raw capture bundles must
+  not contain data from which users or production environments can be
+  reconstructed.
+
+## Security Changes
+
+Security-sensitive changes must follow [CONTRIBUTING.md](CONTRIBUTING.md), add
+regression coverage, and run the checks appropriate to their boundary. The
+full local gate is:
+
+```bash
+REMNANODE_OFFICIAL_SOURCE=/absolute/path/to/pinned-official-source \
+REQUIRE_GOVULNCHECK=1 \
+  bash scripts/check.sh
+```
+
+Passing this gate proves repository-level checks only. It does not replace
+real Linux namespace tests, candidate attestation verification, Panel
+integration, resource-fault testing, or long-running M8 acceptance where those
+are required.
