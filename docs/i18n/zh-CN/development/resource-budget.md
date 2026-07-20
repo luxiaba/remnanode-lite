@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=a8b716543590aac74c5ea38103545310533495ebef058fd95880efd7cf91a300 -->
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=6a337f4212393566f8b7c8ffb6c25c45da9058af20da071c37a3404202c0a5ec -->
 # 512 MiB 资源预算与 M6-M8 基准
 
 > **翻译说明：** [英文原文](../../../development/resource-budget.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
@@ -21,7 +21,7 @@
 
 生产 Compose 使用不同但更贴近实际运行的 tmpfs 布局：`/run`、`/tmp` 和 rw-core 日志合计 `48 MiB`，且日志不写入持久卷。资源门禁的单个 64 MiB `/tmp` 是测试夹具，不应描述成 Compose 已经在该门禁中逐项复现；正式 M8 仍需在冻结候选容器上验证生产布局。
 
-下列 M6/M7 数值早于当前 M8 候选，只作为工程基线；冻结候选 `C` 后必须重新测量并写入 acceptance evidence，不能直接作为 `2.8.0-rnl.1` 发布结论。
+下列 M6/M7 数值早于当前 M8 候选，只作为工程基线；冻结候选 `C` 后必须重新测量并写入 acceptance evidence，不能直接作为 `2.8.0` 发布结论。
 
 ## 固定测试资产
 
@@ -92,7 +92,7 @@ OpenRC 另外由 supervisor 写入 `openrc.log` 与 `openrc.err.log`。它们每
 - Debian 与 Alpine 安装器在 `MemTotal <= 512 MiB` 时自动写入 `LOW_MEMORY=1`。
 - OpenRC 校验 cgroup v2 的 `448 MiB` memory、零 swap、1 CPU、256 PID 以及启动 shell 的实际 cgroup 成员关系；controller 缺失或写入未生效时拒绝启动。停止后不依赖 OpenRC 0.62.6 的路径清理，而是将 `stop_post` 自身迁出、通过 `cgroup.kill` 清理精确 service cgroup、最多等待 5 秒确认 `populated=0` 后删除该目录。
 
-当前上述 OpenRC 清理覆盖 init 实际执行 `stop_post` 的正常停止路径。installer 共享锁已经消除并发写入，但不提供 SIGKILL/掉电后的持久 phase journal；`supervise-daemon` 自身异常退出后也不承诺自动清理残留 cgroup。这是 `2.8.0-rnl.1` 接受的运维限制：原生部署重新运行 installer 或重启主机，容器部署重新创建容器，不作为发布阻断项。
+当前上述 OpenRC 清理覆盖 init 实际执行 `stop_post` 的正常停止路径。installer 共享锁已经消除并发写入，但不提供 SIGKILL/掉电后的持久 phase journal；`supervise-daemon` 自身异常退出后也不承诺自动清理残留 cgroup。这是 `2.8.0` 接受的运维限制：原生部署重新运行 installer 或重启主机，容器部署重新创建容器，不作为发布阻断项。
 
 任何修改请求解码、Xray 配置生命周期、RPC 消息、报告队列或依赖图的提交，都应重新执行此门禁并比较阶段峰值。
 

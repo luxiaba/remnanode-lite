@@ -779,7 +779,7 @@ chmod 0770 "$managed_root/unsafe-parent"
 )
 
 ln -s ../../outside "$managed_root/support-current-bad"
-ln -s support/v2.8.0-rnl.1 "$managed_root/support-current-good"
+ln -s support/v9.8.7-rnl.3 "$managed_root/support-current-good"
 (
   validate_managed_parent_path() { :; }
   installer_path_has_root_owner() { :; }
@@ -1988,7 +1988,7 @@ upgrade_transaction_test_rollback_stop_gate() {
     UNIT="$fixture/unit"
     OPENRC_SVC="$fixture/openrc"
     SUPPORT_LINK="$fixture/support-current"
-    TAG=v2.8.0-rnl.1
+    TAG=v9.8.7-rnl.3
     UPGRADE_XRAY=0
     SERVICE_WAS_ACTIVE=1
     ROLLBACK_ARMED=1
@@ -2015,7 +2015,7 @@ upgrade_transaction_test_rollback_stop_gate() {
     UNIT="$fixture/unit"
     OPENRC_SVC="$fixture/openrc"
     SUPPORT_LINK="$fixture/support-current"
-    TAG=v2.8.0-rnl.1
+    TAG=v9.8.7-rnl.3
     UPGRADE_XRAY=0
     SERVICE_WAS_ACTIVE=1
     ROLLBACK_ARMED=1
@@ -2101,13 +2101,13 @@ managed_service_file_test_atomic_install() {
   local source="$fixture/source.service" target="$fixture/target.service"
   local outside="$fixture/outside.service" atomic_log="$fixture/atomic-mv"
   local support_link="$fixture/support-current"
-  local release_source="$fixture/support/v2.8.0-rnl.1/deploy/source.service"
-  mkdir -p "$fixture/support/v2.8.0-rnl.1/deploy"
+  local release_source="$fixture/support/v9.8.7-rnl.3/deploy/source.service"
+  mkdir -p "$fixture/support/v9.8.7-rnl.3/deploy"
   printf 'new-service\n' >"$source"
   printf 'new-service\n' >"$release_source"
   printf 'outside\n' >"$outside"
   chmod 0644 "$source" "$release_source" "$outside"
-  ln -s support/v2.8.0-rnl.1 "$support_link"
+  ln -s support/v9.8.7-rnl.3 "$support_link"
 
   # The production helper requires root-owned paths. Tests substitute only the
   # ownership probe/chown while retaining real inode, mode, and link checks.
@@ -2369,7 +2369,7 @@ install_entrypoints_test_delegated_enable_intent() {
     source <(sed -n '/^run_upgrade_transaction()/,/^}/p' \
       "$ROOT_DIR/scripts/$installer_script")
     REPO=example/repository
-    TAG=v2.8.0-rnl.1
+    TAG=v9.8.7-rnl.3
     SKIP_XRAY=1
     INSTALL_XRAY=1
     DRY_RUN=0

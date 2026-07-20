@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=2802d090182c9c568927852742856d6e7f42557c78d70bd0930603ff43fdda59 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=7077eede152cfd5d81c81041095586ed9060f67b88e0a35589fadeeb654b4c9f -->
 
 # Docker Compose 部署
 
@@ -256,6 +256,8 @@ docker compose logs --tail=100 remnanode
 5. 任一阶段出现无法解释的节点离线、代理失败、反复 Xray 启动失败、OOM、异常重启、zombie、资源越界或同类错误集中增长时，立即停止扩批；先回滚该批次，再保留日志和 digest 关联用于定位。
 
 回滚不依赖 Registry 移动 tag：恢复每台节点已记录的上一 Compose/digest，执行 `pull` 与 `up --force-recreate`，并重新确认 Panel 与真实流量。问题没有形成明确结论前，不要继续更新尚未触及的节点，也不要清理 canary 上的上一镜像。
+
+每个正式 Release 都必须在 release note 中链接已经完成的 M8 验收 manifest。如果没有这项记录，只能把镜像视为验收输入，不能据此进行未经观察的批量上线。
 
 ## `.env` 可选模式
 

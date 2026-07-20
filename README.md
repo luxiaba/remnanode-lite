@@ -43,9 +43,9 @@ See [Project scope and goals](docs/project.md) for the background, supported bou
 
 | Item | Current value |
 | --- | --- |
-| Project version | `2.8.0-rnl.1`; the first stable Release has not been published |
+| Project version | `2.8.0`; formal availability is defined by immutable Git tags and GitHub Releases |
 | Official contract baseline | `remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b` |
-| Panel acceptance target | `2.8.1` |
+| Panel version used for integration acceptance | `2.8.1`; it does not determine the project version |
 | rw-core | `v26.6.27` |
 | Target architectures | `linux/amd64`, `linux/arm64` |
 | M7 engineering snapshots | Ubuntu 24.04 arm64/systemd and Alpine 3.22 arm64/OpenRC container; these are not frozen-candidate M8 acceptance |
@@ -57,7 +57,7 @@ The static contract and code-level remediation are in place. A production Releas
 
 Docker Compose is the recommended deployment model. The repository includes a complete [single-file Compose template](deploy/compose.single-file.yaml) that does not require source code or a separate `.env` file.
 
-Because the first stable Release does not exist yet, select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite). Bind the image and deployment template to the same 40-character `main` commit:
+Before a formal Release is available, and whenever validating a new candidate, select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite). Bind the image and deployment template to the same 40-character `main` commit:
 
 ```bash
 (

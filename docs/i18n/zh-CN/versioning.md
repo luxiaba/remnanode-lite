@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=074a623014c2926674274e1a815c6ef55e2488152c08a470bad17f474b430b4a -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=d1ea36548d542eeab32fb79026fc98456cf3352d14e53699754a4418a5d6724c -->
 
 # 版本与镜像标签策略
 
@@ -162,7 +162,7 @@ ghcr.io/luxiaba/remnanode-lite:latest
 6. 发布说明记录真实兼容范围与已知风险；
 7. 发布 workflow 自动把同一 digest 晋升为 `latest`，并把对应 GitHub Release 标记为 Latest。
 
-仓库中出现的版本字符串可能代表开发目标。判断一个版本是否已经发布，应以 Git tag、GitHub Releases 和 GHCR 中实际存在的精确标签为准。
+仓库中出现的版本字符串可能代表开发目标。判断一个版本是否已经发布，应以 Git tag、GitHub Releases 和 GHCR 中实际存在的精确标签为准。当前源码版本是 `2.8.0`；源码字符串本身永远不能作为已经发布的证据。
 
 ## 官方版本同步
 

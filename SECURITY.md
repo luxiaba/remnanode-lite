@@ -30,11 +30,9 @@ other copies.
 
 ## Supported Versions
 
-The first final release has not yet been published. Until it is, `edge`,
-`sha-*`, and `candidate-sha-*` are candidate builds and carry no long-term
-security maintenance commitment.
-
-After the first final release, support follows this policy:
+Security support applies only to published formal releases. `edge`, `sha-*`,
+and `candidate-sha-*` are candidate builds and carry no long-term security
+maintenance commitment. At any point, support follows this policy:
 
 | Version | Security support |
 | --- | --- |

@@ -22,13 +22,12 @@ import (
 const (
 	expectedSchemaVersion = 1
 
-	expectedReleaseVersion = "2.8.0-rnl.1"
-	expectedReleaseTag     = "v2.8.0-rnl.1"
-	expectedVersionOutput  = "remnanode-lite 2.8.0-rnl.1 (contract 2.8.0)"
-
 	expectedOfficialNodeVersion = "2.8.0"
 	expectedOfficialNodeCommit  = "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b"
 	expectedPanelVersion        = "2.8.1"
+	expectedReleaseVersion      = "2.8.0"
+	expectedReleaseTag          = "v" + expectedReleaseVersion
+	expectedVersionOutput       = "remnanode-lite " + expectedReleaseVersion + " (contract " + expectedOfficialNodeVersion + ")"
 
 	expectedRWCoreVersion = "v26.6.27"
 	expectedRWCoreCommit  = "45cf2898ab12e97a55dd8f1f3d78d903340bdc9e"
@@ -44,8 +43,9 @@ const (
 	maximumClockSkew              = 5 * time.Minute
 	maximumAcceptanceFileBytes    = 1 << 20
 
-	acceptanceDirectory    = "docs/development/acceptance/v2.8.0-rnl.1"
-	manifestRepositoryPath = acceptanceDirectory + "/manifest.json"
+	acceptanceDirectory       = "docs/development/acceptance/v" + expectedReleaseVersion
+	manifestRepositoryPath    = acceptanceDirectory + "/manifest.json"
+	releaseNoteRepositoryPath = "docs/releases/v" + expectedReleaseVersion + ".md"
 )
 
 var expectedAssetSHAByArch = map[string]string{
@@ -982,9 +982,12 @@ func (repo gitRepository) validatePostCandidateChanges(ctx context.Context, cand
 func isAllowedPostCandidatePath(path string) bool {
 	switch path {
 	case "README.md",
+		"README.ru.md",
+		"README.zh-CN.md",
 		"CHANGELOG.md",
 		"docs/development/roadmap.md",
-		"docs/releases/v2.8.0-rnl.1.md",
+		"docs/i18n/zh-CN/development/roadmap.md",
+		releaseNoteRepositoryPath,
 		manifestRepositoryPath,
 		acceptanceDirectory + "/systemd.json",
 		acceptanceDirectory + "/openrc.json",

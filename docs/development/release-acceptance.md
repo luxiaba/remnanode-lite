@@ -2,7 +2,7 @@
 
 [Back to development documentation](README.md) · [General release process](../release.md)
 
-This protocol defines the machine-verifiable acceptance record for `2.8.0-rnl.1`. It does not replace real testing. Its purpose is to bind every result to one code candidate and prevent code drift after acceptance. No candidate has been frozen and no evidence has been produced yet; this document defines the protocol, not an acceptance result.
+This protocol defines the machine-verifiable acceptance record for `2.8.0`. It does not replace real testing. Its purpose is to bind every result to one code candidate and prevent code drift after acceptance. The protocol itself is not an acceptance result; actual status is established only by a complete versioned evidence directory and the corresponding formal Release.
 
 This is a versioned acceptance profile for the first release line, not a universal template that can be reused unchanged. Changes to the project version, official contract, Panel, rw-core, route count, operating systems, or resource policy require the validator and this protocol to be updated in a normal code PR before a new candidate is frozen.
 
@@ -12,14 +12,14 @@ Commit all Go code, tests, scripts, workflows, deployment assets, and governance
 
 Acceptance binaries must be built from a clean checkout of `C` by `scripts/build-release-binaries.sh`. The script requires exactly `go1.26.5`, disables workspaces and automatic toolchain drift, clears build options that could alter artifacts, and fixes `CGO_ENABLED=0`, architecture levels, `-trimpath`, release ldflags, and `-buildvcs=false`. The final release gate rebuilds both architectures with the same script and compares their SHA-256 digests.
 
-After acceptance, changes are restricted to `README.md`, root `CHANGELOG.md`, `docs/development/roadmap.md`, `docs/development/acceptance/v2.8.0-rnl.1/`, and `docs/releases/v2.8.0-rnl.1.md`. The validator requires `C` to be an ancestor of final HEAD, inspects every post-candidate commit and parent, enforces this path allowlist, and rejects merge commits during finalization. Reverting an out-of-scope code change does not make the history acceptable.
+After acceptance, changes are restricted to the root README and its Chinese/Russian translations, root `CHANGELOG.md`, the development roadmap and its Chinese translation, `docs/development/acceptance/v2.8.0/`, and `docs/releases/v2.8.0.md`. The validator requires `C` to be an ancestor of final HEAD, inspects every post-candidate commit and parent, enforces this path allowlist, and rejects merge commits during finalization. Reverting an out-of-scope code change does not make the history acceptable.
 
 On a protected branch, merge all code to `main` through a PR and use the resulting `main` commit as `C`. Create a separate acceptance-material branch from `C` and freeze `main` while acceptance is running. The final evidence PR must use squash merge so that exactly one single-parent, allowlisted finalization commit follows `C`. The validator rejects zero or multiple finalization commits, ordinary merge commits, and any change outside the allowlist.
 
 ## File layout
 
 ```text
-docs/development/acceptance/v2.8.0-rnl.1/
+docs/development/acceptance/v2.8.0/
   manifest.json
   systemd.json
   openrc.json
@@ -34,7 +34,7 @@ All six files must be tracked, non-executable regular files no larger than `1 Mi
 
 The manifest fixes the following release boundary:
 
-- `releaseVersion=2.8.0-rnl.1`, `releaseTag=v2.8.0-rnl.1`, and `decision=pass`.
+- `releaseVersion=2.8.0`, `releaseTag=v2.8.0`, and `decision=pass`.
 - `candidateCommit`, `candidateTree`, and an RFC 3339 `acceptedAt` timestamp.
 - `candidateImageDigest` must be the candidate multi-platform manifest digest returned by the registry, exactly `sha256:` followed by 64 lowercase hexadecimal characters. A tag, an image config digest, or a single-platform layer digest is not a substitute.
 - Official Node `2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`.
@@ -250,8 +250,8 @@ Record only allowlisted metrics, commands, and digests. Never commit the Secret 
 
 ```bash
 go run ./cmd/release-evidence-check \
-  -manifest docs/development/acceptance/v2.8.0-rnl.1/manifest.json \
-  -tag v2.8.0-rnl.1
+  -manifest docs/development/acceptance/v2.8.0/manifest.json \
+  -tag v2.8.0
 ```
 
 `scripts/release-check.sh` calls the same validator and then checks the release note, version, full repository gate, supply chain, and tag placement. Until genuine evidence exists, failure of the release gate is expected.

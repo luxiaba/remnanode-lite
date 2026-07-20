@@ -29,6 +29,8 @@ var (
 
 const translationHeaderMaxLine = 20
 
+const strictTranslationsEnv = "REMNANODE_DOCS_STRICT_TRANSLATIONS"
+
 var supportedTranslationLocales = map[string]struct{}{
 	"ru":    {},
 	"zh-CN": {},
@@ -92,7 +94,7 @@ func main() {
 			}
 		}
 	}
-	translationProblems, translationWarnings := validateTranslations(root, documents)
+	translationProblems, translationWarnings := validateTranslations(root, documents, strictTranslationValidation())
 	problems = append(problems, translationProblems...)
 	problems = append(problems, orphanedDocuments(documents)...)
 
@@ -451,7 +453,7 @@ func validateLink(root string, doc document, link documentLink, documents map[st
 	return ""
 }
 
-func validateTranslations(root string, documents map[string]document) ([]string, []string) {
+func validateTranslations(root string, documents map[string]document, strict bool) ([]string, []string) {
 	var problems []string
 	var warnings []string
 	translations := make(map[string]string)
@@ -528,12 +530,21 @@ func validateTranslations(root string, documents map[string]document) ([]string,
 			}
 			actualHash := fmt.Sprintf("%x", sha256.Sum256(content))
 			if actualHash != metadata.sourceSHA256 {
-				warnings = append(warnings, fmt.Sprintf("%s:%d: translation may be stale: %s has SHA-256 %s, metadata records %s", documentPath, metadata.line, source, actualHash, metadata.sourceSHA256))
+				diagnostic := fmt.Sprintf("%s:%d: translation may be stale: %s has SHA-256 %s, metadata records %s", documentPath, metadata.line, source, actualHash, metadata.sourceSHA256)
+				if strict {
+					problems = append(problems, diagnostic)
+				} else {
+					warnings = append(warnings, diagnostic)
+				}
 			}
 		}
 	}
 
 	return problems, warnings
+}
+
+func strictTranslationValidation() bool {
+	return os.Getenv(strictTranslationsEnv) == "1"
 }
 
 func translationLocaleForPath(documentPath string) (string, bool) {

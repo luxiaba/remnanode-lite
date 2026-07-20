@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=9adf3bb616a92277c4cf2bf96e5ac631998c3c15157d69c868bb60fd13727aee -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=5e345e8952ce822f786de4992b90b44660fa9747521a856dde3f20d80eb791ce -->
 
 # 发布与版本维护手册
 
@@ -214,9 +214,17 @@ docs/development/acceptance/v${VERSION}/
 
 ```text
 README.md
+README.zh-CN.md
+README.ru.md
 CHANGELOG.md
 docs/development/roadmap.md
-docs/development/acceptance/v${VERSION}/**
+docs/i18n/zh-CN/development/roadmap.md
+docs/development/acceptance/v${VERSION}/manifest.json
+docs/development/acceptance/v${VERSION}/systemd.json
+docs/development/acceptance/v${VERSION}/openrc.json
+docs/development/acceptance/v${VERSION}/panel.json
+docs/development/acceptance/v${VERSION}/compose.json
+docs/development/acceptance/v${VERSION}/resource-fault.json
 docs/releases/v${VERSION}.md
 ```
 
@@ -228,8 +236,10 @@ docs/releases/v${VERSION}.md
 git switch --detach "$C"
 git switch -c "release/v${VERSION}-docs"
 
-# 填写 evidence、Release note、CHANGELOG，并把 README/roadmap 从候选状态更新为发布状态
-git add README.md CHANGELOG.md docs/development/roadmap.md \
+# 填写 evidence、Release note、CHANGELOG，并同步 canonical README/roadmap
+# 及其持续维护的译文
+git add README.md README.zh-CN.md README.ru.md CHANGELOG.md \
+  docs/development/roadmap.md docs/i18n/zh-CN/development/roadmap.md \
   "docs/development/acceptance/v${VERSION}" \
   "docs/releases/v${VERSION}.md"
 git diff --cached --check

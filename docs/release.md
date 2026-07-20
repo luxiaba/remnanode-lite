@@ -310,9 +310,17 @@ changed. The current allowlist is:
 
 ```text
 README.md
+README.zh-CN.md
+README.ru.md
 CHANGELOG.md
 docs/development/roadmap.md
-docs/development/acceptance/v${VERSION}/**
+docs/i18n/zh-CN/development/roadmap.md
+docs/development/acceptance/v${VERSION}/manifest.json
+docs/development/acceptance/v${VERSION}/systemd.json
+docs/development/acceptance/v${VERSION}/openrc.json
+docs/development/acceptance/v${VERSION}/panel.json
+docs/development/acceptance/v${VERSION}/compose.json
+docs/development/acceptance/v${VERSION}/resource-fault.json
 docs/releases/v${VERSION}.md
 ```
 
@@ -326,9 +334,10 @@ Create a dedicated documentation branch from `C`:
 git switch --detach "$C"
 git switch -c "release/v${VERSION}-docs"
 
-# Add evidence and Release notes, update CHANGELOG, and move README/roadmap
-# from candidate status to released status.
-git add README.md CHANGELOG.md docs/development/roadmap.md \
+# Add evidence and Release notes, update CHANGELOG, and move the canonical
+# README/roadmap plus their maintained translations to released status.
+git add README.md README.zh-CN.md README.ru.md CHANGELOG.md \
+  docs/development/roadmap.md docs/i18n/zh-CN/development/roadmap.md \
   "docs/development/acceptance/v${VERSION}" \
   "docs/releases/v${VERSION}.md"
 git diff --cached --check

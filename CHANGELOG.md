@@ -4,9 +4,9 @@
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). It records notable user-facing and operational changes; GitHub Releases provide the complete diff for published versions.
 
-## [2.8.0-rnl.1] - Unreleased
+## [2.8.0] - Unreleased
 
-This is the first independent release line of `luxiaba/remnanode-lite`. Its compatibility target is pinned to official Node 2.8.0 and Panel 2.8.1.
+This is the first independent release line of `luxiaba/remnanode-lite`. Its implemented contract is pinned to official Node 2.8.0; Panel 2.8.1 is the integration acceptance environment and does not determine the project version.
 
 The first entry also records the repository takeover and architectural remediation, so it is intentionally more detailed than future entries. Later entries should contain only changes that users, operators, or maintainers need to understand.
 

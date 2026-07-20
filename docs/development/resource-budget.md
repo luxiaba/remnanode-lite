@@ -18,7 +18,7 @@ The gate is [`scripts/test-low-memory.sh`](../../scripts/test-low-memory.sh), an
 
 Production Compose uses a different tmpfs layout that better reflects deployment: `/run`, `/tmp`, and rw-core logs total `48 MiB`, and logs are not written to a persistent volume. The gate's single 64 MiB `/tmp` is a test fixture. It must not be described as a field-by-field reproduction of the Compose layout. Formal M8 acceptance must still verify the production layout in a frozen-candidate container.
 
-The M6/M7 figures below predate the current M8 candidate and are engineering baselines only. After candidate `C` is frozen, the measurements must be repeated and recorded in acceptance evidence. They are not, by themselves, a release conclusion for `2.8.0-rnl.1`.
+The M6/M7 figures below predate the current M8 candidate and are engineering baselines only. After candidate `C` is frozen, the measurements must be repeated and recorded in acceptance evidence. They are not, by themselves, a release conclusion for `2.8.0`.
 
 ## Fixed Test Assets
 
@@ -93,7 +93,7 @@ Production `node.env` must be a regular, non-symlink file. Go reads at most `1 M
 - Debian and Alpine installers automatically set `LOW_MEMORY=1` when `MemTotal <= 512 MiB`.
 - OpenRC verifies cgroup v2 limits of `448 MiB` memory, zero swap, 1 CPU, and 256 PIDs, plus the startup shell's actual cgroup membership. It refuses to start if a controller is unavailable or a write does not take effect. Shutdown does not depend on OpenRC 0.62.6 removing the path: `stop_post` first moves itself out, kills the exact service cgroup through `cgroup.kill`, waits up to 5 seconds for `populated=0`, and then removes the directory.
 
-The OpenRC cleanup above covers the normal stop path where init actually runs `stop_post`. The shared installer lock removes concurrent writes, but it is not a persistent phase journal for `SIGKILL` or power loss. Nor does the project promise automatic cleanup of a residual cgroup if `supervise-daemon` itself exits abnormally. These are accepted operational limitations for `2.8.0-rnl.1`: rerun the installer or reboot for a native deployment, and recreate the container for a container deployment. They are not release blockers.
+The OpenRC cleanup above covers the normal stop path where init actually runs `stop_post`. The shared installer lock removes concurrent writes, but it is not a persistent phase journal for `SIGKILL` or power loss. Nor does the project promise automatic cleanup of a residual cgroup if `supervise-daemon` itself exits abnormally. These are accepted operational limitations for `2.8.0`: rerun the installer or reboot for a native deployment, and recreate the container for a container deployment. They are not release blockers.
 
 Any change to request decoding, the Xray configuration lifecycle, RPC messages, report queues, or the dependency graph should rerun this gate and compare stage peaks.
 

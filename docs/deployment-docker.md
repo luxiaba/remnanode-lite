@@ -252,7 +252,7 @@ Deploy a fleet only from one manifest digest that has completed M8 acceptance. E
 
 Rollback does not depend on moving a registry tag. Restore each node's recorded previous Compose file or digest, run `pull` and `up --force-recreate`, and confirm Panel connectivity and real traffic again. Until the issue has a clear conclusion, do not continue with untouched nodes or prune the previous image from canaries.
 
-The repository has not yet recorded completed M8 evidence for the first formal Release. Candidate images remain acceptance inputs, not authorization for an unobserved fleet rollout.
+Each formal Release must link its completed M8 evidence manifest from its release note. If that record is absent, treat the image as an acceptance input, not authorization for an unobserved fleet rollout.
 
 ## Optional `.env` layout
 
