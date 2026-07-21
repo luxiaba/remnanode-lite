@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=1f17183c5e55ab79b185a9a9e82f0e2d7acd66101271492190df766d4cef9a33 -->
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=22c34892be067efa920923d908975c69bf71121a88dd1fd2b873a82757cd7b13 -->
 # 512 MiB 资源预算与 M6-M8 基准
 
 > 这是中文译文；资源数字和边界以[英文原文](../../../development/resource-budget.md)为准。
@@ -9,11 +9,11 @@
 
 ## 验收边界
 
-`v2.8.0` 唯一会阻塞发布的资源与运行时验收方案，是冻结候选上的 `docker-production-smoke-v1`。它要求在 `amd64` 上以镜像摘要固定生产 Compose 部署，接入真实 Panel、通过真实代理流量，并记录实际内存和 PID 用量；容器必须持续健康运行，且 OOM kill 和重启次数均为零。[验收协议](release-acceptance.md#docker-生产-smoke)定义完整条件，其中包括在指定宿主、容器、健康和就绪限制下至少运行 600 秒。
+`v2.8.0` 唯一会阻塞发布的资源与运行时验收方案，是冻结候选上的 `docker-production-smoke-v2`。它要求在 `amd64` 上以镜像摘要固定生产 Compose 部署，接入真实 Panel、通过真实代理流量，并记录实际内存和 PID 用量；容器必须持续健康运行，且 OOM kill 和重启次数均为零。[验收协议](release-acceptance.md#docker-生产-smoke)定义完整条件，其中包括在精确的容器、健康和就绪限制下至少运行 600 秒。宿主的内存、CPU、磁盘和 swap 总量是必填的环境观测值，不作为容量验收阈值。
 
-`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 和 `fault-and-rollback-injection` 均作为不阻塞发布的后续 profile 延后执行。未在当前候选上运行这些 profile 时，不得暗示已经取得相应结果。
+`whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 和 `fault-and-rollback-injection` 均作为不阻塞发布的后续 profile 延后执行。未在当前候选上运行这些 profile 时，不得暗示已经取得相应结果。
 
-生产目标仍是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。带日期的 M6 工程门禁曾将 Node 测试进程与真实 rw-core 放在同一个 cgroup 内，并使用以下限制：
+生产目标仍是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`，但 `docker-production-smoke-v2` 不声称冻结候选已经在这一精确整机规格上完成运行时验证。该 profile 严格验证生产容器边界：`448 MiB` 内存上限、`448 MiB` 内存与 swap 合计上限、`1 CPU` 和 `256` 个 PID。内存与 swap 合计上限等于内存上限，因此即使宿主有 swap，容器也没有额外 swap 配额。带日期的 M6 工程门禁曾将 Node 测试进程与真实 rw-core 放在同一个 cgroup 内，并使用以下限制：
 
 - `448 MiB` hard memory limit，为宿主机内核与基础服务保留至少 `64 MiB`。
 - `1 CPU`、`256` 个 PID、禁用 swap 与外部网络。
@@ -23,7 +23,7 @@
 
 历史门禁脚本为 [`scripts/test-low-memory.sh`](../../../../scripts/test-low-memory.sh)，Linux 集成测试为 [`internal/xray/resource_linux_integration_test.go`](../../../../internal/xray/resource_linux_integration_test.go)。M6 执行还通过最小 protobuf wire client 验证了系统统计、inbound 用户数、VLESS 热增删和用户 IP 统计 RPC。
 
-生产 Compose 使用另一套 tmpfs 布局：`/run`、`/tmp` 和 rw-core 日志合计 `48 MiB`，日志不写入持久卷。历史门禁中的单个 64 MiB `/tmp` 只是测试夹具，并未逐项复现生产 Compose。阻塞发布的 `amd64` smoke 使用生产布局，但不重复历史 50,000 用户负载。
+生产 Compose 使用另一套 tmpfs 布局：`/run`、`/tmp` 和 rw-core 日志合计 `48 MiB`，日志不写入持久卷。历史门禁中的单个 64 MiB `/tmp` 只是测试夹具，并未逐项复现生产 Compose。阻塞发布的 `amd64` smoke 使用生产布局，但不重复历史 50,000 用户负载，也不证明另一项整机目标。
 
 2026-07-15 的 M6 数据和 2026-07-19 的 M7 init 快照都早于当前 M8 候选。它们仍是有价值的工程基线，但不是当前候选的运行时证据，也不需要为发布 `2.8.0` 重新执行。
 

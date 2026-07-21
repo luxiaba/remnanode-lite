@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/release-acceptance.md; source-sha256=926ff50d2b1a9cbf3b0bd4942d3f2262d0ea1e98df149cf5b5c28d279dab554e -->
+<!-- translation: locale=zh-CN; source=docs/development/release-acceptance.md; source-sha256=816898231107e8370369b09aa5f51439e895d70387ec48051f7715359069bc1c -->
 # v2.8.0 发布验收证据协议
 
 > 这是中文译文；验收字段和规则以[英文原文](../../../development/release-acceptance.md)为准。
@@ -6,13 +6,14 @@
 [返回开发文档](README.md) | [通用发布流程](../release.md)
 
 这是 `v2.8.0` 专用的验收协议，定义 schema version 2 和
-`docker-production-smoke-v1` profile。它不表示每个已打包平台或部署方式都已经在生产
+`docker-production-smoke-v2` profile。它不表示每个已打包平台或部署方式都已经在生产
 环境运行过。
 
 验收绑定一个冻结源码候选、一个带 attestation 的多架构镜像 digest，以及一次在原生
-amd64/x86_64 上运行的真实低内存 Docker smoke。运行时观测由 Release Owner 签字
-确认。验证器可以检查记录、Git 历史、摘要、产物、阈值和签注，但不能独立证明所记录的
-Panel 会话或流量确实发生。因此，这份证据可以审计，但并非不可伪造。
+amd64/x86_64 上按规范容器限制运行的生产 Docker smoke。宿主容量只作为环境背景记录，
+不作为验收阈值。运行时观测由 Release Owner 签字确认。验证器可以检查记录、Git 历史、
+摘要、产物、阈值和签注，但不能独立证明所记录的 Panel 会话或流量确实发生。因此，这份
+证据可以审计，但并非不可伪造。
 
 ## 候选冻结
 
@@ -49,7 +50,7 @@ docs/development/acceptance/v2.8.0/
 `manifest.json` 固定发布与产物身份：
 
 - `schemaVersion=2` 与
-  `acceptanceProfile=docker-production-smoke-v1`。
+  `acceptanceProfile=docker-production-smoke-v2`。
 - `releaseVersion=2.8.0`、`releaseTag=v2.8.0`、`decision=pass`。
 - candidate commit、tree、OCI manifest digest 和 RFC3339 验收时间；
   `acceptedAt` 不得早于 smoke evidence 的完成时间。
@@ -67,6 +68,7 @@ deferred 列表顺序和内容必须精确如下：
 
 ```json
 [
+  "whole-host-512mib-runtime",
   "arm64-production-runtime",
   "native-systemd-install",
   "native-openrc-install",
@@ -77,8 +79,9 @@ deferred 列表顺序和内容必须精确如下：
 ```
 
 这些项目是 `v2.8.0` profile 明确记录的限制，不阻断发布，也不得描述成已经通过。
-带日期的 M6 50,000 用户与 M7 原生 init 工程测量仍是有用的历史基线，但不是 `C`
-的运行时 evidence。
+其中，`whole-host-512mib-runtime` 表示本 profile 不证明 `C` 已在整机
+`512 MiB RAM / 1 vCPU / 2 GB disk` 上运行。带日期的 M6 50,000 用户与 M7 原生
+init 工程测量仍是有用的历史基线，但不是 `C` 的运行时 evidence。
 
 风险 severity 只能是 `P1`、`P2`、`P3`，status 只能是 `open` 或
 `closed`，并且必须包含 `releaseBlocking` 布尔值。任何 release-blocking
@@ -90,7 +93,7 @@ Manifest 的规范结构如下：
 ```json
 {
   "schemaVersion": 2,
-  "acceptanceProfile": "docker-production-smoke-v1",
+  "acceptanceProfile": "docker-production-smoke-v2",
   "releaseVersion": "2.8.0",
   "releaseTag": "v2.8.0",
   "candidateCommit": "<40-lowercase-hex>",
@@ -118,6 +121,7 @@ Manifest 的规范结构如下：
     }
   },
   "deferredValidation": [
+    "whole-host-512mib-runtime",
     "arm64-production-runtime",
     "native-systemd-install",
     "native-openrc-install",
@@ -143,7 +147,8 @@ Manifest 的规范结构如下：
 `deploy/compose.single-file.yaml`。只能修改完整 Panel Secret、节点端口和镜像
 引用。镜像必须固定为
 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}`。不得放宽模板中的资源、
-capability、文件系统、init、healthcheck 或日志设置。
+capability、文件系统、init、healthcheck 或日志设置。宿主规格可以高于整机目标，也可以
+配置 swap；这两种情况都不会放宽精确的容器限制。
 
 最终检查必须证明同一个容器已经运行至少 600 秒。evidence 的 `startedAt` 必须与
 Docker `.State.StartedAt` 完全相同，且 `finishedAt - startedAt` 至少为 600 秒。
@@ -159,16 +164,18 @@ Docker `.State.StartedAt` 完全相同，且 `finishedAt - startedAt` 至少为 
   的 SHA-256，而不是当前 checkout 的摘要。
 - 精确包含 `linux/amd64`、`linux/arm64` 的 manifest platform 集合。
 - 原生 `amd64` / `x86_64`、kernel、Docker Engine 和 Docker Compose 身份。
-- 真实宿主：480..512 MiB memory、1 CPU、1792..2048 MiB total disk、zero swap。
+- 宿主观测值：内存总量、CPU 数和磁盘容量必须为正数，swap 容量不得为负数。这些必填值
+  只描述运行环境，不与整机目标比较，因此允许更大的宿主，也允许宿主配置 swap。
 - 精确 Node version output 和 amd64 candidate binary SHA-256。
 - 64 字符 Docker container ID、固定到 digest 的 `.Config.Image` 和精确
-  `.State.StartedAt`；名为 `remnanode` 且正在运行的容器，health 为 healthy、
+  `.State.StartedAt`；名为 `remnanode-lite` 且正在运行的容器，health 为 healthy、
   healthcheck exit code 为 0、至少一次连续成功、OOM kill 为 0、restart 为 0。
 - 实际 Docker 配置闭包：host network、`unless-stopped`、只读 rootfs、
   no-new-privileges、启用 init 且 PID 1 为 `docker-init` 或 `tini`、精确的
   drop/add capability、三个 tmpfs 的 size/mode/options、精确 healthcheck、精确
   `json-file` options、nofile soft/hard limit 和 35 秒 stop grace period。
-- 实际限制：448 MiB memory、448 MiB memory plus swap、1 CPU、256 PIDs。
+- 实际限制：448 MiB 内存上限、448 MiB 内存与 swap 合计上限、1 CPU、256 PIDs。
+  内存与 swap 合计上限等于内存上限，因此即使宿主有 swap，容器也没有额外 swap 配额。
 - 正数 memory current/peak 与 PID current/peak；current 不大于 peak，peak 不超过
   配置上限。
 - low-memory mode、ASN database、internal socket、listener readiness 全部通过。
@@ -176,6 +183,9 @@ Docker `.State.StartedAt` 完全相同，且 `finishedAt - startedAt` 至少为 
 - 保留且已脱敏的原始采集包 SHA-256。
 - Release Owner 签注：operator `luxiaba`、role `release-owner`、decision
   `accept`。
+
+这些检查证明候选在规范容器资源边界内运行，但不证明另一项整机目标；后者明确记录为
+延期的 `whole-host-512mib-runtime` profile。
 
 Evidence 的规范结构如下：
 
@@ -187,7 +197,7 @@ Evidence 的规范结构如下：
   "status": "pass",
   "startedAt": "<exact container .State.StartedAt RFC3339 value>",
   "finishedAt": "<RFC3339 at least 600 seconds after startedAt>",
-  "command": ["docker", "inspect", "remnanode"],
+  "command": ["docker", "inspect", "remnanode-lite"],
   "candidateImageDigest": "sha256:<same digest as manifest>",
   "imageReference": "ghcr.io/luxiaba/remnanode-lite@sha256:<same digest>",
   "source": {
@@ -203,10 +213,10 @@ Evidence 的规范结构如下：
     "dockerComposeVersion": "<non-empty>"
   },
   "host": {
-    "memoryTotalBytes": 536870912,
-    "cpuCount": 1,
-    "diskTotalBytes": 2147483648,
-    "swapTotalBytes": 0
+    "memoryTotalBytes": 2061541376,
+    "cpuCount": 2,
+    "diskTotalBytes": 21474836480,
+    "swapTotalBytes": 1073737728
   },
   "node": {
     "versionOutput": "remnanode-lite 2.8.0 (contract 2.8.0)",
@@ -214,7 +224,7 @@ Evidence 的规范结构如下：
   },
   "container": {
     "id": "<64-lowercase-hex Docker container ID>",
-    "name": "remnanode",
+    "name": "remnanode-lite",
     "imageReference": "ghcr.io/luxiaba/remnanode-lite@sha256:<same digest>",
     "startedAt": "<exactly equal to top-level startedAt>",
     "status": "running",

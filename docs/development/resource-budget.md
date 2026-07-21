@@ -6,11 +6,11 @@ This document collects dated engineering measurements and the current resource p
 
 ## Acceptance Boundary
 
-For `v2.8.0`, the only blocking resource and runtime profile is `docker-production-smoke-v1` on the frozen candidate. It runs the digest-pinned production Compose deployment on `amd64` against a real Panel and real proxy traffic, records observed memory and PID usage, and requires the container to stay healthy with zero OOM kills and restarts. The [acceptance protocol](release-acceptance.md#docker-production-smoke) defines the full requirements, including at least 600 seconds under the specified host, container, health, and readiness limits.
+For `v2.8.0`, the only blocking resource and runtime profile is `docker-production-smoke-v2` on the frozen candidate. It runs the digest-pinned production Compose deployment on `amd64` against a real Panel and real proxy traffic, records observed memory and PID usage, and requires the container to stay healthy with zero OOM kills and restarts. The [acceptance protocol](release-acceptance.md#docker-production-smoke) defines the full requirements, including at least 600 seconds under the exact container, health, and readiness limits. Host memory, CPU, disk, and swap totals are required environment observations, not pass/fail capacity thresholds.
 
-`arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` are deferred, non-blocking follow-up profiles. Results from those profiles must not be implied when they have not been run against the current candidate.
+`whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` are deferred, non-blocking follow-up profiles. Results from those profiles must not be implied when they have not been run against the current candidate.
 
-The production target remains a whole machine with `512 MiB RAM / 1 vCPU / 2 GB disk`. The dated M6 engineering gate placed the Node test process and a real rw-core in the same cgroup with these limits:
+The production target remains a whole machine with `512 MiB RAM / 1 vCPU / 2 GB disk`, but `docker-production-smoke-v2` does not claim frozen-candidate runtime coverage on that exact whole-host specification. Its strict resource boundary is the production container: `448 MiB` memory, a `448 MiB` combined memory-and-swap limit, `1 CPU`, and `256` PIDs. Equal memory and combined memory-and-swap limits leave no additional container swap allowance, even if the host has swap. The dated M6 engineering gate placed the Node test process and a real rw-core in the same cgroup with these limits:
 
 - A `448 MiB` hard memory limit, leaving at least `64 MiB` for the host kernel and base services.
 - `1 CPU`, `256` PIDs, no swap, and no external network access.
@@ -20,7 +20,7 @@ The production target remains a whole machine with `512 MiB RAM / 1 vCPU / 2 GB 
 
 The historical gate is [`scripts/test-low-memory.sh`](../../scripts/test-low-memory.sh), and the Linux integration test is [`internal/xray/resource_linux_integration_test.go`](../../internal/xray/resource_linux_integration_test.go). The M6 run also verified system statistics, inbound user counts, VLESS hot add/remove, and user-IP statistics RPCs through the minimal protobuf wire client.
 
-Production Compose uses a different tmpfs layout: `/run`, `/tmp`, and rw-core logs total `48 MiB`, with no persistent log volume. The historical gate's single 64 MiB `/tmp` is only a test fixture, not a field-by-field reproduction of that layout. The blocking `amd64` smoke uses the production Compose layout but does not repeat the historical 50,000-user workload.
+Production Compose uses a different tmpfs layout: `/run`, `/tmp`, and rw-core logs total `48 MiB`, with no persistent log volume. The historical gate's single 64 MiB `/tmp` is only a test fixture, not a field-by-field reproduction of that layout. The blocking `amd64` smoke uses the production Compose layout but does not repeat the historical 50,000-user workload or prove the separate whole-host target.
 
 The M6 figures from 2026-07-15 and M7 init snapshots from 2026-07-19 predate the current M8 candidate. They remain useful engineering baselines, but they are not current-candidate runtime evidence and do not need to be repeated for `2.8.0`.
 

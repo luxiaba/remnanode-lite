@@ -173,11 +173,16 @@ The table summarizes only core constraints. Executable schemas in `internal/cont
 
 The previously recorded TLS/socket and system supply-chain differences are closed. There is currently no known static P1/P2 difference in the `/node` contract.
 
-The release-blocking runtime profile for `v2.8.0` is `docker-production-smoke-v1`. The exact candidate image digest must run through the production single-file Compose template on an `x86_64`/`amd64` host, report the expected version, connect to a real Panel 2.8.1, carry real proxy traffic, record cgroup memory and PID observations, and remain healthy with zero OOM kills and zero restarts.
+The release-blocking runtime profile for `v2.8.0` is `docker-production-smoke-v2`. The exact candidate image digest must run through the production Compose template on a recorded native `x86_64`/`amd64` host, report the expected version, connect to a real Panel 2.8.1, carry real proxy traffic, record host capacity plus cgroup memory and PID observations, and remain healthy with zero OOM kills and zero restarts. Host size is not an admission limit; the container must still have exactly 448 MiB memory, no additional container swap, 1 CPU, and 256 PIDs.
 
-The `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, repeated 50,000-user load, 24-hour soak, and fault/rollback profiles are deferred and non-blocking. The acceptance manifest and release risks must show that they were not run, rather than reporting them as passed.
+The `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, repeated 50,000-user load, 24-hour soak, and fault/rollback profiles are deferred and non-blocking. The acceptance manifest and release risks must show that they were not run, rather than reporting them as passed.
 
 Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd and OpenRC remain equivalent native deployment entry points.
+
+Both maintained production Compose templates use `remnanode-lite` for the
+service, container, and hostname. They interpolate the same explicit runtime
+mapping from `.env`, apply production defaults, and reject a missing or empty
+`SECRET_KEY` before container creation; `.env` is not injected wholesale.
 
 Runtime `dump-config` is an accepted deferred difference. Manager retains the complete canonical configuration only while rw-core starts, releases it after readiness, and then has `CurrentConfigJSON` return `{}`. This is a memory tradeoff for 512 MiB nodes and does not change the `/node` or rw-core startup contract. Restoring the diagnostic later requires a bounded design; a second large resident configuration copy is not acceptable.
 

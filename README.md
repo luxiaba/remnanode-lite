@@ -30,62 +30,78 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 - Includes a maintained low-memory Compose profile for 512 MiB servers.
 - Supports live user updates, statistics, connection management, and the official plugin rule formats.
 - Publishes multi-architecture images to GHCR with SBOM, provenance, and build attestations.
-- Uses one Compose file for deployment. No source tree, `.env` file, or persistent data volume is required.
+- Uses one Compose file for deployment. No source tree or persistent data volume is required, and `.env` remains optional.
 
 ## Docker quick start
 
 You need Docker Engine with Compose v2, a Node created in Remnawave Panel, and the complete Secret Key for that Node. The port must be reachable from the Panel. Commands below assume a root shell; use `sudo` where needed.
 
-Download the Compose file from the latest stable Release:
+Download the Compose file and environment template from the latest stable Release:
 
 ```bash
-mkdir -p /opt/remnanode
-cd /opt/remnanode
+mkdir -p /opt/remnanode-lite
+cd /opt/remnanode-lite
 
 curl -fL \
   https://github.com/luxiaba/remnanode-lite/releases/latest/download/docker-compose.single-file.yaml \
   -o docker-compose.yaml
+curl -fL \
+  https://github.com/luxiaba/remnanode-lite/releases/latest/download/remnanode.env.example \
+  -o .env
 
-chmod 600 docker-compose.yaml
+chmod 600 docker-compose.yaml .env
 ```
 
-The downloaded file is pinned to the exact image version from that Release.
+The Compose CLI automatically reads `.env` from this directory. Both downloaded files select the exact image version from that Release. Set the Node port and complete Secret from the Panel in `.env`:
 
-Open `docker-compose.yaml` and set the port and complete Secret from the Panel:
+```env
+NODE_PORT=38329
+SECRET_KEY=PASTE_THE_COMPLETE_PANEL_SECRET_KEY
+```
+
+The Compose fallback for `NODE_PORT` is `2222`; `38329` is only an example. Whichever port you use must match the Node port configured in the Panel.
+
+Existing deployments may keep their current custom directory; changing the directory name is not required for an upgrade.
+
+To keep a literal single-file deployment without `.env`, replace the `SECRET_KEY` interpolation in `docker-compose.yaml` with the complete value directly. The following example also changes the port fallback to `38329`:
 
 ```yaml
 environment:
-  NODE_PORT: "38329"
+  NODE_PORT: "${NODE_PORT:-38329}"
   SECRET_KEY: "PASTE_THE_COMPLETE_PANEL_SECRET_KEY"
 ```
 
 Start the Node:
 
 ```bash
-cd /opt/remnanode
+cd /opt/remnanode-lite
 docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build
 docker compose ps
-docker compose logs --tail=100 remnanode
+docker compose logs --tail=100 remnanode-lite
 ```
 
 The container should become healthy, then the Node should return online in the Panel. Confirm the deployment with real proxy traffic. Container health alone does not check Panel connectivity or rw-core traffic.
 
 The official container's `NODE_PORT` and `SECRET_KEY` can be reused when migrating. Stop the old container before starting this one. The [Docker deployment guide](docs/deployment-docker.md) covers migration, exact-version installs, digest pinning, and rollback.
 
-## Common Docker environment variables
+## Docker Compose environment variables
 
-Most deployments only need to change `NODE_PORT` and `SECRET_KEY`. Add optional values under the same Compose `environment` mapping when they are needed.
+Most deployments only need to set `NODE_PORT` and `SECRET_KEY`. The maintained Compose files interpolate exactly these eight variables:
 
-| Variable | Required | Release Compose value | Purpose |
+| Variable | Required in `.env` | Compose fallback | Purpose |
 | --- | --- | --- | --- |
-| `NODE_PORT` | Yes | `38329` | HTTPS port used by the Panel. It must match the Node port configured there. |
-| `SECRET_KEY` | Yes | Placeholder | Complete base64 or base64url Secret supplied by the Panel. |
+| `REMNANODE_IMAGE` | No | Exact image selected by the Release Compose file | Image tag or `name@sha256:...`; used by Compose and not passed to the Node. |
+| `NODE_PORT` | No | `2222` | HTTPS port used by the Panel. It must match the Node port configured there. |
+| `NODE_BIND_ADDR` | No | Empty | Listen on a specific local address. Empty listens on all local addresses. |
+| `SECRET_KEY` | Yes, unless set directly in YAML | None; interpolation fails when empty | Complete base64 or base64url Secret supplied by the Panel. |
 | `LOW_MEMORY` | No | `1` | Enables the low-memory limits used by the small-server profile. |
-| `NODE_BIND_ADDR` | No | Not set | Listen on a specific local address. When unset, the Node listens on all local addresses. |
-| `BODY_LIMIT_MB` | No | Automatic | Overrides the Node API body limit. Low-memory mode selects 16 MiB automatically. |
-| `GOMEMLIMIT` | No | Automatic | Overrides the Go runtime soft memory limit. Low-memory mode selects 180 MiB automatically. |
+| `DISABLE_HASHED_SET_CHECK` | No | `false` | Debug-only switch that forces every start request to restart rw-core. |
+| `BODY_LIMIT_MB` | No | Empty (automatic) | Overrides the Node API body limit. Low-memory mode selects 16 MiB automatically. |
+| `GOMEMLIMIT` | No | Empty (automatic) | Overrides the Go runtime soft memory limit. Low-memory mode selects 180 MiB automatically. |
+
+For interpolation, precedence is shell environment > `.env` > the fallback written in the Compose file. The `:-` form uses its fallback when the resolved value is unset or empty. Compose passes only the seven runtime variables explicitly listed under `environment`; `REMNANODE_IMAGE` is Compose-only, and unknown keys in `.env` are not injected into the container.
 
 Keep the mapping form shown above. Do not write `- SECRET_KEY="..."`: in that list form the quote characters become part of the value and the Secret cannot be decoded. Keep the Compose file private because Docker stores inline environment values in its local metadata.
 
@@ -96,13 +112,13 @@ See the [configuration reference](docs/configuration.md) for every runtime setti
 Follow the Node logs:
 
 ```bash
-docker compose logs --tail=100 -f remnanode
+docker compose logs --tail=100 -f remnanode-lite
 ```
 
 Follow rw-core output and errors:
 
 ```bash
-docker exec -it remnanode tail -n 50 -F \
+docker exec -it remnanode-lite tail -n 50 -F \
   /var/log/remnanode/xray.out.log \
   /var/log/remnanode/xray.err.log
 ```
@@ -110,7 +126,7 @@ docker exec -it remnanode tail -n 50 -F \
 Check the running version:
 
 ```bash
-docker exec remnanode remnanode-lite version
+docker exec remnanode-lite remnanode-lite version
 ```
 
 To update, change `image:` first when moving between exact versions, then pull and recreate the container:
@@ -143,6 +159,8 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | Platforms | `linux/amd64`, `linux/arm64` |
 | Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose service limit | `448 MiB RAM`, no additional swap |
+
+The whole-host size is a design target: the v2.8.0 formal smoke strictly validates the container at `448 MiB / 1 CPU` with no additional swap, while `whole-host-512mib-runtime` remains deferred.
 
 The resource target is the baseline for the maintained Compose profile, not a promise that every traffic pattern or plugin configuration fits the same machine. Measurements and limits are documented in the [resource budget](docs/development/resource-budget.md).
 

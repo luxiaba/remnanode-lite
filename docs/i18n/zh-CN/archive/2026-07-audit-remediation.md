@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=7cc6a493ccfe69f5ea705b93411dfe6c583034d7837700894590b53c484637c8 -->
+<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=9cdc7106bc95f54f1c542cbf30491410ef75458ff38feda098a1d65ed9ba7605 -->
 # 2026-07 静态审计整改记录（归档）
 
 > 这是中文译文；涉及历史记录和规则时，请以[英文原文](../../../archive/2026-07-audit-remediation.md)为准。
@@ -8,8 +8,10 @@
 这里记录的是 2026 年 7 月为首个独立版本线完成的静态审计和整改工作，仅供回顾，不是当前待办或新维护者指南。审计早于仓库历史重置，原基线 commit 已不存在于当前 Git 历史。仍需追踪的事实可以在代码和测试、[2.8.0 契约基线](../development/contract-2.8.0.md)、[资源预算](../development/resource-budget.md)和[发布验收协议](../development/release-acceptance.md)中找到。
 
 下文的 M8 计划原本要求原生和双运行时测试、50,000 用户测试及 24 小时 soak。对于尚未
-发布的 `v2.8.0`，它已经由 schema version 2 和 `docker-production-smoke-v1` 取代。
-这些旧场景现在均已延期且不阻塞发布；实际发布门禁以当前验收协议为准。
+发布的 `v2.8.0`，它已经由 schema version 2 和 `docker-production-smoke-v2` 取代。
+当前 profile 会在实际记录的宿主机上严格验证容器资源边界；精确整机 512 MiB 运行、
+旧场景和其它已命名的后续 profile 均已延期且不阻塞发布。实际发布门禁以当前验收协议
+为准。
 
 本记录形成时，M0-M7 整改已经完成，M8 负责冻结候选的真实 Panel/Linux、资源、恢复和
 长期运行测试。掉电或 installer/supervisor 被强制终止后的自动恢复不在范围内；操作人员

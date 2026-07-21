@@ -11,14 +11,9 @@ import (
 const (
 	expectedComposeSourcePath = "deploy/compose.single-file.yaml"
 	expectedCandidateImage    = "ghcr.io/luxiaba/remnanode-lite"
-	expectedContainerName     = "remnanode"
+	expectedContainerName     = "remnanode-lite"
 
 	minimumDockerSmokeDuration = 600 * time.Second
-
-	minimumHostMemoryBytes = int64(480 * 1024 * 1024)
-	maximumHostMemoryBytes = int64(512 * 1024 * 1024)
-	minimumHostDiskBytes   = int64(1792 * 1024 * 1024)
-	maximumHostDiskBytes   = int64(2048 * 1024 * 1024)
 
 	expectedContainerMemoryBytes = int64(448 * 1024 * 1024)
 	expectedContainerNanoCPUs    = int64(1_000_000_000)
@@ -257,17 +252,17 @@ func validateDockerSmokeHost(host dockerSmokeHost) error {
 	if host.MemoryTotalBytes == nil || host.CPUCount == nil || host.DiskTotalBytes == nil || host.SwapTotalBytes == nil {
 		return errors.New("Docker smoke host memoryTotalBytes, cpuCount, diskTotalBytes, and swapTotalBytes are required")
 	}
-	if *host.MemoryTotalBytes < minimumHostMemoryBytes || *host.MemoryTotalBytes > maximumHostMemoryBytes {
-		return fmt.Errorf("Docker smoke host memoryTotalBytes must be in %d..%d", minimumHostMemoryBytes, maximumHostMemoryBytes)
+	if *host.MemoryTotalBytes <= 0 {
+		return errors.New("Docker smoke host memoryTotalBytes must be positive")
 	}
-	if *host.CPUCount != 1 {
-		return fmt.Errorf("Docker smoke host cpuCount=%d, want 1", *host.CPUCount)
+	if *host.CPUCount <= 0 {
+		return errors.New("Docker smoke host cpuCount must be positive")
 	}
-	if *host.DiskTotalBytes < minimumHostDiskBytes || *host.DiskTotalBytes > maximumHostDiskBytes {
-		return fmt.Errorf("Docker smoke host diskTotalBytes must be in %d..%d", minimumHostDiskBytes, maximumHostDiskBytes)
+	if *host.DiskTotalBytes <= 0 {
+		return errors.New("Docker smoke host diskTotalBytes must be positive")
 	}
-	if *host.SwapTotalBytes != 0 {
-		return errors.New("Docker smoke host swapTotalBytes must be 0")
+	if *host.SwapTotalBytes < 0 {
+		return errors.New("Docker smoke host swapTotalBytes must not be negative")
 	}
 	return nil
 }

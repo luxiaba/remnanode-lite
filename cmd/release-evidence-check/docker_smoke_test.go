@@ -107,32 +107,32 @@ func TestValidateDockerSmokeEvidenceFailures(t *testing.T) {
 			wantErr: "host memoryTotalBytes",
 		},
 		{
-			name: "host memory too large",
+			name: "host memory is not positive",
 			mutate: func(evidence *dockerSmokeEvidence, _ *evidenceTiming) {
-				evidence.Host.MemoryTotalBytes = int64Pointer(maximumHostMemoryBytes + 1)
+				evidence.Host.MemoryTotalBytes = int64Pointer(0)
 			},
-			wantErr: "memoryTotalBytes must be",
+			wantErr: "memoryTotalBytes must be positive",
 		},
 		{
-			name: "host cpu mismatch",
+			name: "host cpu is not positive",
 			mutate: func(evidence *dockerSmokeEvidence, _ *evidenceTiming) {
-				evidence.Host.CPUCount = intPointer(2)
+				evidence.Host.CPUCount = intPointer(0)
 			},
-			wantErr: "cpuCount=2",
+			wantErr: "cpuCount must be positive",
 		},
 		{
-			name: "host disk too small",
+			name: "host disk is not positive",
 			mutate: func(evidence *dockerSmokeEvidence, _ *evidenceTiming) {
-				evidence.Host.DiskTotalBytes = int64Pointer(minimumHostDiskBytes - 1)
+				evidence.Host.DiskTotalBytes = int64Pointer(0)
 			},
-			wantErr: "diskTotalBytes must be",
+			wantErr: "diskTotalBytes must be positive",
 		},
 		{
-			name: "host swap enabled",
+			name: "host swap is negative",
 			mutate: func(evidence *dockerSmokeEvidence, _ *evidenceTiming) {
-				evidence.Host.SwapTotalBytes = int64Pointer(1)
+				evidence.Host.SwapTotalBytes = int64Pointer(-1)
 			},
-			wantErr: "swapTotalBytes must be 0",
+			wantErr: "swapTotalBytes must not be negative",
 		},
 		{
 			name: "wrong node version",
@@ -222,6 +222,20 @@ func TestValidateDockerSmokeEvidenceFailures(t *testing.T) {
 			name: "wrong memory limit",
 			mutate: func(evidence *dockerSmokeEvidence, _ *evidenceTiming) {
 				evidence.Container.MemoryLimitBytes = int64Pointer(expectedContainerMemoryBytes + 1)
+			},
+			wantErr: "container limits",
+		},
+		{
+			name: "container swap is enabled",
+			mutate: func(evidence *dockerSmokeEvidence, _ *evidenceTiming) {
+				evidence.Container.MemorySwapLimitBytes = int64Pointer(expectedContainerMemoryBytes + 1)
+			},
+			wantErr: "container limits",
+		},
+		{
+			name: "wrong cpu limit",
+			mutate: func(evidence *dockerSmokeEvidence, _ *evidenceTiming) {
+				evidence.Container.NanoCPUs = int64Pointer(expectedContainerNanoCPUs + 1)
 			},
 			wantErr: "container limits",
 		},
@@ -390,7 +404,7 @@ func TestValidateDockerSmokeEvidenceFailures(t *testing.T) {
 }
 
 func TestIsSafeEvidenceCommandArgument(t *testing.T) {
-	for _, safe := range []string{"scripts/collect-docker-smoke.sh", "--container", "remnanode"} {
+	for _, safe := range []string{"scripts/collect-docker-smoke.sh", "--container", "remnanode-lite"} {
 		if !isSafeEvidenceCommandArgument(safe) {
 			t.Errorf("isSafeEvidenceCommandArgument(%q) = false", safe)
 		}
@@ -429,10 +443,10 @@ func validDockerSmokeEvidence(candidate, candidateImageDigest, candidateNodeSHA,
 			DockerEngineVersion: "28.3.2", DockerComposeVersion: "2.38.2",
 		},
 		Host: dockerSmokeHost{
-			MemoryTotalBytes: int64Pointer(500 * 1024 * 1024),
-			CPUCount:         intPointer(1),
-			DiskTotalBytes:   int64Pointer(1900 * 1024 * 1024),
-			SwapTotalBytes:   int64Pointer(0),
+			MemoryTotalBytes: int64Pointer(2_061_541_376),
+			CPUCount:         intPointer(2),
+			DiskTotalBytes:   int64Pointer(21_474_836_480),
+			SwapTotalBytes:   int64Pointer(1_073_737_728),
 		},
 		Node: dockerSmokeNode{
 			VersionOutput: expectedVersionOutput, BinarySHA256: candidateNodeSHA,

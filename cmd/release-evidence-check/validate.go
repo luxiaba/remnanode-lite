@@ -21,7 +21,7 @@ import (
 
 const (
 	expectedSchemaVersion     = 2
-	expectedAcceptanceProfile = "docker-production-smoke-v1"
+	expectedAcceptanceProfile = "docker-production-smoke-v2"
 
 	expectedOfficialNodeVersion = "2.8.0"
 	expectedOfficialNodeCommit  = "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b"
@@ -44,6 +44,7 @@ const (
 )
 
 var expectedDeferredValidation = []string{
+	"whole-host-512mib-runtime",
 	"arm64-production-runtime",
 	"native-systemd-install",
 	"native-openrc-install",

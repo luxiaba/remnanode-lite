@@ -157,7 +157,10 @@ synchronization signals.
 ### Resource limits
 
 The production target is an entire host with `512 MiB RAM / 1 vCPU / 2 GB
-disk`. Every newly consumed resource must have an explicit bound, including:
+disk`. That remains an engineering target; the `v2.8.0` blocking smoke enforces
+the canonical container limits on its recorded host, while
+`whole-host-512mib-runtime` remains deferred. Every newly consumed resource must
+have an explicit bound, including:
 
 - Plain and compressed HTTP request bodies.
 - JSON, protobuf, command stdout/stderr, and file reads.
@@ -186,6 +189,9 @@ Its dated engineering baseline is not evidence for a later frozen candidate.
   to skip verification.
 - Docker and native services must preserve least capability, read-only
   filesystem or file-permission controls, and `no-new-privileges`.
+- Production Compose files must interpolate only explicitly mapped runtime
+  settings from `.env`; shell values may override them, required values must
+  fail early, and unrelated `.env` entries must not be injected wholesale.
 
 If a real secret appears in a local diff, log, or test output, stop propagating
 and committing it. Rotate it and clean the affected history; deleting it in a
@@ -396,10 +402,13 @@ not weaken a check to work around missing evidence or describe `edge`, `sha-*`,
 or `candidate-sha-*` images as releases.
 
 Before `v2.8.0` can be published, its frozen image digest must pass
-`docker-production-smoke-v1` on a production `amd64` host. The blocking record
-covers the production Compose template, expected version, real Panel
-connectivity and proxy traffic, cgroup memory and PID observations, a healthy
-running container, no OOM kill, and zero restarts. The `arm64` runtime,
+`docker-production-smoke-v2` on a recorded native `amd64`/`x86_64` host. Host
+memory, CPU, disk, and swap are evidence fields rather than admission limits;
+the container must still use exactly 448 MiB memory, no additional container
+swap, 1 CPU, and 256 PIDs. The blocking record also covers the canonical
+Compose template, expected version, real Panel connectivity and proxy traffic,
+cgroup observations, a healthy running container, no OOM kill, and zero
+restarts. `whole-host-512mib-runtime`, the `arm64` runtime,
 `native-systemd-install`, `native-openrc-install`, candidate 50,000-user load,
 24-hour soak, and fault/rollback injection remain deferred and non-blocking and
 must be disclosed that way.

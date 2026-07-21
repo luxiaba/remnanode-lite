@@ -12,9 +12,11 @@ the [resource budget](../development/resource-budget.md), and the
 
 The M8 plan below originally required native and dual-runtime testing, a
 50,000-user run, and a 24-hour soak. For the unpublished `v2.8.0` candidate, it
-has been replaced by schema version 2 and `docker-production-smoke-v1`. Those
-older scenarios are now deferred and non-blocking. Use the current acceptance
-protocol as the release gate.
+has been replaced by schema version 2 and `docker-production-smoke-v2`. The
+current profile strictly validates the container resource boundary on a
+recorded host; exact whole-host 512 MiB runtime, the older scenarios, and the
+other named follow-up profiles are deferred and non-blocking. Use the current
+acceptance protocol as the release gate.
 
 When this record was written, M0-M7 remediation was complete and M8 covered the
 real Panel/Linux, resource, recovery, and long-running tests for a frozen

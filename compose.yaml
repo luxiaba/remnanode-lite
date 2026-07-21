@@ -1,13 +1,23 @@
 name: remnanode-lite
 
 services:
-  remnanode:
+  remnanode-lite:
     image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:2.8.0}"
-    container_name: remnanode
-    hostname: remnanode
+    container_name: remnanode-lite
+    hostname: remnanode-lite
     init: true
     network_mode: host
     restart: unless-stopped
+
+    environment:
+      NODE_PORT: "${NODE_PORT:-2222}"
+      NODE_BIND_ADDR: "${NODE_BIND_ADDR:-}"
+      SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY in .env}"
+      LOW_MEMORY: "${LOW_MEMORY:-1}"
+      DISABLE_HASHED_SET_CHECK: "${DISABLE_HASHED_SET_CHECK:-false}"
+      BODY_LIMIT_MB: "${BODY_LIMIT_MB:-}"
+      GOMEMLIMIT: "${GOMEMLIMIT:-}"
+
     cap_drop:
       - ALL
     cap_add:
@@ -20,14 +30,7 @@ services:
       - /run/remnanode:rw,noexec,nosuid,nodev,size=4m,mode=0700
       - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
       - /var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750
-    environment:
-      NODE_PORT: "${NODE_PORT:-2222}"
-      NODE_BIND_ADDR: "${NODE_BIND_ADDR:-}"
-      SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY in .env}"
-      LOW_MEMORY: "${LOW_MEMORY:-1}"
-      DISABLE_HASHED_SET_CHECK: "${DISABLE_HASHED_SET_CHECK:-false}"
-      BODY_LIMIT_MB: "${BODY_LIMIT_MB:-}"
-      GOMEMLIMIT: "${GOMEMLIMIT:-}"
+
     mem_limit: 448m
     memswap_limit: 448m
     cpus: 1.0
@@ -37,12 +40,14 @@ services:
       nofile:
         soft: 1048576
         hard: 1048576
+
     healthcheck:
       test: ["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
+
     logging:
       driver: json-file
       options:

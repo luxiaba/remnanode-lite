@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=9457ca8b036b5e11a7694e50f667c833ca9f5ee94d8766b38266e8e059f7d150 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=b5a0178a21dd6658d65deb1acdc3d72e74243ce843fc2b1b4c279c6d7619a271 -->
 
 # 贡献指南
 
@@ -112,7 +112,9 @@ git switch -c fix/short-description
 
 ### 资源约束
 
-生产目标是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。任何新增资源都必须有界：
+生产目标仍是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`，但这是工程目标；
+`v2.8.0` 的阻塞 smoke 只在实际记录的宿主机上严格校验规范容器限制，
+`whole-host-512mib-runtime` 仍属延期项。任何新增资源都必须有界：
 
 - HTTP 和压缩后的请求体。
 - JSON、protobuf、命令 stdout/stderr 和文件读取。
@@ -134,6 +136,8 @@ git switch -c fix/short-description
 - HTTP 客户端和探针必须验证 TLS，不增加通用的 insecure 跳过开关。
 - Docker 与原生服务继续遵守最小 capability、只读 rootfs/文件权限和
   `no-new-privileges` 约束。
+- 生产 Compose 只能通过 `.env` 插值显式映射的运行参数；shell 环境可以覆盖
+  `.env`，必填值必须尽早失败，不得把 `.env` 中的无关变量整份注入容器。
 
 如果在本地 diff、日志或测试输出中发现真实 Secret，先停止传播和提交，再完成轮换与
 清理；不要仅在后续 commit 中删除后继续公开原有历史。
@@ -288,11 +292,14 @@ tag 则提升从 `C` 构建且已经验收的 manifest。候选 tag 和 commit-S
 不要为了绕过缺失证据而放宽检查，也不要把 `edge`、`sha-*` 或
 `candidate-sha-*` 描述为正式版。
 
-`v2.8.0` 发布前，冻结镜像的 digest 必须在生产 `amd64` 主机上通过
-`docker-production-smoke-v1`。记录要覆盖生产 Compose 模板、预期版本、真实 Panel
-连接与代理流量、cgroup 内存和 PID 观测、持续健康运行的容器、无 OOM kill，以及零
-restart。`arm64` 运行、`native-systemd-install`、`native-openrc-install`、当前候选的
-50,000 用户负载、24 小时 soak 和故障/回滚注入都已延期，不阻塞发布，也必须如实披露。
+`v2.8.0` 发布前，冻结镜像的 digest 必须在实际记录的原生 `amd64`/`x86_64`
+宿主机上通过 `docker-production-smoke-v2`。宿主机内存、CPU、磁盘和 swap 是证据字段，
+不是准入上限；容器仍必须严格使用 448 MiB 内存、不得获得额外容器 swap、限制为
+1 CPU 和 256 PIDs。阻塞记录还要覆盖规范 Compose 模板、预期版本、真实 Panel 连接与
+代理流量、cgroup 观测、持续健康运行的容器、无 OOM kill，以及零 restart。
+`whole-host-512mib-runtime`、`arm64` 运行、`native-systemd-install`、
+`native-openrc-install`、当前候选的 50,000 用户负载、24 小时 soak 和故障/回滚注入
+都已延期，不阻塞发布，也必须如实披露。
 
 运行观测由操作人员签字确认。校验器能把记录绑定到候选 commit 和 digest，并检查
 schema 与内部一致性，但无法独立证明实际运行确实发生。不得编造或夸大此类证据。
