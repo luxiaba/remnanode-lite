@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=0daf9046e358353378b633d8453c9dc53610a52f2649f45605d7d8a4a72f777b -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=4aaefd3282406096c192954bf77011770e1f0faf2273dda54e517c96ff639a59 -->
 <div align="center">
 
 # Remnanode Lite
@@ -132,7 +132,8 @@ docker exec -it remnanode-lite tail -n 50 -F \
 docker exec remnanode-lite remnanode-lite version
 ```
 
-如果要切换精确版本，先修改 `image:`，然后拉取镜像并重建容器：
+如果要切换精确版本，先修改 `.env` 中的 `REMNANODE_IMAGE`。只有明确不使用
+`.env` 时才直接修改 Compose 中的 `image:`。随后拉取镜像并重建容器：
 
 ```bash
 docker compose pull
@@ -148,7 +149,7 @@ docker compose up -d --no-build --force-recreate
 | `X.Y.Z` | 与对应官方 Node 契约对齐的稳定版本，推荐用于生产和回滚。 |
 | `X.Y.Z-rnl.N` | Remnanode Lite 自己的迭代版本，可用于提前开发或继续完善已有对齐版本。 |
 | `latest` | 最近一次完整发布的稳定版本。它会移动，不能作为回滚依据。 |
-| `sha-<commit>` / `candidate-sha-<commit>` | 正式发布前测试某个 `main` 候选提交。 |
+| `sha-<commit>` | 从某个 `main` 提交构建的不可变镜像，用于正式发布前验证候选。 |
 | `edge` | 当前 `main` 的滚动镜像，只适合短期测试。 |
 
 批量部署应使用同一个精确版本或 manifest digest，并保留上一个值用于回滚。完整规则见 [版本与镜像标签](docs/i18n/zh-CN/versioning.md)。
@@ -163,7 +164,7 @@ docker compose up -d --no-build --force-recreate
 | 整机目标 | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose 服务限制 | `448 MiB RAM`，不额外使用 swap |
 
-该整机规格是设计目标：v2.8.0 正式 smoke 严格验证的是 `448 MiB / 1 CPU` 且不额外使用 swap 的容器限制，`whole-host-512mib-runtime` 仍为 deferred。
+该整机规格是设计目标。仓库维护的 Compose 配置会把容器严格限制为 `448 MiB / 1 CPU`，且不为容器提供额外 swap，为宿主机留出余量。
 
 资源目标对应仓库维护的标准 Compose 配置，不表示任何流量和插件组合都一定适合相同规格。具体测量和边界见 [资源预算](docs/i18n/zh-CN/development/resource-budget.md)。
 
@@ -205,7 +206,7 @@ go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
 ./bin/remnanode-lite version
 ```
 
-Linux 网络集成、真实 rw-core、Panel 兼容和正式发布验收属于不同的测试层。修改这些部分前，请先阅读 [开发指南](docs/i18n/zh-CN/development/README.md)。
+Linux 网络集成、真实 rw-core 和 Panel 兼容属于不同的测试层。修改这些部分前，请先阅读 [开发指南](docs/i18n/zh-CN/development/README.md)。
 
 ## 安全
 

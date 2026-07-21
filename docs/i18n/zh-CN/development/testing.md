@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=adb52f046e6cf0d845056c1649e953378f6d2e2de67aad0182ce1586c3f6a608 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=0902bbd152531d3c38b6c327a6760cdef9e63f5f61ef58d18fd5fcc63d4775d8 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -13,9 +13,9 @@
 - 状态、锁、goroutine、取消或生命周期变化必须运行带 `-race` 的测试。
 - 官方可见行为变化必须运行固定源码契约测试。
 - Linux capability、netlink、nftables、进程组和 cgroup 结论只能由 Linux 测试支持。
-- 发布验收按版本定义。`v2.8.0` 唯一会阻塞发布的运行检查，是在实际记录的原生 `amd64`/`x86_64` 宿主机上用真实 Panel 和真实代理流量完成 `docker-production-smoke-v2`。宿主容量只做记录，规范容器限制仍需严格校验。
-- `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案仍处于延期状态，不阻塞本次发布。单元测试不能替代尚未执行的真实环境验证。
-- 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应。
+- 正式发布前，维护者应使用当前 `main` 的不可变 `sha-<40 位提交>` 候选，在生产限制下连接真实 Panel 并验证真实代理流量。这是人工发布判断，运行观测不提交到仓库。
+- 精确整机 512 MiB 目标、原生安装路径、`arm64` 运行、大用户量、长时间运行和故障注入仍是有价值的后续检查。单元测试不能替代它们没有覆盖的真实环境。
+- 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应；宿主清单、容器标识、时间戳、日志和 smoke JSON 也不写入仓库。
 
 ## 快速选择
 
@@ -31,7 +31,7 @@
 | Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
 | 低内存预算 | `scripts/test-low-memory.sh --rw-core ...` | Docker/真实 core |
 | 官方与候选行为比较 | `go run ./cmd/contract-probe ...` | 隔离验收环境 |
-| 正式发布 | `bash scripts/release-check.sh` | 冻结候选专用 |
+| 正式发布 | `bash scripts/release-check.sh` | 仅用于当前已打 tag 的 `main` 提交 |
 
 ## Go 测试
 
@@ -201,7 +201,7 @@ REQUIRE_GOVULNCHECK=1 \
 `REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，它会跳过漏洞扫描；因此发布前和
 需要报告完整结果时必须显式要求该工具。
 
-`check.sh` 成功并不等于完成 `v2.8.0` 的生产验收。它不会在实际记录的原生 `amd64`/`x86_64` 宿主机上用真实 Panel 和真实流量运行冻结候选的镜像摘要，也不执行已延期的整机 512 MiB、负载、soak、原生 init、`arm64` 或故障注入方案。
+`check.sh` 成功并不能证明生产行为。它不会让候选镜像连接真实 Panel、承载真实流量，也不会覆盖所有支持架构、init 系统、宿主规格、负载和故障路径。
 
 ## Installer 测试
 
@@ -216,7 +216,7 @@ bash scripts/check-repository.sh
 迁移、原子替换、失败回滚、systemd/OpenRC 状态转换和卸载隔离。它不会改动真实
 `/etc/remnanode` 或启动本机服务。
 
-测试中的部分分支只有系统提供 `flock` 时才会运行。macOS 结果不能替代 Ubuntu CI 或真实原生主机观测。`native-systemd-install` 和 `native-openrc-install` 已在 `v2.8.0` 延期，但安装器行为变化仍须运行与风险匹配的 CI 和离线事务测试。
+测试中的部分分支只有系统提供 `flock` 时才会运行。macOS 结果不能替代 Ubuntu CI 或适当的原生 Linux 检查。安装器行为变化仍须运行对应的 CI 和离线事务测试。
 
 ## Linux 网络管理集成测试
 
@@ -259,7 +259,7 @@ scripts/test-low-memory.sh \
 - `--rw-core` 指向与 Docker 架构相同的可执行 Linux rw-core。
 - 宿主机支持 Docker memory、CPU、swap 和 PID 限制。
 
-带日期的 M6 50,000 用户结果是工程基线，不是冻结 `v2.8.0` 候选的运行证据。当前 M8 方案已将候选负载复测延期，且不阻塞发布。
+带日期的 M6 50,000 用户结果只用于比较后续资源敏感改动，不能自动代表另一个构建的表现。
 
 资源处理、请求解析、配置保留、队列、日志、并发上限或 rw-core 生命周期发生变化时，应运行该测试。结果应记录 cgroup 峰值；单独的 Go 进程 RSS 不是对应指标。详细基线见[资源预算](resource-budget.md)。
 
@@ -324,11 +324,7 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-`release-check.sh` 只用于已经冻结且具备当前版本所需验收材料的候选。它要求工作区干净、发布说明和 CHANGELOG 已完成收尾、证据清单可验证、候选祖先关系合法，并运行完整仓库检查。普通开发分支缺少这些材料时，失败属于预期行为；不要通过伪造证据、放宽检查或提前修改发布状态让命令变绿。
-
-`v2.8.0` 要求冻结候选的镜像摘要在发布前通过 `docker-production-smoke-v2`。对应的 `docker-smoke.json` 要记录原生 `amd64`/`x86_64` Compose 运行、实际宿主机内存、CPU、磁盘和 swap、精确的 `448 MiB / 1 CPU / no container swap / 256 PIDs` 容器限制、预期版本输出、真实 Panel 连接和代理流量、cgroup 内存与 PID 观测，以及容器健康、OOM 状态和重启次数。验收清单会把 `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案列为延期且不阻塞发布。
-
-这些观测由操作人签字确认。校验器会将记录绑定到候选提交和镜像摘要，并检查必需字段、时间和内部一致性，但无法证明物理运行确实发生。应把这份记录视为可追责的审计声明，而不是不可伪造的证明。
+`release-check.sh` 用于当前 `main` 的正式发布准备。它要求工作区干净、版本与带日期的 `CHANGELOG.md` 一致、固定官方源码可验证，并运行完整仓库检查。运行时验证不由该脚本读取：维护者应在打 tag 前人工确认同一 `sha-<commit>` 候选能够连接真实 Panel、承载真实代理流量且没有意外生命周期或资源故障，不把运行数据提交到仓库。
 
 具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
 [发布流程](../release.md)。
@@ -341,18 +337,18 @@ REQUIRE_GOVULNCHECK=1 \
 | 普通 Go 逻辑 | 目标包普通测试 | `bash scripts/check-go.sh` |
 | 锁、状态、worker、关闭 | 目标包 race test | 全量 race 与相关生命周期测试 |
 | HTTP/API/schema | `nodeapi`、`httpserver`、`contract` | 固定源码契约与黑盒差分 |
-| Xray 生命周期 | `xray`、`httpserver` race | `amd64` Docker 生产 smoke；风险需要时运行资源测试 |
+| Xray 生命周期 | `xray`、`httpserver` race | 真实候选运行验证；风险需要时运行资源测试 |
 | 用户与 stats | `nodehandler`、`stats`、`xrayrpc` | contract response 与 Panel 差分 |
 | 插件纯逻辑 | `plugin` race | HTTP lifecycle 交错测试 |
 | nftables/socket destroy | 对应 Linux unit test | 两条 namespace 集成测试 |
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
-| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 真实 systemd/OpenRC（扩展验证；`v2.8.0` 延期） |
-| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与严格容器限制下的 `amd64` 候选 smoke；整机 512 MiB 与 `arm64` 运行延期 |
+| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 风险需要时运行真实 systemd/OpenRC |
+| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建，以及严格容器限制下的真实候选验证 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |
 | 官方契约升级 | 全契约与固定源码测试 | 全部注册路由黑盒、Panel 全流程 |
 | protobuf wire | `scripts/generate-protobuf.sh --check`、`go test ./internal/xrayrpc` | 真实 rw-core 与 golden wire 回归 |
-| 资源上限 | 相关 unit/race | 按风险运行 `test-low-memory.sh`；`v2.8.0` 的候选 50k 负载与 soak 延期 |
+| 资源上限 | 相关 unit/race | 按风险运行 `test-low-memory.sh` 或更长时间的压力测试 |
 
 “最低验证”适合开发循环，不代表 PR 一定只需要这一列。改动跨越多个组件时取各行并集。
 
@@ -368,7 +364,7 @@ REQUIRE_GOVULNCHECK=1 \
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
 
-容器 workflow 按路径触发，因此并非所有 PR 都会出现 container check。`main` 上的容器输入发生变化时，workflow 会构建 manifest、生成证明，再发布不可移动的候选 tag。由 tag 触发的发布 workflow 会把验收清单绑定的同一镜像摘要晋升为正式标签。路径条件导致的“未运行”不算失败；也不要把可选的 container job 配成所有 PR 都必须出现的门禁。
+并非所有 PR 都会执行容器构建；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。由 tag 触发的发布 workflow 会校验该候选的 OCI 结构与 attestation，并把同一镜像摘要晋升为正式标签。不要把只在部分 PR 出现的 container job 配成所有 PR 都必须出现的门禁。
 
 ## 编写测试
 
@@ -388,5 +384,5 @@ REQUIRE_GOVULNCHECK=1 \
 - `check.sh` 在未安装 govulncheck 时默认允许跳过，完整报告应设置
   `REQUIRE_GOVULNCHECK=1`。
 - `check-repository.sh` 在没有 Docker Compose 时允许跳过 Compose schema 验证。
-- `release-check.sh` 不是普通开发命令，未完成候选证据时预期失败。
+- `release-check.sh` 是最终源码预检，不是日常开发循环中的普通命令。
 - 成功构建 Go 二进制不代表 Docker 固定资产、多架构或 Linux capability 已验证。

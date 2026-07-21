@@ -83,7 +83,7 @@ In this project, compatibility means matching the behavior of a stated official 
 To keep the project focused, it does not attempt to:
 
 - reproduce the official TypeScript module layout or its internal multi-process structure;
-- claim compatibility with a new official version before comparison and acceptance are complete;
+- claim compatibility with a new official version before comparison and verification are complete;
 - become a general Xray manager, proxy panel, or host firewall manager;
 - take ownership of unrelated processes, generic Xray paths, or the host's global firewall policy;
 - persist the complete Panel-provided Xray configuration locally and restore it independently after restart;
@@ -91,7 +91,7 @@ To keep the project focused, it does not attempt to:
 - treat non-Linux platforms as production targets;
 - build distributed transactions or high-availability recovery for every extreme event, including power loss and forced process termination.
 
-Recreating a container is an accepted operational recovery method when its runtime state cannot be recovered safely. Native recovery guarantees are limited to the boundaries documented by the installers, service manager, and relevant Release notes.
+Recreating a container is an accepted operational recovery method when its runtime state cannot be recovered safely. Native recovery guarantees are limited to the boundaries documented by the installers, service manager, and release documentation.
 
 ## Intended audience
 
@@ -107,7 +107,7 @@ Recreating a container is an accepted operational recovery method when its runti
 
 The repository has an independent Git history, automated tests, and a GHCR candidate-image workflow. The contract compiled into the binary is recorded in [`internal/version/contract.version`](../internal/version/contract.version); its official source and known differences are documented in the versioned [contract baseline](development/contract-2.8.0.md).
 
-A version in source identifies the build, not a published Release. Check Git tags, GitHub Releases, and exact GHCR tags to see what is actually available. Project version, contract version, Panel acceptance target, and rw-core version remain separate; [Versioning and image tags](versioning.md) explains how they relate.
+A version in source identifies the build, not a published Release. Check Git tags, GitHub Releases, and exact GHCR tags to see what is actually available. Project version, contract version, Panel integration target, and rw-core version remain separate; [Versioning and image tags](versioning.md) explains how they relate.
 
 ## Engineering decision order
 
@@ -118,7 +118,7 @@ Design and review decisions generally follow this order:
 3. Establish testable limits for every resource that can grow with input.
 4. Reuse clear existing boundaries before introducing abstractions for hypothetical future requirements.
 5. Balance low-probability extreme recovery against real operational cost without blocking core compatibility work.
-6. Make every compatibility conclusion traceable to source evidence, automated tests, or explicit environment acceptance.
+6. Make every compatibility conclusion traceable to source evidence, automated tests, or explicit environment verification.
 
 ## Boundary at a glance
 

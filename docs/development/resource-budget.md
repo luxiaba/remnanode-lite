@@ -1,16 +1,23 @@
-# 512 MiB Resource Budget and M6-M8 Baselines
+# 512 MiB Resource Budget and Engineering Baselines
 
 [Back to developer documentation](README.md) · [Operations and troubleshooting](../operations.md)
 
-This document collects dated engineering measurements and the current resource policy. Each result applies only to the listed commit, date, toolchain, architecture, and test assets. It provides context for later work, not automatic runtime evidence for another release candidate.
+This document collects dated engineering measurements and the current resource policy. Each result applies only to the listed commit, date, toolchain, architecture, and test assets. It provides a comparison point for later work, not a claim about another build or environment.
 
-## Acceptance Boundary
+## Production Boundary
 
-For `v2.8.0`, the only blocking resource and runtime profile is `docker-production-smoke-v2` on the frozen candidate. It runs the digest-pinned production Compose deployment on `amd64` against a real Panel and real proxy traffic, records observed memory and PID usage, and requires the container to stay healthy with zero OOM kills and restarts. The [acceptance protocol](release-acceptance.md#docker-production-smoke) defines the full requirements, including at least 600 seconds under the exact container, health, and readiness limits. Host memory, CPU, disk, and swap totals are required environment observations, not pass/fail capacity thresholds.
+The production target is a whole machine with `512 MiB RAM / 1 vCPU / 2 GB
+disk`. The standard container reserves room for the host by limiting the Node
+and rw-core together to `448 MiB` memory, a `448 MiB` combined
+memory-and-swap limit, `1 CPU`, and `256` PIDs. Equal memory and combined
+memory-and-swap limits leave no additional container swap allowance, even when
+the host has swap.
 
-`whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` are deferred, non-blocking follow-up profiles. Results from those profiles must not be implied when they have not been run against the current candidate.
-
-The production target remains a whole machine with `512 MiB RAM / 1 vCPU / 2 GB disk`, but `docker-production-smoke-v2` does not claim frozen-candidate runtime coverage on that exact whole-host specification. Its strict resource boundary is the production container: `448 MiB` memory, a `448 MiB` combined memory-and-swap limit, `1 CPU`, and `256` PIDs. Equal memory and combined memory-and-swap limits leave no additional container swap allowance, even if the host has swap. The dated M6 engineering gate placed the Node test process and a real rw-core in the same cgroup with these limits:
+Before tagging, the maintainer verifies the immutable
+`sha-<40-character-main-commit>` image with a real Panel and real proxy traffic
+under these limits. That operational check is not stored in this repository.
+The dated M6 engineering gate used the same core cgroup limits for a
+reproducible resource test:
 
 - A `448 MiB` hard memory limit, leaving at least `64 MiB` for the host kernel and base services.
 - `1 CPU`, `256` PIDs, no swap, and no external network access.
@@ -20,9 +27,9 @@ The production target remains a whole machine with `512 MiB RAM / 1 vCPU / 2 GB 
 
 The historical gate is [`scripts/test-low-memory.sh`](../../scripts/test-low-memory.sh), and the Linux integration test is [`internal/xray/resource_linux_integration_test.go`](../../internal/xray/resource_linux_integration_test.go). The M6 run also verified system statistics, inbound user counts, VLESS hot add/remove, and user-IP statistics RPCs through the minimal protobuf wire client.
 
-Production Compose uses a different tmpfs layout: `/run`, `/tmp`, and rw-core logs total `48 MiB`, with no persistent log volume. The historical gate's single 64 MiB `/tmp` is only a test fixture, not a field-by-field reproduction of that layout. The blocking `amd64` smoke uses the production Compose layout but does not repeat the historical 50,000-user workload or prove the separate whole-host target.
+Production Compose uses a different tmpfs layout: `/run`, `/tmp`, and rw-core logs total `48 MiB`, with no persistent log volume. The historical gate's single 64 MiB `/tmp` is only a test fixture, not a field-by-field reproduction of that layout. Neither the historical workload nor a run on a larger host alone proves the exact whole-machine target.
 
-The M6 figures from 2026-07-15 and M7 init snapshots from 2026-07-19 predate the current M8 candidate. They remain useful engineering baselines, but they are not current-candidate runtime evidence and do not need to be repeated for `2.8.0`.
+The M6 figures from 2026-07-15 and M7 init snapshots from 2026-07-19 remain useful engineering baselines. Repeat the relevant measurement when a change can materially affect that budget.
 
 ## M6 Fixed Test Assets (2026-07-15 Engineering Baseline)
 
@@ -81,7 +88,7 @@ The two rw-core log streams use capped writers. Each current file and its `.1` f
 
 OpenRC also writes `openrc.log` and `openrc.err.log` through the supervisor. It checks and copy-truncates them every 10 seconds. Each `.1` file uses a `4 MiB` threshold after a successful check, but a current file may grow past that threshold before the next poll; this is not a hard byte limit. The four current-plus-`.1` pairs therefore have a `32 MiB` threshold budget, or about `48 MiB` if all four fixed temporary files remain, plus any growth of the two current files during one polling interval.
 
-The systemd journal accepts at most 200 service log records every 30 seconds, while byte usage and long-term growth remain subject to the host's journald quota. A future extended-validation run should measure a log fault storm and long-term growth on a whole machine with `2 GB` of disk. That work is deferred for `2.8.0`; these thresholds are not a substitute for its results.
+The systemd journal accepts at most 200 service log records every 30 seconds, while byte usage and long-term growth remain subject to the host's journald quota. A future extended check should measure a log fault storm and long-term growth on a whole machine with `2 GB` of disk; these thresholds are not a substitute for that result.
 
 Installation and upgrade store large assets in root-only `/var/lib/remnanode-installer`, not in the potentially memory-backed `/tmp`. All five mutating entry points hold `/run/lock/remnanode-installer.lock`. Nested installers reuse and verify the same open file description. `RNL_TMP_ROOT` does not affect the lock path, and no exit path removes its inode.
 
@@ -109,9 +116,9 @@ Both `node.env` and `SECRET_KEY_FILE` are opened once with `O_NOFOLLOW|O_NONBLOC
 - Debian and Alpine installers automatically set `LOW_MEMORY=1` when `MemTotal <= 512 MiB`.
 - OpenRC verifies cgroup v2 limits of `448 MiB` memory, zero swap, 1 CPU, and 256 PIDs, plus the startup shell's actual cgroup membership. It refuses to start if a controller is unavailable or a write does not take effect. Shutdown does not depend on OpenRC 0.62.6 removing the path: `stop_post` first moves itself out, kills the exact service cgroup through `cgroup.kill`, waits up to 5 seconds for `populated=0`, and then removes the directory.
 
-The OpenRC cleanup above covers a normal stop in which init runs `stop_post`. The shared installer lock prevents concurrent writes, but it is not a persistent phase journal for `SIGKILL` or power loss. The project also does not promise automatic cleanup of a residual cgroup if `supervise-daemon` exits abnormally. These are accepted operational limits for `2.8.0`: rerun the installer or reboot a native deployment, or recreate the container. They do not block the release.
+The OpenRC cleanup above covers a normal stop in which init runs `stop_post`. The shared installer lock prevents concurrent writes, but it is not a persistent phase journal for `SIGKILL` or power loss. The project also does not promise automatic cleanup of a residual cgroup if `supervise-daemon` exits abnormally. Recover by rerunning the installer or rebooting a native deployment, or by recreating the container.
 
-Any change to request decoding, the Xray configuration lifecycle, RPC messages, report queues, or the dependency graph should rerun this engineering gate and compare stage peaks. That comparison is a maintenance guardrail independent of the current M8 blocking profile.
+Any change to request decoding, the Xray configuration lifecycle, RPC messages, report queues, or the dependency graph should rerun this engineering gate and compare stage peaks. That comparison is a maintenance guardrail, not release paperwork.
 
 ## Shutdown Budget
 

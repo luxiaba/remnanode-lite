@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=f57ae26bc5f10062f52e13341cc8d320832e1f05cd1b3f55d7d598d89ecf9514 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=7e54f4a61ba543b3aff6a250084f7a1e21de5a6b7bccbfe3033c2e60120a2ce1 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -14,10 +14,9 @@
 - 对官方 Node `2.8.0@596f015` 达到行为级兼容。
 - 与 Panel `2.8.1` 完成真实集成验证。
 - 修复已知生命周期、插件、防火墙、契约和安装供应链问题。
-- 以在 `512 MiB RAM / 1 vCPU / 2 GB disk` 的 Linux 节点稳定运行为工程目标；
-  与候选绑定的整机运行验证安排在首个版本之后。
-- 提供 Linux `amd64` 与 `arm64` 产物，`2.8.0` 的运行时验收范围限定为生产 `amd64` Docker 方案。
-- 保留 Debian/systemd 与 Alpine/OpenRC 安装路径，原生运行期验收延后到首个版本之后。
+- 以在 `512 MiB RAM / 1 vCPU / 2 GB disk` 的 Linux 节点稳定运行为工程目标。
+- 提供 Linux `amd64` 与 `arm64` 产物，发布前用真实 Panel 和真实流量验证候选。
+- 保留 Debian/systemd 与 Alpine/OpenRC 安装路径。
 
 项目版本与官方契约版本彼此独立。`X.Y.Z-rnl.N` 是项目自己的迭代标识，既可以用于提前开发下一条版本线，也可以继续完善已有的官方基线。纯 `X.Y.Z` 只有在对应官方契约完成对齐后才能发布。官方发布监测只会创建同步 Issue，不会自动修改契约或发布任何内容。完整规则见[版本模型](../versioning.md)。
 
@@ -30,7 +29,7 @@
 5. 所有并发、队列、请求体和缓存都必须有明确上限。
 6. Node 只管理自己启动的 rw-core 进程、内部 socket 和 nftables 私有表，不接管整机防火墙。按 IP 执行 socket destroy 可能影响宿主 network namespace，属于必须明确记录的副作用。
 7. `dev` 是稳定开发与集成分支，主题分支通过 PR 和 CI 进入；`main` 是发布分支，只从 `dev` 接收已通过代码门禁的候选。
-8. 候选合入 `main` 后才冻结为 M8 发布候选 `C`；此后不再混入功能修改，真实验收结果必须绑定该 commit。
+8. `main` 的每个提交都生成一个不可变的 `sha-<40位提交>` 容器候选。维护者用真实 Panel 和真实流量验证候选后，正式 tag 才能指向当前 `main` HEAD。
 
 ## 兼容边界
 
@@ -52,22 +51,21 @@
 | M5 用户、连接与统计 | 已完成 |
 | M6 512 MiB 资源优化 | 已完成 |
 | M7 系统与供应链 | 已完成 |
-| M8 发布验收 | 推进中 |
+| M8 发布准备 | 已完成 |
 
-2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们早于候选 `C`，因此不是当前 M8 候选的运行时证据，也不需要为 `2.8.0` 重新执行。M6 完成的是有界资源实现，并未完成延期的 `whole-host-512mib-runtime` profile。
+2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们记录资源优化结果，为后续改动提供稳定对比，不代表所有未来构建。
 
-`2.8.0` 仍未发布，M8 正在推进。实现、CI、候选镜像流水线和代码级 512 MiB 约束已经落地。现在只有一个验收方案会阻塞发布：冻结候选上的 `docker-production-smoke-v2`。运行时先把候选 tag 解析为不可变的 manifest 摘要，再用生产 Compose 模板在实际记录的原生 `amd64`/`x86_64` 宿主机上运行该摘要；期间必须观察到真实 Panel 连接和代理流量，并确认容器资源限制精确、持续健康运行，未发生 OOM kill 或重启。宿主机资源会记录，但不要求符合整机 512 MiB 目标。`main` 上的 `sha-*` tag 只用于定位候选，既不是验收身份，也不是正式 Release。
+`2.8.0` 已具备正常发布条件。代码从 `dev` 合入 `main` 后，容器 workflow 会生成不可变的 `sha-<main提交>` 镜像；维护者使用真实 Panel 和真实代理流量确认该镜像；随后在当前 `main` HEAD 上创建 annotated tag。发布 workflow 校验多架构 manifest 和 GitHub attestation，再把同一 digest 晋升为 `2.8.0` 和 `latest`。运行观测不写入源码仓库，Release notes 由 GitHub 自动生成。
 
 ## 当前重点
 
-- **当前**：完成冻结候选的 `amd64` Docker 生产 smoke，记录完成 M8 验收所需的宿主容量、严格容器限制、Panel、流量、进程状态、内存、OOM 和重启观测。
+- **当前**：从已经验证的当前 `main` 候选发布 `2.8.0`。
 - **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码和差分，再决定项目版本线。
 - **后续**：在不牺牲 512 MiB 目标的前提下改进可观测性、自动化升级和更多发行环境验证。
 
 以下事项作为已接受限制或后续增强，不阻塞 `2.8.0`：
 
-- `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install` 与 `native-openrc-install` 延后执行。
-- 候选级 50,000 用户负载、24 小时 soak 以及故障/回滚注入作为扩展验证延后执行。
+- 可在具体风险需要时补充整机 512 MiB、arm64 运行、原生安装、大用户量、soak 和故障注入覆盖。
 - 安装器不维护持久化阶段日志。被 `SIGKILL` 或掉电中断后重新运行安装器；容器部署则重新创建容器。
 - OpenRC 正常执行 `stop_post` 时会清理专用 cgroup。`supervise-daemon` 异常退出后，通过重启主机或重新部署恢复。
 - 只有出现实测需求时，才重新评估活动配置常驻副本与运行时 `dump-config` 的内存取舍。
@@ -81,7 +79,7 @@
 
 - 修正 module、仓库地址、版本和发布归属。
 - 固定官方 Node 与 Panel 兼容版本。
-- 建立路线、验收门槛和分支发布规则。
+- 建立路线、发布门槛和分支发布规则。
 
 ### M1 - 契约证据
 
@@ -137,15 +135,14 @@
 - 固定的 rw-core、ASN 与 Release 归档都会在安装前校验。
 - 故障注入测试覆盖写入后失败，以及 rw-core 资产和 Node 升级事务的逐文件摘要恢复。
 
-### M8 - 发布验收
+### M8 - 发布准备
 
 - 通过 `go test`、race、vet、静态检查、脚本检查和多架构构建。
-- 先冻结代码候选，并将阻塞验收记录绑定到候选 commit 与候选镜像。
-- 完成唯一阻塞的运行期 profile `docker-production-smoke-v2`：在实际记录的原生宿主机上，把 `amd64` 生产 Compose 部署固定到候选 manifest digest，严格使用 `448 MiB / 1 CPU / no container swap / 256 PIDs` 限制，接入真实 Panel 并通过真实代理流量，记录内存与 PID 使用量，确认容器持续运行且健康、OOM kill 与 restart 都为零。
-- 将现有生命周期协调器、进程组清理、init、50,000 用户与回滚测试保留为代码级或带日期的工程证据，不把它们表述为当前候选运行期观测。
-- 将 `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 与 `fault-and-rollback-injection` 列为不阻塞发布的后续验证。
-- 更新兼容矩阵、风险清单、运维文档和 `2.8.0` Release 资料。
-- 按 [`release-acceptance.md`](release-acceptance.md) 校验发布记录与候选身份，随后只允许最终发布收尾变化。
+- 为每个 `main` 提交发布一个不可变的 `sha-<40位提交>` 镜像，并包含 `linux/amd64`、`linux/arm64` runnable manifest 与对应 attestation。
+- 打 tag 前，在生产容器限制下使用真实 Panel 和真实代理流量验证候选；宿主详情、日志和运行记录不写入仓库。
+- 正式 tag 必须指向当前 `main` HEAD。校验候选 manifest 与源码 attestation 后，在不重建容器的情况下把同一 digest 晋升为精确版本和 `latest`。
+- 将生命周期、进程组清理、安装器、50,000 用户和回滚结果保留为代码测试或带日期的工程基线。
+- 更新兼容文档和带日期的根 `CHANGELOG.md`，Release notes 由 GitHub 自动生成。
 
 ## 开发与发布规则
 
@@ -153,5 +150,6 @@
 - 日常变更先进入 `dev`；发布候选通过 PR 从 `dev` 提升到 `main`。
 - commit 只包含一个可说明、可验证的变化，不混入无关格式化。
 - 提交前必须运行与改动风险匹配的测试；失败不得合入 `dev` 或 `main`。
+- 等待 `main` 的 `sha-*` 候选并用真实 Panel 和真实流量验证后再打 tag；不要提交运行测试数据。
 - 正式 tag 使用 `vX.Y.Z` 或 `vX.Y.Z-rnl.N` 并与项目 `Version` 完全一致；已发布精确 tag 不得覆盖。
 - 仓库不配置代码上游 remote；外部实现只作为协议或行为验证材料。

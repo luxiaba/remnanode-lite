@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=d575599959883257606ee7120312cf031c39d4d15f466eb1cee191f2b54edc50 -->
+<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=cbe07fa736c94134e861daa50c5c56594197db5830e391c77d6a420e5e6cc851 -->
 
 # 安全策略
 
@@ -21,7 +21,7 @@
 
 ## 支持范围
 
-只有已经发布的正式版本才提供安全支持。`edge`、`sha-*` 与 `candidate-sha-*` 都是候选构建，不承诺长期维护。当前策略如下：
+只有已经发布的正式版本才提供安全支持。`edge` 与 `sha-*` 都是候选构建，不承诺长期维护。当前策略如下：
 
 | 版本 | 安全修复策略 |
 | --- | --- |
@@ -55,7 +55,7 @@ chmod 600 docker-compose.yaml
 
 同时限制 Docker socket、备份、终端历史和主机管理员权限。Node 启动 rw-core 前会从继承环境中剥离 `SECRET_KEY`、`SECRET_KEY_FILE`、`INTERNAL_REST_TOKEN` 与 `REMNANODE_ENV`，并覆盖资源路径和内部 webhook token；该 token 默认每次启动随机生成，显式配置时使用经过 Go 配置解析的值。其它非受管环境变量仍会继承，因此不要向 Node 容器注入无关 Secret。
 
-绝不能提交 `.env`、包含真实 Secret 的展开后 Compose、`/etc/remnanode/node.env`、`secret.key`、证书、私钥或原始验收采集包。
+绝不能提交 `.env`、包含真实 Secret 的展开后 Compose、`/etc/remnanode/node.env`、`secret.key`、证书、私钥、宿主清单、容器标识、日志或其它运行观测。
 
 ## 供应链
 
@@ -79,7 +79,7 @@ chmod 600 docker-compose.yaml
 - rw-core、插件快照和 nftables 状态各有唯一所有者；失败不能提前提交本地成功状态。
 - Node 只管理本项目的 rw-core 进程、内部 socket 和固定 nftables 表，不接管宿主机的整体防火墙策略。
 - 连接销毁会扫描宿主 network namespace 中的 TCP 连接；只要连接的本地或远端地址等于目标 IP，就可能被关闭，而且不按 PID 区分，因此生产节点应专门承担这项工作。Panel 请求会过滤本地和特殊地址；管理员命令 `remnanode-lite kill-sockets` 直接调用内核适配器，不经过这层应用过滤。
-- 发布验收材料不得包含可还原用户或生产环境的数据。
+- 真实 Panel 和流量验证在仓库外完成；不得把可还原用户或生产环境的数据提交到仓库。
 
 ## 安全相关变更
 
@@ -91,4 +91,4 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-该门禁通过只证明仓库级检查，不替代真实 Linux namespace、候选 attestation、Panel 集成，也不替代对应版本发布 profile 要求的运行时与扩展验收。
+该门禁通过只证明仓库级检查，不替代真实 Linux namespace、候选 attestation 或 Panel 集成验证。

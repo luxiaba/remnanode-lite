@@ -15,7 +15,7 @@ Release binaries are built for Linux `amd64` and `arm64`. The installer supports
 | Ubuntu 24.04 | systemd | arm64 |
 | Alpine 3.22 | OpenRC | arm64 |
 
-CI cross-compiles both architectures and runs Linux network-administration tests on Ubuntu. For `v2.8.0`, the blocking production smoke covers Docker on a real low-memory `linux/amd64` host; native systemd and OpenRC installs, real `arm64` runtime, the 50,000-user load test, 24-hour soak, and fault and rollback injection remain follow-up validation. Test a native installation on your target distribution before rolling it out widely. On systems other than Debian or Ubuntu, install the commands required by the scripts first.
+CI cross-compiles both architectures and runs Linux network-administration tests on Ubuntu. Before tagging `v2.8.0`, maintainers also checked the Docker candidate on a real `linux/amd64` host, under the maintained container limits, with a real Panel and proxy traffic. That was a release decision, not a repository evidence gate. Native systemd and OpenRC installs, real `arm64` runtime, the whole-host 512 MiB target, the 50,000-user load test, 24-hour soak, and fault and rollback injection remain follow-up validation. Test a native installation on your target distribution before rolling it out widely. On systems other than Debian or Ubuntu, install the commands required by the scripts first.
 
 The target tag must have a published GitHub Release containing binary archives, support files, `SHA256SUMS`, and the ASN database. An `edge` or `sha-*` GHCR candidate image cannot substitute for native Release assets.
 

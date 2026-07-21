@@ -40,9 +40,9 @@ You do not need to read every design document first:
 
 1. Read [Versioning and image tags](versioning.md); never couple project `Version` to `ContractVersion` implicitly.
 2. Review the [roadmap](development/roadmap.md) and current contract baseline.
-3. Follow the [Release process](release.md) to freeze a candidate, collect evidence, and run the gates.
-4. Store acceptance data according to the [Release acceptance evidence protocol](development/release-acceptance.md).
-5. Record the result in the root [CHANGELOG](../CHANGELOG.md) and versioned Release note. A version is not published until its Git tag and Release assets actually exist.
+3. Prepare the version, root [CHANGELOG](../CHANGELOG.md), documentation, and tests on `dev`, then promote them to `main`.
+4. Follow the [Release process](release.md) to verify the `sha-<commit>` candidate with a real Panel and real traffic, then create the annotated tag. Runtime observations stay outside the repository.
+5. A version is published only after its GitHub Release, assets, and exact GHCR tag exist.
 
 ## Complete index
 
@@ -52,7 +52,7 @@ You do not need to read every design document first:
 | --- | --- |
 | [Project scope and goals](project.md) | Motivation, relationship to the official project, goals, non-goals, audience, and status |
 | [Versioning and image tags](versioning.md) | Project versions, contract versions, aligned Releases, and GHCR tag semantics |
-| [Roadmap](development/roadmap.md) | Completed milestones, current Release acceptance, and later work |
+| [Roadmap](development/roadmap.md) | Completed milestones and later work |
 | [Contributing](../CONTRIBUTING.md) | Branches, commits, testing, review, and documentation requirements |
 | [Security policy](../SECURITY.md) | Private vulnerability reporting, supported versions, and sensitive-data boundaries |
 | [Localization policy](i18n/README.md) | Canonical-language rules, translation layout, and synchronization expectations |
@@ -82,12 +82,11 @@ You do not need to read every design document first:
 | [Official 2.8.0 contract baseline](development/contract-2.8.0.md) | Pinned official evidence, 26 routes, request/response behavior, and known differences |
 | [Archived 2026-07 audit remediation](archive/2026-07-audit-remediation.md) | Historical scope of the first static audit; not a current truth source |
 
-### Release and acceptance
+### Release
 
 | Document | Purpose |
 | --- | --- |
-| [Release process](release.md) | Candidate freeze, acceptance, tags, GitHub Release, GHCR, and rollback |
-| [Release acceptance evidence protocol](development/release-acceptance.md) | Evidence files, environments, data boundaries, and machine validation |
+| [Release process](release.md) | Candidate verification, tags, GitHub Release, GHCR, and rollback |
 | [Changelog](../CHANGELOG.md) | Published and pending user-visible changes |
 
 ## Essential concepts
@@ -98,7 +97,7 @@ You do not need to read every design document first:
 
 ### A candidate is not a Release
 
-`edge`, `sha-*`, and `candidate-sha-*` images are test builds from `main`. A version becomes a formal Release only when its Git tag, GitHub Release, and exact GHCR tag have been published. Pin the multi-architecture manifest digest when you need an exact, content-addressed image.
+`edge` and `sha-*` images are builds from `main`, not Releases. A version becomes a formal Release only when its Git tag, GitHub Release, and exact GHCR tag have been published. Pin the multi-architecture manifest digest when you need an exact, content-addressed image.
 
 ### Compatibility has more than one layer
 
@@ -115,8 +114,7 @@ Contract tests, a successful Panel connection, resource testing, and distributio
 | operation epoch | Increasing ownership token for one Xray start or stop operation; not process identity |
 | process lease | Short-lived authorization bound to one rw-core process epoch and abstract socket, preventing a mutation from crossing processes |
 | lifecycle lease | Shared or exclusive HTTP coordination for start, stop, plugin/user mutation, and reset-capable stats; not a persistent lock file |
-| candidate `C` | Commit frozen after code enters `main`, used for real-environment acceptance |
-| final commit `F` | The one allowed release-record commit after `C`; the formal Git tag points to `F` |
+| release candidate | Current `main` commit, represented by its immutable `sha-<commit>` image |
 | manifest digest | The `sha256:...` content address of the multi-architecture GHCR index, stronger than a mutable registry tag |
 
 ## Sources of truth
@@ -131,7 +129,7 @@ Contract tests, a successful Panel connection, resource testing, and distributio
 | Container constraints | `compose.yaml`, `Dockerfile` | Explain capabilities, resources, and tmpfs choices |
 | CI and Release behavior | `.github/workflows`, `scripts/*check*.sh` | Keep maintainer procedures synchronized with automation |
 | Formal publication state | Git tags, GitHub Releases, exact GHCR tags | Never present a planned asset or URL as existing |
-| Resource limits | Code constants, integration tests, candidate evidence | Separate design limits, engineering baselines, and formal acceptance |
+| Resource limits | Code constants, integration tests, and dated measurements | Separate design limits from measurements made under specific conditions |
 
 ## Documentation maintenance
 

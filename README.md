@@ -129,7 +129,9 @@ Check the running version:
 docker exec remnanode-lite remnanode-lite version
 ```
 
-To update, change `image:` first when moving between exact versions, then pull and recreate the container:
+To move between exact versions, change `REMNANODE_IMAGE` in `.env` first. If
+you intentionally deploy without `.env`, change `image:` in the Compose file
+instead. Then pull and recreate the container:
 
 ```bash
 docker compose pull
@@ -145,7 +147,7 @@ docker compose up -d --no-build --force-recreate
 | `X.Y.Z` | Stable Release aligned with the corresponding official Node contract. Recommended for production and rollback. |
 | `X.Y.Z-rnl.N` | A tested Remnanode Lite iteration for work ahead of or beyond an official alignment point. |
 | `latest` | The most recently completed stable Release. It moves, so it is not a rollback reference. |
-| `sha-<commit>` / `candidate-sha-<commit>` | Images for testing a specific `main` candidate before Release. |
+| `sha-<commit>` | Immutable image built from a specific `main` commit. Use it to verify a release candidate. |
 | `edge` | Current `main` image for short-lived testing only. |
 
 For a fleet, prefer one exact version or manifest digest and keep the previous value for rollback. The full policy is in [Versioning and image tags](docs/versioning.md).
@@ -160,7 +162,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose service limit | `448 MiB RAM`, no additional swap |
 
-The whole-host size is a design target: the v2.8.0 formal smoke strictly validates the container at `448 MiB / 1 CPU` with no additional swap, while `whole-host-512mib-runtime` remains deferred.
+The whole-host size is a design target. The maintained Compose profile strictly limits the container to `448 MiB / 1 CPU` with no additional container swap, leaving room for the host.
 
 The resource target is the baseline for the maintained Compose profile, not a promise that every traffic pattern or plugin configuration fits the same machine. Measurements and limits are documented in the [resource budget](docs/development/resource-budget.md).
 
@@ -202,7 +204,7 @@ go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
 ./bin/remnanode-lite version
 ```
 
-Linux network integration, real rw-core behavior, Panel compatibility, and Release acceptance are separate test layers. Start with the [development guide](docs/development/README.md) before changing those areas.
+Linux network integration, real rw-core behavior, and Panel compatibility are separate test layers. Start with the [development guide](docs/development/README.md) before changing those areas.
 
 ## Security
 

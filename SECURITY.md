@@ -30,8 +30,8 @@ other copies.
 
 ## Supported Versions
 
-Only published releases receive security support. `edge`, `sha-*`, and
-`candidate-sha-*` are candidate builds without a long-term maintenance
+Only published releases receive security support. `edge` and `sha-*` are
+candidate builds without a long-term maintenance
 commitment. The standing policy is:
 
 | Version | Security support |
@@ -93,8 +93,8 @@ unmanaged environment variables are still inherited, so do not inject
 unrelated secrets into the Node container or native service.
 
 Never commit `.env`, an expanded Compose file containing a real secret,
-`/etc/remnanode/node.env`, `secret.key`, certificates, private keys, or raw
-acceptance captures.
+`/etc/remnanode/node.env`, `secret.key`, certificates, private keys, host
+inventories, or raw runtime captures.
 
 ## Supply-Chain Controls
 
@@ -141,9 +141,9 @@ posture or release status.
   from Panel filter local and special addresses; the administrative
   `remnanode-lite kill-sockets` command calls the kernel adapter directly and
   bypasses that application-level filter.
-- Keep release acceptance data sanitized. Evidence and raw capture bundles must
-  not contain data from which users or production environments can be
-  reconstructed.
+- Keep production observations outside the repository. Sanitize any diagnostic
+  detail shared through a private advisory so users or production environments
+  cannot be reconstructed from it.
 
 ## Security Changes
 
@@ -159,5 +159,4 @@ REQUIRE_GOVULNCHECK=1 \
 
 Passing this gate proves repository-level checks only. It does not replace
 real Linux namespace tests, candidate attestation verification, Panel
-integration, or any version-specific runtime and extended-acceptance checks
-required by the applicable release profile.
+integration, or risk-driven runtime checks.

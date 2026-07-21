@@ -30,9 +30,8 @@ exploitation details.
 
 ## Branch Model
 
-- `main` is the protected release branch. A tested `dev` promotion becomes the
-  M8 release candidate after it is merged. Once that candidate passes
-  acceptance, a release-only branch may add the allowlisted release material.
+- `main` is the protected release branch. Merging a tested `dev` promotion
+  creates the commit that may become a Release.
 - `dev` is the stable development and integration branch. Normal features,
   fixes, refactors, and maintenance changes ultimately merge here.
 - Daily work belongs on a short-lived topic branch created from the latest
@@ -52,16 +51,15 @@ Use a branch prefix that describes the change:
 - `feat/` for a new verified contract capability or project feature.
 - `fix/` for a behavior, resource, security, or operational correction.
 - `refactor/` for a structural change that preserves external behavior.
-- `test/` for tests and acceptance tooling.
+- `test/` for tests and verification tooling.
 - `docs/` for documentation.
 - `chore/` for dependencies, CI, releases, and repository maintenance.
 
 Normal pull requests target `dev`. A maintainer preparing a release opens a
-`dev -> main` pull request. After candidate acceptance, the maintainer opens a
-final `release/v*-docs -> main` pull request containing only the allowed
-README, root [`CHANGELOG.md`](CHANGELOG.md), roadmap, evidence, and release-note
-paths. See the [release procedure](docs/release.md) for the protected-main
-finalization rules.
+`dev -> main` pull request after the version, changelog, documentation, and
+tests are ready. The resulting `main` commit is the release candidate; there is
+no later documentation-only finalization commit. See the [release
+procedure](docs/release.md) for the publication steps.
 Do not develop directly on `main`, and do not create or move a final release
 tag from a feature pull request.
 
@@ -106,7 +104,7 @@ change is needed and how it was tested.
   not become silently optional through runtime `nil` checks.
 - Add operational context while preserving the error chain, for example
   `fmt.Errorf("start core: %w", err)`.
-- Comments should explain non-obvious invariants, evidence, or lock ordering,
+- Comments should explain non-obvious invariants, protocol provenance, or lock ordering,
   not restate the visible operation.
 - Add tests with new code. A bug fix should normally include a deterministic
   regression test that fails without the fix.
@@ -126,8 +124,8 @@ When changing externally visible behavior:
 4. Reach Xray, Stats, Handler, or Plugin through the existing application
    service; do not duplicate domain logic in a route.
 5. Add request, response, error, and side-effect tests.
-6. During candidate acceptance, compare the official node and candidate with
-   `contract-probe`.
+6. When compatibility risk warrants it, compare the official node and
+   candidate with `contract-probe`.
 
 Do not diverge from verified official behavior merely because another JSON or
 error representation looks more idiomatic in Go.
@@ -157,10 +155,9 @@ synchronization signals.
 ### Resource limits
 
 The production target is an entire host with `512 MiB RAM / 1 vCPU / 2 GB
-disk`. That remains an engineering target; the `v2.8.0` blocking smoke enforces
-the canonical container limits on its recorded host, while
-`whole-host-512mib-runtime` remains deferred. Every newly consumed resource must
-have an explicit bound, including:
+disk`. The maintained container reserves room for the host by enforcing
+`448 MiB` memory, no additional container swap, `1 CPU`, and `256` PIDs. Every
+newly consumed resource must have an explicit bound, including:
 
 - Plain and compressed HTTP request bodies.
 - JSON, protobuf, command stdout/stderr, and file reads.
@@ -173,14 +170,14 @@ Prefer streaming or retaining a hash or summary over keeping a second long-lived
 copy of a large configuration. Document the worst case of a resource-affecting
 change and use the [testing strategy](docs/development/testing.md) to decide
 whether the 50,000-user resource test should be rerun as expanded validation.
-Its dated engineering baseline is not evidence for a later frozen candidate.
+Its dated engineering baseline applies only to the recorded conditions.
 
 ### Security and secrets
 
 - Never log or commit `SECRET_KEY`, JWTs, client certificates, private keys, or
   complete authentication headers.
 - Do not place real node IP addresses, hostnames, or raw Panel responses in test
-  fixtures or acceptance evidence.
+  fixtures, documentation, or the repository.
 - Configuration and secret readers must enforce size, file type, symlink,
   owner/mode, and stable-read protections.
 - Invoke external commands with argument arrays and bounded input and output.
@@ -265,9 +262,9 @@ affects:
 - Install, upgrade, rollback, or uninstall behavior.
 
 Record user-visible changes in the root [`CHANGELOG.md`](CHANGELOG.md). Do not
-describe unfinished acceptance as a release. Avoid copying volatile "current
+describe an unpublished version as a release. Avoid copying volatile "current
 status" statements into several documents; link to the versioning policy,
-contract baseline, or release note that owns the fact.
+contract baseline, or changelog entry that owns the fact.
 
 The canonical CI workflow is [`.github/workflows/ci.yml`](.github/workflows/ci.yml),
 and the supported single-file deployment template is
@@ -386,38 +383,19 @@ the wrong boundary with more comments.
 
 A normal contribution ends when it merges into `dev`; contributors do not
 publish it independently. Maintainers control the `dev -> main` promotion,
-candidate images, final tags, `latest`, release assets, and acceptance evidence
-under the [versioning policy](docs/versioning.md) and
-[release procedure](docs/release.md).
+candidate images, final tags, `latest`, and release assets under the
+[versioning policy](docs/versioning.md) and [release procedure](docs/release.md).
 
-The release procedure calls the frozen code candidate on `main` `C`. After M8
-acceptance, one squash-merged finalization pull request adds the allowlisted
-release material and produces `F`. The Git tag points to `F`; the container
-version tag promotes the accepted manifest built from `C`. Candidate tags and
-commit-SHA images are not releases.
+Every `main` commit receives an immutable `sha-<commit>` candidate image. Before
+tagging a release, a maintainer confirms that this candidate starts cleanly,
+connects to a real Panel, and carries real proxy traffic under the maintained
+Compose limits. These operational checks happen outside the repository: do not
+commit host inventories, logs, Secrets, smoke JSON, or other production data.
 
-Release gates require a clean worktree, the pinned official source, a frozen
-candidate, and the evidence required by that version's acceptance profile. Do
-not weaken a check to work around missing evidence or describe `edge`, `sha-*`,
-or `candidate-sha-*` images as releases.
-
-Before `v2.8.0` can be published, its frozen image digest must pass
-`docker-production-smoke-v2` on a recorded native `amd64`/`x86_64` host. Host
-memory, CPU, disk, and swap are evidence fields rather than admission limits;
-the container must still use exactly 448 MiB memory, no additional container
-swap, 1 CPU, and 256 PIDs. The blocking record also covers the canonical
-Compose template, expected version, real Panel connectivity and proxy traffic,
-cgroup observations, a healthy running container, no OOM kill, and zero
-restarts. `whole-host-512mib-runtime`, the `arm64` runtime,
-`native-systemd-install`, `native-openrc-install`, candidate 50,000-user load,
-24-hour soak, and fault/rollback injection remain deferred and non-blocking and
-must be disclosed that way.
-
-Operator-attested runtime observations are accountable audit claims. Validation
-can bind a record to a candidate commit and digest and check its schema and
-internal consistency; it cannot make the underlying observation unforgeable or
-independently prove that the run occurred. Never manufacture or overstate such
-evidence.
+When the candidate is ready, create an annotated version tag on the current
+`main` HEAD. The Release workflow verifies the candidate manifest and build
+attestation, promotes that same digest to the exact version and `latest`, and
+lets GitHub generate the Release notes. `edge` and `sha-*` are not releases.
 
 ## License
 

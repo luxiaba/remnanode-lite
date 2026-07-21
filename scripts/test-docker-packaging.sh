@@ -27,7 +27,6 @@ for file in \
   .env.example \
   .github/workflows/container.yml \
   .github/workflows/release.yml \
-  scripts/check-release-risk-disclosure.sh \
   scripts/promote-image-tag.sh \
   docs/deployment-docker.md \
   deploy/compose.single-file.yaml; do
@@ -127,8 +126,10 @@ require_text .github/workflows/release.yml \
   "if [ \"${github_expression_prefix}GITHUB_SHA\" != \"${github_expression_prefix}main_head\" ]; then"
 require_text .github/workflows/release.yml 'needs: release'
 require_text .github/workflows/release.yml 'needs: publish-container'
-require_text .github/workflows/release.yml 'Verify accepted candidate image'
-require_text .github/workflows/release.yml 'candidateImageDigest // empty'
+require_text .github/workflows/release.yml 'Verify main candidate image'
+require_text .github/workflows/release.yml "candidate_commit=\"\$GITHUB_SHA\""
+require_text .github/workflows/release.yml \
+  "candidate_tag=\"\${REGISTRY}/\${IMAGE_NAME}:sha-\${candidate_commit}\""
 require_text .github/workflows/release.yml '--cert-identity'
 require_text .github/workflows/release.yml '/.github/workflows/container.yml@refs/heads/main'
 require_text .github/workflows/release.yml '--source-digest'
@@ -149,67 +150,16 @@ if grep -Fq -- '--signer-workflow' .github/workflows/release.yml ||
   echo "release workflow must use an exact attestation certificate identity" >&2
   exit 1
 fi
-require_text scripts/release-check.sh 'scripts/check-release-risk-disclosure.sh'
-require_text scripts/check-release-risk-disclosure.sh '## Known Risks'
-require_text scripts/check-release-risk-disclosure.sh 'operator-attested'
-require_text scripts/check-release-risk-disclosure.sh 'not an unforgeable proof'
-for deferred in \
-  whole-host-512mib-runtime \
-  arm64-production-runtime \
-  native-systemd-install \
-  native-openrc-install \
-  50000-user-load \
-  24h-soak \
-  fault-and-rollback-injection; do
-  require_text scripts/check-release-risk-disclosure.sh "$deferred"
-done
-
-risk_fixture_dir="$(mktemp -d)"
-trap 'rm -rf "$risk_fixture_dir"' EXIT
-valid_risks="${risk_fixture_dir}/valid.md"
-invalid_deferred="${risk_fixture_dir}/invalid-deferred.md"
-invalid_operator="${risk_fixture_dir}/invalid-operator.md"
-invalid_host_scope="${risk_fixture_dir}/invalid-host-scope.md"
-{
-  printf '%s\n\n' '# v2.8.0' '## Known Risks'
-  for deferred in \
-    whole-host-512mib-runtime \
-    arm64-production-runtime \
-    native-systemd-install \
-    native-openrc-install \
-    50000-user-load \
-    24h-soak \
-    fault-and-rollback-injection; do
-    printf -- "- \`%s\`: deferred; not validated by \`docker-production-smoke-v2\`.\n" "$deferred"
-  done
-  printf '\n%s\n\n%s\n\n%s\n' \
-    'The smoke validates the canonical container limits on the recorded host; whole-host 512 MiB / 1 vCPU / 2 GB runtime remains deferred.' \
-    'Runtime evidence is operator-attested and is not an unforgeable proof.' \
-    '## Installation and Upgrade'
-} >"$valid_risks"
-bash scripts/check-release-risk-disclosure.sh "$valid_risks"
-sed 's/: deferred;/: not deferred;/' "$valid_risks" >"$invalid_deferred"
-if bash scripts/check-release-risk-disclosure.sh "$invalid_deferred" >/dev/null 2>&1; then
-  echo "release risk checker accepted a negated deferred disclosure" >&2
-  exit 1
-fi
-sed 's/Runtime evidence is operator-attested/Runtime evidence is not operator-attested/' \
-  "$valid_risks" >"$invalid_operator"
-if bash scripts/check-release-risk-disclosure.sh "$invalid_operator" >/dev/null 2>&1; then
-  echo "release risk checker accepted a negated operator evidence statement" >&2
-  exit 1
-fi
-sed 's/whole-host 512 MiB \/ 1 vCPU \/ 2 GB runtime remains deferred/whole-host target was validated/' \
-  "$valid_risks" >"$invalid_host_scope"
-if bash scripts/check-release-risk-disclosure.sh "$invalid_host_scope" >/dev/null 2>&1; then
-  echo "release risk checker accepted a false whole-host validation statement" >&2
-  exit 1
-fi
 require_text .github/workflows/release.yml \
   "SOURCE_DIGEST: ${github_expression_prefix}{{ needs.release.outputs.candidate_digest }}"
 require_text .github/workflows/release.yml 'make_latest: false'
 require_text .github/workflows/release.yml 'overwrite_files: false'
 require_text .github/workflows/release.yml 'prerelease: false'
+require_text .github/workflows/release.yml 'generate_release_notes: true'
+if grep -Fq 'body_path:' .github/workflows/release.yml; then
+  echo "release workflow must not require a repository release-note file" >&2
+  exit 1
+fi
 require_text .github/workflows/release.yml 'promote-latest:'
 require_text .github/workflows/release.yml 'Publish accepted candidate as the exact release version'
 require_text .github/workflows/release.yml 'Promote attested image to GHCR latest'
@@ -233,22 +183,25 @@ require_text .github/workflows/release.yml 'dist/docker-compose.single-file.yaml
 require_text .github/workflows/release.yml \
   "release_version=\"${github_expression_prefix}{GITHUB_REF_NAME#v}\""
 require_text .github/workflows/release.yml 'dist/remnanode.env.example'
+require_text .github/workflows/release.yml \
+  "REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${github_expression_prefix}{release_version}"
 require_text .github/workflows/container.yml 'outputs: type=cacheonly'
 require_text .github/workflows/container.yml 'push: false'
 require_text .github/workflows/container.yml 'workflow_dispatch:'
-require_text .github/workflows/container.yml 'branches: [dev, main]'
+require_text .github/workflows/container.yml 'branches: [main]'
+require_text .github/workflows/container.yml 'branches: [main, dev]'
 require_text .github/workflows/container.yml '      - ".env.example"'
 require_text .github/workflows/container.yml '      - "compose.yaml"'
-if [ "$(grep -Fc '      - "deploy/compose.single-file.yaml"' .github/workflows/container.yml)" -ne 2 ]; then
-  echo "container workflow must track the production single-file Compose on push and pull requests" >&2
+if [ "$(grep -Fc '      - "deploy/compose.single-file.yaml"' .github/workflows/container.yml)" -ne 1 ]; then
+  echo "container pull-request filter must track the production single-file Compose" >&2
   exit 1
 fi
-if [ "$(grep -Fc '      - "scripts/promote-image-tag.sh"' .github/workflows/container.yml)" -ne 2 ]; then
-  echo "container workflow must track its image promotion helper on push and pull requests" >&2
+if [ "$(grep -Fc '      - "scripts/promote-image-tag.sh"' .github/workflows/container.yml)" -ne 1 ]; then
+  echo "container pull-request filter must track its image promotion helper" >&2
   exit 1
 fi
 require_text .github/workflows/container.yml "cancel-in-progress: \${{ github.event_name != 'workflow_dispatch' }}"
-require_text .github/workflows/container.yml "if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')"
+require_text .github/workflows/container.yml "if: github.event_name == 'pull_request'"
 require_text .github/workflows/container.yml "if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
 require_text .github/workflows/container.yml "if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'"
 require_text .github/workflows/container.yml 'Reject non-main candidate dispatch'
@@ -268,9 +221,16 @@ require_text .github/workflows/container.yml 'needs: [publish-main, attest-main]
 require_text .github/workflows/container.yml 'scripts/promote-image-tag.sh immutable'
 require_text .github/workflows/container.yml 'scripts/promote-image-tag.sh mutable'
 require_text .github/workflows/container.yml \
-  "tag=\"candidate-sha-${github_expression_prefix}{GITHUB_SHA}\""
-require_text .github/workflows/container.yml \
   "tag=\"sha-${github_expression_prefix}{GITHUB_SHA}\""
+require_text .github/workflows/container.yml 'id: candidate'
+require_text .github/workflows/container.yml "candidate_ref=\"\${image}:\${tag}\""
+require_text .github/workflows/container.yml 'keeping the immutable candidate'
+require_text .github/workflows/container.yml \
+  "SOURCE_DIGEST: ${github_expression_prefix}{{ steps.candidate.outputs.digest }}"
+if grep -Fq 'candidate-sha-' .github/workflows/container.yml; then
+  echo "container workflow must use one candidate tag namespace" >&2
+  exit 1
+fi
 require_text .github/workflows/container.yml "current main is ${github_expression_prefix}main_head"
 sbom_generator='generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68'
 require_text .github/workflows/container.yml "sbom: ${sbom_generator}"
@@ -321,13 +281,9 @@ if grep -Fq 'docker/build-push-action@' .github/workflows/release.yml; then
 fi
 
 require_text .github/workflows/release.yml \
+  "candidate_tag=\"${github_expression_prefix}{REGISTRY}/${github_expression_prefix}{IMAGE_NAME}:sha-${github_expression_prefix}{candidate_commit}\""
+require_text .github/workflows/release.yml \
   "candidate_ref=\"${github_expression_prefix}{image}@${github_expression_prefix}{candidate_digest}\""
-if grep -Fq \
-  "candidate_ref=\"${github_expression_prefix}{image}:sha-${github_expression_prefix}{candidate_commit}\"" \
-  .github/workflows/release.yml; then
-  echo "release workflow must not require one candidate tag alias" >&2
-  exit 1
-fi
 
 if grep -Eq '^[[:space:]]+needs:[[:space:]]+build[[:space:]]*$' .github/workflows/container.yml; then
   echo "main image publishing must not repeat the CI build job" >&2
@@ -349,8 +305,11 @@ done < <(
     .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null
 )
 
+packaging_tmp_dir="$(mktemp -d)"
+trap 'rm -rf "$packaging_tmp_dir"' EXIT
+
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  compose_env="${risk_fixture_dir}/compose.env"
+  compose_env="${packaging_tmp_dir}/compose.env"
   {
     printf '%s\n' \
       "REMNANODE_IMAGE=${production_image}" \
@@ -392,10 +351,15 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     exit 1
   }
 
-  release_compose="${risk_fixture_dir}/release-compose.yaml"
-  release_env="${risk_fixture_dir}/release.env"
+  release_compose="${packaging_tmp_dir}/release-compose.yaml"
+  release_env="${packaging_tmp_dir}/release.env"
+  release_env_asset="${packaging_tmp_dir}/remnanode.env.example"
   printf '%s\n' "$release_single_file" >"$release_compose"
   printf '%s\n' 'SECRET_KEY=packaging-check' >"$release_env"
+  sed \
+    "s|^REMNANODE_IMAGE=.*$|REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${version}|" \
+    .env.example >"$release_env_asset"
+  require_text "$release_env_asset" "REMNANODE_IMAGE=${production_image}"
   release_image="$(env -u REMNANODE_IMAGE docker compose \
     --env-file "$release_env" -f "$release_compose" config --format json \
     | jq -r '.services["remnanode-lite"].image')"

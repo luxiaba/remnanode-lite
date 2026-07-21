@@ -1,19 +1,17 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=22c34892be067efa920923d908975c69bf71121a88dd1fd2b873a82757cd7b13 -->
-# 512 MiB 资源预算与 M6-M8 基准
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=ec24387c466658ae424639e42a3441bb49cec1b1e155b51ee53903610b023a98 -->
+# 512 MiB 资源预算与工程基准
 
 > 这是中文译文；资源数字和边界以[英文原文](../../../development/resource-budget.md)为准。
 
 [返回开发文档](README.md) · [运维与排障](../operations.md)
 
-本文汇总带日期的工程测量和当前资源策略。每项结果只适用于所列提交、测试日期、工具链、架构和测试资产；它们用于提供工程背景，不会自动成为其他发布候选的运行时证据。
+本文汇总带日期的工程测量和当前资源策略。每项结果只适用于所列提交、测试日期、工具链、架构和测试资产；它们用于后续对比，不代表其它构建或环境。
 
-## 验收边界
+## 生产边界
 
-`v2.8.0` 唯一会阻塞发布的资源与运行时验收方案，是冻结候选上的 `docker-production-smoke-v2`。它要求在 `amd64` 上以镜像摘要固定生产 Compose 部署，接入真实 Panel、通过真实代理流量，并记录实际内存和 PID 用量；容器必须持续健康运行，且 OOM kill 和重启次数均为零。[验收协议](release-acceptance.md#docker-生产-smoke)定义完整条件，其中包括在精确的容器、健康和就绪限制下至少运行 600 秒。宿主的内存、CPU、磁盘和 swap 总量是必填的环境观测值，不作为容量验收阈值。
+生产目标是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。标准容器为宿主预留空间，把 Node 与 rw-core 合计限制为 `448 MiB` 内存、`448 MiB` 内存与 swap 合计上限、`1 CPU` 和 `256` 个 PID。内存与 swap 合计上限等于内存上限，因此即使宿主有 swap，容器也没有额外 swap 配额。
 
-`whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 和 `fault-and-rollback-injection` 均作为不阻塞发布的后续 profile 延后执行。未在当前候选上运行这些 profile 时，不得暗示已经取得相应结果。
-
-生产目标仍是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`，但 `docker-production-smoke-v2` 不声称冻结候选已经在这一精确整机规格上完成运行时验证。该 profile 严格验证生产容器边界：`448 MiB` 内存上限、`448 MiB` 内存与 swap 合计上限、`1 CPU` 和 `256` 个 PID。内存与 swap 合计上限等于内存上限，因此即使宿主有 swap，容器也没有额外 swap 配额。带日期的 M6 工程门禁曾将 Node 测试进程与真实 rw-core 放在同一个 cgroup 内，并使用以下限制：
+打 tag 前，维护者会在这些限制下使用真实 Panel 和真实代理流量验证不可变的 `sha-<main-commit>` 镜像。该人工发布判断不以运行数据文件的形式存入仓库。带日期的 M6 工程门禁使用相同的核心 cgroup 限制完成了可复现的资源测试：
 
 - `448 MiB` hard memory limit，为宿主机内核与基础服务保留至少 `64 MiB`。
 - `1 CPU`、`256` 个 PID、禁用 swap 与外部网络。
@@ -23,9 +21,9 @@
 
 历史门禁脚本为 [`scripts/test-low-memory.sh`](../../../../scripts/test-low-memory.sh)，Linux 集成测试为 [`internal/xray/resource_linux_integration_test.go`](../../../../internal/xray/resource_linux_integration_test.go)。M6 执行还通过最小 protobuf wire client 验证了系统统计、inbound 用户数、VLESS 热增删和用户 IP 统计 RPC。
 
-生产 Compose 使用另一套 tmpfs 布局：`/run`、`/tmp` 和 rw-core 日志合计 `48 MiB`，日志不写入持久卷。历史门禁中的单个 64 MiB `/tmp` 只是测试夹具，并未逐项复现生产 Compose。阻塞发布的 `amd64` smoke 使用生产布局，但不重复历史 50,000 用户负载，也不证明另一项整机目标。
+生产 Compose 使用另一套 tmpfs 布局：`/run`、`/tmp` 和 rw-core 日志合计 `48 MiB`，日志不写入持久卷。历史门禁中的单个 64 MiB `/tmp` 只是测试夹具，并未逐项复现生产 Compose。历史负载或较大宿主机上的一次运行都不能单独证明精确整机目标。
 
-2026-07-15 的 M6 数据和 2026-07-19 的 M7 init 快照都早于当前 M8 候选。它们仍是有价值的工程基线，但不是当前候选的运行时证据，也不需要为发布 `2.8.0` 重新执行。
+2026-07-15 的 M6 数据和 2026-07-19 的 M7 init 快照仍是有价值的工程基线。改动可能显著影响资源预算时，应重新执行相关测量并对比结果。
 
 ## M6 固定测试资产（2026-07-15 工程基线）
 
@@ -84,7 +82,7 @@ M7 使用最终安装布局补充了两类真实发行环境快照：
 
 OpenRC 还会通过 supervisor 写入 `openrc.log` 和 `openrc.err.log`，每 10 秒检查并 copy-truncate。成功检查后，每个 `.1` 文件的阈值为 `4 MiB`；但当前文件可能在下一次轮询前继续增长，因此这不是严格的字节上限。四组当前文件加 `.1` 文件的阈值预算为 `32 MiB`。如果四个固定临时文件全部残留，总量约为 `48 MiB`，还要加上两个当前文件在一次轮询间隔内的额外增长。
 
-systemd journal 每 30 秒最多接收 200 条服务日志，但字节用量和长期增长仍由宿主机 journald 配额决定。后续扩展验证应在 `2 GB` 整机磁盘上测量日志故障风暴和长期增长。这项工作已在 `2.8.0` 延期，上述阈值不能代替它的结果。
+systemd journal 每 30 秒最多接收 200 条服务日志，但字节用量和长期增长仍由宿主机 journald 配额决定。后续扩展验证应在 `2 GB` 整机磁盘上测量日志故障风暴和长期增长；上述阈值不能代替该结果。
 
 安装和升级把大资产放在仅 root 可访问的 `/var/lib/remnanode-installer`，不使用可能映射到内存的 `/tmp`。五个变更入口都持有 `/run/lock/remnanode-installer.lock`。嵌套安装器会复用并验证同一个打开的文件描述，`RNL_TMP_ROOT` 不影响锁路径，也没有退出路径会删除锁 inode。
 
@@ -112,9 +110,9 @@ upgrade 调用 rw-core 安装器时，外层事务是唯一的备份所有者，
 - Debian 与 Alpine 安装器在 `MemTotal <= 512 MiB` 时自动写入 `LOW_MEMORY=1`。
 - OpenRC 校验 cgroup v2 的 `448 MiB` memory、零 swap、1 CPU、256 PID 以及启动 shell 的实际 cgroup 成员关系；controller 缺失或写入未生效时拒绝启动。停止后不依赖 OpenRC 0.62.6 的路径清理，而是将 `stop_post` 自身迁出、通过 `cgroup.kill` 清理精确 service cgroup、最多等待 5 秒确认 `populated=0` 后删除该目录。
 
-上述 OpenRC 清理覆盖 init 正常执行 `stop_post` 的停止路径。安装器共享锁可以避免并发写入，但不提供应对 SIGKILL 或掉电的持久化阶段日志（phase journal）；`supervise-daemon` 异常退出后，项目也不承诺自动清理残留 cgroup。这是 `2.8.0` 接受的运维限制：原生部署重新运行安装器或重启主机，容器部署重新创建容器。它们不阻塞发布。
+上述 OpenRC 清理覆盖 init 正常执行 `stop_post` 的停止路径。安装器共享锁可以避免并发写入，但不提供应对 SIGKILL 或掉电的持久化阶段日志（phase journal）；`supervise-daemon` 异常退出后，项目也不承诺自动清理残留 cgroup。原生部署可重新运行安装器或重启主机，容器部署可重新创建容器。
 
-任何修改请求解码、Xray 配置生命周期、RPC 消息、报告队列或依赖图的提交，都应重新执行该工程门禁并比较阶段峰值。该比较是独立于当前 M8 阻塞 profile 的维护约束。
+任何修改请求解码、Xray 配置生命周期、RPC 消息、报告队列或依赖图的提交，都应重新执行该工程门禁并比较阶段峰值。该比较是维护约束，不是发布资料。
 
 ## 关闭预算
 

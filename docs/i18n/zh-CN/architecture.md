@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d59a2de6c3a4efbc6de9b0826aefe198b336187755d06655ac8542c438828584 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d14398316f857d2ee475ae8b391bd0240b0c0eef01fbad4dae9a0bdb3822ad73 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -20,7 +20,7 @@ Remnanode Lite 是 Remnawave Panel 与 rw-core 之间的轻量控制面。它本
 - 在允许时通过 Linux `NETLINK_SOCK_DIAG` 终止指定 TCP 连接。
 - 在固定资源预算下提供有界的请求、队列、日志和并发行为。
 
-项目要对齐的是官方 Node 对外可见的行为和协议契约，而不是复刻其 TypeScript 内部架构。项目版本、官方 Node 契约版本、验收使用的 Panel 版本和 rw-core 版本互不等同，分别由版本包、契约证据、验收记录和供应链固定项管理。
+项目要对齐的是官方 Node 对外可见的行为和协议契约，而不是复刻其 TypeScript 内部架构。项目版本、官方 Node 契约版本、集成验证使用的 Panel 版本和 rw-core 版本互不等同，分别由版本包、契约证据、发布文档和供应链固定项管理。
 
 生产目标平台是 Linux `amd64` 和 `arm64`，目标整机规格为 `512 MiB RAM / 1 vCPU / 2 GB disk`。带非 Linux build tag 的占位实现只用于保证项目可编译、单元测试可运行，不代表这些平台具备完整生产能力。
 
@@ -78,7 +78,6 @@ flowchart LR
 | `cmd/remnanode-lite` | 生产 CLI、依赖装配、daemon 启动与整体关闭 |
 | `cmd/asn-builder` | 离线构建低内存 ASN 二进制索引 |
 | `cmd/contract-probe` | 对官方和候选 Node 做受控黑盒契约比较 |
-| `cmd/release-evidence-check` | 校验发布验收记录、Git ancestry 和产物 |
 | `internal/config` | 有界配置读取、环境覆盖、默认值和 Secret 文件读取 |
 | `internal/secret` | 解码 Panel `SECRET_KEY`，提取 CA、JWT 公钥和 Node 证书/私钥 |
 | `internal/auth` | RS256 JWT 签名、`exp`/`nbf` 和可选身份 claim 校验 |

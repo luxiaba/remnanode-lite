@@ -1,19 +1,15 @@
-<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=9cdc7106bc95f54f1c542cbf30491410ef75458ff38feda098a1d65ed9ba7605 -->
+<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=507e7db9d7096814c3bb6f77df53acf66e1f4264310f5878422a584f624a3913 -->
 # 2026-07 静态审计整改记录（归档）
 
 > 这是中文译文；涉及历史记录和规则时，请以[英文原文](../../../archive/2026-07-audit-remediation.md)为准。
 
 [返回开发文档](../development/README.md) · [当前路线图](../development/roadmap.md) · [架构说明](../architecture.md)
 
-这里记录的是 2026 年 7 月为首个独立版本线完成的静态审计和整改工作，仅供回顾，不是当前待办或新维护者指南。审计早于仓库历史重置，原基线 commit 已不存在于当前 Git 历史。仍需追踪的事实可以在代码和测试、[2.8.0 契约基线](../development/contract-2.8.0.md)、[资源预算](../development/resource-budget.md)和[发布验收协议](../development/release-acceptance.md)中找到。
+这里记录的是 2026 年 7 月为首个独立版本线完成的静态审计和整改工作，仅供回顾，不是当前待办或新维护者指南。审计早于仓库历史重置，原基线 commit 已不存在于当前 Git 历史。仍需追踪的事实可以在代码和测试、[2.8.0 契约基线](../development/contract-2.8.0.md)、[资源预算](../development/resource-budget.md)和当前[发布流程](../release.md)中找到。
 
-下文的 M8 计划原本要求原生和双运行时测试、50,000 用户测试及 24 小时 soak。对于尚未
-发布的 `v2.8.0`，它已经由 schema version 2 和 `docker-production-smoke-v2` 取代。
-当前 profile 会在实际记录的宿主机上严格验证容器资源边界；精确整机 512 MiB 运行、
-旧场景和其它已命名的后续 profile 均已延期且不阻塞发布。实际发布门禁以当前验收协议
-为准。
+下文的 M8 计划原本要求原生和双运行时测试、50,000 用户测试及 24 小时 soak。仓库后来不再把这些运行观测作为版本化源码资料。当前流程为每个 `main` 提交构建一个不可变的 `sha-<40位提交>` 候选；维护者用真实 Panel 和流量确认候选后，在当前 `main` HEAD 创建 annotated tag，触发 attestation 校验、同一 digest 的精确版本与 `latest` 晋升，以及 GitHub 自动生成 Release notes。当前发布规则以发布手册为准；本文只记录历史计划。
 
-本记录形成时，M0-M7 整改已经完成，M8 负责冻结候选的真实 Panel/Linux、资源、恢复和
+本记录形成时，M0-M7 整改已经完成，M8 规划了候选的真实 Panel/Linux、资源、恢复和
 长期运行测试。掉电或 installer/supervisor 被强制终止后的自动恢复不在范围内；操作人员
 应根据情况重新运行 installer、重启主机或重建容器。
 
@@ -50,11 +46,8 @@
    信息、JWT 和 Unix config target 等已确认差异。
 5. **资源边界**：补齐 OpenRC cgroup、低内存升级迁移、磁盘和归档预检、可靠停止与回滚，
    以及进程身份健康检查。
-6. **可信测试链**：从固定的官方源码和 SDK 证据生成静态契约，后续发布测试再把场景结果
-   绑定到退出码、日志摘要和二进制摘要。
-7. **冻结与验收准备**：冻结候选前运行测试、race detection、vet、static analysis 和双架构
-   构建。原计划随后执行 systemd、OpenRC、Panel 2.8.1、真实 rw-core、50,000 用户和
-   24 小时 soak。
+6. **可信测试链**：从固定的官方源码和 SDK 证据生成静态契约，并通过可执行检查验证代码和产物。
+7. **发布准备**：打 tag 前运行测试、race detection、vet、static analysis 和双架构构建。原计划随后执行 systemd、OpenRC、Panel 2.8.1、真实 rw-core、50,000 用户和 24 小时 soak。
 
 ## 当时采用的提交策略
 
