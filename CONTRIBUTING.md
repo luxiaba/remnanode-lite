@@ -1,14 +1,13 @@
 # Contributing to Remnanode Lite
 
-Thank you for helping improve Remnanode Lite. This repository maintains an
-independent Go implementation of Remnawave Node for resource-constrained Linux
-hosts. Its externally observable behavior is governed by a pinned release of
-the official Remnawave Node, while its implementation, architecture, and
-release cadence remain independent.
+Remnanode Lite is an independent Go implementation of Remnawave Node for
+resource-constrained Linux hosts. It follows the observable behavior of a
+pinned official Node release, but its code, architecture, and release schedule
+are maintained here.
 
-A good contribution leaves behavior verifiable, state ownership explicit,
-resource use bounded, failures recoverable, and the resulting design clear to
-the next maintainer.
+When you contribute, make the behavior easy to verify and the design easy for
+the next maintainer to follow. New state needs a clear owner, resource use needs
+a bound, and failure paths need to be recoverable.
 
 ## Before You Start
 
@@ -31,10 +30,9 @@ exploitation details.
 
 ## Branch Model
 
-- `main` is the protected release branch. It accepts a tested promotion from
-  `dev`. The resulting `main` commit becomes the M8 release candidate only
-  after the merge. Once that candidate has passed acceptance, a release-only
-  branch may enter under the documented path allowlist.
+- `main` is the protected release branch. A tested `dev` promotion becomes the
+  M8 release candidate after it is merged. Once that candidate passes
+  acceptance, a release-only branch may add the allowlisted release material.
 - `dev` is the stable development and integration branch. Normal features,
   fixes, refactors, and maintenance changes ultimately merge here.
 - Daily work belongs on a short-lived topic branch created from the latest
@@ -171,7 +169,8 @@ disk`. Every newly consumed resource must have an explicit bound, including:
 Prefer streaming or retaining a hash or summary over keeping a second long-lived
 copy of a large configuration. Document the worst case of a resource-affecting
 change and use the [testing strategy](docs/development/testing.md) to decide
-whether the 50,000-user resource gate must be rerun.
+whether the 50,000-user resource test should be rerun as expanded validation.
+Its dated engineering baseline is not evidence for a later frozen candidate.
 
 ### Security and secrets
 
@@ -250,8 +249,8 @@ When adding or upgrading a dependency:
 
 ## Documentation and Changelog
 
-Code and documentation are one change. Update the relevant canonical document
-in the same pull request when changing:
+Update the canonical documentation in the same pull request whenever a change
+affects:
 
 - User-visible configuration, defaults, resource limits, or deployment steps.
 - APIs, the official contract version, or known differences.
@@ -296,7 +295,7 @@ The minimum expectations are:
 - Run repository checks for shell or deployment changes; add offline
   operational tests for installer changes.
 - Run Linux network-namespace tests for nftables or netlink changes.
-- Run the low-memory gate for resource ceilings or large-configuration paths.
+- Run the low-memory test for resource ceilings or large-configuration paths.
 
 Before opening a pull request, run the repository checks equivalent to CI when
 your environment supports them:
@@ -309,7 +308,8 @@ REQUIRE_GOVULNCHECK=1 \
 
 This command does not exercise a real Panel, Linux network namespaces, a real
 rw-core, or a long soak. List platform tests you could not run in the pull
-request; never report them as passed.
+request; an expanded test can be non-blocking for a particular release profile,
+but it must never be reported as passed when it was not run.
 
 CI is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Its
 `ci / gate` job aggregates Go and race checks, repository and packaging checks,
@@ -384,17 +384,31 @@ candidate images, final tags, `latest`, release assets, and acceptance evidence
 under the [versioning policy](docs/versioning.md) and
 [release procedure](docs/release.md).
 
-In that procedure, `C` is the frozen code candidate on `main`. After M8
-acceptance, the finalization pull request may add only allowlisted release
-material; its squash-merged result is `F`. The final Git tag points to `F`,
-while the exact release container tag promotes the already accepted manifest
-digest built from `C`. Neither a candidate tag nor a commit-SHA image is a
-release by itself.
+The release procedure calls the frozen code candidate on `main` `C`. After M8
+acceptance, one squash-merged finalization pull request adds the allowlisted
+release material and produces `F`. The Git tag points to `F`; the container
+version tag promotes the accepted manifest built from `C`. Candidate tags and
+commit-SHA images are not releases.
 
-Release gates require a clean worktree, the pinned official source, one frozen
-candidate, and real acceptance evidence. Do not weaken checks to bypass missing
-evidence, and do not describe `edge`, `sha-*`, or `candidate-sha-*` images as
-final releases.
+Release gates require a clean worktree, the pinned official source, a frozen
+candidate, and the evidence required by that version's acceptance profile. Do
+not weaken a check to work around missing evidence or describe `edge`, `sha-*`,
+or `candidate-sha-*` images as releases.
+
+Before `v2.8.0` can be published, its frozen image digest must pass
+`docker-production-smoke-v1` on a production `amd64` host. The blocking record
+covers the production Compose template, expected version, real Panel
+connectivity and proxy traffic, cgroup memory and PID observations, a healthy
+running container, no OOM kill, and zero restarts. The `arm64` runtime,
+`native-systemd-install`, `native-openrc-install`, candidate 50,000-user load,
+24-hour soak, and fault/rollback injection remain deferred and non-blocking and
+must be disclosed that way.
+
+Operator-attested runtime observations are accountable audit claims. Validation
+can bind a record to a candidate commit and digest and check its schema and
+internal consistency; it cannot make the underlying observation unforgeable or
+independently prove that the run occurred. Never manufacture or overstate such
+evidence.
 
 ## License
 

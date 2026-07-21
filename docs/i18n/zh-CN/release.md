@@ -1,13 +1,12 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=5e345e8952ce822f786de4992b90b44660fa9747521a856dde3f20d80eb791ce -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=6702cd6ffd8de8430670cde91d8db7daf1cf2c5c29a3d4765e6d57542346d94c -->
 
 # 发布与版本维护手册
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../release.md)为准。
+> 这是中文译文；发布规则以[英文原文](../../release.md)为准。
 
 [返回文档首页](README.md) · [版本模型](versioning.md)
 
-本文面向项目维护者，定义从日常开发、候选冻结、真实验收，到 GitHub Release 与 GHCR 镜像发布的长期流程。这里描述的是仓库的正式发布规则，不是某个版本的一次性清单。
+这是写给维护者的发布手册，覆盖日常开发、候选冻结、真实环境验收、GitHub Release 和最终 GHCR tag。每个版本都遵循同一套流程。
 
 版本名称和镜像渠道的规范定义见 [`versioning.md`](versioning.md)；本文重点说明如何把这些规则落实为一次可验证的发布。
 
@@ -98,7 +97,7 @@ git push -u origin chore/prepare-next-release
 # 在 GitHub 发起 chore/prepare-next-release -> dev 的 PR；CI 成功并评审后合入
 ```
 
-即使只有一位维护者，也使用同一条 PR 路径，让 `dev` 的变更、CI 结论和评审上下文可追溯；不要把“允许 push”理解为常规开发入口。
+即使只有一位维护者，也请走这条 PR 路径。这样改动、CI 结果和评审记录会一起保留在 `dev`；直接 push 不属于常规发布流程。
 
 发布前必须在 `dev` 完成版本元数据更新。设本次项目版本为：
 
@@ -159,15 +158,14 @@ printf '%s\n' "$CANDIDATE_DIGEST" \
 gh attestation verify \
   "oci://ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}" \
   --repo luxiaba/remnanode-lite \
-  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml \
+  --cert-identity https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
   --source-digest "$C" \
-  --source-ref refs/heads/main \
   --deny-self-hosted-runners
 ```
 
-手动从 `main` 运行候选 workflow 时只发布按策略不移动的 `candidate-sha-${C}`，不会覆盖自动 push 已生成的 `sha-${C}`。它是手动候选专用的发现别名，digest 不保证与自动候选相同。两种候选都可以进入验收，但从开始验收到正式发布必须固定同一个完整 commit 和 manifest digest；正式 Release 直接验证该 digest 的存在性及其 attestation，不依赖候选使用了哪一种 tag 别名。
+从 `main` 手动运行候选 workflow 时，会发布按策略不移动的 `candidate-sha-${C}`，但不会覆盖自动生成的 `sha-${C}`。两者即使来自同一个 commit，也可能指向不同 digest。任一镜像都可以进入验收，但完整 commit 和 manifest digest 必须一直固定到正式发布。最终 Release 直接验证该 digest 及其 attestation，不依赖最初使用哪个 tag 找到它。
 
-M8 的容器验收使用 `C` 中的 `deploy/compose.single-file.yaml`，将其中镜像引用替换为 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}` 后运行。证据必须同时保存候选 Git object 中该模板的文件 SHA-256 和实际运行的 digest；仅运行 `docker compose config` 或测试相同 tag 的另一次构建不能替代最终候选验收。完整字段和采集口径见 [`development/release-acceptance.md`](development/release-acceptance.md#docker-compose-证据)。
+`docker-production-smoke-v1` profile 使用 `C` 中的 `deploy/compose.single-file.yaml`，将其中镜像引用替换为 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}` 后运行。证据必须同时保存候选 Git object 中该模板的文件 SHA-256 和实际运行的 digest；仅运行 `docker compose config` 或测试相同 tag 的另一次构建不能替代最终候选验收。完整字段和采集口径见 [Docker 生产 smoke](development/release-acceptance.md#docker-生产-smoke)。
 
 ## 6. 冻结候选与真实验收
 
@@ -181,32 +179,49 @@ bash scripts/check.sh
 git status --short
 ```
 
-真实验收范围以 [`development/release-acceptance.md`](development/release-acceptance.md) 为准，至少覆盖：
+真实验收范围以 [`development/release-acceptance.md`](development/release-acceptance.md) 为准。
+Schema version 2 使用版本专用的 `docker-production-smoke-v1` profile，阻断范围为：
 
-- 固定官方 Node 与候选 Node 的路由、响应、错误和副作用差分。
-- 目标 Panel 的节点注册、Xray 生命周期、统计、用户和插件流程。
-- Ubuntu/systemd 与 Alpine/OpenRC，架构并集覆盖 amd64 和 arm64。
-- 候选 manifest 同时包含 linux/amd64、linux/arm64，并分别在原生 amd64 与 arm64 验收机上用批量部署 Compose 模板启动同一个验收 digest。
-- 容器实际 cgroup、read-only rootfs、init/reaper、tmpfs、capability、health、优雅停止、PIDs/zombie 和日志轮转约束。
-- rw-core、nftables、socket destroy、进程组清理、安装、升级、回滚和卸载隔离。
-- 整机 `512 MiB RAM / 1 vCPU / 2 GiB disk / no swap` 的资源预算；容器磁盘峰值必须保留一个真实回滚镜像。
-- 50k 用户、规定的持续运行时间和故障恢复场景。
+- `C` 的受保护分支 GitHub CI 门禁。
+- 同时构建 `linux/amd64`、`linux/arm64` 的候选 manifest，以及 SBOM、
+  provenance 和 GitHub build attestation。
+- 从 `C` 构建并以 SHA-256 标识的两个架构 Release binary。
+- 在真实原生 amd64/x86_64 低内存主机上，用规范单文件 Compose 启动同一个
+  digest-pinned 候选。
+- 容器保持 running/healthy，使用规范 memory/CPU/swap/PID 限制，OOM 与 restart
+  都为零，并记录正数 memory/PID current/peak。
+- Panel 2.8.1 在线、真实代理流量通过，并由 Release Owner 签注。
+
+运行时记录由操作员签注并绑定候选，具备可审计性；验证器不能独立证明所记录的 Panel
+会话或流量观测确实发生，因此它不是不可伪造的证明。
+
+本 profile 精确记录以下 deferred、non-blocking 验证：
+`arm64-production-runtime`、`native-systemd-install`、
+`native-openrc-install`、`50000-user-load`、`24h-soak` 和
+`fault-and-rollback-injection`。Release note 必须披露这些限制，且不得把带日期的
+M6/M7 工程基线描述成候选 runtime 验收。
 
 验收材料写入当前项目版本对应的目录：
 
 ```text
 docs/development/acceptance/v${VERSION}/
   manifest.json
-  systemd.json
-  openrc.json
-  panel.json
-  compose.json
-  resource-fault.json
+  docker-smoke.json
 ```
 
-当前 `cmd/release-evidence-check` 是首个版本线的严格验收 profile，会固定版本、官方提交、Panel、rw-core、系统、路由数量和资源策略。准备新的项目版本或契约时，必须先在普通代码 PR 中更新并测试这个 profile；不能等到 tag workflow 中临时放宽校验，也不能把旧版本 evidence 改名复用。
+`cmd/release-evidence-check` 固定 schema version 2、acceptance profile、版本、官方
+提交、Panel、rw-core、deferred 列表、smoke 阈值和签注身份。准备其它项目版本或契约
+时，必须在冻结 `C` 前通过普通代码 PR 更新并测试 profile。不要在 tag workflow 中
+临时放宽校验，也不要复用旧版本证据。
 
-`manifest.json` 必须记录 `C`、candidate tree、`CANDIDATE_DIGEST`、项目版本、Git tag、官方契约 pin、Panel、rw-core、资源策略、风险和其余 evidence 的 SHA-256。它不记录尚未产生的最终提交 `F`；严格 schema 会拒绝这个未知字段。不得提交 Secret Key、JWT、CA、证书、私钥、IP、hostname、Panel URL、原始响应 body 或可还原用户的数据。
+`manifest.json` 记录 `C`、candidate tree、`CANDIDATE_DIGEST`、两个 Node binary
+hash、项目/tag/contract 身份、deferred validation、风险和完整
+`docker-smoke.json` 文件的 SHA-256。smoke 记录把 `C` 中的规范 Compose blob 与同一
+image digest、amd64 Node binary、实际限制和资源观测、Panel/traffic 结果、脱敏 raw
+bundle digest 及 operator signoff 绑定在一起。
+
+不要在 manifest 中写入尚未产生的 `F`。也不得提交 Secret Key、JWT、CA、证书、
+私钥、IP、hostname、Panel URL、原始响应 body 或可识别用户的数据。
 
 ## 7. 受保护 main 下提交发布资料
 
@@ -220,11 +235,7 @@ CHANGELOG.md
 docs/development/roadmap.md
 docs/i18n/zh-CN/development/roadmap.md
 docs/development/acceptance/v${VERSION}/manifest.json
-docs/development/acceptance/v${VERSION}/systemd.json
-docs/development/acceptance/v${VERSION}/openrc.json
-docs/development/acceptance/v${VERSION}/panel.json
-docs/development/acceptance/v${VERSION}/compose.json
-docs/development/acceptance/v${VERSION}/resource-fault.json
+docs/development/acceptance/v${VERSION}/docker-smoke.json
 docs/releases/v${VERSION}.md
 ```
 
@@ -247,7 +258,7 @@ git commit -m "docs(release): record v${VERSION} acceptance"
 git push -u origin "release/v${VERSION}-docs"
 ```
 
-然后发起该分支到 `main` 的 PR。这里有一个不可省略的约束：**发布资料 PR 必须使用 squash merge**。
+然后发起该分支到 `main` 的 PR，并使用 **squash merge**。其它合并方式无法通过发布门禁。
 
 验收验证器会逐个检查 `C..HEAD` 的提交，并拒绝：
 
@@ -289,19 +300,39 @@ docs/releases/v${VERSION}.md
 Release note 至少包含以下章节：
 
 ```markdown
-## 兼容范围
-## 验收结果
-## 已知风险
-## 安装与升级
+## Compatibility
+## Acceptance Results
+## Known Risks
+## Installation and Upgrade
 ```
 
-兼容范围必须分别写明项目版本、契约版本、固定官方 commit、目标 Panel、rw-core 和支持架构；验收结果还必须列出候选提交 `C` 与 `candidateImageDigest`，并包含门禁要求的精确相对链接：
+兼容范围必须把项目版本、契约版本、固定官方 commit、目标 Panel、rw-core、已打包架构
+和完成 runtime 验证的架构分别写明。验收结果必须写出
+`docker-production-smoke-v1`、候选提交 `C` 与 `candidateImageDigest`，并包含
+门禁要求的精确相对链接：
 
 ```markdown
 [验收 manifest](../development/acceptance/v${VERSION}/manifest.json)
 ```
 
-Release note 不能写入自身所在提交 `F`，否则会形成不可实现的 Git SHA 自引用。发布完成后，正式 tag 指向的 commit 就是 `F`，可用 `git rev-list -n 1 v${VERSION}` 或 GitHub Release 的 target commit 解析。已知风险不能用空泛的“无”替代审计结论；不存在开放风险时也应说明验收边界和未覆盖范围。文件不得包含 `TODO`、`TBD`、`待补`、`Unreleased` 或“开发中”等占位内容。
+Release note 无法写入自身所在提交 `F`，因为提交文档后才会产生这个 SHA。发布完成
+后，可以用 `git rev-list -n 1 v${VERSION}` 或 GitHub Release 的 target commit
+解析 `F`。Known Risks 必须逐项列出延期检查，不能只写“none”。每个 token 使用下面
+这种可机器检查的格式单独占一行：
+
+```markdown
+- `arm64-production-runtime`: deferred; not validated by `docker-production-smoke-v1`.
+```
+
+对 `native-systemd-install`、`native-openrc-install`、`50000-user-load`、
+`24h-soak` 和 `fault-and-rollback-injection` 使用相同格式。该章节还必须包含下面的
+精确文本行：
+
+```text
+Runtime evidence is operator-attested and is not an unforgeable proof.
+```
+
+文件不得包含 `TODO`、`TBD`、`待补`、`Unreleased` 或“开发中”等占位内容。
 
 ## 9. 最终门禁与 tag
 
@@ -358,11 +389,16 @@ git push origin "$TAG"
    ghcr.io/luxiaba/remnanode-lite:latest
    ```
 
-正式镜像的构建 provenance 和 OCI revision 指向候选代码提交 `C`；Git tag 与 GitHub Release 指向只比 `C` 多发布资料的最终提交 `F`。acceptance manifest 和 Release note 记录 `C` 与 digest，Git tag 本身唯一解析出 `F`；commit-bound 文件不能自引用尚未产生的 `F`。不能把精确版本描述为重新从 `F` 构建的另一份容器。
+镜像的构建 provenance 和 OCI revision 指向候选提交 `C`；Git tag 与 GitHub Release
+指向只增加发布资料的 `F`。acceptance manifest 和 Release note 记录 `C` 与 digest，
+Git tag 标识 `F`。精确版本就是从 `C` 构建并验收的镜像，不是从 `F` 重新构建的第二份镜像。
 
-精确版本写入采用“不存在则创建、存在则必须是同一 digest”的规则，完整 workflow 重跑不能把它改向另一份内容。`latest` 晋升只移动浮动 tag，不重新构建镜像。promotion job 必须独立重新读取 `origin/main` 并检查 HEAD，不能只依赖更早 job 曾经完成的检查。任何历史 tag 都不得更新 GHCR `latest` 或 GitHub Latest Release。release workflow 使用仓库级串行组，避免两个正式发布同时竞争 registry 写入。
+精确版本 tag 不存在时才会创建；已经存在时必须指向同一 digest，因此重跑 workflow
+不能替换内容。`latest` 晋升只移动浮动 tag。执行晋升前，promotion job 会重新读取
+`origin/main` 并检查 HEAD，旧 tag 无法更新 GHCR `latest` 或 GitHub Latest Release。
+仓库级 concurrency group 会阻止两个发布同时修改 registry。
 
-纯 `X.Y.Z` 和 `X.Y.Z-rnl.N` 在通过同一套正式门禁后都属于稳定 Release，也都会被自动晋升为 `latest`。实验性构建不要通过降低 GitHub Release 的 prerelease 标记来发布，应继续使用候选镜像通道。
+纯 `X.Y.Z` 和 `X.Y.Z-rnl.N` 在通过同一套正式门禁后都属于稳定 Release；当 tag commit 仍满足 `main` HEAD 等晋升保护条件时，两者都有资格自动晋升为 `latest`。实验性构建不要通过降低 GitHub Release 的 prerelease 标记来发布，应继续使用候选镜像通道。
 
 ## 11. 发布后验证
 
@@ -393,9 +429,8 @@ docker buildx imagetools inspect "$CANDIDATE_IMAGE"
 gh attestation verify \
   "oci://ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}" \
   --repo luxiaba/remnanode-lite \
-  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml \
+  --cert-identity https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
   --source-digest "$C" \
-  --source-ref refs/heads/main \
   --deny-self-hosted-runners
 ```
 
@@ -424,7 +459,7 @@ curl -fLO "$BASE_URL/remnanode.env.example"
 sha256sum --check SHA256SUMS
 ```
 
-`SHA256SUMS` 验证下载内容与 workflow 生成内容一致；容器的 GitHub attestation 则提供独立的构建来源证明。除非 Release workflow 另行增加文件级 artifact attestation，不应把容器 attestation 描述为二进制归档的证明。
+`SHA256SUMS` 用于确认下载文件与 workflow 产物一致。GitHub attestation 只覆盖容器构建；除非 Release workflow 以后增加文件级 attestation，否则它不能证明二进制归档的来源。
 
 ## 12. 部分失败与恢复
 
@@ -477,7 +512,7 @@ sudo RNL_TAG=vX.Y.Z-rnl.N bash upgrade.sh --yes
 5. 完成真实验收后，才将契约版本更新为已验证基线。
 6. 只有完成同版本官方对齐时，才允许发布纯 `X.Y.Z`。
 
-项目版本的演进由本项目维护计划决定，官方 Release 只改变兼容工作输入，不能自动决定下一个 `rnl.N`。
+下一个项目版本仍由本项目的维护计划决定。官方新 Release 会启动兼容工作，但不会自动决定下一个 `rnl.N`。
 
 ## 15. 最终检查清单
 
@@ -488,9 +523,15 @@ sudo RNL_TAG=vX.Y.Z-rnl.N bash upgrade.sh --yes
 - [ ] 版本元数据、脚本、Compose、probe、CHANGELOG 和测试一致。
 - [ ] 代码 PR 已进入受保护 `main`，候选 `C` 是合入后的 main commit。
 - [ ] `C` 的 `ci` 与候选容器 workflow 成功。
-- [ ] 所有 evidence 绑定同一个 `C`、candidate tree 和实际验收的多架构 manifest digest。
-- [ ] 目标 Panel、两种 init、两种架构、资源与故障验收通过。
-- [ ] `compose.json` 绑定 `C` 中的单文件 Compose 和同一 digest；amd64/arm64 两条实测 run 都满足整机资源、容器限制、隔离、init/reaper、健康、停止、PIDs/zombie、日志、磁盘余量及实际回滚启动门禁。
+- [ ] `manifest.json` 与 `docker-smoke.json` 绑定同一个 `C`、candidate tree、
+      多架构 manifest digest、candidate binary hashes 和规范 Compose blob。
+- [ ] `docker-production-smoke-v1` 在真实原生 amd64/x86_64 低内存主机上运行至少
+      600 秒，容器 running/healthy、OOM/restart 为零、memory/PID 观测有效、
+      Panel 2.8.1 在线且真实代理流量通过。
+- [ ] 精确 deferred 列表已披露为 non-blocking 且未验证：arm64 runtime、原生
+      systemd/OpenRC、50,000 用户负载、24 小时 soak、fault/rollback injection。
+- [ ] Release Owner signoff 与脱敏 raw-bundle digest 已记录，且没有把
+      operator-attested evidence 描述成不可伪造证明。
 - [ ] 发布资料 PR 只修改最终化白名单，并 squash 为恰好一个单 parent 提交。
 - [ ] README 已移除首发前提示，roadmap 已把本版本 M8 状态更新为完成。
 - [ ] 最终提交 `F` 是当前 `origin/main` HEAD。

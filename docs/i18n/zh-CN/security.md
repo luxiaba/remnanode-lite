@@ -1,11 +1,10 @@
-<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=3c6712d903c3fbfccae1837f2ae2348601323e6157d91cd3516b80ba4b176c5b -->
+<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=d575599959883257606ee7120312cf031c39d4d15f466eb1cee191f2b54edc50 -->
 
 # 安全策略
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../../SECURITY.md)为准。
+> 这是中文译文；安全规则以[英文原文](../../../SECURITY.md)为准。
 
-本文说明 Remnanode Lite 的漏洞报告方式、受支持范围和运行信任边界。部署加固与实现细节另见[架构说明](architecture.md)和[运维文档](operations.md)。
+遇到漏洞时如何报告、哪些版本仍接收安全修复，以及节点运行需要哪些权限，都可以在本文找到。部署加固与实现细节另见[架构说明](architecture.md)和[运维文档](operations.md)。
 
 ## 报告漏洞
 
@@ -22,7 +21,7 @@
 
 ## 支持范围
 
-安全支持只适用于已经发布的正式版本。`edge`、`sha-*` 与 `candidate-sha-*` 都属于候选构建，不承诺长期安全维护。任何时候都遵循以下策略：
+只有已经发布的正式版本才提供安全支持。`edge`、`sha-*` 与 `candidate-sha-*` 都是候选构建，不承诺长期维护。当前策略如下：
 
 | 版本 | 安全修复策略 |
 | --- | --- |
@@ -69,7 +68,7 @@ chmod 600 docker-compose.yaml
 - Release 镜像包含 SBOM、BuildKit provenance 和 GitHub build attestation；
 - Release 二进制、Compose 和数据资产由 `SHA256SUMS` 覆盖。
 
-这不等于字节级完全可复现构建：Dockerfile 内 Debian 软件包目前没有固定到 snapshot 和具体包版本。同一源码的正式产物必须以 registry manifest digest、SBOM、provenance 与 attestation 共同识别，不能只相信 tag 名称。
+这些措施还不能保证构建结果逐字节可复现：Dockerfile 安装的 Debian 软件包尚未固定到 snapshot 和精确版本。核验正式镜像时，应同时检查 registry manifest digest、SBOM、provenance 和 attestation，不能只看 tag。
 
 仓库 CI 以 [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) 为准，面向使用者的发布变化记录在根目录英文 [`CHANGELOG.md`](../../../CHANGELOG.md)。`docs/archive/` 中的历史记录（例如[2026 审计整改记录](archive/2026-07-audit-remediation.md)）只保存历史语境，不代表当前安全状态或发布状态。
 
@@ -78,7 +77,8 @@ chmod 600 docker-compose.yaml
 - 所有外部输入必须在副作用前完成认证、解压边界、JSON 解码和契约校验。
 - 进程、队列、请求体、并发、外部命令输出和关闭时间必须有界。
 - rw-core、插件快照和 nftables 状态各有唯一所有者；失败不能提前提交本地成功状态。
-- Node 只拥有项目 rw-core 进程、内部 socket 和固定 nftables 表，不接管宿主机整体防火墙策略。连接销毁是按目标 IP 扫描宿主 network namespace 的内核操作，可能关闭其它进程命中同一 IP 的 TCP 连接，因此生产节点应视为专用网络执行环境。
+- Node 只管理本项目的 rw-core 进程、内部 socket 和固定 nftables 表，不接管宿主机的整体防火墙策略。
+- 连接销毁会扫描宿主 network namespace 中的 TCP 连接；只要连接的本地或远端地址等于目标 IP，就可能被关闭，而且不按 PID 区分，因此生产节点应专门承担这项工作。Panel 请求会过滤本地和特殊地址；管理员命令 `remnanode-lite kill-sockets` 直接调用内核适配器，不经过这层应用过滤。
 - 发布验收材料不得包含可还原用户或生产环境的数据。
 
 ## 安全相关变更
@@ -91,4 +91,4 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-该门禁通过只证明仓库级检查，不替代真实 Linux namespace、候选 attestation、Panel 集成、资源故障测试或适用时的长期 M8 验收。
+该门禁通过只证明仓库级检查，不替代真实 Linux namespace、候选 attestation、Panel 集成，也不替代对应版本发布 profile 要求的运行时与扩展验收。

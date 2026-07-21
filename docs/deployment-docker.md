@@ -32,8 +32,8 @@ ghcr.io/luxiaba/remnanode-lite
 | `X.Y.Z-rnl.N` | Independently versioned project iteration that passed the release process | Recommended for production and precise rollback |
 | `X.Y.Z` | Formal build aligned with the corresponding official version | Recommended for production |
 | `latest` | Most recent stable build that passed the release process | Opt-in stable tracking; not a rollback identifier |
-| `sha-<40-character-commit>` | Candidate built for a `main` commit | Acceptance on real servers |
-| `candidate-sha-<40-character-commit>` | Independently rebuilt candidate manually dispatched from `main` | Acceptance when the automatic candidate is absent or must be rebuilt |
+| `sha-<40-character-commit>` | Candidate built for a `main` commit | Discover the candidate, then resolve and pin its digest |
+| `candidate-sha-<40-character-commit>` | Independently rebuilt candidate manually dispatched from `main` | Discover a manual rebuild, then resolve and pin its digest |
 | `edge` | Moving candidate for current `main` | Short-term observation only |
 
 By project policy, exact versions, `sha-*`, and `candidate-sha-*` are not intentionally moved, but registry tags are not technically immutable. Use a `name@sha256:...` manifest digest for the strongest pin. Before the first formal Release, `latest` and exact version tags do not exist. Select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) and record its manifest digest.
@@ -52,11 +52,42 @@ Compose uses `network_mode: host`; do not add `ports:`. The container holds `NET
 
 ## Single-file deployment
 
-Choose the entry point for the current release stage. Before the first formal Release, or while accepting a candidate, bind the deployment file and candidate image to the same full commit. After a formal version is published, prefer the Compose asset attached to that Release and covered by its `SHA256SUMS`.
+For production, use the Compose file attached to the same Release as the image. The file is covered by that Release's `SHA256SUMS` and already points to the exact version.
 
-The maintained source template is [`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml).
+Download the single-file asset and checksums from the same GitHub Release:
 
-### Before the first Release or during candidate acceptance
+```bash
+VERSION=X.Y.Z-rnl.N # or X.Y.Z
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
+mkdir -p /opt/remnanode
+cd /opt/remnanode
+curl -fL "${BASE_URL}/docker-compose.single-file.yaml" -o docker-compose.yaml
+curl -fLO "${BASE_URL}/SHA256SUMS"
+grep -F ' docker-compose.single-file.yaml' SHA256SUMS \
+  | sed 's|docker-compose.single-file.yaml|docker-compose.yaml|' \
+  | sha256sum --check --strict
+chmod 600 docker-compose.yaml
+```
+
+This command uses GNU `sha256sum`, which is available on the supported Linux hosts. After verification, set the Node port and Secret. Change the image to `latest` only if you deliberately want to follow the stable channel.
+
+Edit these fields:
+
+```yaml
+image: ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
+
+environment:
+  NODE_PORT: "38329"
+  SECRET_KEY: "PASTE_THE_COMPLETE_BASE64_VALUE_FROM_THE_PANEL"
+  LOW_MEMORY: "1"
+```
+
+The version above illustrates the format. Replace it with an exact version, `sha-*` candidate, or digest that actually exists in GHCR.
+
+### Testing a candidate
+
+Before the first formal Release, or when testing a new candidate, download the Compose template from the same commit as the image:
 
 ```bash
 (
@@ -81,42 +112,7 @@ The maintained source template is [`deploy/compose.single-file.yaml`](../deploy/
 )
 ```
 
-Choose an existing full automatic `sha-<40-character-commit>` candidate or a manual `candidate-sha-<40-character-commit>` candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite), then place the complete tag in the variable. A placeholder, abbreviated commit, or different tag fails before download. This keeps the Compose content and image source at the same commit. Once acceptance begins, also record and pin the resolved manifest digest. Do not retag it as a formal version before acceptance is complete.
-
-### Formal Release
-
-Download the single-file asset and checksums from the same GitHub Release:
-
-```bash
-VERSION=X.Y.Z-rnl.N # or X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
-
-mkdir -p /opt/remnanode
-cd /opt/remnanode
-curl -fL "${BASE_URL}/docker-compose.single-file.yaml" -o docker-compose.yaml
-curl -fLO "${BASE_URL}/SHA256SUMS"
-grep -F ' docker-compose.single-file.yaml' SHA256SUMS \
-  | sed 's|docker-compose.single-file.yaml|docker-compose.yaml|' \
-  | sha256sum --check --strict
-chmod 600 docker-compose.yaml
-```
-
-The production Linux procedure uses GNU `sha256sum`; the macOS `shasum` command is not part of this server deployment path.
-
-The release workflow pins `image:` in this asset to the corresponding exact version instead of `latest`. After download, only the Node port and Secret need to be supplied. Change it to `latest` explicitly only when stable-channel tracking is intentional.
-
-Edit these fields:
-
-```yaml
-image: ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-
-environment:
-  NODE_PORT: "38329"
-  SECRET_KEY: "PASTE_THE_COMPLETE_BASE64_VALUE_FROM_THE_PANEL"
-  LOW_MEMORY: "1"
-```
-
-The version above illustrates the format. Replace it with an exact version, `sha-*` candidate, or digest that actually exists in GHCR.
+Choose a full `sha-<40-character-commit>` or `candidate-sha-<40-character-commit>` tag from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite). For formal acceptance, resolve that tag to its manifest digest and use `ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>` in the Compose file. Candidate tags are test builds and must not be presented as released versions.
 
 ### Secret syntax
 
@@ -156,7 +152,7 @@ ss -H -lnt "sport = :38329"
 
 Do not run `docker compose config` without `--quiet` in automation logs; it expands and prints the inline Secret.
 
-A `healthy` container proves that the healthcheck actively connected to the internal configuration Unix socket within two seconds, so the Node was accepting internal connections. It does not prove that:
+A `healthy` container means the Node accepted a connection on its internal Unix socket. You still need to check the Panel and real traffic, because this healthcheck does not cover:
 
 - the Panel can reach the Node over the network;
 - mTLS, JWT, or the Secret is correct;
@@ -187,9 +183,13 @@ docker compose logs --tail=100 remnanode
 
 There is no container runtime state or Xray configuration volume to migrate; the Panel sends the configuration again. To roll back, restore the backed-up Compose file and exact official image, then repeat pull and recreate. Keep the backup until the new container has completed its observation period.
 
-## Candidate image automation
+## Release candidates
 
-When a merge to `main` changes a container build input, the `container` workflow builds a multi-architecture manifest and produces build provenance. Only after those steps succeed does it publish the policy-immutable `sha-<commit>` tag. It moves `edge` only if the commit is still the current `main` HEAD. A candidate has no GitHub Release assets and is not a formal release. Use the earlier candidate-acceptance procedure to deploy it.
+When a container input changes on `main`, the `container` workflow builds `linux/amd64` and `linux/arm64` images, publishes a multi-architecture manifest, and records build provenance. Once those steps pass, it publishes the `sha-<commit>` tag and updates `edge` if that commit is still the head of `main`. These checks identify how an image was built; they do not prove that it runs correctly.
+
+The `v2.8.0` release requires a 600-second smoke test on a real low-memory `linux/amd64` host, using the canonical Compose file and a manifest-digest pin. The test covers container limits, health, memory and PID observations, Panel connectivity, rw-core startup, real proxy traffic, OOM state, and restart count. `arm64-production-runtime`, native systemd and OpenRC installation, the 50,000-user load test, 24-hour soak, and fault and rollback injection remain follow-up work rather than `v2.8.0` release blockers. The complete requirements and evidence format are in the [release acceptance protocol](development/release-acceptance.md#docker-production-smoke).
+
+A candidate has no GitHub Release assets and is not a formal Release. Build attestations cover the build chain, while runtime records describe what an operator observed; neither should be presented as proof of the other.
 
 ## Pin a digest and verify provenance
 
@@ -218,7 +218,8 @@ With GitHub CLI installed, verify provenance produced by this repository:
 gh attestation verify \
   "oci://${DIGEST_REF}" \
   --repo luxiaba/remnanode-lite \
-  --signer-workflow luxiaba/remnanode-lite/.github/workflows/container.yml
+  --cert-identity https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
+  --deny-self-hosted-runners
 ```
 
 A tag states which version you intend to reference. A digest identifies the bytes actually deployed. A controlled fleet rollout should record the digest.
@@ -242,17 +243,17 @@ To roll back, restore the previously verified YAML or change `image:` back to th
 
 ## Fleet rollout
 
-Deploy a fleet only from one manifest digest that has completed M8 acceptance. Exact version tags are readable, but deployment records must still retain `name@sha256:...`. Do not send `latest` or `edge` directly to every node.
+Use one verified manifest digest throughout a fleet rollout and keep the previous digest for rollback. Exact version tags are easier to read, but deployment records should still retain `name@sha256:...`. Do not send `latest` or `edge` directly to every node.
 
 1. Group nodes by architecture, distribution, region, and primary traffic profile. Record the current digest, target digest, and rollback Compose file for every node.
-2. Start with a small canary group covering real `amd64`, `arm64`, and representative network environments. Observe at least one traffic peak. Confirm that the Panel remains connected, rw-core resynchronizes, real proxy traffic succeeds, and there is no OOM, unexpected restart, zombie process, or sustained disk or log growth.
+2. Start with a small canary group that represents the fleet's networks and architectures. Observe at least one traffic peak. Confirm Panel connectivity, rw-core synchronization, real proxy traffic, memory, restarts, processes, disk, and logs.
 3. Expand in stages of approximately `5%`, `25%`, and `50%`, then deploy the remainder. Finish each observation period before continuing. Keep each batch small enough to restore its previous digest within the same maintenance window.
-4. At every stage, sample container health, Panel state, proxy traffic, restart and OOM counts, memory, PIDs, disk, and Xray or nft errors. The deployment system must map nodes to digests, not only to a moving tag.
-5. Stop expansion immediately if a stage shows unexplained node loss, proxy failure, repeated Xray startup failure, OOM, unexpected restart, zombies, resource-limit violations, or a clustered increase in similar errors. Roll back that batch first, then preserve logs and their digest association for diagnosis.
+4. At every stage, sample container health, Panel state, proxy traffic, restart and OOM counts, memory, PIDs, disk, and Xray or nft errors. Track the digest deployed to each node.
+5. Stop if a stage shows unexplained node loss, proxy failure, repeated Xray startup failure, OOM, unexpected restarts, stuck processes, resource-limit violations, or a cluster of similar errors. Roll back that batch before investigating further, and keep its logs tied to the deployed digest.
 
 Rollback does not depend on moving a registry tag. Restore each node's recorded previous Compose file or digest, run `pull` and `up --force-recreate`, and confirm Panel connectivity and real traffic again. Until the issue has a clear conclusion, do not continue with untouched nodes or prune the previous image from canaries.
 
-Each formal Release must link its completed M8 evidence manifest from its release note. If that record is absent, treat the image as an acceptance input, not authorization for an unobserved fleet rollout.
+Release acceptance does not replace a staged production rollout. Keep the acceptance record linked from the Release notes, then observe each fleet stage on its own.
 
 ## Optional `.env` layout
 
@@ -336,4 +337,4 @@ The current image contains:
 - a compact ASN database built from a pinned `ipverse/as-ip-blocks` commit;
 - a Debian bookworm slim runtime with CA certificates and nftables dependencies.
 
-Base images, rw-core, and the ASN source are pinned by digest or checksum. Debian `apt` packages are not currently pinned to a snapshot and exact package versions, so the image is not claimed to be byte-for-byte reproducible. Identify every formal artifact by its manifest digest together with its SBOM, provenance, and attestation.
+Base images, rw-core, and the ASN source are pinned by digest or checksum. Debian `apt` packages are not pinned to a package snapshot, so two builds are not guaranteed to be byte-for-byte identical. Use the manifest digest, SBOM, provenance, and attestation together when identifying a formal artifact.

@@ -17,7 +17,7 @@ Remnanode Lite is a lightweight control plane between Remnawave Panel and rw-cor
 - Terminate selected TCP connections through Linux `NETLINK_SOCK_DIAG` when permitted.
 - Keep requests, queues, logs, and concurrency bounded under a fixed resource budget.
 
-The project aligns with the observable behavior and protocol contract of the official Node. It does not reproduce the internal architecture of the official TypeScript implementation. The project release version, official Node contract version, Panel version, and rw-core version are four separate concepts. The codebase tracks them through the version package, contract evidence, acceptance documentation, and supply-chain pins respectively.
+The project follows the official Node's observable behavior and protocol contract, but not its internal TypeScript architecture. Four versions move independently: the project release, the official Node contract, the Panel used for acceptance, and rw-core. Their sources of truth are the version package, contract evidence, acceptance records, and supply-chain pins.
 
 The production targets are Linux `amd64` and `arm64` on a host constrained to `512 MiB RAM / 1 vCPU / 2 GB disk`. Build-tagged stubs for non-Linux systems keep the code buildable and unit tests runnable; they do not imply full production support on those systems.
 
@@ -134,7 +134,7 @@ The daemon entry point is `runNode`, which `main` calls when no CLI arguments ar
 5. Parse the Node TLS material, client CA, and JWT public key from `SECRET_KEY`, then construct the JWT validator.
 6. Create `plugin.State` and attempt to open the ASN database.
    - If the ASN file is absent or invalid, plugin `asList` resolution degrades to an empty result and the daemon continues starting.
-7. Explicitly create `system.NetworkMonitor` and the shared `system.Collector`, and immediately register monitor cleanup.
+7. Create `system.NetworkMonitor` and the shared `system.Collector`, then register monitor cleanup immediately.
 8. Create `xray.Manager`.
    - Generate a process-unique rw-core gRPC abstract socket name.
    - Inject frozen Node/core versions, the shared Collector, and the Torrent configuration provider.
@@ -142,11 +142,11 @@ The daemon entry point is `runNode`, which `main` calls when no CLI arguments ar
 9. Create `connections.Dropper` and `plugin.Service`.
    - The single Plugin webhook worker starts in the Service constructor.
    - nftables initialization uses the root context. Failure is a supported degraded mode, while startup cancellation returns immediately.
-10. Explicitly create `stats.Service` and `nodehandler.Service`, then pass the already-constructed dependencies to `httpserver.New`.
+10. Create `stats.Service` and `nodehandler.Service`, then pass the assembled dependencies to `httpserver.New`.
 11. Create the public HTTPS server and the filesystem Unix HTTP server. The public server validates the Node certificate/private key and builds the client CA pool at this point.
 12. Start public HTTPS, internal Unix HTTP, and log rotation concurrently. Wait for root-context cancellation or an unexpected exit from either server.
 
-`internal/system` does not create a default monitor during package initialization and does not start a goroutine implicitly. The composition root constructs the sole `NetworkMonitor`, injects the same `Collector` into Xray and stats, and stops the poller during shutdown. Cleanup is registered as soon as each closeable component is acquired, so a later initialization failure cannot leak resources that have already started.
+`internal/system` starts neither a default monitor nor a goroutine during package initialization. The composition root creates the only `NetworkMonitor`, shares its `Collector` with Xray and stats, and stops the poller during shutdown. Each closeable component registers cleanup as soon as it is created, so a later startup failure cannot leave earlier resources running.
 
 ## 5. Panel Request Flow
 
@@ -172,7 +172,7 @@ TLS >= 1.3 mTLS handshake
   -> application service / runtime coordinator
 ```
 
-TLS has a minimum version of 1.3 without pinning the maximum version of future protocols. It requires a client certificate signed by the CA embedded in the Secret and explicitly disables Go's automatic HTTP/2 negotiation. An invalid JWT, unknown path, or wrong method terminates the current connection without returning an enumerable 401/404/405 body. This is official compatibility behavior and must not be replaced with conventional REST error pages.
+TLS requires version 1.3 or later and a client certificate signed by the CA embedded in the Secret. Go's automatic HTTP/2 negotiation is disabled. For compatibility with the official Node, an invalid JWT, unknown path, or wrong method closes the connection instead of returning a conventional 401/404/405 response.
 
 The requests fall into four groups:
 
@@ -219,7 +219,7 @@ Six routes without DTOs permit an empty body. If a caller sends an `application/
 
 ### 5.4 User and Statistics Data Flow
 
-`nodehandler.Service` serializes all add/remove mutations through a cancelable gate with capacity 1. A top-level operation acquires one Manager process lease and passes the returned context through inbound/IP queries, all Handler RPCs, connection cleanup, and the local user-hash commit. The lease is bound to a specific `process epoch + abstract socket` and makes `Start` and `Stop` wait until the complete mutation finishes. A released token or a token issued by another Manager is rejected.
+`nodehandler.Service` serializes add/remove mutations through a cancelable gate with capacity 1. Each top-level operation acquires one Manager process lease and uses its context for inbound and IP queries, Handler RPCs, connection cleanup, and the local user-hash commit. The lease belongs to a specific `process epoch + abstract socket`, so `Start` and `Stop` wait for the whole mutation to finish. A released token, or one issued by another Manager, is rejected.
 
 Earlier RPCs in a bulk user operation may already have succeeded; the implementation does not pretend to roll them back. Its guarantees are that the local hash never advances beyond rw-core, that the first explicit error is returned, and that Panel can retry safely.
 
@@ -259,7 +259,7 @@ Internal authentication prefers `X-Internal-Token`. A query token exists only fo
 
 ### 6.2 Abstract gRPC
 
-The Manager constructor generates a random abstract socket prefix. Each new rw-core process appends its unique process epoch, and the complete name is injected into the tunnel inbound. A delayed gRPC client from an old process therefore cannot accidentally connect to the replacement core. `internal/xrayrpc` uses `grpc.ClientConnInterface.Invoke` with explicit method paths and does not depend on the complete Xray Go SDK.
+The Manager constructor generates a random abstract socket prefix. Each rw-core process appends its own epoch, and the resulting name is injected into the tunnel inbound. This prevents a delayed gRPC client from an old process from reaching its replacement. `internal/xrayrpc` calls explicit method paths through `grpc.ClientConnInterface.Invoke`, without depending on the full Xray Go SDK.
 
 The channel uses insecure gRPC transport because it is not a public TCP boundary. However, an abstract socket is not private to the current process; it is accessible within the same network namespace. The random name reduces discoverability, while container or host namespace isolation remains part of the security model.
 
@@ -388,7 +388,7 @@ The complete plugin JSON is not retained long term. A sync follows these main st
 
 1. Acquire the cancelable Plugin operation lease with capacity 1.
 2. For an identical source hash and identical firewall readiness, take the fast path and update identity only.
-3. Otherwise, complete JSON, schema, collection, and resource-budget validation before any side effect.
+3. Otherwise, validate the JSON, schema, collections, and resource budgets before any side effect.
 4. Expand shared IP lists and ASN lists into an immutable plan.
 5. If behavior is equivalent to the current state, publish only the new snapshot and preserve dynamic Torrent blocks.
 6. If behavior changes, coordinate nftables and Xray in the required order.
@@ -448,7 +448,7 @@ sequenceDiagram
 
 A webhook must provide an email and source. IP addresses are normalized, and scoped, unspecified, loopback, multicast, link-local, and IPv4 broadcast addresses are rejected. Ignored users, IPs, and CIDRs do not produce a block.
 
-A malformed webhook payload emits bounded diagnostics and returns 200 to preserve current compatibility semantics. A retryable 503 is returned only when the bounded queue does not accept the request.
+A malformed webhook payload is logged with bounded detail and returns 200 to preserve current compatibility semantics. The server returns a retryable 503 only when the bounded queue does not accept the request.
 
 When the queue is full, the request waits for capacity within its 30-second context instead of growing without bound or being dropped silently. Service shutdown, request cancellation, or capacity remaining unavailable returns 503. The single worker acquires the same operation gate as sync, block, and unblock, serializing Plugin side effects.
 
@@ -480,7 +480,7 @@ flowchart TD
     Plugin --> Wait
 ```
 
-The detailed semantics are:
+Shutdown follows these rules:
 
 - The network monitor receives its stop signal first.
 - The Manager's background version recovery shuts down in parallel with application cleanup.
@@ -511,7 +511,7 @@ The outer systemd or Compose stop grace must exceed the application's 25-second 
 
 The Node does not persist the complete Xray configuration received from Panel, the Plugin snapshot, user hashes, or Torrent reports. Correct recovery after a process restart comes from Panel synchronizing state again, not from reading stale local state.
 
-The ASN database uses the custom little-endian `RWASNDB\x01` format. It reads a matching ASN's prefix blob only when needed; it neither mmaps nor loads the entire database into memory. Startup validates only the header and magic. Corruption later in the file normally appears as an empty lookup result, so this must not be described as full-database validation at startup.
+The ASN database uses the custom little-endian `RWASNDB\x01` format. It reads a matching ASN's prefix blob only when needed, without using mmap or loading the whole database into memory. Startup checks only the header and magic. Corruption elsewhere in the file normally appears as an empty lookup result, so startup is not a full-database validation.
 
 ## 11. Concurrency and Resource Boundaries
 
@@ -548,7 +548,9 @@ The cross-component lock order is:
 HTTP Xray lifecycle lease -> Plugin operation gate / nodehandler mutation gate -> xray process lease -> Manager state
 ```
 
-At the HTTP boundary, start takes a shareable lease, while stop, Plugin mutations, user mutations, and stats operations with reset take an exclusive lease. The user application service also acquires a process lease bound to the current rw-core `process epoch + abstract socket`. User RPCs, IP queries, connection cleanup, and the local hash commit all run within that lease. `Start` and `Stop` must wait for its release before replacing or terminating the process. `operationEpoch` identifies only lifecycle-operation ownership and does not substitute for process identity. Any future internal mutation path that bypasses HTTP must reuse the Manager process lease rather than compose multiple RPCs under a new lock order.
+At the HTTP boundary, start takes a shared lease. Stop, Plugin mutations, user mutations, and stats operations with reset take an exclusive lease. The user service also holds a process lease for the current rw-core `process epoch + abstract socket` while it runs RPCs, queries IPs, cleans up connections, and commits the local hash. `Start` and `Stop` wait for that lease before replacing or terminating the process.
+
+`operationEpoch` identifies lifecycle-operation ownership; it is not a process identity. Any future internal mutation path that bypasses HTTP must reuse the Manager process lease instead of composing several RPCs under a new lock order.
 
 ## 12. Security Boundaries
 
@@ -576,7 +578,9 @@ At the HTTP boundary, start takes a shareable lease, while stop, Plugin mutation
 - The Plugin firewall enters a degraded or unavailable state.
 - Connection termination fails or is mapped by the upper layer according to the contract.
 
-The Node owns only its fixed project tables and the rw-core process group it created. It must not modify generic host Xray paths or other nftables tables. The underlying socket-destroy operation matches connected TCP sockets in the same network namespace whose local or remote address equals the target IP; it does not determine ownership by PID. It may therefore close sockets belonging to other processes on a shared host. Panel business paths first reject local and special addresses, but the direct administrative command `remnanode-lite kill-sockets` bypasses that protection. Production deployments should therefore use a dedicated node network environment and must not run this CLI against a host-local IP. Whether a low-numbered listener requires `CAP_NET_BIND_SERVICE` depends on the deployment port.
+The Node owns only its fixed project tables and the rw-core process group it created. It must not modify generic host Xray paths or other nftables tables.
+
+Socket destruction matches connected TCP sockets in the same network namespace by local or remote IP, not by PID. On a shared host, it may therefore close another process's sockets. Panel business paths reject local and special addresses first, but the administrative command `remnanode-lite kill-sockets` bypasses that protection. Use a dedicated node network environment in production, and never run this command against a host-local IP. Whether a low-numbered listener needs `CAP_NET_BIND_SERVICE` depends on the deployment port.
 
 ## 13. Where to Start When Changing Code
 
@@ -632,7 +636,9 @@ Architecture constraints are primarily enforced by executable tests, not asserte
 - Socket-destroy integration: `REMNANODE_SOCKET_KILL_INTEGRATION=1`
 - Real core under low memory: `scripts/test-low-memory.sh`
 
-`internal/contract` is an executable Zod subset manually distilled from pinned official source; it is not generated automatically from TypeScript schemas. The source manifest records SHA-256 hashes for every registered evidence blob in the pinned commit. A narrow extractor disables Git replace refs, independently parses the official `REST_API`, global prefix, and controller decorators, and validates the real bootstrap, static imports, strict module metadata, controller and decorator ownership, registration reachability, and internal prefix exclusions against the Git tree. It accepts only the explicitly supported TypeScript subset and fails closed on unknown syntax. This prevents a hand-maintained method/path table or permissive token scan from validating itself, but does not claim to be a complete Zod translator. Use `cmd/contract-probe` for controlled black-box comparison when the observable semantics of two running instances must be confirmed.
+`internal/contract` is a hand-maintained, executable subset of the official Zod contract; it is not generated from the TypeScript schemas. The source manifest records a SHA-256 for every evidence blob at the pinned commit.
+
+A deliberately narrow extractor disables Git replace refs and independently reads the official `REST_API`, global prefix, and controller decorators. Against the Git tree, it also verifies the actual bootstrap, static imports, strict module metadata, controller and decorator ownership, registration reachability, and internal prefix exclusions. Unsupported TypeScript syntax fails closed. This keeps a hand-written route table or permissive token scan from validating itself, but it is not a complete Zod translator. Use `cmd/contract-probe` when two running instances need a controlled black-box comparison.
 
 Use the following files as sources of truth when inspecting or changing behavior:
 

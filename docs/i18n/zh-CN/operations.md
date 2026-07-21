@@ -1,13 +1,12 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=48d782af901f77870f33e704d142d1d9ff05e7cd34483fffd942ce498cec9f9b -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=1dc34590c75273956e2c0278d3932d1c9c3c5668367b164dd86801b858480118 -->
 
 # 运维手册
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../operations.md)为准。
+> 这是中文译文；涉及运维规则时，请以[英文原文](../../operations.md)为准。
 
 [返回文档索引](README.md)
 
-本文面向已经部署好的节点，说明如何判断 Node、Panel 和 rw-core 的不同状态，查看有界日志，执行更新与回滚，并处理常见故障。
+本文介绍节点上线后的日常操作：检查状态、查看日志、更新或回滚，以及排查常见故障。
 
 ## 运行状态模型
 
@@ -46,7 +45,7 @@ ss -H -lntp 'sport = :38329'
 remnanode-lite healthcheck
 ```
 
-该命令会在 2 秒超时内主动连接 `INTERNAL_SOCKET_PATH` 对应的 Unix socket，证明 Node 进程正在接受内部连接，而不只是检查 socket 文件是否存在。它不验证 Panel 到节点的外部网络、mTLS/JWT 或 Panel 注册状态；因此容器 healthy 但 Panel 离线时，应继续检查端口、防火墙、Secret 和 Panel 配置。
+该命令会在 2 秒超时内连接 `INTERNAL_SOCKET_PATH` 对应的 Unix socket，确认 Node 正在接受内部连接，而不只是检查 socket 文件。它不会测试 Panel 网络、mTLS/JWT 或注册状态。如果 Compose 显示 `healthy`，但 Panel 仍显示离线，请继续检查端口、防火墙、Secret 和 Panel 配置。
 
 ### systemd
 
@@ -96,7 +95,9 @@ sudo remnanode-lite doctor --env /path/to/node.env
 remnanode-lite --help
 ```
 
-不要在运行中的生产容器里手工再启动一个无参数实例；进程和 nftables 所有权按单实例设计。`kill-sockets` 也不是普通健康检查命令：底层按 local **或** remote address 匹配整个 network namespace，不按 PID 或容器归属过滤。输入宿主本机 IP 可能关闭多个无关进程的连接，因此只能在隔离节点上对已经确认的非本机地址执行。
+不要在运行中的生产容器里再启动第二个 daemon；进程和 nftables 所有权按单实例设计。
+
+`kill-sockets` 是管理工具，不是健康检查。它会在整个 network namespace 中匹配 local **或** remote address，不按 PID 或容器过滤。输入宿主机本地地址可能关闭无关连接，因此只能在隔离节点上使用，并且必须先确认目标地址不是本机地址。
 
 ## 日志
 
@@ -141,9 +142,9 @@ remnanode-xlogs
 remnanode-xerrors
 ```
 
-每条 rw-core 日志 current 和 `.1` 各不超过 4 MiB。两条 stream 的稳定文件预算为 16 MiB；轮转时两个固定 `.tmp` 最多再增加约 8 MiB。
+每条 rw-core 日志保留当前文件和一个 `.1` 文件，两者都限制为 4 MiB。正常情况下两条日志合计占用 16 MiB；轮转时临时文件可能短暂再增加约 8 MiB。
 
-Docker 把 `/var/log/remnanode` 放在 28 MiB tmpfs，不使用日志 volume，容器重建后清空且不占持久磁盘。OpenRC 另外有 `openrc.log` 和 `openrc.err.log`；它们按 4 MiB 阈值每 10 秒 copy-truncate，current 文件在检查间隔内可能暂时超过阈值，因此不是严格字节 hard cap。
+Docker 把 `/var/log/remnanode` 放在 28 MiB tmpfs 中，重建容器即可清空，不占用持久磁盘。OpenRC 还会写入 `openrc.log` 和 `openrc.err.log`，每 10 秒检查一次，并在 4 MiB 时执行 copy-truncate，因此文件可能在两次检查之间略微超过阈值。
 
 ## 启停和重建
 

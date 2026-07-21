@@ -1,47 +1,58 @@
-<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=cff4add22fe13288fcc976167286409d3b2f9e8183586b5bf99215c48572ad48 -->
+<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=7cc6a493ccfe69f5ea705b93411dfe6c583034d7837700894590b53c484637c8 -->
 # 2026-07 静态审计整改记录（归档）
 
-> **翻译说明：** [英文原文](../../../archive/2026-07-audit-remediation.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
+> 这是中文译文；涉及历史记录和规则时，请以[英文原文](../../../archive/2026-07-audit-remediation.md)为准。
 
 [返回开发文档](../development/README.md) · [当前路线图](../development/roadmap.md) · [架构说明](../architecture.md)
 
-本文保存首个独立版本线在 2026 年 7 月执行的静态审计和整改原则。它是决策记录，不是当前待办列表，也不应作为新维护者的入口。原审计发生在仓库历史重置之前，其本地基线 commit 已不属于当前独立 Git 历史；可持续追踪的事实已经转移到代码测试、[2.8.0 契约基线](../development/contract-2.8.0.md)、[资源预算](../development/resource-budget.md)和[发布验收协议](../development/release-acceptance.md)。
+这里记录的是 2026 年 7 月为首个独立版本线完成的静态审计和整改工作，仅供回顾，不是当前待办或新维护者指南。审计早于仓库历史重置，原基线 commit 已不存在于当前 Git 历史。仍需追踪的事实可以在代码和测试、[2.8.0 契约基线](../development/contract-2.8.0.md)、[资源预算](../development/resource-budget.md)和[发布验收协议](../development/release-acceptance.md)中找到。
 
-M0-M7 的静态整改已经完成；冻结候选上的真实 Panel/Linux、资源、故障和长期运行证据仍由 M8 管理。掉电、installer/supervisor 自身被强杀后的自动恢复是已接受的运维限制，处理方式是重新运行 installer、重启主机或重新创建容器。
+下文的 M8 计划原本要求原生和双运行时测试、50,000 用户测试及 24 小时 soak。对于尚未
+发布的 `v2.8.0`，它已经由 schema version 2 和 `docker-production-smoke-v1` 取代。
+这些旧场景现在均已延期且不阻塞发布；实际发布门禁以当前验收协议为准。
+
+本记录形成时，M0-M7 整改已经完成，M8 负责冻结候选的真实 Panel/Linux、资源、恢复和
+长期运行测试。掉电或 installer/supervisor 被强制终止后的自动恢复不在范围内；操作人员
+应根据情况重新运行 installer、重启主机或重建容器。
 
 ## 工程原则
 
-- 官方实现定义外部兼容目标，不定义本项目的内部架构。官方已有的失效开放、错误吞噬、
-  无界资源或不可重试行为不得照搬。
-- 生命周期、进程、规则和状态必须有唯一所有者。Manager 和 Plugin 各自拥有内部状态，
-  HTTP lifecycle coordinator 统一管理跨组件入口顺序，不允许调用方散落维护多套锁约定。
-- 所有成功 spawn 的进程必须在返回前登记所有权，并且只有确认 leader 与后代均已清理后
-  才能报告 stopped 或撤销防火墙规则。
-- 所有 mutation 必须绑定明确的 rw-core process identity。RPC 生效与本地 hash/state commit 必须位于同一 process lease。
-- 防火墙更新遵循 fail-closed、plan/apply/reconcile/commit；失败必须可见、可回滚、可幂等重试。
+- 官方实现决定兼容目标，不决定本项目的内部架构。不要照搬 fail-open、吞掉错误、资源
+  无上限或无法重试的行为。
+- 每个进程、生命周期、规则集和状态域都只有一个所有者。Manager 与 Plugin 分别管理
+  内部状态，HTTP lifecycle coordinator 负责跨边界操作的顺序。
+- 进程成功启动后，必须先登记所有权再返回。只有确认 leader 和后代都已退出，才能报告
+  `stopped` 或移除防火墙规则。
+- 每次 mutation 都绑定一个 rw-core 进程身份，其 RPC 操作和本地 hash/state commit 在
+  同一个 process lease 内完成。
+- 防火墙更新采用 fail-closed 的 plan/apply/reconcile/commit 流程。失败必须可见，在承诺
+  回滚的地方恢复旧状态，并且可以安全重试。
 - 所有来自 HTTP、Panel、插件配置、rw-core webhook、文件和外部命令的数据都必须有字节、
   条目、深度、并发、时间和输出边界。错误与日志本身也属于资源预算。
-- `512 MiB RAM / 1 vCPU / 2 GiB disk` 是整机目标。Go runtime 内存软限制不能替代 core、cgroup、
-  内核 nftables、页缓存、安装临时文件和日志的整机预算。
-- 兼容性 oracle 必须独立于 Go 实现生成。复制实现常量或手写 schema 后自我比较不构成证据。
+- `512 MiB RAM / 1 vCPU / 2 GiB disk` 是整机目标。Go runtime 的内存软限制只是预算的
+  一部分，还要计算 rw-core、cgroup、nftables 状态、页缓存、安装文件和日志。
+- 兼容性 oracle 必须独立于 Go 实现生成。拿实现常量与同一份 schema 的手写副本比较，
+  不能证明兼容性。
 
 ## 已执行的整改阶段
 
-1. **输入与部署安全**：移除 OpenRC root shell source；校验 Secret；限制请求数组、validation
-   issue、JSON 深度、插件展开和日志字段。
-2. **Xray 生命周期**：实现 spawn 原子登记、后代清理成功条件和 operation/process epoch lease；HTTP
-   coordinator 允许 start 共享进入 Manager，并让 stop/plugin mutation 独占且具有等待优先级。
-3. **Plugin 与连接正确性**：修复 webhook 过载反馈、nft 幂等删除、动态 block 保留、
-   core-first cleanup 和可重试 socket drop；无 tag 的 torrent 关闭热删 outbound，健康
-   `recreate-tables` 只重建 nftables，只有 degraded 恢复使 torrent 生效时才停止 core。
-4. **官方行为对齐**：修复 stats reset、protobuf wire、HTTP parser、响应模型、系统信息、
-   JWT 和 Unix config target 等已确认偏差。
-5. **运维资源边界**：补齐 OpenRC cgroup、低内存升级迁移、下载/解压/磁盘预检、可靠停止、
-   回滚和进程身份健康检查。
-6. **可信测试链**：从锁定官方源码和 SDK 校验静态契约；完整场景 runner 与逐 case evidence
-   在后续发布阶段绑定退出码、日志摘要和二进制摘要。
-7. **代码冻结与验收准备**：集中完成 test/race/vet/static analysis/双架构构建后冻结提交；
-   再执行 systemd、OpenRC、Panel 2.8.1、真实 rw-core、50k 用户和至少 24 小时整机 soak。
+1. **输入与部署安全**：移除 OpenRC 的 root shell source，校验 Secret，并限制请求数组、
+   validation issue、JSON 深度、插件展开和日志字段。
+2. **Xray 生命周期**：原子登记进程所有权，要求完整清理后代，并加入 operation/process
+   lease。HTTP coordinator 允许 start 共享访问，而 stop 与 plugin mutation 保持独占和
+   writer-preferred。
+3. **Plugin 与连接正确性**：让过载可见、nft 删除可幂等重试、动态 block 可以保留，并让
+   cleanup 先处理 core、socket drop 可以重试。torrent rule 和 `recreate-tables` 只更新
+   真正需要变化的部分。
+4. **官方行为对齐**：修复 stats reset、protobuf encoding、HTTP parsing、响应模型、系统
+   信息、JWT 和 Unix config target 等已确认差异。
+5. **资源边界**：补齐 OpenRC cgroup、低内存升级迁移、磁盘和归档预检、可靠停止与回滚，
+   以及进程身份健康检查。
+6. **可信测试链**：从固定的官方源码和 SDK 证据生成静态契约，后续发布测试再把场景结果
+   绑定到退出码、日志摘要和二进制摘要。
+7. **冻结与验收准备**：冻结候选前运行测试、race detection、vet、static analysis 和双架构
+   构建。原计划随后执行 systemd、OpenRC、Panel 2.8.1、真实 rw-core、50,000 用户和
+   24 小时 soak。
 
 ## 当时采用的提交策略
 

@@ -100,11 +100,51 @@ jobs:
             exit 1
           fi
 
+          index_json="$(docker buildx imagetools inspect --raw "$candidate_ref")"
+          if ! jq -e '
+            def reference_type:
+              (.annotations["vnd.docker.reference.type"] // "");
+            . as $index
+            | [.manifests[]? | select(reference_type == "")] as $runnable
+            | [
+                .manifests[]?
+                | select(reference_type == "attestation-manifest")
+              ] as $attestations
+            | ($index.schemaVersion == 2)
+              and ($index.mediaType == "application/vnd.oci.image.index.v1+json"
+                or $index.mediaType == "application/vnd.docker.distribution.manifest.list.v2+json")
+              and (($index.manifests | type) == "array")
+              and (($index.manifests | length) == 4)
+              and (($runnable | length) == 2)
+              and (($attestations | length) == 2)
+              and (($index.manifests | length) == (($runnable | length) + ($attestations | length)))
+              and (([$runnable[] | "\(.platform.os // "")/\(.platform.architecture // "")"] | sort)
+                == ["linux/amd64", "linux/arm64"])
+              and (([$runnable[].digest] | length) == ([$runnable[].digest] | unique | length))
+              and (all($runnable[];
+                (.digest | test("^sha256:[0-9a-f]{64}$"))
+                and (.size > 0)
+                and (.mediaType == "application/vnd.oci.image.manifest.v1+json"
+                  or .mediaType == "application/vnd.docker.distribution.manifest.v2+json")))
+              and (all($attestations[];
+                (.digest | test("^sha256:[0-9a-f]{64}$"))
+                and (.size > 0)
+                and (.mediaType == "application/vnd.oci.image.manifest.v1+json")
+                and (.platform.os == "unknown")
+                and (.platform.architecture == "unknown")
+                and (.annotations["vnd.docker.reference.digest"] | test("^sha256:[0-9a-f]{64}$"))))
+              and (([$attestations[].annotations["vnd.docker.reference.digest"]] | sort)
+                == ([$runnable[].digest] | sort))
+          ' >/dev/null <<<"$index_json"; then
+            echo "$candidate_ref does not contain exactly two runnable linux/amd64 and linux/arm64 manifests with one BuildKit attestation manifest per runnable digest" >&2
+            jq '{schemaVersion, mediaType, manifests}' <<<"$index_json" >&2
+            exit 1
+          fi
+
           gh attestation verify "oci://${image}@${candidate_digest}" \
             --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "${GITHUB_REPOSITORY}/.github/workflows/container.yml" \
+            --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/container.yml@refs/heads/main" \
             --source-digest "$candidate_commit" \
-            --source-ref refs/heads/main \
             --deny-self-hosted-runners
 
           printf 'commit=%s\n' "$candidate_commit" >> "$GITHUB_OUTPUT"

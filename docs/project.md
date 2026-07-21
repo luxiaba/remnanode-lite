@@ -2,21 +2,21 @@
 
 [Back to the documentation index](README.md)
 
-Remnanode Lite is a lightweight Go implementation of a Remnawave Node. It has two primary concerns: verifiable behavioral compatibility with Remnawave Panel and a clear, predictable operating envelope on resource-constrained Linux nodes.
+Remnanode Lite is a lightweight Remnawave Node written in Go. It aims to behave predictably with Remnawave Panel while running comfortably on small Linux servers.
 
-This is an independently maintained codebase with its own implementation, architecture, versioning, history, and engineering decisions. Official `remnawave/node` is a reference for the external protocol and observable behavior. It is not this repository's Git upstream, and its internal architecture is not a template that must be copied line by line.
+The project is maintained independently. Official `remnawave/node` defines the protocol and observable behavior we follow, but this repository has its own architecture, versioning, and development history.
 
-The public project name is **Remnanode Lite**, and the executable is `remnanode-lite`. Native installations retain the service name `remnawave-node.service` and its OpenRC counterpart to keep existing host upgrade and operations interfaces stable. Those service names do not imply ownership of or continuity with the official repository.
+The project name is **Remnanode Lite**, and the executable is `remnanode-lite`. Native installations keep the service name `remnawave-node.service`, and the matching OpenRC name, so existing upgrade and monitoring commands continue to work.
 
 ## Origin
 
-The project initially used a community-written Go implementation as a starting point rather than beginning from an empty directory. The takeover audit found material gaps in contract evidence, process ownership, concurrent state, plugin transactions, input bounds, installation rollback, and resource control. Existing functionality therefore could not be assumed correct or maintainable.
+Remnanode Lite began with a community-written Go implementation. That gave the project a useful starting point, but an early audit found gaps in compatibility evidence, process ownership, concurrency, plugin transactions, input limits, rollback, and resource control.
 
-The repository was subsequently reset to an independent history and re-audited, refactored, and completed against this project's engineering standards. Code that is both verified and well designed may remain; anything that fails contract, correctness, security, or maintainability requirements may be replaced. This history explains the starting point but creates no upstream relationship and imposes no obligation to preserve the original architecture.
+The repository was then reset with an independent history. We kept code that held up under review and rewrote the parts that did not. The original implementation explains where the project began, but it does not constrain the architecture we maintain today.
 
 ## Motivation
 
-Many edge nodes have limited CPU, memory, and disk but still need full Panel connectivity, rw-core management, live user changes, statistics, and plugin support. General-purpose deployments often favor larger machines, while small nodes are disproportionately affected by:
+Many edge nodes have very little CPU, memory, or disk, but they still need Panel connectivity, rw-core management, live user changes, statistics, and plugins. On these machines, a few common problems matter quickly:
 
 - multiple resident processes, unbounded queues, or duplicate configuration copies that amplify memory use;
 - logs, image caches, and installation staging that gradually consume the disk;
@@ -24,7 +24,7 @@ Many edge nodes have limited CPU, memory, and disk but still need full Panel con
 - matching endpoint names without verifying request, response, error, and side-effect semantics;
 - installation, upgrade, and external assets without explicit integrity and rollback boundaries.
 
-Remnanode Lite uses one Go application process to coordinate the Node API, rw-core lifecycle, and plugins. It bounds request bodies, concurrency, queues, logs, and runtime memory without intentionally changing Panel-observable behavior. Shorter code is not the end goal. The objective is a correct, maintainable, and diagnosable system under tight resource constraints.
+Remnanode Lite uses one Go process to coordinate the Node API, rw-core lifecycle, and plugins. Request bodies, concurrency, queues, logs, and runtime memory all have explicit limits. The goal is not simply to use less code, but to remain correct, maintainable, and easy to diagnose on a small server.
 
 ## Relationship to Official Node
 
@@ -36,7 +36,7 @@ Official Node defines the external behavior that must be considered for compatib
 - results and errors for users, statistics, connections, and plugins;
 - ordering of side effects observable between Panel and Node.
 
-This project preserves evidence through a pinned official version and commit, executable contract tests, and controlled black-box comparison where required. When official Node publishes a new version, automation only opens a synchronization reminder. Maintainers must pin the new source, audit differences, adjust the implementation, and complete verification before changing the implemented contract version.
+Each supported contract is tied to a specific official version and commit, backed by executable tests and black-box comparison where needed. When a new official version appears, automation opens a reminder; maintainers still review the changes, update the implementation, and verify it before changing the reported contract version.
 
 The following do not need to match official Node internally:
 
@@ -46,7 +46,7 @@ The following do not need to match official Node internally:
 - resource protection that does not change the external contract;
 - project-specific diagnostics, tests, and Release tooling.
 
-Compatibility therefore means behavioral compatibility with a stated contract baseline. It does not mean that Remnanode Lite is an official product, a repackaged official image, or a downstream fork of the official repository.
+In this project, compatibility means matching the behavior of a stated official contract. Remnanode Lite is not an official product, a repackaged official image, or a downstream fork.
 
 ## Goals
 
@@ -103,13 +103,11 @@ Recreating a container is an accepted operational recovery method when its runti
 | Release maintainer | Versions, compatibility evidence, image tags, and gates | [Versioning](versioning.md), [Release process](release.md) |
 | Security or compatibility auditor | Official evidence, resource boundaries, supply chain, and known differences | [Contract baseline](development/contract-2.8.0.md), [resource budget](development/resource-budget.md) |
 
-## Engineering status
+## Project status
 
-The repository has an independent Git history, a Go implementation, automated tests, and a GHCR candidate-image workflow. The contract baseline compiled into the code remains authoritative in [`internal/version/contract.version`](../internal/version/contract.version); pinned official evidence and known differences are recorded in the versioned [contract baseline](development/contract-2.8.0.md).
+The repository has an independent Git history, automated tests, and a GHCR candidate-image workflow. The contract compiled into the binary is recorded in [`internal/version/contract.version`](../internal/version/contract.version); its official source and known differences are documented in the versioned [contract baseline](development/contract-2.8.0.md).
 
-The source `Version` identifies what is being built. It does not prove that the version has been published. Determine formal availability from the repository's Git tags, GitHub Releases, exact GHCR tags, and associated Release records. A candidate that connects successfully to a real Panel is valuable evidence, but it does not replace the complete compatibility and Release acceptance declared for that version.
-
-Project version, official contract version, Panel acceptance target, and rw-core version are four separate dimensions. Their relationship and publication rules are defined in [Versioning and image tags](versioning.md).
+A version in source identifies the build, not a published Release. Check Git tags, GitHub Releases, and exact GHCR tags to see what is actually available. Project version, contract version, Panel acceptance target, and rw-core version remain separate; [Versioning and image tags](versioning.md) explains how they relate.
 
 ## Engineering decision order
 

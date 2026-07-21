@@ -1,21 +1,20 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=5df0202af7048f10f655716c39186050a57ae5b870e97ef5117fdb7aa01ca246 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=d9a8fe1381578b51855f27f81eb4e9959e7c8a2abbcc52887caebad8537dd16a -->
 # 测试指南
 
-> **翻译说明：** [英文原文](../../../development/testing.md)是唯一权威来源；本页用于中文阅读，并应随英文源同步。
+> 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
 
 [返回开发文档](README.md) · [贡献指南](../contributing.md)
 
-本文说明 Remnanode Lite 的测试层级、平台边界和可执行命令。目标不是让每次修改都
-重复最昂贵的门禁，而是让验证范围与改动风险匹配，并清楚区分“本机通过”和
-“Linux/Panel 生产语义已经验证”。
+本文介绍 Remnanode Lite 的测试层级、平台边界和对应命令。验证范围应与改动风险匹配，同时要清楚区分“本机通过”和“Linux/Panel 生产行为已经验证”。
 
 ## 基本原则
 
 - 开发过程中优先运行目标包，逻辑批次结束后再扩大范围。
-- 状态、锁、goroutine、取消或生命周期变化必须运行 race test。
+- 状态、锁、goroutine、取消或生命周期变化必须运行带 `-race` 的测试。
 - 官方可见行为变化必须运行固定源码契约测试。
 - Linux capability、netlink、nftables、进程组和 cgroup 结论只能由 Linux 测试支持。
-- 真实 Panel、真实 rw-core、资源门禁和 soak 是候选验收，不是普通单元测试的替代品。
+- 发布验收按版本定义。`v2.8.0` 唯一会阻塞发布的运行检查，是在生产 `amd64` 主机上用真实 Panel 和真实代理流量完成 `docker-production-smoke-v1`。
+- `arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案仍处于延期状态，不阻塞本次发布。单元测试不能替代尚未执行的真实环境验证。
 - 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应。
 
 ## 快速选择
@@ -46,9 +45,7 @@ go test -run '^TestName$' -count=1 ./internal/httpserver
 go test -race -count=1 ./internal/httpserver
 ```
 
-`-count=1` 禁用 Go 测试结果缓存，避免把旧成功结果误认为当前实现已经通过。
-定位并发问题时保留 `-race`；不要通过增加 sleep 掩盖缺少同步或取消传播的问题。
-Go race detector 需要 CGO 和可用的 C 编译器；缺少编译工具链时应先修复开发环境，不能把跳过 race test 记为通过。
+`-count=1` 会禁用 Go 测试结果缓存，确保命令检查的是当前实现。并发相关改动应使用 `-race`；不要靠插入 `sleep` 掩盖同步或取消传播缺失。Go 竞争检测器（race detector）需要 CGO 和可用的 C 编译器；缺少编译工具链时应先修复开发环境，不能把跳过竞争检测记为通过。
 
 ### 普通全量回归
 
@@ -100,11 +97,9 @@ go run ./cmd/contract-source-check
 go test -count=1 ./internal/contract
 ```
 
-`contract-source-check` 直接读取固定 commit object，禁用 replace refs，不信任 checkout、index 或 HEAD。
-它逐个校验证据 blob 摘要，并从官方 `REST_API`、全局 prefix、route constants 和
-controller decorators 重建 method/path manifest；还会从 Git tree 枚举 controller/module，
-绑定真实 Nest bootstrap、静态 import、严格 metadata、decorator ownership、module 注册可达性以及内部 controller 的 prefix exclusions。未知条件、spread、alias、复合 decorator 或未批准 dynamic module 会直接失败，不会猜测提取。随后运行 Go 门禁时可保留环境变量，
-使 contract package 测试也执行同一证据检查：
+`contract-source-check` 直接读取固定提交对象，禁用 replace refs，也不信任 checkout、index 或 `HEAD`。它逐个校验证据 blob 摘要，并从官方 `REST_API`、全局 prefix、route constant 和 controller decorator 重建 method/path manifest。
+
+同一检查还会从 Git tree 枚举 controller 和 module，核验真实 Nest bootstrap、静态 import、严格 metadata、decorator 归属、module 注册可达性，以及内部 controller 的 prefix exclusion。遇到条件表达式、spread、alias、复合 decorator 或未批准的 dynamic module 时会直接失败，不做猜测性提取。随后运行 Go 门禁时可保留环境变量，让 contract package 重复执行这项证据检查：
 
 ```bash
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
@@ -167,7 +162,7 @@ go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 ```
 
-不要在本地调用 `scripts/install-ci-checks.sh`。它是 GitHub Runner bootstrap，依赖
+不要在本地调用 `scripts/install-ci-checks.sh`。它是 GitHub Runner 初始化脚本，依赖
 `GITHUB_PATH`、`RUNNER_TEMP`、Linux 归档和 `sha256sum`。
 
 ### 仓库门禁
@@ -186,9 +181,7 @@ bash scripts/check-repository.sh
 - 下载源、固定摘要、Action SHA 和 installer bootstrap 等供应链检查。
 - 使用精确 Go toolchain 交叉构建 Linux `amd64` 与 `arm64` 二进制。
 
-如果 Docker Compose 可用，打包测试还会执行 Compose schema 校验；如果不可用，脚本
-会明确输出跳过信息，但其他静态策略仍会运行。需要宣称 Compose 已验证时，不应忽略
-这条 skip。
+如果 Docker Compose 可用，打包测试还会执行 Compose schema 校验；如果不可用，脚本会明确输出跳过信息，但其他静态策略仍会运行。如果要声称已经完成 Compose 验证，就不能忽略这条跳过提示。
 
 ### 漏洞扫描与完整仓库检查
 
@@ -208,8 +201,7 @@ REQUIRE_GOVULNCHECK=1 \
 `REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，它会跳过漏洞扫描；因此发布前和
 需要报告完整结果时必须显式要求该工具。
 
-即便该命令成功，它也不包含 Linux network namespace、真实 rw-core、Panel 黑盒、
-资源门禁或长期 soak，不应描述为生产验收完成。
+`check.sh` 成功并不等于完成 `v2.8.0` 的生产验收。它不会在生产 `amd64` 主机上用真实 Panel 和真实流量运行冻结候选的镜像摘要，也不执行已延期的负载、soak、原生 init、`arm64` 或故障注入方案。
 
 ## Installer 测试
 
@@ -220,13 +212,11 @@ bash scripts/test-install-ops.sh
 bash scripts/check-repository.sh
 ```
 
-`test-install-ops.sh` 使用临时目录和命令 mock，离线验证锁、权限、路径安全、Secret
+`test-install-ops.sh` 使用临时目录和命令替身，离线验证锁、权限、路径安全、Secret
 迁移、原子替换、失败回滚、systemd/OpenRC 状态转换和卸载隔离。它不会改动真实
 `/etc/remnanode` 或启动本机服务。
 
-测试中的部分 `flock` 分支只有系统存在 `flock` 时才运行。macOS 结果不能替代
-Ubuntu/OpenRC 的真实安装验收；installer 行为变化仍应等待 CI 的 Ubuntu job，并在
-候选阶段按发布验收协议验证真实主机。
+测试中的部分分支只有系统提供 `flock` 时才会运行。macOS 结果不能替代 Ubuntu CI 或真实原生主机观测。`native-systemd-install` 和 `native-openrc-install` 已在 `v2.8.0` 延期，但安装器行为变化仍须运行与风险匹配的 CI 和离线事务测试。
 
 ## Linux 网络管理集成测试
 
@@ -249,10 +239,9 @@ sudo apt-get update
 sudo apt-get install --yes iproute2 nftables
 ```
 
-这些测试只操作隔离 namespace。不要删掉环境变量保护，也不要把测试改为直接操作
-开发机默认 network namespace。
+这些测试只操作隔离 namespace。不要删掉环境变量保护，也不要把测试改为直接操作开发机的默认 network namespace。
 
-## 低内存资源门禁
+## 低内存资源测试
 
 资源测试将测试进程与真实 rw-core 放在同一个 Docker cgroup 中，默认使用
 `448 MiB / 1 CPU / no swap / 256 PIDs / 50,000 users`：
@@ -270,9 +259,9 @@ scripts/test-low-memory.sh \
 - `--rw-core` 指向与 Docker 架构相同的可执行 Linux rw-core。
 - 宿主机支持 Docker memory、CPU、swap 和 PID 限制。
 
-资源、请求解析、配置保留、队列、日志、并发上限或 rw-core 生命周期变化时需要运行。
-结果应记录 cgroup peak；单独的 Go 进程 RSS 不是门禁判定值。详细基线见
-[资源预算](resource-budget.md)。
+带日期的 M6 50,000 用户结果是工程基线，不是冻结 `v2.8.0` 候选的运行证据。当前 M8 方案已将候选负载复测延期，且不阻塞发布。
+
+资源处理、请求解析、配置保留、队列、日志、并发上限或 rw-core 生命周期发生变化时，应运行该测试。结果应记录 cgroup 峰值；单独的 Go 进程 RSS 不是对应指标。详细基线见[资源预算](resource-budget.md)。
 
 ## Docker 与镜像测试
 
@@ -330,10 +319,11 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-该脚本只适用于已经冻结且具备真实 acceptance evidence 的发布候选。它要求工作树
-干净、release note 和 CHANGELOG 已最终化、证据 manifest 可校验、候选 ancestry
-合法，并运行完整仓库检查。普通开发分支缺少这些资料时失败是正常行为，不要通过
-伪造 evidence、放宽检查或提前修改发布状态让它变绿。
+`release-check.sh` 只用于已经冻结且具备当前版本所需验收材料的候选。它要求工作区干净、发布说明和 CHANGELOG 已完成收尾、证据清单可验证、候选祖先关系合法，并运行完整仓库检查。普通开发分支缺少这些材料时，失败属于预期行为；不要通过伪造证据、放宽检查或提前修改发布状态让命令变绿。
+
+`v2.8.0` 要求冻结候选的镜像摘要在发布前通过 `docker-production-smoke-v1`。对应的 `docker-smoke.json` 要记录生产 `amd64` Compose 运行、预期版本输出、真实 Panel 连接和代理流量、cgroup 内存与 PID 观测，以及容器健康、OOM 状态和重启次数。验收清单会把 `arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案列为延期且不阻塞发布。
+
+这些观测由操作人签字确认。校验器会将记录绑定到候选提交和镜像摘要，并检查必需字段、时间和内部一致性，但无法证明物理运行确实发生。应把这份记录视为可追责的审计声明，而不是不可伪造的证明。
 
 具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
 [发布流程](../release.md)。
@@ -346,24 +336,24 @@ REQUIRE_GOVULNCHECK=1 \
 | 普通 Go 逻辑 | 目标包普通测试 | `bash scripts/check-go.sh` |
 | 锁、状态、worker、关闭 | 目标包 race test | 全量 race 与相关生命周期测试 |
 | HTTP/API/schema | `nodeapi`、`httpserver`、`contract` | 固定源码契约与黑盒差分 |
-| Xray 生命周期 | `xray`、`httpserver` race | 真实 rw-core、Panel、资源门禁 |
+| Xray 生命周期 | `xray`、`httpserver` race | `amd64` Docker 生产 smoke；风险需要时运行资源测试 |
 | 用户与 stats | `nodehandler`、`stats`、`xrayrpc` | contract response 与 Panel 差分 |
 | 插件纯逻辑 | `plugin` race | HTTP lifecycle 交错测试 |
 | nftables/socket destroy | 对应 Linux unit test | 两条 namespace 集成测试 |
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
-| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 真实 systemd/OpenRC |
-| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与候选部署 |
+| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 真实 systemd/OpenRC（扩展验证；`v2.8.0` 延期） |
+| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与 `amd64` 候选 smoke；`arm64` 运行延期 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |
 | 官方契约升级 | 全契约与固定源码测试 | 全部注册路由黑盒、Panel 全流程 |
 | protobuf wire | `scripts/generate-protobuf.sh --check`、`go test ./internal/xrayrpc` | 真实 rw-core 与 golden wire 回归 |
-| 资源上限 | 相关 unit/race | `test-low-memory.sh` 与 soak |
+| 资源上限 | 相关 unit/race | 按风险运行 `test-low-memory.sh`；`v2.8.0` 的候选 50k 负载与 soak 延期 |
 
 “最低验证”适合开发循环，不代表 PR 一定只需要这一列。改动跨越多个组件时取各行并集。
 
 ## CI 对应关系
 
-`.github/workflows/ci.yml` 的 required gate 汇总四组并行 job：
+`.github/workflows/ci.yml` 的必需门禁由四组并行作业和一个汇总作业组成：
 
 | CI job | 主要命令 |
 | --- | --- |
@@ -373,16 +363,13 @@ REQUIRE_GOVULNCHECK=1 \
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
 
-容器 workflow 按路径触发，不是所有 PR 都有 container check。`main` 上命中容器输入
-时会先构建并证明 manifest，再发布不可移动的候选 tag；正式版本由 tag release workflow
-晋升 acceptance manifest 绑定的同一 digest。不要把路径条件导致的
-“未运行”误判为失败，也不要把可选 container job 配成永远要求出现的通用门禁。
+容器 workflow 按路径触发，因此并非所有 PR 都会出现 container check。`main` 上的容器输入发生变化时，workflow 会构建 manifest、生成证明，再发布不可移动的候选 tag。由 tag 触发的发布 workflow 会把验收清单绑定的同一镜像摘要晋升为正式标签。路径条件导致的“未运行”不算失败；也不要把可选的 container job 配成所有 PR 都必须出现的门禁。
 
 ## 编写测试
 
-- 优先使用标准库 `testing`、局部 fake 和窄接口，不为断言语法引入依赖。
+- 优先使用标准库 `testing`、局部测试替身和窄接口，不为断言语法引入依赖。
 - 使用 `t.TempDir()`、`t.Setenv()` 和测试专属端口，禁止写真实系统路径。
-- 并发测试使用 channel、context 或明确同步信号，不依赖脆弱 sleep 排序。
+- 并发测试使用 channel、context 或明确同步信号，不靠 `sleep` 碰运气控制执行顺序。
 - 每个可能阻塞的测试都有 deadline；失败消息说明实际值、期望值和操作阶段。
 - Linux 集成测试必须有 build tag 与显式环境变量保护。
 - 契约测试同时覆盖合法输入、缺失字段、错类型、联合类型、额外字段和响应 schema。

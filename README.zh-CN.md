@@ -1,14 +1,13 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=4803d9b11e8b118d4fba089408f1429349f9e687a7e9dd41bdfac800777ea377 -->
-
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=a3b25d081a9df7d06803f87f10022c8da66e40da17164aeb593a44a837b9ed2a -->
 <div align="center">
 
 # Remnanode Lite
 
-**为资源受限 Linux 节点设计的 Remnawave Node Go 实现**
+**面向小型 Linux 服务器的 Remnawave Node Go 实现**
 
 [English](README.md) | **简体中文** | [Русский](README.ru.md)
 
-**本地化提示：英文是唯一权威来源；[查看英文原文](README.md)。**
+**英文 [README.md](README.md) 是权威版本，本页是中文说明。**
 
 [![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
 [![Container](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
@@ -16,84 +15,57 @@
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-[文档](docs/i18n/zh-CN/README.md) · [Docker 部署](docs/i18n/zh-CN/deployment-docker.md) · [架构](docs/i18n/zh-CN/architecture.md) · [开发指南](docs/i18n/zh-CN/development/README.md) · [版本](docs/i18n/zh-CN/versioning.md) · [发布](docs/i18n/zh-CN/release.md)
+[Docker 快速部署](#docker-快速部署) · [配置](docs/i18n/zh-CN/configuration.md) · [运维](docs/i18n/zh-CN/operations.md) · [完整文档](docs/i18n/zh-CN/README.md)
 
 </div>
 
-> [!IMPORTANT]
-> 本项目是独立维护的社区实现，与 Remnawave 官方项目没有隶属或背书关系。官方 `remnawave/node` 是外部行为和协议契约的参考，不是本仓库的代码上游。
+Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收 Remnawave Panel 下发的配置，管理 rw-core 进程、用户和插件规则，并上报系统与流量统计。Docker 镜像已经包含 rw-core 及其运行数据。
 
-Remnanode Lite 负责接收 Remnawave Panel 的节点指令，管理 rw-core 生命周期、用户热更新、统计和插件规则。它使用单个 Go Node 进程直接拥有 rw-core；Docker 镜像不依赖 Node.js、s6 或容器内第二个 supervisor，原生部署则由宿主 systemd/OpenRC 监督 Node。目标是在 **整机 512 MiB RAM / 1 vCPU / 2 GB 磁盘** 的小型 Linux 服务器上保持清晰、可控的运行边界。
+项目维护的部署配置面向**整机 512 MiB 内存、1 vCPU、2 GB 磁盘**的小型服务器，并提供 `linux/amd64` 和 `linux/arm64` 镜像。
 
-## 为什么有这个项目
+> [!NOTE]
+> Remnanode Lite 是独立维护的社区项目，与 Remnawave 官方没有隶属或背书关系。项目按照官方 Node 的公开行为保持兼容，代码则由我们独立开发和维护。
 
-资源有限的边缘节点需要的不只是“能启动”：还需要与 Panel 行为兼容、进程与防火墙状态可恢复、输入与并发有界、升级能够回滚，并且代码能被长期维护。
+## 主要特点
 
-本项目从一份社区 Go 实现的工程经验出发，重新审计并收敛了 API 契约、Xray 生命周期、插件事务、网络管理、安装供应链和低内存预算。最终目标不是逐行翻译官方 TypeScript，而是在保持外部兼容的前提下，建立一套适合 Go 的清晰架构。
+- 实现 Remnawave Node `2.8.0` API 契约。
+- 使用一个 Go 进程直接管理 rw-core，不依赖 Node.js 或 s6。
+- 提供面向 512 MiB 服务器维护的低内存 Compose 配置。
+- 支持用户热更新、统计、连接管理和官方插件规则格式。
+- 提供 amd64/arm64 GHCR 镜像，并附带 SBOM、构建来源和证明。
+- 只用一个 Compose 文件即可部署，不需要源码、`.env` 或持久化数据卷。
 
-| 关注点 | 当前设计 |
-| --- | --- |
-| Panel 兼容 | 固定官方源码证据，将 26 条 `/node` 路由、请求、响应与错误转换为可执行契约 |
-| 资源边界 | `LOW_MEMORY=1`、有界请求/队列/并发、448 MiB cgroup；Docker 模板不创建持久日志卷 |
-| 生命周期 | Node 是 rw-core 唯一所有者；显式状态机、operation/process epoch、进程 lease 和有界关闭 |
-| 网络能力 | 私有 nftables 表、双栈 socket destroy，只保留 `NET_ADMIN` 与 `NET_BIND_SERVICE` |
-| 交付 | amd64/arm64 GHCR 镜像、SBOM、provenance、build attestation 与校验过的原生安装资产 |
+## Docker 快速部署
 
-更完整的项目背景、目标与非目标见[项目说明](docs/i18n/zh-CN/project.md)。
+开始前需要准备 Docker Engine 和 Compose v2，并在 Remnawave Panel 中创建好节点，拿到该节点的完整 Secret Key。节点端口必须能被 Panel 访问。下面的命令默认在 root shell 中执行，其他情况请按需使用 `sudo`。
 
-## 当前状态
-
-| 项目 | 当前值 |
-| --- | --- |
-| 项目版本 | `2.8.0`；正式可用性以不可变 Git tag 和 GitHub Release 为准 |
-| 官方契约 | `remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b` |
-| 集成验收使用的 Panel 版本 | `2.8.1`；它不决定项目版本号 |
-| rw-core | `v26.6.27` |
-| 架构 | `linux/amd64`、`linux/arm64` |
-| M7 原生工程快照 | Ubuntu 24.04 arm64/systemd；Alpine 3.22 arm64/OpenRC 容器（不是 M8 冻结候选验收） |
-| 生产资源目标 | 整机 `512 MiB / 1 vCPU / 2 GB disk`，服务上限 `448 MiB`、无 swap |
-
-静态契约和代码级整改已经完成，完整发布仍以冻结候选上的 Panel、双 init、双架构、资源、故障与 soak 验收为准。阶段状态见[路线图](docs/i18n/zh-CN/development/roadmap.md)，历史基准不等于正式版本的 SLA。
-
-## 快速开始
-
-生产推荐 Docker Compose。仓库提供一份完整的[单文件部署样本](deploy/compose.single-file.yaml)，无需源码或 `.env`。
-
-在正式 Release 可用之前，或每次验收新候选时，先从 [GHCR Package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) 选择真实存在的 `sha-<40位提交>`，再用同一个提交下载 Compose，保证部署文件和镜像来自完全相同的代码：
+下载最新稳定版本附带的 Compose 文件：
 
 ```bash
-(
-  set -euo pipefail
-  candidate_commit=REPLACE_WITH_40_CHAR_COMMIT
-  candidate_tag="sha-${candidate_commit}"
-  # 手动重建的候选使用 candidate-sha-${candidate_commit}。
-  printf '%s\n' "$candidate_commit" | grep -Eq '^[0-9a-f]{40}$'
+mkdir -p /opt/remnanode
+cd /opt/remnanode
 
-  mkdir -p /opt/remnanode
-  cd /opt/remnanode
-  curl -fL \
-    "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${candidate_commit}/deploy/compose.single-file.yaml" \
-    -o docker-compose.yaml
-  sed -i \
-    "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${candidate_tag}|" \
-    docker-compose.yaml
-  chmod 600 docker-compose.yaml
-)
+curl -fL \
+  https://github.com/luxiaba/remnanode-lite/releases/latest/download/docker-compose.single-file.yaml \
+  -o docker-compose.yaml
+
+chmod 600 docker-compose.yaml
 ```
 
-正式版本发布后，GitHub Release 会附带已把镜像固定到该精确版本的同类文件和 `SHA256SUMS`；受控生产部署应优先下载与目标版本配套的 Release 资产。
+下载到的文件已经固定到该 Release 的精确镜像版本。
 
-下载完成后，`image:` 已固定到刚才选择的候选提交。启动前只需编辑节点端口和完整 Secret：
+打开 `docker-compose.yaml`，填写 Panel 中的节点端口和完整 Secret：
 
 ```yaml
 environment:
   NODE_PORT: "38329"
-  SECRET_KEY: "粘贴 Panel 提供的完整 base64 内容"
+  SECRET_KEY: "PASTE_THE_COMPLETE_PANEL_SECRET_KEY"
 ```
 
-然后启动：
+启动节点：
 
 ```bash
+cd /opt/remnanode
 docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build
@@ -101,58 +73,110 @@ docker compose ps
 docker compose logs --tail=100 remnanode
 ```
 
-> [!NOTE]
-> `latest` 只在正式 Release 后存在并指向最新一个通过验证的稳定构建。`edge` 仅用于临时观察 `main`，不适合作为可回滚的生产版本。容器 healthy 只能证明内部 Unix socket 正在接受连接，不能证明 Panel 可达、mTLS/JWT 有效或 rw-core 已上线。
+容器应先进入 healthy，随后节点应在 Panel 中恢复在线。最后再用真实代理流量确认部署结果；容器 healthy 本身并不能证明 Panel 连接和 rw-core 流量都正常。
 
-完整说明包括镜像标签、digest 固定、Secret 写法、日志、更新和回滚，见 [Docker Compose 部署](docs/i18n/zh-CN/deployment-docker.md)。原生 systemd/OpenRC 部署见[原生 Linux 部署](docs/i18n/zh-CN/deployment-native.md)。
+从官方容器迁移时，原来的 `NODE_PORT` 和 `SECRET_KEY` 可以直接沿用；启动新容器前，请先停止旧容器。迁移、指定版本、digest 固定和回滚方法见 [Docker 部署指南](docs/i18n/zh-CN/deployment-docker.md)。
 
-## 运行架构
+## 常用 Docker 环境变量
+
+绝大多数节点只需要修改 `NODE_PORT` 和 `SECRET_KEY`。需要可选配置时，将它们添加到同一个 Compose `environment` 映射中。
+
+| 变量 | 必需 | Release 附带 Compose 的设置 | 用途 |
+| --- | --- | --- | --- |
+| `NODE_PORT` | 是 | `38329` | Panel 连接节点的 HTTPS 端口，必须与 Panel 中的配置一致。 |
+| `SECRET_KEY` | 是 | 占位符 | Panel 提供的完整 base64 或 base64url Secret。 |
+| `LOW_MEMORY` | 否 | `1` | 启用小机器使用的低内存运行参数。 |
+| `NODE_BIND_ADDR` | 否 | 未设置 | 只监听指定的本地地址；未设置时监听所有本地地址。 |
+| `BODY_LIMIT_MB` | 否 | 自动 | 覆盖 Node 对外 API 的请求体上限；低内存模式会自动使用 16 MiB。 |
+| `GOMEMLIMIT` | 否 | 自动 | 覆盖 Go 运行时内存软限制；低内存模式会自动使用 180 MiB。 |
+
+请使用上面展示的 YAML 映射写法。不要写成 `- SECRET_KEY="..."`：在这种列表写法中，引号会成为值的一部分，导致 Secret 无法解码。Compose 文件中含有 Secret，Docker 本地元数据也能看到环境变量，因此文件权限应保持为 `0600`。
+
+所有运行参数、取值范围和优先级见 [配置参考](docs/i18n/zh-CN/configuration.md)。
+
+## 常用操作
+
+查看 Node 日志：
+
+```bash
+docker compose logs --tail=100 -f remnanode
+```
+
+查看 rw-core 输出和错误日志：
+
+```bash
+docker exec -it remnanode tail -n 50 -F \
+  /var/log/remnanode/xray.out.log \
+  /var/log/remnanode/xray.err.log
+```
+
+查看当前运行版本：
+
+```bash
+docker exec remnanode remnanode-lite version
+```
+
+如果要切换精确版本，先修改 `image:`，然后拉取镜像并重建容器：
+
+```bash
+docker compose pull
+docker compose up -d --no-build --force-recreate
+```
+
+`latest` 只会在主动 pull 时检查新镜像，不会自行替换正在运行的容器。rw-core 日志位于 tmpfs，重建容器后会清空；Node 日志由 Docker 按 Compose 中的限制轮转。健康检查、故障排查、分批更新和回滚见 [运维指南](docs/i18n/zh-CN/operations.md)。
+
+## 版本与镜像标签
+
+| 标签 | 用途 |
+| --- | --- |
+| `X.Y.Z` | 与对应官方 Node 契约对齐的稳定版本，推荐用于生产和回滚。 |
+| `X.Y.Z-rnl.N` | Remnanode Lite 自己的迭代版本，可用于提前开发或继续完善已有对齐版本。 |
+| `latest` | 最近一次完整发布的稳定版本。它会移动，不能作为回滚依据。 |
+| `sha-<commit>` / `candidate-sha-<commit>` | 正式发布前测试某个 `main` 候选提交。 |
+| `edge` | 当前 `main` 的滚动镜像，只适合短期测试。 |
+
+批量部署应使用同一个精确版本或 manifest digest，并保留上一个值用于回滚。完整规则见 [版本与镜像标签](docs/i18n/zh-CN/versioning.md)。
+
+## 兼容性
+
+| 项目 | 当前基线 |
+| --- | --- |
+| Node 契约 | `2.8.0` |
+| rw-core | `v26.6.27` |
+| 平台 | `linux/amd64`、`linux/arm64` |
+| 整机目标 | `512 MiB RAM / 1 vCPU / 2 GB disk` |
+| Compose 服务限制 | `448 MiB RAM`，不额外使用 swap |
+
+资源目标对应仓库维护的标准 Compose 配置，不表示任何流量和插件组合都一定适合相同规格。具体测量和边界见 [资源预算](docs/i18n/zh-CN/development/resource-budget.md)。
+
+## 工作原理
 
 ```mermaid
 flowchart LR
-    Panel["Remnawave Panel"] -->|"TLS >= 1.3 + mTLS + JWT"| HTTP["Node HTTP 边界"]
-    HTTP --> API["请求契约与应用服务"]
-    API --> Manager["Xray Manager"]
-    API --> Plugin["Plugin Service"]
-    API --> Stats["用户与统计服务"]
-    Manager -->|"进程 + 配置 Unix socket"| Core["rw-core"]
-    Stats -->|"gRPC abstract socket"| Core
-    Plugin --> NFT["nftables / socket destroy"]
-    Core -->|"torrent webhook"| Plugin
+    Panel["Remnawave Panel"] -->|"mTLS + JWT"| Node["Remnanode Lite"]
+    Node -->|"配置、用户、统计"| Core["rw-core"]
+    Node --> Rules["nftables 与连接管理"]
+    Core --> Traffic["代理流量"]
 ```
 
-关键原则是“状态有唯一所有者”：HTTP 层只做认证、校验、容量控制和协调；业务服务不依赖 `net/http`；Xray Manager 独占进程、生命周期状态与 process lease；Plugin Service 独占插件快照和 nftables 事务。详细流程、锁序和包职责见[架构说明](docs/i18n/zh-CN/architecture.md)。
+Node 负责管理 rw-core 进程及其运行状态，Xray 配置始终以 Panel 下发的内容为准。因此，重建容器不需要配置数据卷，Panel 会重新下发配置。包结构、生命周期和数据流见 [架构与运行设计](docs/i18n/zh-CN/architecture.md)。
 
-## 镜像标签
+## 文档
 
-| 标签 | 含义 | 建议用途 |
-| --- | --- | --- |
-| `sha-<commit>` | 某个 `main` 提交的候选镜像 | 服务器验收；更强固定请记录 manifest digest |
-| `candidate-sha-<commit>` | 从 `main` 手动触发的独立候选镜像 | 自动候选缺失或需要重建时定位候选 |
-| `edge` | 当前 `main` 的浮动候选 | 临时观察，不用于稳定回滚 |
-| `X.Y.Z-rnl.N` | 本项目独立迭代版本 | 精确部署和回滚 |
-| `X.Y.Z` | 完成对应官方版本对齐后的正式版本 | 精确部署和回滚 |
-| `latest` | 最新一个通过完整发布流程的稳定版本 | 主动跟随稳定版；运行容器不会自动更新 |
-
-`rnl.N` 是本项目自己的迭代编号，可以用于提前开发下一条版本线，也可以用于继续完善某个官方版本；它不表示官方项目的修订次数。详见[版本模型](docs/i18n/zh-CN/versioning.md)。
-
-## 文档导航
-
-| 你想做什么 | 从这里开始 |
+| 目标 | 从这里开始 |
 | --- | --- |
-| 判断项目是否适合自己的节点 | [项目说明](docs/i18n/zh-CN/project.md) · [资源预算](docs/i18n/zh-CN/development/resource-budget.md) |
 | 部署或迁移节点 | [Docker Compose](docs/i18n/zh-CN/deployment-docker.md) · [原生 Linux](docs/i18n/zh-CN/deployment-native.md) |
-| 查配置、日志和故障 | [配置参考](docs/i18n/zh-CN/configuration.md) · [运维与排障](docs/i18n/zh-CN/operations.md) |
-| 理解代码与数据流 | [架构说明](docs/i18n/zh-CN/architecture.md) · [2.8.0 契约基线](docs/i18n/zh-CN/development/contract-2.8.0.md) |
-| 开始开发或提交修改 | [开发指南](docs/i18n/zh-CN/development/README.md) · [测试策略](docs/i18n/zh-CN/development/testing.md) · [贡献指南](docs/i18n/zh-CN/contributing.md) |
-| 维护版本或发布 | [版本模型](docs/i18n/zh-CN/versioning.md) · [发布流程](docs/i18n/zh-CN/release.md) |
-| 了解安全边界 | [安全策略](docs/i18n/zh-CN/security.md) |
+| 配置与日常运维 | [配置](docs/i18n/zh-CN/configuration.md) · [运维](docs/i18n/zh-CN/operations.md) |
+| 了解项目实现 | [项目范围](docs/i18n/zh-CN/project.md) · [架构](docs/i18n/zh-CN/architecture.md) |
+| 参与开发 | [开发指南](docs/i18n/zh-CN/development/README.md) · [测试](docs/i18n/zh-CN/development/testing.md) · [贡献说明](docs/i18n/zh-CN/contributing.md) |
+| 了解版本和发布 | [版本策略](docs/i18n/zh-CN/versioning.md) · [发布流程](docs/i18n/zh-CN/release.md) |
+| 报告或检查安全问题 | [安全策略](docs/i18n/zh-CN/security.md) |
 
-完整文档地图和按角色阅读路径见[中文文档索引](docs/i18n/zh-CN/README.md)，本地化规则见[本地化说明](docs/i18n/README.md)。
+[中文文档索引](docs/i18n/zh-CN/README.md)包含更完整的使用和开发资料。
 
 ## 开发
 
-普通单元测试不需要 Panel、Secret 或 rw-core：
+普通单元测试不需要 Panel、Secret 或正在运行的 rw-core：
 
 ```bash
 git switch dev
@@ -163,14 +187,14 @@ go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
 ./bin/remnanode-lite version
 ```
 
-Linux nftables、socket destroy、真实 rw-core、Panel 差分和发布验收属于独立测试层，不能由 macOS 上的 `go test ./...` 代替。修改前请阅读[开发指南](docs/i18n/zh-CN/development/README.md)和[测试策略](docs/i18n/zh-CN/development/testing.md)。
+Linux 网络集成、真实 rw-core、Panel 兼容和正式发布验收属于不同的测试层。修改这些部分前，请先阅读 [开发指南](docs/i18n/zh-CN/development/README.md)。
 
-## 安全与信任边界
+## 安全
 
-容器使用 host network，并持有 `NET_ADMIN`；这意味着它能影响宿主机网络命名空间。只运行受信任的镜像，并优先固定精确版本或 manifest digest。Docker 内联 Secret 会出现在本机 Docker 元数据中，因此部署文件应设置为 `0600`，并严格限制 Docker socket 与主机管理员权限。
+容器使用 host network 并持有 `NET_ADMIN`，因此能够修改宿主机的网络状态。只运行可信镜像，生产环境优先使用精确版本或 manifest digest。Compose 文件权限应保持为 `0600`，并限制对 Docker socket 和宿主机管理员账号的访问。
 
-发现漏洞时不要在公开 Issue 中披露利用细节、Secret、证书或真实节点信息。请遵循[中文安全策略](docs/i18n/zh-CN/security.md)中的私密报告流程。
+不要在公开 Issue 中发布 Secret、证书、真实节点信息或漏洞利用细节。私下报告方式见 [安全策略](docs/i18n/zh-CN/security.md)。
 
 ## 许可证
 
-本项目采用 [AGPL-3.0-only](LICENSE) 许可证。
+Remnanode Lite 使用 [AGPL-3.0-only](LICENSE) 许可证。

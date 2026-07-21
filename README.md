@@ -2,7 +2,7 @@
 
 # Remnanode Lite
 
-**A resource-conscious Go implementation of Remnawave Node for small Linux servers**
+**A lightweight Remnawave Node implementation in Go for small Linux servers**
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [Русский](README.ru.md)
 
@@ -12,86 +12,57 @@
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-[Documentation](docs/README.md) · [Docker deployment](docs/deployment-docker.md) · [Architecture](docs/architecture.md) · [Development](docs/development/README.md) · [Versioning](docs/versioning.md) · [Release process](docs/release.md)
+[Docker quick start](#docker-quick-start) · [Configuration](docs/configuration.md) · [Operations](docs/operations.md) · [Documentation](docs/README.md)
 
 </div>
 
-> [!IMPORTANT]
-> Remnanode Lite is an independently maintained community project. It is not affiliated with or endorsed by Remnawave. The official `remnawave/node` repository defines an external behavior and protocol reference; it is not this repository's code upstream.
+Remnanode Lite runs a Remnawave-compatible Node on Linux. It receives configuration from Remnawave Panel, supervises rw-core, manages users and plugin rules, and reports system and traffic statistics. The Docker image bundles rw-core and its runtime data files.
 
-Remnanode Lite receives commands from Remnawave Panel and manages the rw-core lifecycle, live user updates, statistics, and plugin rules. A single Go Node process owns rw-core directly. The container does not require Node.js, s6, or a second application supervisor; native installations rely on systemd or OpenRC to supervise the Node process.
+The maintained deployment profile is designed for a server with **512 MiB RAM, 1 vCPU, and 2 GB of disk**. Images are available for both `linux/amd64` and `linux/arm64`.
 
-The production engineering target is a complete Linux host with **512 MiB RAM, 1 vCPU, and 2 GB of disk**. That target is a constrained operating envelope, not a blanket performance guarantee for every traffic pattern or plugin configuration.
+> [!NOTE]
+> Remnanode Lite is an independent community project. It is not affiliated with or endorsed by Remnawave. Compatibility follows the public behavior of the official Node, while this codebase is developed and maintained independently.
 
-## Why this project exists
+## Highlights
 
-Small edge nodes need more than a process that starts. They need verifiable Panel behavior, recoverable process and firewall state, bounded input and concurrency, controlled logs, and upgrades that can fail without silently corrupting the installation.
+- Implements the Remnawave Node `2.8.0` API contract.
+- Runs the Node as one Go process that directly manages rw-core, without Node.js or s6.
+- Includes a maintained low-memory Compose profile for 512 MiB servers.
+- Supports live user updates, statistics, connection management, and the official plugin rule formats.
+- Publishes multi-architecture images to GHCR with SBOM, provenance, and build attestations.
+- Uses one Compose file for deployment. No source tree, `.env` file, or persistent data volume is required.
 
-This repository began with experience from a community Go implementation, then re-audited and reworked the API contract, Xray lifecycle, plugin transactions, network administration, installation supply chain, and low-memory profile. The goal is not a line-by-line TypeScript port. It is an idiomatic Go system that preserves the observable contract while making ownership and resource limits explicit.
+## Docker quick start
 
-| Area | Current design |
-| --- | --- |
-| Panel contract | Pinned official source evidence for 26 `/node` routes, request and response schemas, error mapping, and observable side effects |
-| Resource bounds | `LOW_MEMORY=1`, bounded bodies, queues and concurrency, a 448 MiB container limit, ephemeral runtime logs |
-| Lifecycle | One owner for rw-core, explicit lifecycle states, separate operation and process epochs, process leases, bounded shutdown |
-| Network effects | Project-owned nftables tables and dual-stack socket destruction with only `NET_ADMIN` and `NET_BIND_SERVICE` added |
-| Delivery | amd64/arm64 GHCR candidates, SBOM, provenance, build attestation, and integrity-checked native release assets |
+You need Docker Engine with Compose v2, a Node created in Remnawave Panel, and the complete Secret Key for that Node. The port must be reachable from the Panel. Commands below assume a root shell; use `sudo` where needed.
 
-See [Project scope and goals](docs/project.md) for the background, supported boundaries, and non-goals.
-
-## Current status
-
-| Item | Current value |
-| --- | --- |
-| Project version | `2.8.0`; formal availability is defined by immutable Git tags and GitHub Releases |
-| Official contract baseline | `remnawave/node 2.8.0@596f015a5c8f876dc9a9d61b6cb78d35bd8e379b` |
-| Panel version used for integration acceptance | `2.8.1`; it does not determine the project version |
-| rw-core | `v26.6.27` |
-| Target architectures | `linux/amd64`, `linux/arm64` |
-| M7 engineering snapshots | Ubuntu 24.04 arm64/systemd and Alpine 3.22 arm64/OpenRC container; these are not frozen-candidate M8 acceptance |
-| Production resource target | Whole host `512 MiB / 1 vCPU / 2 GB disk`, service maximum `448 MiB`, no swap |
-
-The static contract and code-level remediation are in place. A production Release still requires frozen-candidate Panel, init-system, dual-architecture, resource, fault, and soak evidence. Follow the [roadmap](docs/development/roadmap.md) and do not treat an engineering snapshot as a published SLA.
-
-## Quick start
-
-Docker Compose is the recommended deployment model. The repository includes a complete [single-file Compose template](deploy/compose.single-file.yaml) that does not require source code or a separate `.env` file.
-
-Before a formal Release is available, and whenever validating a new candidate, select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite). Bind the image and deployment template to the same 40-character `main` commit:
+Download the Compose file from the latest stable Release:
 
 ```bash
-(
-  set -euo pipefail
-  candidate_commit=REPLACE_WITH_40_CHAR_COMMIT
-  candidate_tag="sha-${candidate_commit}"
-  # For a manually rebuilt candidate, use candidate-sha-${candidate_commit}.
-  printf '%s\n' "$candidate_commit" | grep -Eq '^[0-9a-f]{40}$'
+mkdir -p /opt/remnanode
+cd /opt/remnanode
 
-  mkdir -p /opt/remnanode
-  cd /opt/remnanode
-  curl -fL \
-    "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${candidate_commit}/deploy/compose.single-file.yaml" \
-    -o docker-compose.yaml
-  sed -i \
-    "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${candidate_tag}|" \
-    docker-compose.yaml
-  chmod 600 docker-compose.yaml
-)
+curl -fL \
+  https://github.com/luxiaba/remnanode-lite/releases/latest/download/docker-compose.single-file.yaml \
+  -o docker-compose.yaml
+
+chmod 600 docker-compose.yaml
 ```
 
-After a formal Release, download the matching Compose asset and `SHA256SUMS` from that GitHub Release instead. The release workflow pins the asset to the exact version rather than `latest`.
+The downloaded file is pinned to the exact image version from that Release.
 
-Edit only the node port and the complete Secret issued by Panel:
+Open `docker-compose.yaml` and set the port and complete Secret from the Panel:
 
 ```yaml
 environment:
   NODE_PORT: "38329"
-  SECRET_KEY: "PASTE_THE_COMPLETE_BASE64_PANEL_SECRET"
+  SECRET_KEY: "PASTE_THE_COMPLETE_PANEL_SECRET_KEY"
 ```
 
-Then start the node:
+Start the Node:
 
 ```bash
+cd /opt/remnanode
 docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build
@@ -99,58 +70,110 @@ docker compose ps
 docker compose logs --tail=100 remnanode
 ```
 
-> [!NOTE]
-> `latest` is created only by a completed stable Release. `edge` follows the current `main` container build and is not a rollback target. A healthy container proves that the internal Unix socket accepts connections; it does not prove Panel reachability, mTLS/JWT validity, or that rw-core is online.
+The container should become healthy, then the Node should return online in the Panel. Confirm the deployment with real proxy traffic. Container health alone does not check Panel connectivity or rw-core traffic.
 
-For image selection, digest pinning, Secret handling, logs, upgrades, and rollback, read [Docker Compose deployment](docs/deployment-docker.md). Native systemd and OpenRC installations are documented in [Native Linux deployment](docs/deployment-native.md).
+The official container's `NODE_PORT` and `SECRET_KEY` can be reused when migrating. Stop the old container before starting this one. The [Docker deployment guide](docs/deployment-docker.md) covers migration, exact-version installs, digest pinning, and rollback.
 
-## Runtime model
+## Common Docker environment variables
+
+Most deployments only need to change `NODE_PORT` and `SECRET_KEY`. Add optional values under the same Compose `environment` mapping when they are needed.
+
+| Variable | Required | Release Compose value | Purpose |
+| --- | --- | --- | --- |
+| `NODE_PORT` | Yes | `38329` | HTTPS port used by the Panel. It must match the Node port configured there. |
+| `SECRET_KEY` | Yes | Placeholder | Complete base64 or base64url Secret supplied by the Panel. |
+| `LOW_MEMORY` | No | `1` | Enables the low-memory limits used by the small-server profile. |
+| `NODE_BIND_ADDR` | No | Not set | Listen on a specific local address. When unset, the Node listens on all local addresses. |
+| `BODY_LIMIT_MB` | No | Automatic | Overrides the Node API body limit. Low-memory mode selects 16 MiB automatically. |
+| `GOMEMLIMIT` | No | Automatic | Overrides the Go runtime soft memory limit. Low-memory mode selects 180 MiB automatically. |
+
+Keep the mapping form shown above. Do not write `- SECRET_KEY="..."`: in that list form the quote characters become part of the value and the Secret cannot be decoded. Keep the Compose file private because Docker stores inline environment values in its local metadata.
+
+See the [configuration reference](docs/configuration.md) for every runtime setting, accepted value, and precedence rule.
+
+## Everyday operations
+
+Follow the Node logs:
+
+```bash
+docker compose logs --tail=100 -f remnanode
+```
+
+Follow rw-core output and errors:
+
+```bash
+docker exec -it remnanode tail -n 50 -F \
+  /var/log/remnanode/xray.out.log \
+  /var/log/remnanode/xray.err.log
+```
+
+Check the running version:
+
+```bash
+docker exec remnanode remnanode-lite version
+```
+
+To update, change `image:` first when moving between exact versions, then pull and recreate the container:
+
+```bash
+docker compose pull
+docker compose up -d --no-build --force-recreate
+```
+
+`latest` is only checked when you pull; it never updates a running container by itself. rw-core logs live in tmpfs, while Node logs use Docker's rotating `json-file` driver. See the [operations guide](docs/operations.md) for health checks, troubleshooting, rollout, and rollback.
+
+## Versions and image tags
+
+| Tag | Use |
+| --- | --- |
+| `X.Y.Z` | Stable Release aligned with the corresponding official Node contract. Recommended for production and rollback. |
+| `X.Y.Z-rnl.N` | A tested Remnanode Lite iteration for work ahead of or beyond an official alignment point. |
+| `latest` | The most recently completed stable Release. It moves, so it is not a rollback reference. |
+| `sha-<commit>` / `candidate-sha-<commit>` | Images for testing a specific `main` candidate before Release. |
+| `edge` | Current `main` image for short-lived testing only. |
+
+For a fleet, prefer one exact version or manifest digest and keep the previous value for rollback. The full policy is in [Versioning and image tags](docs/versioning.md).
+
+## Compatibility
+
+| Item | Current baseline |
+| --- | --- |
+| Node contract | `2.8.0` |
+| rw-core | `v26.6.27` |
+| Platforms | `linux/amd64`, `linux/arm64` |
+| Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |
+| Compose service limit | `448 MiB RAM`, no additional swap |
+
+The resource target is the baseline for the maintained Compose profile, not a promise that every traffic pattern or plugin configuration fits the same machine. Measurements and limits are documented in the [resource budget](docs/development/resource-budget.md).
+
+## How it fits together
 
 ```mermaid
 flowchart LR
-    Panel["Remnawave Panel"] -->|"TLS 1.3+ with mTLS and JWT"| HTTP["Node HTTP boundary"]
-    HTTP --> API["Validated application services"]
-    API --> Manager["Xray Manager"]
-    API --> Plugin["Plugin Service"]
-    API --> Stats["User and statistics services"]
-    Manager -->|"process and config socket"| Core["rw-core"]
-    Stats -->|"gRPC abstract socket"| Core
-    Plugin --> NFT["nftables and socket destroy"]
-    Core -->|"torrent webhook"| Plugin
+    Panel["Remnawave Panel"] -->|"mTLS + JWT"| Node["Remnanode Lite"]
+    Node -->|"configuration, users, stats"| Core["rw-core"]
+    Node --> Rules["nftables and connections"]
+    Core --> Traffic["Proxy traffic"]
 ```
 
-The central rule is single ownership of mutable state. The HTTP layer authenticates, validates, applies capacity limits, and coordinates operations. Application services do not depend on `net/http`. Xray Manager owns process and lifecycle state plus process leases. Plugin Service owns plugin snapshots and nftables transactions. See [Architecture and runtime design](docs/architecture.md) for the data flows, lock ordering, and package responsibilities.
+The Node owns the rw-core process and current runtime state. The Panel remains the source of truth for the active Xray configuration, so a recreated container does not need a configuration volume. Read [Architecture and runtime design](docs/architecture.md) for package boundaries, lifecycle rules, and data flows.
 
-## Image channels
-
-| Tag | Meaning | Intended use |
-| --- | --- | --- |
-| `sha-<commit>` | Candidate built automatically from a `main` commit | Server acceptance; record the manifest digest for strict pinning |
-| `candidate-sha-<commit>` | Independent candidate built by a manual workflow run on `main` | Rebuild or acceptance when the automatic candidate is unavailable |
-| `edge` | Moving image for the current `main` head | Short-lived observation only |
-| `X.Y.Z-rnl.N` | Independently versioned Remnanode Lite Release | Exact deployment and rollback |
-| `X.Y.Z` | Formal Release after matching the official version's contract | Exact deployment and rollback |
-| `latest` | Most recent Release that completed the full stable workflow | Opt-in stable tracking; running containers are not updated automatically |
-
-`rnl.N` is this project's iteration number. It can identify work started ahead of a future official line or further work on an existing contract baseline; it is not an official revision number. The authoritative rules are in [Versioning and image tags](docs/versioning.md).
-
-## Documentation map
+## Documentation
 
 | Goal | Start here |
 | --- | --- |
-| Decide whether the project fits a node | [Project scope](docs/project.md) · [Resource budget](docs/development/resource-budget.md) |
-| Deploy or migrate | [Docker Compose](docs/deployment-docker.md) · [Native Linux](docs/deployment-native.md) |
-| Configure, observe, or troubleshoot | [Configuration](docs/configuration.md) · [Operations](docs/operations.md) |
-| Understand the implementation | [Architecture](docs/architecture.md) · [2.8.0 contract baseline](docs/development/contract-2.8.0.md) |
-| Contribute code | [Development guide](docs/development/README.md) · [Testing](docs/development/testing.md) · [Contributing](CONTRIBUTING.md) |
-| Prepare a Release | [Versioning](docs/versioning.md) · [Release process](docs/release.md) |
-| Review security boundaries | [Security policy](SECURITY.md) |
+| Deploy or migrate a Node | [Docker Compose](docs/deployment-docker.md) · [Native Linux](docs/deployment-native.md) |
+| Configure and operate it | [Configuration](docs/configuration.md) · [Operations](docs/operations.md) |
+| Understand the project | [Project scope](docs/project.md) · [Architecture](docs/architecture.md) |
+| Work on the code | [Development guide](docs/development/README.md) · [Testing](docs/development/testing.md) · [Contributing](CONTRIBUTING.md) |
+| Understand versions and Releases | [Versioning](docs/versioning.md) · [Release process](docs/release.md) |
+| Report or review security issues | [Security policy](SECURITY.md) |
 
-The complete role-based index is available in [docs/README.md](docs/README.md).
+The [documentation index](docs/README.md) contains the complete English documentation and links to the Chinese and Russian translations.
 
 ## Development
 
-Ordinary unit tests do not require Panel, a Secret, or rw-core:
+Ordinary unit tests do not need a Panel, Secret, or running rw-core:
 
 ```bash
 git switch dev
@@ -161,13 +184,13 @@ go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
 ./bin/remnanode-lite version
 ```
 
-Linux nftables, socket destruction, real rw-core, Panel differential testing, and Release acceptance are separate test layers. A local `go test ./...` run on macOS does not replace them. Read the [development guide](docs/development/README.md) and [testing strategy](docs/development/testing.md) before changing those areas.
+Linux network integration, real rw-core behavior, Panel compatibility, and Release acceptance are separate test layers. Start with the [development guide](docs/development/README.md) before changing those areas.
 
-## Security boundary
+## Security
 
-The container uses host networking and holds `NET_ADMIN`, so it can affect the host network namespace. Run only trusted images and prefer an exact version or manifest digest. An inline Docker Secret is visible in local Docker metadata; keep the Compose file at mode `0600` and tightly restrict Docker socket and host administrator access.
+The container uses host networking and holds `NET_ADMIN`, so it can change networking state on the host. Run only trusted images and prefer an exact version or manifest digest. Keep the Compose file at mode `0600`, and restrict access to the Docker socket and host administrator accounts.
 
-Do not disclose exploit details, Secrets, certificates, or real node information in a public Issue. Follow [SECURITY.md](SECURITY.md) for private vulnerability reporting.
+Do not post Secrets, certificates, real Node details, or vulnerability exploits in a public Issue. Follow [SECURITY.md](SECURITY.md) for private reporting.
 
 ## License
 

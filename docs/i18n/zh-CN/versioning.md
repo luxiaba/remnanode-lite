@@ -1,13 +1,12 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=d1ea36548d542eeab32fb79026fc98456cf3352d14e53699754a4418a5d6724c -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=7084100f4d584beebff50843a44f5712d68428d46255d43bfa5a0f2bd0182100 -->
 
 # 版本与镜像标签策略
 
-> [!IMPORTANT]
-> 英文是唯一权威来源；本页是便于阅读的简体中文翻译。请以[英文原文](../../versioning.md)为准。
+> 这是中文译文；版本规则以[英文原文](../../versioning.md)为准。
 
 [返回文档索引](README.md)
 
-Remnanode Lite 同时面对项目自身迭代、官方 Node 契约、Panel 集成和 rw-core 运行时。它们变化的节奏不同，不能压缩成一个含义模糊的“当前版本”。
+Remnanode Lite 同时跟踪四个版本：项目发行版、官方 Node 契约、集成测试使用的 Panel，以及随项目打包的 rw-core。它们并不总是同步变化，因此不能用一个含糊的“当前版本”概括。
 
 本文件是版本命名与镜像标签的规范。具体发布操作见[发布流程](release.md)。
 
@@ -86,7 +85,9 @@ Git tag:       v2.8.1-rnl.9
 Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.1-rnl.9
 ```
 
-两者都按项目政策不可重写，但指向的对象不同：正式 Git tag 指向发布资料最终提交 `F`，而精确容器 tag 指向已从候选提交 `C` 构建并完成验收的 manifest digest。`F` 是发布时最新的 `main` HEAD，验证器要求它只比 `C` 多一个白名单内的发布资料提交；release workflow 会拒绝从 `dev`、临时分支或旧的 `main` 提交发布，也不会从 `F` 重新构建另一份容器。
+按项目政策，这两种 tag 都不可重写，但它们指向不同对象：正式 Git tag 指向发布资料最终提交 `F`，精确容器 tag 则指向从候选提交 `C` 构建并完成验收的 manifest digest。
+
+验证器要求 `C` 与 `F` 之间必须恰好有一个发布资料 commit，并且该 commit 只能有一个父提交。发布 workflow 只接受当前的 `main` HEAD，也不会从 `F` 重新构建容器。验收 manifest 和 Release note 把镜像 digest 绑定到 `C`，Git tag 则标识 `F`。
 
 ## 镜像渠道
 
@@ -100,7 +101,7 @@ Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.1-rnl.9
 | `latest` | 可变 | 最近一次完整成功的正式 Release | 希望主动跟随稳定版本的节点 |
 | `name@sha256:...` | 内容寻址 | Registry manifest digest | 最严格的生产固定与供应链核验 |
 
-手动从 `main` 触发候选发布时，workflow 只生成 `candidate-sha-<commit>`，不会覆盖自动 push 已发布的 `sha-<commit>`。两者都表示同一源码提交的候选构建，但手工重建的 manifest digest 不保证与此前构建相同。tag 只负责定位候选；验收记录中的 commit 与实际 manifest digest 才是正式发布验证和晋升的规范身份。
+从 `main` 手动运行时，workflow 会发布 `candidate-sha-<commit>`，但不会覆盖自动生成的 `sha-<commit>`。两次构建即使来自同一个 commit，manifest digest 也可能不同。这些 tag 只用于找到候选；验收和晋升以源码 commit 和精确 digest 为准。
 
 ### `latest` 的准确含义
 
@@ -111,7 +112,7 @@ Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.1-rnl.9
 - `latest` 不等于“与官方最新版本完全一致”；
 - `latest` 不指向 `edge`，也不应由普通 `main` push 更新；
 - 较旧版本的补发或重跑不得让 `latest` 倒退；
-- 只有正式发布流程可以移动 `latest`，每个成功完成全部门禁的正式 tag 都会自动成为新的 `latest`；
+- 只有正式发布流程可以移动 `latest`；成功完成全部门禁的正式 tag，在满足 `main` HEAD 等晋升保护条件时，才有资格成为新的 `latest`；
 - 移动 `latest` 不会自动替换正在运行的容器。
 
 创建正式 tag 就表示维护者选择该版本进入稳定通道。尚不准备成为 `latest` 的构建不应伪装成正式 Release，应继续使用 `sha-*` 或 `candidate-sha-*` 完成验收。
@@ -148,7 +149,7 @@ ghcr.io/luxiaba/remnanode-lite:latest
 
 ### 候选验收
 
-服务器验收通常从完整的 `sha-<40位提交>` 定位自动候选；需要手动重建时可以从 `candidate-sha-<40位提交>` 定位。开始验收前必须把所选 tag 解析为 manifest digest，后续运行、证据和正式晋升全部固定该 digest，同时从同一 commit 获取部署文件。不要使用 `edge` 记录验收证据，因为它会随下一次 `main` 构建移动。
+验收通常从 `sha-<40位提交>` 开始，手动重建则使用 `candidate-sha-<40位提交>`。测试前先把 tag 解析为 manifest digest，并从同一个 commit 获取部署文件；采集证据和后续晋升始终固定这个 digest。不要验收 `edge`，下一次 `main` 构建就可能移动它。
 
 ## 发布与稳定性的关系
 
@@ -162,7 +163,7 @@ ghcr.io/luxiaba/remnanode-lite:latest
 6. 发布说明记录真实兼容范围与已知风险；
 7. 发布 workflow 自动把同一 digest 晋升为 `latest`，并把对应 GitHub Release 标记为 Latest。
 
-仓库中出现的版本字符串可能代表开发目标。判断一个版本是否已经发布，应以 Git tag、GitHub Releases 和 GHCR 中实际存在的精确标签为准。当前源码版本是 `2.8.0`；源码字符串本身永远不能作为已经发布的证据。
+仓库里的版本字符串可能只是开发目标。要判断版本是否已经发布，请检查对应的 Git tag、GitHub Release 和 GHCR 精确标签。当前源码写的是 `2.8.0`，但这行字符串本身不代表已经发布。
 
 ## 官方版本同步
 
@@ -198,4 +199,4 @@ remnanode-lite <Version> (contract <ContractVersion>)
 - 已知差异和回滚方式；
 - 镜像 manifest digest 与验证命令。
 
-`NODE_CONTRACT_VERSION` 运行时覆盖只用于受控调试或紧急兼容验证。它不会改变二进制真实实现、契约证据或发布身份，不得用于制造虚假的兼容声明。
+`NODE_CONTRACT_VERSION` 只用于受控调试或紧急兼容测试。它不会改变实际行为、源码证据、二进制身份或 Release 声明，也不能用来宣称代码尚未实现的兼容性。

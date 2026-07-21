@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide is for maintainers approaching Remnanode Lite for the first time. It is designed to get you from environment setup to code navigation, implementation, and local verification without starting a real node or preparing a Panel and `SECRET_KEY`.
+This guide is for maintainers approaching Remnanode Lite for the first time. It covers environment setup, code navigation, implementation, and local verification without requiring a running node, a Panel, or a `SECRET_KEY`.
 
 Linux is the production target, but routine Go development works on Linux or macOS. Any conclusion involving nftables, socket destruction, process groups, or cgroups must still be verified on Linux.
 
@@ -110,7 +110,7 @@ go run ./cmd/contract-source-check
 go test -count=1 ./internal/contract
 ```
 
-`cmd/contract-source-check` does not trust files in the checkout. It reconstructs `official-source-manifest.json` directly from the pinned commit's Git objects, verifies the package name and version plus the SHA-256 of every evidence blob, and independently extracts methods and paths from `REST_API` and NestJS controller decorators. It also verifies controller and module inventory from the Git tree and registration reachability from `AppModule`.
+`cmd/contract-source-check` does not trust the checked-out files. It rebuilds `official-source-manifest.json` from the pinned commit's Git objects, verifies the package name, version, and SHA-256 of every evidence blob, then extracts methods and paths independently from `REST_API` and the NestJS controller decorators. It also checks the controller and module inventory in the Git tree and confirms that `AppModule` can reach every registered controller.
 
 A dirty worktree, staged changes, replace refs, or a different `HEAD` cannot contaminate the evidence. A missing pinned object, a changed content digest, or manual drift in the local route inventory fails verification. The tool does not attempt to translate all Zod schemas automatically and does not download the external plugin schema.
 
@@ -162,7 +162,7 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | `scripts/install*.sh`, `scripts/upgrade.sh`, `scripts/uninstall.sh` | Native installation, asset transactions, upgrade rollback, and uninstall |
 | `deploy/` | systemd/OpenRC service definitions, native `node.env`, and the production single-file Compose template |
 | `compose.yaml`, `compose.build.yaml` | GHCR runtime configuration and local source-build override |
-| `docs/development/acceptance/` | Versioned, redacted, machine-validated release acceptance evidence, created only for a frozen candidate |
+| `docs/development/acceptance/` | Versioned and redacted release acceptance records whose schema and digests are machine-validated, created only for a frozen candidate |
 | `docs/releases/` | GitHub Release notes paired with Git tags, created only for a frozen candidate |
 | `Dockerfile` | Dual-architecture Node build, pinned rw-core/geo/ASN assets, and minimal runtime image |
 
@@ -200,7 +200,9 @@ git diff --check
 git diff
 ```
 
-Do not run the release gate after every line-level edit. Test cost should match risk. The complete repository check belongs after a coherent batch or before opening a pull request; real Panel, resource, and long-running soak tests belong to candidate acceptance.
+Scale the test scope with the risk of the change. The complete repository check belongs after a coherent batch or before opening a pull request, not after every small edit.
+
+For `v2.8.0`, publication requires the frozen digest to pass the `amd64` Docker production smoke with a real Panel and real proxy traffic. The `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, 50,000-user load, 24-hour soak, and fault/rollback profiles remain deferred and do not block this release.
 
 ## Common Change Paths
 
