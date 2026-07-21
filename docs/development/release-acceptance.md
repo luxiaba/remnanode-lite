@@ -3,15 +3,17 @@
 [Back to development documentation](README.md) | [General release process](../release.md)
 
 This is the version-specific acceptance protocol for `v2.8.0`. It defines
-schema version 2 and the `docker-production-smoke-v1` profile; it does not claim
+schema version 2 and the `docker-production-smoke-v2` profile; it does not claim
 that every packaged platform or deployment method has run in production.
 
 Acceptance is tied to one frozen source candidate, one attested
-multi-architecture image digest, and one real low-memory Docker smoke on native
-amd64/x86_64. The Release Owner signs off the runtime observations. The
-validator checks the record, Git history, hashes, artifacts, thresholds, and
-signoff, but cannot independently prove that the reported Panel session or
-traffic occurred. This makes the evidence auditable, not unforgeable.
+multi-architecture image digest, and one production Docker smoke on native
+amd64/x86_64 under the canonical container limits. Host capacity is recorded as
+environment context rather than used as an acceptance threshold. The Release
+Owner signs off the runtime observations. The validator checks the record, Git
+history, hashes, artifacts, thresholds, and signoff, but cannot independently
+prove that the reported Panel session or traffic occurred. This makes the
+evidence auditable, not unforgeable.
 
 ## Candidate freeze
 
@@ -55,7 +57,7 @@ case-sensitive; duplicate and unknown fields are rejected.
 `manifest.json` fixes the release and artifact identity:
 
 - `schemaVersion=2` and
-  `acceptanceProfile=docker-production-smoke-v1`.
+  `acceptanceProfile=docker-production-smoke-v2`.
 - `releaseVersion=2.8.0`, `releaseTag=v2.8.0`, and `decision=pass`.
 - The candidate commit, tree, OCI manifest digest, and RFC3339 acceptance time.
   `acceptedAt` must not be earlier than the finish time of the smoke evidence.
@@ -73,6 +75,7 @@ The deferred list is ordered and exact:
 
 ```json
 [
+  "whole-host-512mib-runtime",
   "arm64-production-runtime",
   "native-systemd-install",
   "native-openrc-install",
@@ -83,9 +86,11 @@ The deferred list is ordered and exact:
 ```
 
 These items are explicit limitations of the `v2.8.0` profile and are not
-release blockers. They must not be described as having passed. The dated M6
-50,000-user and M7 native-init engineering measurements remain useful
-historical baselines, but they are not runtime evidence for `C`.
+release blockers. They must not be described as having passed. In particular,
+`whole-host-512mib-runtime` means this profile does not prove that `C` ran on a
+whole machine with `512 MiB RAM / 1 vCPU / 2 GB disk`. The dated M6 50,000-user
+and M7 native-init engineering measurements remain useful historical baselines,
+but they are not runtime evidence for `C`.
 
 Risks use severity `P1`, `P2`, or `P3`, status `open` or `closed`, and a
 required `releaseBlocking` boolean. A release-blocking risk or an open P1/P2
@@ -97,7 +102,7 @@ The normative manifest shape is:
 ```json
 {
   "schemaVersion": 2,
-  "acceptanceProfile": "docker-production-smoke-v1",
+  "acceptanceProfile": "docker-production-smoke-v2",
   "releaseVersion": "2.8.0",
   "releaseTag": "v2.8.0",
   "candidateCommit": "<40-lowercase-hex>",
@@ -125,6 +130,7 @@ The normative manifest shape is:
     }
   },
   "deferredValidation": [
+    "whole-host-512mib-runtime",
     "arm64-production-runtime",
     "native-systemd-install",
     "native-openrc-install",
@@ -151,7 +157,8 @@ amd64/x86_64 Linux host. Change only the complete Panel Secret, node port, and
 the image reference. The image must be pinned as
 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}`. Do not relax the
 template's resource, capability, filesystem, init, healthcheck, or logging
-settings.
+settings. The host may be larger than the whole-machine target and may have
+swap; neither condition relaxes the exact container limits.
 
 The final inspection must show that the same container ran for at least 600
 seconds. Evidence `startedAt` must exactly match Docker `.State.StartedAt`, and
@@ -171,20 +178,23 @@ candidate does not satisfy this profile.
   `linux/arm64`.
 - Native `amd64` / `x86_64`, kernel, Docker Engine, and Docker Compose
   identities.
-- A real host with 480..512 MiB memory, one CPU, 1792..2048 MiB total disk, and
-  zero swap.
+- Observed host totals with positive memory, CPU count, and disk capacity, plus
+  non-negative swap capacity. These required values describe the environment;
+  they are not compared with the whole-machine target, so a larger host and
+  host swap are allowed.
 - Exact Node version output and the amd64 candidate binary SHA-256.
 - The 64-character Docker container ID, its digest-pinned `.Config.Image`, and
-  its exact `.State.StartedAt`; a running container named `remnanode`, healthy
-  with healthcheck exit code zero and at least one consecutive success, zero
-  OOM kills, and zero restarts.
+  its exact `.State.StartedAt`; a running container named `remnanode-lite`,
+  healthy with healthcheck exit code zero and at least one consecutive success,
+  zero OOM kills, and zero restarts.
 - The actual Docker configuration closure: host network, `unless-stopped`,
   read-only rootfs, no-new-privileges, enabled init with `docker-init` or
   `tini` as PID 1, exact dropped/added capabilities, all three tmpfs mounts
   with sizes/modes/options, exact healthcheck, exact `json-file` options,
   nofile soft/hard limits, and the 35-second stop grace period.
-- Actual limits of 448 MiB memory, 448 MiB memory plus swap, one CPU, and 256
-  PIDs.
+- Actual limits of 448 MiB memory, 448 MiB combined memory and swap, one CPU,
+  and 256 PIDs. Because the combined limit equals the memory limit, the
+  container has no additional swap allowance even when the host has swap.
 - Positive memory current/peak and PID current/peak observations, with current
   no greater than peak and peak no greater than the configured limit.
 - Successful low-memory mode, ASN database loading, internal socket readiness,
@@ -193,6 +203,10 @@ candidate does not satisfy this profile.
 - A SHA-256 for the retained, sanitized raw collection bundle.
 - Release Owner signoff: operator `luxiaba`, role `release-owner`, decision
   `accept`.
+
+These checks prove the candidate ran under the canonical container resource
+boundary. They do not prove the separate whole-machine target; that coverage is
+recorded as the deferred `whole-host-512mib-runtime` profile.
 
 The normative evidence shape is:
 
@@ -204,7 +218,7 @@ The normative evidence shape is:
   "status": "pass",
   "startedAt": "<exact container .State.StartedAt RFC3339 value>",
   "finishedAt": "<RFC3339 at least 600 seconds after startedAt>",
-  "command": ["docker", "inspect", "remnanode"],
+  "command": ["docker", "inspect", "remnanode-lite"],
   "candidateImageDigest": "sha256:<same digest as manifest>",
   "imageReference": "ghcr.io/luxiaba/remnanode-lite@sha256:<same digest>",
   "source": {
@@ -220,10 +234,10 @@ The normative evidence shape is:
     "dockerComposeVersion": "<non-empty>"
   },
   "host": {
-    "memoryTotalBytes": 536870912,
-    "cpuCount": 1,
-    "diskTotalBytes": 2147483648,
-    "swapTotalBytes": 0
+    "memoryTotalBytes": 2061541376,
+    "cpuCount": 2,
+    "diskTotalBytes": 21474836480,
+    "swapTotalBytes": 1073737728
   },
   "node": {
     "versionOutput": "remnanode-lite 2.8.0 (contract 2.8.0)",
@@ -231,7 +245,7 @@ The normative evidence shape is:
   },
   "container": {
     "id": "<64-lowercase-hex Docker container ID>",
-    "name": "remnanode",
+    "name": "remnanode-lite",
     "imageReference": "ghcr.io/luxiaba/remnanode-lite@sha256:<same digest>",
     "startedAt": "<exactly equal to top-level startedAt>",
     "status": "running",

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=6702cd6ffd8de8430670cde91d8db7daf1cf2c5c29a3d4765e6d57542346d94c -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=5379a5ff01649415be9b67f983313d76f6601feb2b221d54c2b4071c86895f39 -->
 
 # 发布与版本维护手册
 
@@ -165,7 +165,7 @@ gh attestation verify \
 
 从 `main` 手动运行候选 workflow 时，会发布按策略不移动的 `candidate-sha-${C}`，但不会覆盖自动生成的 `sha-${C}`。两者即使来自同一个 commit，也可能指向不同 digest。任一镜像都可以进入验收，但完整 commit 和 manifest digest 必须一直固定到正式发布。最终 Release 直接验证该 digest 及其 attestation，不依赖最初使用哪个 tag 找到它。
 
-`docker-production-smoke-v1` profile 使用 `C` 中的 `deploy/compose.single-file.yaml`，将其中镜像引用替换为 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}` 后运行。证据必须同时保存候选 Git object 中该模板的文件 SHA-256 和实际运行的 digest；仅运行 `docker compose config` 或测试相同 tag 的另一次构建不能替代最终候选验收。完整字段和采集口径见 [Docker 生产 smoke](development/release-acceptance.md#docker-生产-smoke)。
+`docker-production-smoke-v2` profile 使用 `C` 中的 `deploy/compose.single-file.yaml`，将其中镜像引用替换为 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}` 后运行。证据必须同时保存候选 Git object 中该模板的文件 SHA-256 和实际运行的 digest；仅运行 `docker compose config` 或测试相同 tag 的另一次构建不能替代最终候选验收。完整字段和采集口径见 [Docker 生产 smoke](development/release-acceptance.md#docker-生产-smoke)。
 
 ## 6. 冻结候选与真实验收
 
@@ -180,23 +180,25 @@ git status --short
 ```
 
 真实验收范围以 [`development/release-acceptance.md`](development/release-acceptance.md) 为准。
-Schema version 2 使用版本专用的 `docker-production-smoke-v1` profile，阻断范围为：
+Schema version 2 使用版本专用的 `docker-production-smoke-v2` profile，阻断范围为：
 
 - `C` 的受保护分支 GitHub CI 门禁。
 - 同时构建 `linux/amd64`、`linux/arm64` 的候选 manifest，以及 SBOM、
   provenance 和 GitHub build attestation。
 - 从 `C` 构建并以 SHA-256 标识的两个架构 Release binary。
-- 在真实原生 amd64/x86_64 低内存主机上，用规范单文件 Compose 启动同一个
+- 在实际记录的真实原生 amd64/x86_64 宿主机上，用规范单文件 Compose 启动同一个
   digest-pinned 候选。
-- 容器保持 running/healthy，使用规范 memory/CPU/swap/PID 限制，OOM 与 restart
-  都为零，并记录正数 memory/PID current/peak。
+- 把实际宿主机内存、CPU、磁盘和 swap 作为证据记录，但不把整机大小作为准入上限。
+- 容器保持 running/healthy，精确使用 448 MiB memory、448 MiB
+  memory-plus-swap、1 CPU 和 256 PIDs，OOM 与 restart 都为零，并记录正数
+  memory/PID current/peak。
 - Panel 2.8.1 在线、真实代理流量通过，并由 Release Owner 签注。
 
 运行时记录由操作员签注并绑定候选，具备可审计性；验证器不能独立证明所记录的 Panel
 会话或流量观测确实发生，因此它不是不可伪造的证明。
 
 本 profile 精确记录以下 deferred、non-blocking 验证：
-`arm64-production-runtime`、`native-systemd-install`、
+`whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、
 `native-openrc-install`、`50000-user-load`、`24h-soak` 和
 `fault-and-rollback-injection`。Release note 必须披露这些限制，且不得把带日期的
 M6/M7 工程基线描述成候选 runtime 验收。
@@ -308,7 +310,7 @@ Release note 至少包含以下章节：
 
 兼容范围必须把项目版本、契约版本、固定官方 commit、目标 Panel、rw-core、已打包架构
 和完成 runtime 验证的架构分别写明。验收结果必须写出
-`docker-production-smoke-v1`、候选提交 `C` 与 `candidateImageDigest`，并包含
+`docker-production-smoke-v2`、候选提交 `C` 与 `candidateImageDigest`，并包含
 门禁要求的精确相对链接：
 
 ```markdown
@@ -321,12 +323,16 @@ Release note 无法写入自身所在提交 `F`，因为提交文档后才会产
 这种可机器检查的格式单独占一行：
 
 ```markdown
-- `arm64-production-runtime`: deferred; not validated by `docker-production-smoke-v1`.
+- `whole-host-512mib-runtime`: deferred; not validated by `docker-production-smoke-v2`.
 ```
 
-对 `native-systemd-install`、`native-openrc-install`、`50000-user-load`、
-`24h-soak` 和 `fault-and-rollback-injection` 使用相同格式。该章节还必须包含下面的
-精确文本行：
+对 `arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、
+`50000-user-load`、`24h-soak` 和 `fault-and-rollback-injection` 使用相同格式。
+该章节还必须包含下面两条精确文本：
+
+```text
+The smoke validates the canonical container limits on the recorded host; whole-host 512 MiB / 1 vCPU / 2 GB runtime remains deferred.
+```
 
 ```text
 Runtime evidence is operator-attested and is not an unforgeable proof.
@@ -375,7 +381,7 @@ git push origin "$TAG"
 
 1. 验证 tag commit 正是当前 `origin/main` HEAD，并重新运行版本、证据、代码、供应链和 Linux namespace 门禁。
 2. 从 acceptance manifest 读取 `C` 和已验收 digest，直接确认该 digest 仍存在，并严格校验 attestation 的仓库、签名 workflow、源码提交与 `refs/heads/main` 来源；不要求它必须来自某一种候选 tag 别名。
-3. 构建 linux/amd64 与 linux/arm64 二进制归档、compact ASN 数据库、标准 Compose、单文件 Compose、环境模板和 `SHA256SUMS`；证据验证器会比较两种架构的 Node 二进制摘要。
+3. 构建 linux/amd64 与 linux/arm64 二进制归档、compact ASN 数据库、标准 Compose、单文件 Compose、环境模板和 `SHA256SUMS`；证据验证器会比较两种架构的 Node 二进制摘要。两份 Compose 资产都必须保留 `remnanode-lite` service、container、hostname 和相同的显式 `.env` 插值 mapping。
 4. 使用 `docs/releases/v${VERSION}.md` 创建 GitHub Release，但暂不把它标为 GitHub 的 Latest Release；已有同名资产不会被覆盖。
 5. 不重新构建容器，而是把已经验收并证明的 `CANDIDATE_DIGEST` 发布为按政策不移动的精确版本：
 
@@ -461,6 +467,10 @@ sha256sum --check SHA256SUMS
 
 `SHA256SUMS` 用于确认下载文件与 workflow 产物一致。GitHub attestation 只覆盖容器构建；除非 Release workflow 以后增加文件级 attestation，否则它不能证明二进制归档的来源。
 
+给定同一份 `.env` 时，两份 Compose 资产必须解析为同一个 `remnanode-lite` 服务。
+Compose 只插值显式映射的运行变量，shell 环境优先于 `.env`；`SECRET_KEY` 未设置或
+为空时，必须在创建容器前使配置展开失败。
+
 ## 12. 部分失败与恢复
 
 发布 workflow 是分阶段产生外部状态的。失败后先确认已经创建了哪些对象，再决定重试范围。
@@ -525,11 +535,13 @@ sudo RNL_TAG=vX.Y.Z-rnl.N bash upgrade.sh --yes
 - [ ] `C` 的 `ci` 与候选容器 workflow 成功。
 - [ ] `manifest.json` 与 `docker-smoke.json` 绑定同一个 `C`、candidate tree、
       多架构 manifest digest、candidate binary hashes 和规范 Compose blob。
-- [ ] `docker-production-smoke-v1` 在真实原生 amd64/x86_64 低内存主机上运行至少
-      600 秒，容器 running/healthy、OOM/restart 为零、memory/PID 观测有效、
-      Panel 2.8.1 在线且真实代理流量通过。
-- [ ] 精确 deferred 列表已披露为 non-blocking 且未验证：arm64 runtime、原生
-      systemd/OpenRC、50,000 用户负载、24 小时 soak、fault/rollback injection。
+- [ ] `docker-production-smoke-v2` 在实际记录的真实原生 amd64/x86_64 宿主机上运行
+      至少 600 秒，容器精确限制为 448 MiB memory、448 MiB memory-plus-swap、
+      1 CPU 和 256 PIDs，保持 running/healthy、OOM/restart 为零、memory/PID 观测
+      有效、Panel 2.8.1 在线且真实代理流量通过。
+- [ ] 精确 deferred 列表已披露为 non-blocking 且未验证：整机 512 MiB runtime、
+      arm64 runtime、原生 systemd/OpenRC、50,000 用户负载、24 小时 soak、
+      fault/rollback injection。
 - [ ] Release Owner signoff 与脱敏 raw-bundle digest 已记录，且没有把
       operator-attested evidence 描述成不可伪造证明。
 - [ ] 发布资料 PR 只修改最终化白名单，并 squash 为恰好一个单 parent 提交。

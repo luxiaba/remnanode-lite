@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=6c5d9d17424f657b4da51451c0b9e08574c0b671355878cfa98746d4b39fb808 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=8e8f68da1ef1315980682636a3df71dcb1bab700a0ca41f684b5dba2370e8376 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > 这是中文译文；涉及契约细节时，请以[英文原文](../../../development/contract-2.8.0.md)为准。
@@ -172,13 +172,17 @@ systemd 与 OpenRC 均使用专用 `remnanode:remnanode` 账号，配置为 `roo
 
 此前记录的 TLS/socket 与系统供应链偏差已经关闭。当前没有已知的静态 `/node` 契约 P1/P2。
 
-`v2.8.0` 唯一会阻塞发布的运行方案是 `docker-production-smoke-v1`。候选镜像的精确摘要必须通过生产单文件 Compose 模板运行在 `x86_64`/`amd64` 主机上，输出预期版本，连接真实 Panel 2.8.1，承载真实代理流量，记录 cgroup 内存和 PID 观测，并保持健康运行，OOM kill 和重启次数都为零。
+`v2.8.0` 唯一会阻塞发布的运行方案是 `docker-production-smoke-v2`。候选镜像的精确摘要必须通过生产 Compose 模板运行在实际记录的原生 `x86_64`/`amd64` 宿主机上，输出预期版本，连接真实 Panel 2.8.1，承载真实代理流量，记录宿主容量及 cgroup 内存和 PID 观测，并保持健康运行，OOM kill 和重启次数都为零。宿主机大小不是准入上限；容器仍必须精确使用 448 MiB 内存、不得获得额外容器 swap、限制为 1 CPU 和 256 PIDs。
 
-`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载复测、24 小时 soak 和故障/回滚方案均已延期，不阻塞发布。验收清单与发布风险必须继续披露这些未验证项，不能把它们写成已通过。
+`whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载复测、24 小时 soak 和故障/回滚方案均已延期，不阻塞发布。验收清单与发布风险必须继续披露这些未验证项，不能把它们写成已通过。
 
 Docker Compose 与官方一样使用 host network 和 `NET_ADMIN`，同时保留低端口监听
 能力；Go Manager 直接拥有 rw-core 生命周期，因此无需复制官方双进程 s6 运行结构。
 systemd/OpenRC 继续作为等价的原生部署入口。
+
+两份受维护的生产 Compose 模板都使用 `remnanode-lite` 作为 service、container 和
+hostname。它们从 `.env` 插值同一组显式运行变量，应用生产默认值，并在创建容器前拒绝
+缺失或为空的 `SECRET_KEY`；`.env` 不会被整份注入容器。
 
 运行期 `dump-config` 是已接受的后置差异：Manager 只在 rw-core 启动期间保留完整规范配置，ready 后释放该副本并让 `CurrentConfigJSON` 返回 `{}`。这是面向 512 MiB 节点的内存取舍，不影响 `/node` 或 rw-core 启动契约；后续如恢复该诊断能力，必须采用有界方案，不能常驻第二份大配置。
 

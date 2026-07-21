@@ -44,7 +44,7 @@ func TestReleaseProfileMatchesProjectIdentity(t *testing.T) {
 	if expectedReleaseTag != "v"+projectversion.Version {
 		t.Fatalf("release profile tag = %q", expectedReleaseTag)
 	}
-	if expectedAcceptanceProfile != "docker-production-smoke-v1" {
+	if expectedAcceptanceProfile != "docker-production-smoke-v2" {
 		t.Fatalf("acceptance profile = %q", expectedAcceptanceProfile)
 	}
 }
@@ -553,7 +553,7 @@ func newReleaseFixture(t *testing.T) *releaseFixture {
 	fixture.git("config", "user.email", "release@example.invalid")
 	fixture.git("config", "commit.gpgsign", "false")
 	fixture.writeFile("code.txt", []byte("candidate code\n"))
-	fixture.writeFile(expectedComposeSourcePath, []byte("services:\n  remnanode:\n    image: candidate\n"))
+	fixture.writeFile(expectedComposeSourcePath, []byte("services:\n  remnanode-lite:\n    image: candidate\n"))
 	fixture.commitAllAt("candidate", testCandidateAt)
 	fixture.candidate = fixture.git("rev-parse", "HEAD")
 	fixture.candidateTree = fixture.git("rev-parse", fixture.candidate+"^{tree}")

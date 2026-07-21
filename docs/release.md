@@ -224,7 +224,7 @@ Either image may enter acceptance, but its full commit and manifest digest must
 remain fixed through publication. The final release verifies that digest and
 its attestation directly, regardless of which tag first exposed it.
 
-The `docker-production-smoke-v1` profile must use
+The `docker-production-smoke-v2` profile must use
 [`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml) from
 `C`, with its image reference replaced by
 `ghcr.io/luxiaba/remnanode-lite@${CANDIDATE_DIGEST}`. The evidence records both
@@ -253,7 +253,7 @@ git status --short
 The authoritative scope is defined in
 [`development/release-acceptance.md`](development/release-acceptance.md).
 Schema version 2 uses the version-specific
-`docker-production-smoke-v1` profile. Its blocking scope is:
+`docker-production-smoke-v2` profile. Its blocking scope is:
 
 - the protected-branch GitHub CI gate for `C`;
 - a candidate image manifest built for `linux/amd64` and `linux/arm64`,
@@ -261,9 +261,12 @@ Schema version 2 uses the version-specific
 - both architecture-specific release binaries built from `C` and identified
   by SHA-256;
 - one candidate-bound, digest-pinned run of the canonical single-file Compose
-  template on a real native amd64/x86_64 low-memory host;
-- a running and healthy container with the canonical memory, CPU, swap, and PID
-  limits, zero OOM kills and restarts, and positive memory/PID observations; and
+  template on a recorded real native amd64/x86_64 host;
+- the actual host memory, CPU, disk, and swap inventory as evidence, without a
+  whole-host size admission limit;
+- a running and healthy container with exactly 448 MiB memory, 448 MiB
+  memory-plus-swap, 1 CPU, and 256 PIDs, zero OOM kills and restarts, and
+  positive memory/PID observations; and
 - Panel 2.8.1 online with real proxy traffic, plus Release Owner signoff.
 
 The operator-attested runtime record is auditable and bound to the candidate,
@@ -271,7 +274,7 @@ but the validator cannot independently prove that the reported Panel session or
 traffic observation occurred. It is not an unforgeable proof.
 
 The profile records these exact deferred, non-blocking validations:
-`arm64-production-runtime`, `native-systemd-install`,
+`whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`,
 `native-openrc-install`, `50000-user-load`, `24h-soak`, and
 `fault-and-rollback-injection`. A Release note must disclose them and must not
 present the dated M6/M7 engineering baselines as candidate runtime acceptance.
@@ -395,7 +398,7 @@ The Release notes must contain at least these sections:
 The compatibility section must state the project version, contract version,
 pinned official commit, target Panel, rw-core, and packaged architectures
 separately from runtime-validated architectures. Acceptance results must name
-`docker-production-smoke-v1`, include candidate commit `C`,
+`docker-production-smoke-v2`, include candidate commit `C`,
 `candidateImageDigest`, and the exact relative link required by the gate:
 
 ```markdown
@@ -409,12 +412,16 @@ Risks section must list every deferred check instead of saying only "none." Use
 one line per token in this machine-checkable form:
 
 ```markdown
-- `arm64-production-runtime`: deferred; not validated by `docker-production-smoke-v1`.
+- `whole-host-512mib-runtime`: deferred; not validated by `docker-production-smoke-v2`.
 ```
 
-Apply the same form to `native-systemd-install`, `native-openrc-install`,
-`50000-user-load`, `24h-soak`, and `fault-and-rollback-injection`. The section
-must also contain this exact line:
+Apply the same form to `arm64-production-runtime`, `native-systemd-install`,
+`native-openrc-install`, `50000-user-load`, `24h-soak`, and
+`fault-and-rollback-injection`. The section must also contain these exact lines:
+
+```text
+The smoke validates the canonical container limits on the recorded host; whole-host 512 MiB / 1 vCPU / 2 GB runtime remains deferred.
+```
 
 ```text
 Runtime evidence is operator-attested and is not an unforgeable proof.
@@ -479,7 +486,8 @@ When [`.github/workflows/release.yml`](../.github/workflows/release.yml) receive
 3. Build linux/amd64 and linux/arm64 binary archives, the compact ASN database,
    standard Compose, single-file Compose, the environment template, and
    `SHA256SUMS`. The evidence validator compares the Node binary digest for both
-   architectures.
+   architectures. Both Compose assets retain the `remnanode-lite` service,
+   container, and hostname and the same explicit `.env` interpolation mapping.
 4. Create the GitHub Release from `docs/releases/v${VERSION}.md`, but do not yet
    mark it as GitHub's Latest Release. Existing assets with the same names are
    not overwritten.
@@ -587,6 +595,11 @@ The GitHub attestation covers the container build only; it does not attest the
 binary archives unless the release workflow later adds file-level
 attestations.
 
+The two Compose assets must resolve to the same `remnanode-lite` service when
+given the same `.env`. Compose interpolates only the explicitly mapped runtime
+settings, shell values override `.env`, and an unset or empty `SECRET_KEY` must
+make configuration expansion fail before container creation.
+
 ## 12. Partial Failures and Recovery
 
 The release workflow creates external state in stages. After a failure, first
@@ -684,13 +697,14 @@ Before pushing a final tag, confirm every item:
 - [ ] `manifest.json` and `docker-smoke.json` bind the same `C`, candidate
       tree, multi-architecture manifest digest, candidate binary hashes, and
       canonical Compose blob.
-- [ ] `docker-production-smoke-v1` passed on a real native amd64/x86_64
-      low-memory host for at least 600 seconds with the container running and
-      healthy, zero OOM kills/restarts, valid memory/PID observations, Panel
-      2.8.1 online, and real proxy traffic.
+- [ ] `docker-production-smoke-v2` passed on a recorded real native
+      amd64/x86_64 host for at least 600 seconds with exact 448 MiB memory,
+      448 MiB memory-plus-swap, 1 CPU, and 256 PID container limits; the
+      container remained healthy with zero OOM kills/restarts, valid memory/PID
+      observations, Panel 2.8.1 online, and real proxy traffic.
 - [ ] The exact deferred list is disclosed as non-blocking and unvalidated:
-      arm64 runtime, native systemd/OpenRC, 50,000-user load, 24-hour soak, and
-      fault/rollback injection.
+      whole-host 512 MiB runtime, arm64 runtime, native systemd/OpenRC,
+      50,000-user load, 24-hour soak, and fault/rollback injection.
 - [ ] Release Owner signoff and the sanitized raw-bundle digest are recorded
       without presenting operator-attested evidence as unforgeable proof.
 - [ ] The release-material pull request changes only the finalization allowlist

@@ -11,7 +11,9 @@ The first release line starts at `2.8.0` with these goals:
 - Behavioral compatibility with official Node `2.8.0@596f015`.
 - Real integration validation against Panel `2.8.1`.
 - Resolution of known lifecycle, plugin, firewall, contract, and installation supply-chain defects.
-- Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk`.
+- Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk` as
+  an engineering target; candidate-bound whole-host runtime validation follows
+  after the first release.
 - Linux `amd64` and `arm64` artifacts, with `2.8.0` runtime acceptance scoped to the production `amd64` Docker profile.
 - Keep Debian/systemd and Alpine/OpenRC installation paths available, with native runtime acceptance deferred beyond the first release.
 
@@ -50,19 +52,19 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M7 System integration and supply chain | Complete |
 | M8 Release acceptance | In progress |
 
-The M6 50,000-user measurement from 2026-07-15 and the M7 init/distribution snapshots from 2026-07-19 remain useful engineering baselines. They predate candidate `C`, so they are not runtime evidence for the current M8 candidate and do not need to be repeated for `2.8.0`.
+The M6 50,000-user measurement from 2026-07-15 and the M7 init/distribution snapshots from 2026-07-19 remain useful engineering baselines. They predate candidate `C`, so they are not runtime evidence for the current M8 candidate and do not need to be repeated for `2.8.0`. M6 completed the bounded-resource implementation work; it did not complete the deferred `whole-host-512mib-runtime` profile.
 
-`2.8.0` is still unreleased, with M8 in progress. The implementation, CI, candidate-image pipeline, and code-level 512 MiB controls are in place. One acceptance profile still blocks release: `docker-production-smoke-v1` on the frozen candidate. The run must resolve the candidate tag to an immutable manifest digest, use that digest with the production Compose template on `amd64`, carry a real Panel connection and proxy traffic, and finish with a healthy container, zero OOM kills, and zero restarts. A `sha-*` tag from `main` only locates a candidate; it is neither the acceptance identity nor a formal release.
+`2.8.0` is still unreleased, with M8 in progress. The implementation, CI, candidate-image pipeline, and code-level 512 MiB controls are in place. One acceptance profile still blocks release: `docker-production-smoke-v2` on the frozen candidate. The run must resolve the candidate tag to an immutable manifest digest, use that digest with the production Compose template on a recorded native `amd64`/`x86_64` host, carry a real Panel connection and proxy traffic, and finish with the exact container resource limits, a healthy container, zero OOM kills, and zero restarts. The host inventory is recorded but is not required to match the whole-host 512 MiB target. A `sha-*` tag from `main` only locates a candidate; it is neither the acceptance identity nor a formal release.
 
 ## Current focus
 
-- **Now:** Complete the frozen candidate's `amd64` Docker production smoke and record the Panel, traffic, process state, memory, OOM, and restart observations required to finish M8.
+- **Now:** Complete the frozen candidate's `amd64` Docker production smoke and record host capacity, strict container limits, Panel, traffic, process state, memory, OOM, and restart observations required to finish M8.
 - **Next:** Evaluate the next official release detected by automation. Pin its source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements and do not block `2.8.0`:
 
-- `arm64-production-runtime`, `native-systemd-install`, and `native-openrc-install` are deferred.
+- `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, and `native-openrc-install` are deferred.
 - Candidate-scale 50,000-user load, a 24-hour soak, and fault/rollback injection are deferred extended-validation profiles.
 - The installer has no persistent phase journal. Rerun it after `SIGKILL` or power loss; recreate the container for a container deployment.
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
@@ -139,9 +141,9 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 
 - Pass Go tests, race tests, vet, static checks, script checks, and multi-platform builds.
 - Freeze the code candidate first and bind the blocking acceptance record to its commit and candidate image.
-- Complete the sole blocking runtime profile, `docker-production-smoke-v1`: an `amd64` production Compose deployment pinned to the candidate manifest digest, with a real Panel connection and real proxy traffic, observed memory and PID usage, a running and healthy container, zero OOM kills, and zero restarts.
+- Complete the sole blocking runtime profile, `docker-production-smoke-v2`: an `amd64` production Compose deployment pinned to the candidate manifest digest on a recorded native host, with exact `448 MiB / 1 CPU / no container swap / 256 PIDs` limits, a real Panel connection and real proxy traffic, observed memory and PID usage, a running and healthy container, zero OOM kills, and zero restarts.
 - Keep the existing lifecycle coordinator, process-group cleanup, init, 50,000-user, and rollback tests as code-level or dated engineering evidence; do not present them as current-candidate runtime observations.
-- Defer `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` as non-blocking follow-up validation.
+- Defer `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` as non-blocking follow-up validation.
 - Update the compatibility matrix, risk register, operations documentation, root `CHANGELOG.md`, and `2.8.0` release material.
 - Validate the release record and candidate identity according to [`release-acceptance.md`](release-acceptance.md), then permit only finalization changes.
 

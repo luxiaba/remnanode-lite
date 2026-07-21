@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=936241caa3457807958e09f1f347995823fba946bb821bf94fcaf277d45ec7f9 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=f57ae26bc5f10062f52e13341cc8d320832e1f05cd1b3f55d7d598d89ecf9514 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -14,7 +14,8 @@
 - 对官方 Node `2.8.0@596f015` 达到行为级兼容。
 - 与 Panel `2.8.1` 完成真实集成验证。
 - 修复已知生命周期、插件、防火墙、契约和安装供应链问题。
-- 在 `512 MiB RAM / 1 vCPU / 2 GB disk` 的 Linux 节点稳定运行。
+- 以在 `512 MiB RAM / 1 vCPU / 2 GB disk` 的 Linux 节点稳定运行为工程目标；
+  与候选绑定的整机运行验证安排在首个版本之后。
 - 提供 Linux `amd64` 与 `arm64` 产物，`2.8.0` 的运行时验收范围限定为生产 `amd64` Docker 方案。
 - 保留 Debian/systemd 与 Alpine/OpenRC 安装路径，原生运行期验收延后到首个版本之后。
 
@@ -53,19 +54,19 @@
 | M7 系统与供应链 | 已完成 |
 | M8 发布验收 | 推进中 |
 
-2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们早于候选 `C`，因此不是当前 M8 候选的运行时证据，也不需要为 `2.8.0` 重新执行。
+2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们早于候选 `C`，因此不是当前 M8 候选的运行时证据，也不需要为 `2.8.0` 重新执行。M6 完成的是有界资源实现，并未完成延期的 `whole-host-512mib-runtime` profile。
 
-`2.8.0` 仍未发布，M8 正在推进。实现、CI、候选镜像流水线和代码级 512 MiB 约束已经落地。现在只有一个验收方案会阻塞发布：冻结候选上的 `docker-production-smoke-v1`。运行时先把候选 tag 解析为不可变的 manifest 摘要，再用生产 Compose 模板在 `amd64` 上运行该摘要；期间必须观察到真实 Panel 连接和代理流量，并确认容器持续健康运行，未发生 OOM kill 或重启。`main` 上的 `sha-*` tag 只用于定位候选，既不是验收身份，也不是正式 Release。
+`2.8.0` 仍未发布，M8 正在推进。实现、CI、候选镜像流水线和代码级 512 MiB 约束已经落地。现在只有一个验收方案会阻塞发布：冻结候选上的 `docker-production-smoke-v2`。运行时先把候选 tag 解析为不可变的 manifest 摘要，再用生产 Compose 模板在实际记录的原生 `amd64`/`x86_64` 宿主机上运行该摘要；期间必须观察到真实 Panel 连接和代理流量，并确认容器资源限制精确、持续健康运行，未发生 OOM kill 或重启。宿主机资源会记录，但不要求符合整机 512 MiB 目标。`main` 上的 `sha-*` tag 只用于定位候选，既不是验收身份，也不是正式 Release。
 
 ## 当前重点
 
-- **当前**：完成冻结候选的 `amd64` Docker 生产 smoke，记录完成 M8 验收所需的 Panel、流量、进程状态、内存、OOM 和重启观测。
+- **当前**：完成冻结候选的 `amd64` Docker 生产 smoke，记录完成 M8 验收所需的宿主容量、严格容器限制、Panel、流量、进程状态、内存、OOM 和重启观测。
 - **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码和差分，再决定项目版本线。
 - **后续**：在不牺牲 512 MiB 目标的前提下改进可观测性、自动化升级和更多发行环境验证。
 
 以下事项作为已接受限制或后续增强，不阻塞 `2.8.0`：
 
-- `arm64-production-runtime`、`native-systemd-install` 与 `native-openrc-install` 延后执行。
+- `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install` 与 `native-openrc-install` 延后执行。
 - 候选级 50,000 用户负载、24 小时 soak 以及故障/回滚注入作为扩展验证延后执行。
 - 安装器不维护持久化阶段日志。被 `SIGKILL` 或掉电中断后重新运行安装器；容器部署则重新创建容器。
 - OpenRC 正常执行 `stop_post` 时会清理专用 cgroup。`supervise-daemon` 异常退出后，通过重启主机或重新部署恢复。
@@ -140,9 +141,9 @@
 
 - 通过 `go test`、race、vet、静态检查、脚本检查和多架构构建。
 - 先冻结代码候选，并将阻塞验收记录绑定到候选 commit 与候选镜像。
-- 完成唯一阻塞的运行期 profile `docker-production-smoke-v1`：`amd64` 生产 Compose 部署固定到候选 manifest digest，接入真实 Panel 并通过真实代理流量，记录内存与 PID 使用量，确认容器持续运行且健康、OOM kill 与 restart 都为零。
+- 完成唯一阻塞的运行期 profile `docker-production-smoke-v2`：在实际记录的原生宿主机上，把 `amd64` 生产 Compose 部署固定到候选 manifest digest，严格使用 `448 MiB / 1 CPU / no container swap / 256 PIDs` 限制，接入真实 Panel 并通过真实代理流量，记录内存与 PID 使用量，确认容器持续运行且健康、OOM kill 与 restart 都为零。
 - 将现有生命周期协调器、进程组清理、init、50,000 用户与回滚测试保留为代码级或带日期的工程证据，不把它们表述为当前候选运行期观测。
-- 将 `arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 与 `fault-and-rollback-injection` 列为不阻塞发布的后续验证。
+- 将 `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、`50000-user-load`、`24h-soak` 与 `fault-and-rollback-injection` 列为不阻塞发布的后续验证。
 - 更新兼容矩阵、风险清单、运维文档和 `2.8.0` Release 资料。
 - 按 [`release-acceptance.md`](release-acceptance.md) 校验发布记录与候选身份，随后只允许最终发布收尾变化。
 

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=d9a8fe1381578b51855f27f81eb4e9959e7c8a2abbcc52887caebad8537dd16a -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=adb52f046e6cf0d845056c1649e953378f6d2e2de67aad0182ce1586c3f6a608 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -13,8 +13,8 @@
 - 状态、锁、goroutine、取消或生命周期变化必须运行带 `-race` 的测试。
 - 官方可见行为变化必须运行固定源码契约测试。
 - Linux capability、netlink、nftables、进程组和 cgroup 结论只能由 Linux 测试支持。
-- 发布验收按版本定义。`v2.8.0` 唯一会阻塞发布的运行检查，是在生产 `amd64` 主机上用真实 Panel 和真实代理流量完成 `docker-production-smoke-v1`。
-- `arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案仍处于延期状态，不阻塞本次发布。单元测试不能替代尚未执行的真实环境验证。
+- 发布验收按版本定义。`v2.8.0` 唯一会阻塞发布的运行检查，是在实际记录的原生 `amd64`/`x86_64` 宿主机上用真实 Panel 和真实代理流量完成 `docker-production-smoke-v2`。宿主容量只做记录，规范容器限制仍需严格校验。
+- `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案仍处于延期状态，不阻塞本次发布。单元测试不能替代尚未执行的真实环境验证。
 - 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应。
 
 ## 快速选择
@@ -201,7 +201,7 @@ REQUIRE_GOVULNCHECK=1 \
 `REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，它会跳过漏洞扫描；因此发布前和
 需要报告完整结果时必须显式要求该工具。
 
-`check.sh` 成功并不等于完成 `v2.8.0` 的生产验收。它不会在生产 `amd64` 主机上用真实 Panel 和真实流量运行冻结候选的镜像摘要，也不执行已延期的负载、soak、原生 init、`arm64` 或故障注入方案。
+`check.sh` 成功并不等于完成 `v2.8.0` 的生产验收。它不会在实际记录的原生 `amd64`/`x86_64` 宿主机上用真实 Panel 和真实流量运行冻结候选的镜像摘要，也不执行已延期的整机 512 MiB、负载、soak、原生 init、`arm64` 或故障注入方案。
 
 ## Installer 测试
 
@@ -282,6 +282,11 @@ SECRET_KEY=packaging-check \
 `packaging-check` 只用于 Compose 解析，不能启动节点。真实启动必须使用 Panel 生成的
 完整 Secret，并遵循 [Docker 部署文档](../deployment-docker.md)的安全要求。
 
+两份受维护的生产 Compose 都把 service、container 和 hostname 统一为
+`remnanode-lite`。Compose 从 `.env` 读取插值，shell 环境优先，并且只有显式映射的
+运行变量会进入容器。打包测试会确认两个模板解析为同一服务、覆盖所有受支持的
+`.env` 变量，并要求 `SECRET_KEY` 未设置或为空时在 Compose 展开阶段失败。
+
 ## 黑盒契约比较
 
 先查看路由及其是否允许默认探测：
@@ -321,7 +326,7 @@ REQUIRE_GOVULNCHECK=1 \
 
 `release-check.sh` 只用于已经冻结且具备当前版本所需验收材料的候选。它要求工作区干净、发布说明和 CHANGELOG 已完成收尾、证据清单可验证、候选祖先关系合法，并运行完整仓库检查。普通开发分支缺少这些材料时，失败属于预期行为；不要通过伪造证据、放宽检查或提前修改发布状态让命令变绿。
 
-`v2.8.0` 要求冻结候选的镜像摘要在发布前通过 `docker-production-smoke-v1`。对应的 `docker-smoke.json` 要记录生产 `amd64` Compose 运行、预期版本输出、真实 Panel 连接和代理流量、cgroup 内存与 PID 观测，以及容器健康、OOM 状态和重启次数。验收清单会把 `arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案列为延期且不阻塞发布。
+`v2.8.0` 要求冻结候选的镜像摘要在发布前通过 `docker-production-smoke-v2`。对应的 `docker-smoke.json` 要记录原生 `amd64`/`x86_64` Compose 运行、实际宿主机内存、CPU、磁盘和 swap、精确的 `448 MiB / 1 CPU / no container swap / 256 PIDs` 容器限制、预期版本输出、真实 Panel 连接和代理流量、cgroup 内存与 PID 观测，以及容器健康、OOM 状态和重启次数。验收清单会把 `whole-host-512mib-runtime`、`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案列为延期且不阻塞发布。
 
 这些观测由操作人签字确认。校验器会将记录绑定到候选提交和镜像摘要，并检查必需字段、时间和内部一致性，但无法证明物理运行确实发生。应把这份记录视为可追责的审计声明，而不是不可伪造的证明。
 
@@ -342,7 +347,7 @@ REQUIRE_GOVULNCHECK=1 \
 | nftables/socket destroy | 对应 Linux unit test | 两条 namespace 集成测试 |
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
 | Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 真实 systemd/OpenRC（扩展验证；`v2.8.0` 延期） |
-| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与 `amd64` 候选 smoke；`arm64` 运行延期 |
+| Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建与严格容器限制下的 `amd64` 候选 smoke；整机 512 MiB 与 `arm64` 运行延期 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |
 | 官方契约升级 | 全契约与固定源码测试 | 全部注册路由黑盒、Panel 全流程 |

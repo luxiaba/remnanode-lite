@@ -12,11 +12,12 @@ Panel 2.8.1 is used for integration testing but does not determine the project
 version.
 
 `2.8.0` is not published yet. Its release gate covers GitHub CI, attested
-amd64/arm64 image builds, and a real low-memory smoke test on amd64/x86_64 using
-the canonical Compose file. The smoke requires a live Panel 2.8.1 connection
-and real proxy traffic and records container health, OOM, restart, memory, and
-PID data. The following checks are deferred and do not block this release:
-`arm64-production-runtime`, `native-systemd-install`,
+amd64/arm64 image builds, and a real smoke test on a recorded native
+amd64/x86_64 host using the canonical Compose file. The smoke requires a live
+Panel 2.8.1 connection and real proxy traffic, records the host inventory, and
+enforces the canonical `448 MiB / 1 CPU / no container swap / 256 PIDs` limits.
+The following checks are deferred and do not block this release:
+`whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`,
 `native-openrc-install`, `50000-user-load`, `24h-soak`, and
 `fault-and-rollback-injection`.
 
@@ -37,7 +38,11 @@ independently prove that the reported runtime observations occurred.
   `latest` without rebuilding it. Pull requests and `dev` validate the
   container build without publishing a release image.
 - Added scheduled monitoring for official Node Releases. A changed compatibility baseline opens a synchronization Issue but never changes code or publishes an image automatically.
-- Added amd64/arm64 multi-stage Docker images and production Compose files with pinned and verified rw-core, geo, and ASN assets. The deployment preserves the official host-network and capability model while applying 448 MiB memory, no-swap, 1 CPU, 256 PID, read-only-rootfs, health, and log limits.
+- Added amd64/arm64 multi-stage Docker images and production Compose files with pinned and verified rw-core, geo, and ASN assets. The deployment preserves the official host-network and capability model while applying 448 MiB memory, no additional container swap, 1 CPU, 256 PID, read-only-rootfs, health, and log limits.
+- Standardized the Compose service, container, and hostname as
+  `remnanode-lite`. Both maintained production templates now interpolate the
+  same explicitly allowed runtime settings from `.env`, apply documented
+  defaults, and reject an unset or empty `SECRET_KEY` during Compose expansion.
 - Removed persistent container log volumes. rw-core logs use bounded tmpfs storage, Docker logs rotate within fixed limits, and recreating the container reclaims all runtime logs.
 - Captured 26 routes, Zod request and response behavior, error shapes, and side effects from official Node `2.8.0@596f015` as an executable contract.
 - Added a read-only-by-default `contract-probe`, protected by mTLS and JWT, for controlled black-box comparison between official Node and the Go implementation.
@@ -45,7 +50,12 @@ independently prove that the reported runtime observations occurred.
 - Added Linux network-namespace integration gates for nftables and socket destruction, including real dual-stack replacement, block, unblock, recreation, shutdown cleanup, and TCP connection termination.
 - Added a streaming ASN build pipeline pinned to an `ipverse/as-ip-blocks` commit and archive digest. Releases include the compact `asn-prefixes.bin` database and `SHA256SUMS`.
 - Added a real rw-core resource gate at `448 MiB / 1 CPU / no swap`. The dated 2026-07-15 M6 engineering baseline peaked at `143.9 MiB` with 50,000 users. It remains a historical baseline; repeating the 50,000-user load is deferred rather than a `2.8.0` candidate blocker.
-- Added the schema v2 `docker-production-smoke-v1` acceptance profile. It binds the real amd64/x86_64 Compose smoke to the candidate commit, manifest digest, architecture binary, and canonical Compose file, while recording the Panel 2.8.1 real-traffic result and health, OOM, restart, memory, and PID observations.
+- Added the schema v2 `docker-production-smoke-v2` acceptance profile. It binds
+  the real amd64/x86_64 Compose smoke to the candidate commit, manifest digest,
+  architecture binary, and canonical Compose file. The record captures actual
+  host capacity without treating it as a 512 MiB whole-host proof, while
+  strictly validating container limits, Panel 2.8.1 real traffic, health, OOM,
+  restart, memory, and PID observations.
 
 ### Security
 

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=7324aaf69d698661d40b0bc0b7d4caccd466719c50b222ab4a41367a050b1bb1 -->
+<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=502032a0a637be8281456087ced1f9e20ef3b9290d4114536b362ad83596ca43 -->
 
 # 配置参考
 
@@ -18,7 +18,9 @@ Node 启动时按以下顺序选择配置文件：
 
 Node 先读取配置文件，再用进程环境中已知且非空的变量覆盖它。空环境变量不会清除文件中的值；两个 Secret 配置同时存在时，`SECRET_KEY` 优先于 `SECRET_KEY_FILE`。
 
-systemd 和 OpenRC 通过 `REMNANODE_ENV` 指向 `/etc/remnanode/node.env`，但不会 source 或导出整份文件。Node 把它当作数据文件解析，因此未知键和 Secret 不会自动进入进程环境。Docker Compose 则直接把选定的运行变量传给容器。
+systemd 和 OpenRC 通过 `REMNANODE_ENV` 指向 `/etc/remnanode/node.env`，但不会 source 或导出整份文件。Node 把它当作数据文件解析，因此未知键和 Secret 不会自动进入进程环境。
+
+宿主机上供 Docker Compose 使用的 `.env` 属于另一套机制。Compose 在创建容器前完成插值，只传递 Compose 文件中明确映射的运行变量。容器不会把宿主机的 `.env` 当作 Node 配置文件打开。
 
 修改配置后必须重启 Node 或重新创建容器；当前不支持配置热加载。
 
@@ -143,22 +145,36 @@ BODY_LIMIT_MB=
 
 一般不需要再写 `GOMEMLIMIT=180MiB`，因为 `LOW_MEMORY=1` 已提供相同的 Go 默认软限制。只有完成资源测量后才应覆盖它。
 
+受维护的原生模板是 [`deploy/node.env.example`](../../../deploy/node.env.example)。
+
 ## Docker Compose 插值
 
-仓库根目录的 `.env.example` 服务于 Compose CLI。它不是容器内的 `node.env`，也不会被 Go 进程自行发现。
+在部署目录中运行 Compose 时，它会自动读取 Compose 文件同目录下名为 `.env` 的文件。仓库根目录的 `.env.example` 和正式 Release 资产 `remnanode.env.example` 都只是模板；需要把其中一个复制或下载为 `.env`，并设置为 `0600`。保留 example 文件名时不会被自动读取。
 
-| 变量 | 消费方 | 说明 |
-| --- | --- | --- |
-| `REMNANODE_IMAGE` | Compose | 镜像 tag 或 `name@sha256:...`，不会传入 Node。 |
-| `NODE_PORT` | Compose -> Node | 传入容器运行时。 |
-| `NODE_BIND_ADDR` | Compose -> Node | 传入容器运行时。 |
-| `SECRET_KEY` | Compose -> Node | 传入容器环境，会出现在本机 Docker 元数据中。 |
-| `LOW_MEMORY` | Compose -> Node | 生产模板默认 `1`。 |
-| `DISABLE_HASHED_SET_CHECK` | Compose -> Node | 生产模板默认 `false`。 |
-| `BODY_LIMIT_MB` | Compose -> Node | 留空使用低内存默认值。 |
-| `GOMEMLIMIT` | Compose -> Node | 留空由 `LOW_MEMORY` 决定。 |
+这些插值的优先级为 shell 环境变量 > `.env` > Compose 文件中的 `${VARIABLE:-fallback}`。使用 `:-` 时，最终值未设置或为空会采用回退值。`SECRET_KEY` 使用必填的 `${VARIABLE:?message}` 形式，未设置或为空时，Compose 会在部署前直接失败。
 
-大量独立节点可以完全不创建 `.env`，直接把运行变量写入 Compose 的 `environment` 映射。请从受维护的 [`deploy/compose.single-file.yaml`](../../../deploy/compose.single-file.yaml) 开始，并遵循 [Docker Compose 部署](deployment-docker.md)。
+| 变量 | `.env` 中必需 | Compose 回退值 | 消费方与用途 |
+| --- | --- | --- | --- |
+| `REMNANODE_IMAGE` | 否 | 模板选择的镜像；正式 Release 资产使用对应 Release 的精确版本 | 仅供 Compose 使用的镜像 tag 或 `name@sha256:...`，不传入 Node。 |
+| `NODE_PORT` | 否 | `2222` | Compose -> Node。Node 运行时必需，由 Compose 回退值补齐；必须与 Panel 一致。 |
+| `NODE_BIND_ADDR` | 否 | 空 | Compose -> Node。空值表示监听所有本地地址。 |
+| `SECRET_KEY` | 是，除非直接写在 YAML 中 | 无；空值会使插值失败 | Compose -> Node。Panel 的完整 Secret，会出现在本机 Docker 元数据中。 |
+| `LOW_MEMORY` | 否 | `1` | Compose -> Node。启用受维护的小型节点运行策略。 |
+| `DISABLE_HASHED_SET_CHECK` | 否 | `false` | Compose -> Node。仅用于调试的强制重启行为。 |
+| `BODY_LIMIT_MB` | 否 | 空（自动） | Compose -> Node。为空时低内存模式使用 16 MiB。 |
+| `GOMEMLIMIT` | 否 | 空（自动） | Compose -> Node。为空时低内存模式使用 180 MiB。 |
+
+Compose 只把服务 `environment` 映射中明确列出的 7 个运行变量传入容器。`REMNANODE_IMAGE` 由 Compose 自己消费，`.env` 中的未知键不会注入容器。这种显式允许列表与 `env_file:` 指令不同。
+
+推荐的 Release 流程把 `remnanode.env.example` 下载为 `.env`。如果要保持不使用 `.env` 的单文件部署，可以直接用 YAML 值替换必填插值：
+
+```yaml
+environment:
+  NODE_PORT: "${NODE_PORT:-38329}"
+  SECRET_KEY: "PASTE_THE_COMPLETE_SECRET_KEY"
+```
+
+受维护的回退值是 `2222`；上面的 `38329` 只是示例，实际端口必须与 Panel 一致。任何包含 Secret 的文件都应保持 `0600` 且不得提交。请从 [`deploy/compose.single-file.yaml`](../../../deploy/compose.single-file.yaml) 开始，并遵循 [Docker Compose 部署](deployment-docker.md)。
 
 `latest` 只改变下次 pull 解析到的镜像，不会自动替换运行容器：
 

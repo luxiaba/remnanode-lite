@@ -1,16 +1,24 @@
-# Single-file deployment for small Linux nodes.
-# Keep this file private because SECRET_KEY is stored inline: chmod 600.
+# Production deployment for small Linux nodes.
+# Compose reads .env from this directory. Keep .env and this file private.
 name: remnanode-lite
 
 services:
-  remnanode:
-    container_name: remnanode
-    hostname: remnanode
-    # Replace latest with the exact version, candidate tag, or digest selected for this node.
-    image: ghcr.io/luxiaba/remnanode-lite:latest
+  remnanode-lite:
+    image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:latest}"
+    container_name: remnanode-lite
+    hostname: remnanode-lite
     init: true
     network_mode: host
     restart: unless-stopped
+
+    environment:
+      NODE_PORT: "${NODE_PORT:-2222}"
+      NODE_BIND_ADDR: "${NODE_BIND_ADDR:-}"
+      SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY in .env}"
+      LOW_MEMORY: "${LOW_MEMORY:-1}"
+      DISABLE_HASHED_SET_CHECK: "${DISABLE_HASHED_SET_CHECK:-false}"
+      BODY_LIMIT_MB: "${BODY_LIMIT_MB:-}"
+      GOMEMLIMIT: "${GOMEMLIMIT:-}"
 
     cap_drop:
       - ALL
@@ -35,12 +43,6 @@ services:
       nofile:
         soft: 1048576
         hard: 1048576
-
-    environment:
-      NODE_PORT: "38329"
-      SECRET_KEY: "REPLACE_WITH_THE_COMPLETE_PANEL_SECRET_KEY"
-      LOW_MEMORY: "1"
-      DISABLE_HASHED_SET_CHECK: "false"
 
     healthcheck:
       test: ["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]

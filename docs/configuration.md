@@ -14,7 +14,9 @@ At startup, the Node selects a configuration file in this order:
 
 The Node reads the file first, then applies known, non-empty values from the process environment. An empty environment variable does not clear a value from the file. If both Secret settings are present, `SECRET_KEY` takes precedence over `SECRET_KEY_FILE`.
 
-systemd and OpenRC point the Node to `/etc/remnanode/node.env` through `REMNANODE_ENV`. They do not source the file or export all of its contents. The Node parses it as data, which keeps unknown keys and the Secret out of the process environment. Docker Compose passes the selected runtime variables directly to the container instead.
+systemd and OpenRC point the Node to `/etc/remnanode/node.env` through `REMNANODE_ENV`. They do not source the file or export all of its contents. The Node parses it as data, which keeps unknown keys and the Secret out of the process environment.
+
+The host-side `.env` used by Docker Compose is a separate mechanism. Compose performs interpolation before it creates the container and passes only the runtime variables explicitly mapped in the Compose file. The container does not open the host's `.env` as a Node configuration file.
 
 Restart the Node or recreate the container after changing configuration. Runtime configuration reload is not supported.
 
@@ -143,20 +145,32 @@ The maintained native template is [`deploy/node.env.example`](../deploy/node.env
 
 ## Docker Compose interpolation
 
-The repository-root `.env.example` is consumed by the Compose CLI. It is not the container's `node.env`, and the Go process does not discover it on its own.
+When Compose is run from the deployment directory, it automatically reads a file named `.env` beside the Compose file. The repository-root `.env.example` and the formal Release asset `remnanode.env.example` are templates; copy or download one as `.env` and set its mode to `0600`. Neither template is read automatically under its example filename.
 
-| Variable | Consumer | Description |
-| --- | --- | --- |
-| `REMNANODE_IMAGE` | Compose | Image tag or `name@sha256:...`; not passed to the Node. |
-| `NODE_PORT` | Compose -> Node | Passed into the container at runtime. |
-| `NODE_BIND_ADDR` | Compose -> Node | Passed into the container at runtime. |
-| `SECRET_KEY` | Compose -> Node | Passed through the container environment and visible in local Docker metadata. |
-| `LOW_MEMORY` | Compose -> Node | Defaults to `1` in production templates. |
-| `DISABLE_HASHED_SET_CHECK` | Compose -> Node | Defaults to `false` in production templates. |
-| `BODY_LIMIT_MB` | Compose -> Node | Leave empty to use the low-memory default. |
-| `GOMEMLIMIT` | Compose -> Node | Leave empty to let `LOW_MEMORY` select the default. |
+For these substitutions, precedence is shell environment > `.env` > the `${VARIABLE:-fallback}` written in the Compose file. The `:-` form uses its fallback when the resolved value is unset or empty. `SECRET_KEY` uses the required `${VARIABLE:?message}` form and makes Compose fail before deployment when it is unset or empty.
 
-Large fleets of independent nodes do not need an `.env` file. Runtime values can be written directly into the Compose `environment` mapping. Start from [`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml) and follow [Docker Compose deployment](deployment-docker.md).
+| Variable | Required in `.env` | Compose fallback | Consumer and purpose |
+| --- | --- | --- | --- |
+| `REMNANODE_IMAGE` | No | Image selected by the template; formal Release assets use the exact Release version | Compose-only image tag or `name@sha256:...`; not passed to the Node. |
+| `NODE_PORT` | No | `2222` | Compose -> Node. Required by the Node at runtime; the Compose fallback supplies it. It must match the Panel. |
+| `NODE_BIND_ADDR` | No | Empty | Compose -> Node. Empty listens on all local addresses. |
+| `SECRET_KEY` | Yes, unless set directly in YAML | None; interpolation fails when empty | Compose -> Node. Complete Panel Secret, visible in local Docker metadata. |
+| `LOW_MEMORY` | No | `1` | Compose -> Node. Enables the maintained small-node runtime policy. |
+| `DISABLE_HASHED_SET_CHECK` | No | `false` | Compose -> Node. Debug-only forced restart behavior. |
+| `BODY_LIMIT_MB` | No | Empty (automatic) | Compose -> Node. Low-memory mode selects 16 MiB when empty. |
+| `GOMEMLIMIT` | No | Empty (automatic) | Compose -> Node. Low-memory mode selects 180 MiB when empty. |
+
+Compose passes only the seven runtime variables explicitly listed under the service's `environment` mapping. `REMNANODE_IMAGE` is consumed by Compose itself, and unknown keys in `.env` are not injected into the container. This explicit allowlist is different from an `env_file:` directive.
+
+The recommended Release workflow downloads `remnanode.env.example` as `.env`. A literal single-file deployment can omit `.env` and replace the required interpolation line with a direct YAML value instead:
+
+```yaml
+environment:
+  NODE_PORT: "${NODE_PORT:-38329}"
+  SECRET_KEY: "PASTE_THE_COMPLETE_SECRET_KEY"
+```
+
+The maintained fallback is `2222`; `38329` above is only an example, and the selected port must match the Panel. Keep either file containing the Secret at mode `0600` and never commit it. Start from [`deploy/compose.single-file.yaml`](../deploy/compose.single-file.yaml) and follow [Docker Compose deployment](deployment-docker.md).
 
 `latest` only changes what the next pull resolves to. It does not replace a running container:
 

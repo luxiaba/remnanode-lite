@@ -63,6 +63,17 @@ require_text compose.yaml "$production_image"
 require_text .env.example "REMNANODE_IMAGE=${production_image}"
 require_text compose.build.yaml "image: remnanode-lite:${version}"
 require_text compose.build.yaml 'build:'
+for compose_file in compose.yaml compose.build.yaml deploy/compose.single-file.yaml; do
+  require_text "$compose_file" '  remnanode-lite:'
+  if grep -Eq '^[[:space:]]{2}remnanode:' "$compose_file"; then
+    echo "$compose_file still uses the legacy remnanode service name" >&2
+    exit 1
+  fi
+done
+for compose_file in compose.yaml deploy/compose.single-file.yaml; do
+  require_text "$compose_file" 'container_name: remnanode-lite'
+  require_text "$compose_file" 'hostname: remnanode-lite'
+done
 
 if grep -Eq '^[[:space:]]+build:' compose.yaml; then
   echo "production compose.yaml must not require a source build" >&2
@@ -80,8 +91,14 @@ require_text compose.yaml 'pids_limit: 256'
 require_text compose.yaml 'read_only: true'
 require_text compose.yaml '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]'
 
-require_text deploy/compose.single-file.yaml 'image: ghcr.io/luxiaba/remnanode-lite:latest'
-require_text deploy/compose.single-file.yaml 'SECRET_KEY: "REPLACE_WITH_THE_COMPLETE_PANEL_SECRET_KEY"'
+require_text deploy/compose.single-file.yaml \
+  "image: \"\${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:latest}\""
+require_text deploy/compose.single-file.yaml \
+  "SECRET_KEY: \"\${SECRET_KEY:?set SECRET_KEY in .env}\""
+for variable in NODE_PORT NODE_BIND_ADDR LOW_MEMORY DISABLE_HASHED_SET_CHECK BODY_LIMIT_MB GOMEMLIMIT; do
+  require_text compose.yaml "${variable}: \"\${${variable}"
+  require_text deploy/compose.single-file.yaml "${variable}: \"\${${variable}"
+done
 require_text deploy/compose.single-file.yaml 'network_mode: host'
 require_text deploy/compose.single-file.yaml 'init: true'
 require_text deploy/compose.single-file.yaml 'read_only: true'
@@ -89,7 +106,7 @@ require_text deploy/compose.single-file.yaml 'mem_limit: 448m'
 release_single_file="$(sed \
   "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${version}|" \
   deploy/compose.single-file.yaml)"
-grep -Fq "image: ghcr.io/luxiaba/remnanode-lite:${version}" <<<"$release_single_file"
+grep -Fq "ghcr.io/luxiaba/remnanode-lite:${version}" <<<"$release_single_file"
 if grep -Fq 'ghcr.io/luxiaba/remnanode-lite:latest' <<<"$release_single_file"; then
   echo "release single-file Compose still contains latest" >&2
   exit 1
@@ -137,6 +154,7 @@ require_text scripts/check-release-risk-disclosure.sh '## Known Risks'
 require_text scripts/check-release-risk-disclosure.sh 'operator-attested'
 require_text scripts/check-release-risk-disclosure.sh 'not an unforgeable proof'
 for deferred in \
+  whole-host-512mib-runtime \
   arm64-production-runtime \
   native-systemd-install \
   native-openrc-install \
@@ -151,18 +169,21 @@ trap 'rm -rf "$risk_fixture_dir"' EXIT
 valid_risks="${risk_fixture_dir}/valid.md"
 invalid_deferred="${risk_fixture_dir}/invalid-deferred.md"
 invalid_operator="${risk_fixture_dir}/invalid-operator.md"
+invalid_host_scope="${risk_fixture_dir}/invalid-host-scope.md"
 {
   printf '%s\n\n' '# v2.8.0' '## Known Risks'
   for deferred in \
+    whole-host-512mib-runtime \
     arm64-production-runtime \
     native-systemd-install \
     native-openrc-install \
     50000-user-load \
     24h-soak \
     fault-and-rollback-injection; do
-    printf -- "- \`%s\`: deferred; not validated by \`docker-production-smoke-v1\`.\n" "$deferred"
+    printf -- "- \`%s\`: deferred; not validated by \`docker-production-smoke-v2\`.\n" "$deferred"
   done
-  printf '\n%s\n\n%s\n' \
+  printf '\n%s\n\n%s\n\n%s\n' \
+    'The smoke validates the canonical container limits on the recorded host; whole-host 512 MiB / 1 vCPU / 2 GB runtime remains deferred.' \
     'Runtime evidence is operator-attested and is not an unforgeable proof.' \
     '## Installation and Upgrade'
 } >"$valid_risks"
@@ -176,6 +197,12 @@ sed 's/Runtime evidence is operator-attested/Runtime evidence is not operator-at
   "$valid_risks" >"$invalid_operator"
 if bash scripts/check-release-risk-disclosure.sh "$invalid_operator" >/dev/null 2>&1; then
   echo "release risk checker accepted a negated operator evidence statement" >&2
+  exit 1
+fi
+sed 's/whole-host 512 MiB \/ 1 vCPU \/ 2 GB runtime remains deferred/whole-host target was validated/' \
+  "$valid_risks" >"$invalid_host_scope"
+if bash scripts/check-release-risk-disclosure.sh "$invalid_host_scope" >/dev/null 2>&1; then
+  echo "release risk checker accepted a false whole-host validation statement" >&2
   exit 1
 fi
 require_text .github/workflows/release.yml \
@@ -323,11 +350,59 @@ done < <(
 )
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  SECRET_KEY=packaging-check REMNANODE_IMAGE="$production_image" \
-    docker compose -f compose.yaml config --quiet
-  SECRET_KEY=packaging-check REMNANODE_IMAGE="$production_image" \
-    docker compose -f compose.yaml -f compose.build.yaml config --quiet
-  docker compose -f deploy/compose.single-file.yaml config --quiet
+  compose_env="${risk_fixture_dir}/compose.env"
+  {
+    printf '%s\n' \
+      "REMNANODE_IMAGE=${production_image}" \
+      'NODE_PORT=38329' \
+      'NODE_BIND_ADDR=127.0.0.1' \
+      'SECRET_KEY=packaging-check' \
+      'LOW_MEMORY=1' \
+      'DISABLE_HASHED_SET_CHECK=false' \
+      'BODY_LIMIT_MB=12' \
+      'GOMEMLIMIT=160MiB'
+  } >"$compose_env"
+
+  validate_compose() {
+    local services
+    services="$(docker compose --env-file "$compose_env" "$@" config --services)"
+    [ "$services" = 'remnanode-lite' ] || {
+      echo "Compose service set is $services, want remnanode-lite" >&2
+      exit 1
+    }
+    docker compose --env-file "$compose_env" "$@" config --quiet
+  }
+  validate_compose -f compose.yaml
+  validate_compose -f compose.yaml -f compose.build.yaml
+  validate_compose -f deploy/compose.single-file.yaml
+
+  if env -u SECRET_KEY docker compose --env-file /dev/null \
+    -f deploy/compose.single-file.yaml config --quiet >/dev/null 2>&1; then
+    echo "single-file Compose accepted a missing SECRET_KEY" >&2
+    exit 1
+  fi
+
+  root_service="$(docker compose --env-file "$compose_env" -f compose.yaml \
+    config --format json | jq -S '.services["remnanode-lite"]')"
+  single_service="$(docker compose --env-file "$compose_env" -f deploy/compose.single-file.yaml \
+    config --format json | jq -S '.services["remnanode-lite"]')"
+  [ "$root_service" = "$single_service" ] || {
+    echo "production Compose templates do not resolve to the same service" >&2
+    diff -u <(printf '%s\n' "$root_service") <(printf '%s\n' "$single_service") >&2 || true
+    exit 1
+  }
+
+  release_compose="${risk_fixture_dir}/release-compose.yaml"
+  release_env="${risk_fixture_dir}/release.env"
+  printf '%s\n' "$release_single_file" >"$release_compose"
+  printf '%s\n' 'SECRET_KEY=packaging-check' >"$release_env"
+  release_image="$(env -u REMNANODE_IMAGE docker compose \
+    --env-file "$release_env" -f "$release_compose" config --format json \
+    | jq -r '.services["remnanode-lite"].image')"
+  [ "$release_image" = "$production_image" ] || {
+    echo "release Compose default image is $release_image, want $production_image" >&2
+    exit 1
+  }
 else
   echo "docker compose is unavailable; skipped Compose schema validation" >&2
 fi

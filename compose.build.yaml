@@ -1,5 +1,5 @@
 services:
-  remnanode:
+  remnanode-lite:
     image: remnanode-lite:2.8.0
     build:
       context: .

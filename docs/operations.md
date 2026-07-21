@@ -31,9 +31,11 @@ The Node does not persist the complete Xray configuration received from the Pane
 
 ```bash
 docker compose ps
-docker compose logs --tail=100 remnanode
+docker compose logs --tail=100 remnanode-lite
 ss -H -lntp 'sport = :38329'
 ```
+
+Run Compose from the directory containing the Compose file and its optional `.env`. Compose automatically uses that file for interpolation, while an exported shell variable with the same name takes precedence. Only variables explicitly declared in the Compose `environment` mapping enter the container; `.env` is not injected wholesale.
 
 Replace `38329` with the configured `NODE_PORT`. The Compose healthcheck runs this command inside the container:
 
@@ -101,7 +103,7 @@ Do not start a second daemon inside a running production container; process and 
 
 | Deployment | Command | Storage |
 | --- | --- | --- |
-| Docker | `docker compose logs -f remnanode` | Docker `json-file`; the production template uses `2 MiB x 2`. |
+| Docker | `docker compose logs -f remnanode-lite` | Docker `json-file`; the production template uses `2 MiB x 2`. |
 | systemd | `journalctl -u remnawave-node -f` | Controlled by host journald quotas. |
 | OpenRC | `tail -F /var/log/remnanode/openrc.log` | File checked for rotation by the Node every 10 seconds. |
 
@@ -124,10 +126,10 @@ rw-core stdout and stderr are stored separately:
 Docker:
 
 ```bash
-docker exec -it remnanode \
+docker exec -it remnanode-lite \
   tail -n 50 -F /var/log/remnanode/xray.out.log
 
-docker exec -it remnanode \
+docker exec -it remnanode-lite \
   tail -n 50 -F /var/log/remnanode/xray.err.log
 ```
 
@@ -147,8 +149,8 @@ Docker stores `/var/log/remnanode` on a 28 MiB tmpfs, so recreating the containe
 Docker:
 
 ```bash
-docker compose restart remnanode
-docker compose stop remnanode
+docker compose restart remnanode-lite
+docker compose stop remnanode-lite
 docker compose up -d --no-build
 docker compose down
 ```
@@ -188,29 +190,59 @@ By project policy, exact tags and `sha-*` tags should not move, but registry tag
 
 ### Controlled update
 
-1. Record the current Compose file and image reference.
+1. Record the current Compose file, optional `.env`, and effective image reference.
 2. Read the target Release notes and identify contract, rw-core, and configuration changes.
-3. Change `image:` to the new exact tag or digest.
+3. Change `REMNANODE_IMAGE` in `.env`, or an intentionally inline `image:`, to the new exact tag or digest.
 4. Pull and force-recreate.
 5. Check the container, port, logs, and Panel.
 
 ```bash
 cp -p docker-compose.yaml docker-compose.yaml.rollback
+[ ! -f .env ] || cp -p .env .env.rollback
 
+docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build --force-recreate
 docker compose ps
-docker compose logs --tail=100 remnanode
+docker compose logs --tail=100 remnanode-lite
 ```
 
 Tracking `latest` still requires an explicit pull and recreate. `docker compose restart` alone never checks for a new image.
 
+### One-time service and container rename
+
+Templates older than this naming change used `remnanode` for the Compose service, container, and hostname. An ordinary `up --force-recreate` does not guarantee that the old service is removed: it can become an orphan, and host networking then makes the old and new containers compete for the same ports.
+
+Stop the old deployment before replacing its Compose file when possible. With the new file in place, remove same-project orphans, then inspect and explicitly remove a remaining legacy container only after confirming its image:
+
+```bash
+docker compose down --remove-orphans
+docker container inspect remnanode \
+  --format 'name={{.Name}} image={{.Config.Image}}' 2>/dev/null || true
+```
+
+If inspection returns a container, confirm that it is the legacy Node. Only then run the destructive command separately:
+
+```bash
+docker rm -f remnanode
+```
+
+After the legacy name is absent, start the current service:
+
+```bash
+docker compose up -d --no-build
+docker compose ps
+```
+
+The expected running name is `remnanode-lite`. Never leave both names running. A legacy container owned by a different Compose project is not removed by `down --remove-orphans`, which is why the explicit inspection is required.
+
 ### Rollback
 
-Restore the previous Compose file, or change `image:` back to a verified exact tag or digest:
+Restore the previous Compose inputs, or change the active image setting back to a verified exact tag or digest:
 
 ```bash
 cp -p docker-compose.yaml.rollback docker-compose.yaml
+[ ! -f .env.rollback ] || cp -p .env.rollback .env
 chmod 600 docker-compose.yaml
 
 docker compose pull
@@ -248,7 +280,7 @@ Installation, upgrade, rw-core updates, and uninstall share `/run/lock/remnanode
 
 ### Docker
 
-Edit the Compose mapping and recreate:
+Edit the Compose mapping or the same-directory `.env`, then recreate. The shell takes precedence over `.env`, and only keys declared in the mapping are injected into the container:
 
 ```bash
 chmod 600 docker-compose.yaml
@@ -256,7 +288,7 @@ docker compose config --quiet
 docker compose up -d --no-build --force-recreate
 ```
 
-Do not run `docker compose config` without `--quiet`; the expanded Secret would be printed to the terminal or collected logs.
+Do not run `docker compose config` without `--quiet`; the expanded effective Secret would be printed to the terminal or collected logs.
 
 ### Native deployment
 
@@ -300,12 +332,12 @@ After changing `NODE_PORT`, also update the Panel node configuration and host fi
 
 ## Resources and disk
 
-Production configuration targets a whole machine with `512 MiB RAM / 1 vCPU / 2 GB disk`, but this is an engineering budget, not a performance guarantee for every host. The Docker daemon, kernel, and other system services consume capacity outside the container's 448 MiB limit.
+The canonical Docker configuration always enforces a `448 MiB` memory limit, a `448 MiB` combined memory-and-swap limit, `1 CPU`, and `256 PIDs`, even when the host is larger. Equal memory and combined limits leave no additional container swap allowance. The `docker-production-smoke-v2` profile may be collected on a larger host and validates these container limits plus runtime behavior. The separate whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk / zero swap` remains deferred and is not proven by that smoke. The Docker daemon, kernel, and other system services consume capacity outside the container limit.
 
 Docker:
 
 ```bash
-docker stats --no-stream remnanode
+docker stats --no-stream remnanode-lite
 docker system df
 df -h
 ```
@@ -338,7 +370,7 @@ Docker uses host networking, so `CAP_NET_ADMIN` applies to the host network name
 - Do not use `privileged: true` or add unrelated capabilities.
 - Allow the Node API port through the host firewall only from Panel addresses.
 - Open proxy inbound ports according to the configuration actually sent by the Panel.
-- Restrict the Docker socket and host administrator access. A host administrator can read an inline Secret through Docker inspect.
+- Restrict the Docker socket and host administrator access. A host administrator can read the effective injected Secret through Docker inspect.
 
 Native services run as a non-root user with the same two minimal capabilities. Without `CAP_NET_ADMIN`, basic Node connectivity may still work, but nftables plugins and connection destruction degrade.
 
@@ -391,7 +423,7 @@ Compose health checks only the internal socket and does not cover these paths.
 Immediately after a restart, wait for the next Panel health cycle. If rw-core remains offline:
 
 ```bash
-docker exec -it remnanode \
+docker exec -it remnanode-lite \
   tail -n 100 /var/log/remnanode/xray.err.log
 ```
 
@@ -426,7 +458,7 @@ The scripts fail conservatively when they cannot reliably establish service stat
 
 Very little persistent state needs backup:
 
-- Single-file deployment: the mode-`0600` Compose file, or Compose plus `.env`.
+- Single-file deployment: the Compose file and, when used, its same-directory mode-`0600` `.env`.
 - Native deployment: `/etc/remnanode/node.env` and `/etc/remnanode/secret.key`.
 - Rollback identity: the current image digest or project Release tag.
 

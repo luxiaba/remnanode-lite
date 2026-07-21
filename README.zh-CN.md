@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=a3b25d081a9df7d06803f87f10022c8da66e40da17164aeb593a44a837b9ed2a -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=0daf9046e358353378b633d8453c9dc53610a52f2649f45605d7d8a4a72f777b -->
 <div align="center">
 
 # Remnanode Lite
@@ -33,62 +33,78 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 - 提供面向 512 MiB 服务器维护的低内存 Compose 配置。
 - 支持用户热更新、统计、连接管理和官方插件规则格式。
 - 提供 amd64/arm64 GHCR 镜像，并附带 SBOM、构建来源和证明。
-- 只用一个 Compose 文件即可部署，不需要源码、`.env` 或持久化数据卷。
+- 只用一个 Compose 文件即可部署，不需要源码或持久化数据卷，`.env` 仍为可选项。
 
 ## Docker 快速部署
 
 开始前需要准备 Docker Engine 和 Compose v2，并在 Remnawave Panel 中创建好节点，拿到该节点的完整 Secret Key。节点端口必须能被 Panel 访问。下面的命令默认在 root shell 中执行，其他情况请按需使用 `sudo`。
 
-下载最新稳定版本附带的 Compose 文件：
+下载最新稳定版本附带的 Compose 文件和环境变量模板：
 
 ```bash
-mkdir -p /opt/remnanode
-cd /opt/remnanode
+mkdir -p /opt/remnanode-lite
+cd /opt/remnanode-lite
 
 curl -fL \
   https://github.com/luxiaba/remnanode-lite/releases/latest/download/docker-compose.single-file.yaml \
   -o docker-compose.yaml
+curl -fL \
+  https://github.com/luxiaba/remnanode-lite/releases/latest/download/remnanode.env.example \
+  -o .env
 
-chmod 600 docker-compose.yaml
+chmod 600 docker-compose.yaml .env
 ```
 
-下载到的文件已经固定到该 Release 的精确镜像版本。
+Compose CLI 会自动读取同目录中的 `.env`。下载的两个文件都选择了该 Release 的精确镜像版本。在 `.env` 中填写 Panel 的节点端口和完整 Secret：
 
-打开 `docker-compose.yaml`，填写 Panel 中的节点端口和完整 Secret：
+```env
+NODE_PORT=38329
+SECRET_KEY=PASTE_THE_COMPLETE_PANEL_SECRET_KEY
+```
+
+Compose 为 `NODE_PORT` 提供的回退值是 `2222`；`38329` 只是示例。无论选择哪个端口，都必须与 Panel 中该节点的端口一致。
+
+已有部署可以继续使用原来的自定义目录，升级时不要求迁移目录。
+
+如果希望保持真正的单文件部署而不创建 `.env`，可以在 `docker-compose.yaml` 中直接用完整值替换 `SECRET_KEY` 插值。下面的示例同时把端口回退值改为 `38329`：
 
 ```yaml
 environment:
-  NODE_PORT: "38329"
+  NODE_PORT: "${NODE_PORT:-38329}"
   SECRET_KEY: "PASTE_THE_COMPLETE_PANEL_SECRET_KEY"
 ```
 
 启动节点：
 
 ```bash
-cd /opt/remnanode
+cd /opt/remnanode-lite
 docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build
 docker compose ps
-docker compose logs --tail=100 remnanode
+docker compose logs --tail=100 remnanode-lite
 ```
 
 容器应先进入 healthy，随后节点应在 Panel 中恢复在线。最后再用真实代理流量确认部署结果；容器 healthy 本身并不能证明 Panel 连接和 rw-core 流量都正常。
 
 从官方容器迁移时，原来的 `NODE_PORT` 和 `SECRET_KEY` 可以直接沿用；启动新容器前，请先停止旧容器。迁移、指定版本、digest 固定和回滚方法见 [Docker 部署指南](docs/i18n/zh-CN/deployment-docker.md)。
 
-## 常用 Docker 环境变量
+## Docker Compose 环境变量
 
-绝大多数节点只需要修改 `NODE_PORT` 和 `SECRET_KEY`。需要可选配置时，将它们添加到同一个 Compose `environment` 映射中。
+绝大多数节点只需要设置 `NODE_PORT` 和 `SECRET_KEY`。受维护的 Compose 文件只插值以下 8 个变量：
 
-| 变量 | 必需 | Release 附带 Compose 的设置 | 用途 |
+| 变量 | `.env` 中必需 | Compose 回退值 | 用途 |
 | --- | --- | --- | --- |
-| `NODE_PORT` | 是 | `38329` | Panel 连接节点的 HTTPS 端口，必须与 Panel 中的配置一致。 |
-| `SECRET_KEY` | 是 | 占位符 | Panel 提供的完整 base64 或 base64url Secret。 |
+| `REMNANODE_IMAGE` | 否 | Release Compose 文件选择的精确镜像 | 镜像 tag 或 `name@sha256:...`；仅由 Compose 使用，不传入 Node。 |
+| `NODE_PORT` | 否 | `2222` | Panel 连接节点的 HTTPS 端口，必须与 Panel 中的配置一致。 |
+| `NODE_BIND_ADDR` | 否 | 空 | 只监听指定的本地地址；空值表示监听所有本地地址。 |
+| `SECRET_KEY` | 是，除非直接写在 YAML 中 | 无；空值会使插值失败 | Panel 提供的完整 base64 或 base64url Secret。 |
 | `LOW_MEMORY` | 否 | `1` | 启用小机器使用的低内存运行参数。 |
-| `NODE_BIND_ADDR` | 否 | 未设置 | 只监听指定的本地地址；未设置时监听所有本地地址。 |
-| `BODY_LIMIT_MB` | 否 | 自动 | 覆盖 Node 对外 API 的请求体上限；低内存模式会自动使用 16 MiB。 |
-| `GOMEMLIMIT` | 否 | 自动 | 覆盖 Go 运行时内存软限制；低内存模式会自动使用 180 MiB。 |
+| `DISABLE_HASHED_SET_CHECK` | 否 | `false` | 仅用于调试，使每次 start 请求都重启 rw-core。 |
+| `BODY_LIMIT_MB` | 否 | 空（自动） | 覆盖 Node 对外 API 的请求体上限；低内存模式会自动使用 16 MiB。 |
+| `GOMEMLIMIT` | 否 | 空（自动） | 覆盖 Go 运行时内存软限制；低内存模式会自动使用 180 MiB。 |
+
+插值优先级为 shell 环境变量 > `.env` > Compose 文件中的回退值。使用 `:-` 时，最终值未设置或为空会采用回退值。Compose 只把 `environment` 下明确列出的 7 个运行变量传入容器；`REMNANODE_IMAGE` 只供 Compose 使用，`.env` 中的未知键不会注入容器。
 
 请使用上面展示的 YAML 映射写法。不要写成 `- SECRET_KEY="..."`：在这种列表写法中，引号会成为值的一部分，导致 Secret 无法解码。Compose 文件中含有 Secret，Docker 本地元数据也能看到环境变量，因此文件权限应保持为 `0600`。
 
@@ -99,13 +115,13 @@ docker compose logs --tail=100 remnanode
 查看 Node 日志：
 
 ```bash
-docker compose logs --tail=100 -f remnanode
+docker compose logs --tail=100 -f remnanode-lite
 ```
 
 查看 rw-core 输出和错误日志：
 
 ```bash
-docker exec -it remnanode tail -n 50 -F \
+docker exec -it remnanode-lite tail -n 50 -F \
   /var/log/remnanode/xray.out.log \
   /var/log/remnanode/xray.err.log
 ```
@@ -113,7 +129,7 @@ docker exec -it remnanode tail -n 50 -F \
 查看当前运行版本：
 
 ```bash
-docker exec remnanode remnanode-lite version
+docker exec remnanode-lite remnanode-lite version
 ```
 
 如果要切换精确版本，先修改 `image:`，然后拉取镜像并重建容器：
@@ -146,6 +162,8 @@ docker compose up -d --no-build --force-recreate
 | 平台 | `linux/amd64`、`linux/arm64` |
 | 整机目标 | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose 服务限制 | `448 MiB RAM`，不额外使用 swap |
+
+该整机规格是设计目标：v2.8.0 正式 smoke 严格验证的是 `448 MiB / 1 CPU` 且不额外使用 swap 的容器限制，`whole-host-512mib-runtime` 仍为 deferred。
 
 资源目标对应仓库维护的标准 Compose 配置，不表示任何流量和插件组合都一定适合相同规格。具体测量和边界见 [资源预算](docs/i18n/zh-CN/development/resource-budget.md)。
 
