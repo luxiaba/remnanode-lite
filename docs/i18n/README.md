@@ -20,8 +20,8 @@ to the English document for the full details.
 
 Keep these files in English only instead of copying them into locale trees:
 
-- `LICENSE`, `CHANGELOG.md`, and GitHub Release notes;
-- release acceptance JSON, checksums, attestations, and other machine evidence;
+- `LICENSE`, `CHANGELOG.md`, and generated GitHub Release notes;
+- checksums, attestations, and other generated release metadata;
 - executable Compose files, service definitions, scripts, and environment
   templates;
 - generated source and protocol descriptors.
@@ -57,6 +57,6 @@ error in the Release gate.
 5. Run `go run ./cmd/docs-check` and review every stale warning before opening a
    pull request.
 
-A translation-only change must not alter runtime code, Release evidence, or the
+A translation-only change must not alter runtime code, release metadata, or the
 meaning of the English source. If a translation disagrees with its source, use
 the English document as the reference and fix the drift in the same change.

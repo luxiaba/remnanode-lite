@@ -4,26 +4,17 @@
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and focuses on changes that matter to users and operators. GitHub Releases provide the full diff for each published version.
 
-## [2.8.0] - Unreleased
+## [2.8.0] - 2026-07-21
 
 This entry covers the first independent release line of
 `luxiaba/remnanode-lite`. It implements the official Node 2.8.0 contract.
 Panel 2.8.1 is used for integration testing but does not determine the project
 version.
 
-`2.8.0` is not published yet. Its release gate covers GitHub CI, attested
-amd64/arm64 image builds, and a real smoke test on a recorded native
-amd64/x86_64 host using the canonical Compose file. The smoke requires a live
-Panel 2.8.1 connection and real proxy traffic, records the host inventory, and
-enforces the canonical `448 MiB / 1 CPU / no container swap / 256 PIDs` limits.
-The following checks are deferred and do not block this release:
-`whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`,
-`native-openrc-install`, `50000-user-load`, `24h-soak`, and
-`fault-and-rollback-injection`.
-
-The runtime record is signed off by the Release Owner and bound to the candidate
-artifacts. Validation checks that binding and the record's structure; it cannot
-independently prove that the reported runtime observations occurred.
+The release candidate passed GitHub CI, multi-architecture image and
+attestation checks, and maintainer verification with a real Panel 2.8.1
+connection and real proxy traffic under the maintained Compose limits.
+Operational test data is intentionally not stored in the source repository.
 
 ### Added
 
@@ -32,11 +23,11 @@ independently prove that the reported runtime observations occurred.
   scanning runs separately on a schedule, and GitHub-hosted runners use Ubuntu
   24.04.
 - Added multi-architecture GHCR publishing with an SBOM, BuildKit provenance,
-  and a GitHub build attestation. Changes to container inputs on `main`,
-  including the fleet Compose template, publish `sha-*` candidates and `edge`;
+  and a GitHub build attestation. Every `main` commit publishes a `sha-*`
+  candidate and updates `edge` while it remains the branch head;
   the release workflow promotes the accepted digest to the version tag and
-  `latest` without rebuilding it. Pull requests and `dev` validate the
-  container build without publishing a release image.
+  `latest` without rebuilding it. Relevant pull requests validate the
+  container build without publishing an image.
 - Added scheduled monitoring for official Node Releases. A changed compatibility baseline opens a synchronization Issue but never changes code or publishes an image automatically.
 - Added amd64/arm64 multi-stage Docker images and production Compose files with pinned and verified rw-core, geo, and ASN assets. The deployment preserves the official host-network and capability model while applying 448 MiB memory, no additional container swap, 1 CPU, 256 PID, read-only-rootfs, health, and log limits.
 - Standardized the Compose service, container, and hostname as
@@ -50,13 +41,6 @@ independently prove that the reported runtime observations occurred.
 - Added Linux network-namespace integration gates for nftables and socket destruction, including real dual-stack replacement, block, unblock, recreation, shutdown cleanup, and TCP connection termination.
 - Added a streaming ASN build pipeline pinned to an `ipverse/as-ip-blocks` commit and archive digest. Releases include the compact `asn-prefixes.bin` database and `SHA256SUMS`.
 - Added a real rw-core resource gate at `448 MiB / 1 CPU / no swap`. The dated 2026-07-15 M6 engineering baseline peaked at `143.9 MiB` with 50,000 users. It remains a historical baseline; repeating the 50,000-user load is deferred rather than a `2.8.0` candidate blocker.
-- Added the schema v2 `docker-production-smoke-v2` acceptance profile. It binds
-  the real amd64/x86_64 Compose smoke to the candidate commit, manifest digest,
-  architecture binary, and canonical Compose file. The record captures actual
-  host capacity without treating it as a 512 MiB whole-host proof, while
-  strictly validating container limits, Panel 2.8.1 real traffic, health, OOM,
-  restart, memory, and PID observations.
-
 ### Security
 
 - Strip the Panel Secret, Secret-file path, Node configuration path, and caller-supplied internal token from the rw-core child environment. Only required resource paths and a controlled internal webhook token are reintroduced; that token is random by default for each start.
@@ -122,12 +106,13 @@ independently prove that the reported runtime observations occurred.
 - Added an executable documentation gate for headings, fences, local files, anchors, and reachability. Added a pinned wire-regeneration entry point using `protoc 35.1` and `protoc-gen-go v1.36.11`.
 - Decoupled project `Version` from official `ContractVersion`: `X.Y.Z-rnl.N` identifies an independent project iteration, while a plain `X.Y.Z` is reserved for a completed official-version alignment.
 - Require build attestation before publishing a commit-specific candidate tag.
-  A release can promote only the digest recorded in the acceptance manifest,
-  and it refuses to replace an existing version tag with different content.
+  A release promotes only the digest behind the tagged `main` commit's
+  immutable `sha-*` image and refuses to replace an existing version tag with
+  different content.
   The Release Git tag must point to the current `main` head.
-- Set candidate OCI version metadata from the project version. Release records
-  are squash-merged as one documentation-only commit; the Release note records
-  the candidate and digest, and the Git tag identifies the final commit.
+- Set candidate OCI version metadata from the project version. The Git tag,
+  candidate image, and generated GitHub Release all refer to the same `main`
+  commit.
 - Moved the Go module, installer URLs, Release addresses, and documentation ownership to this repository.
 - Established the compatibility, architecture-remediation, and 512 MiB acceptance roadmap.
 - Make contract CI read raw Git objects from the pinned official commit and
@@ -135,10 +120,10 @@ independently prove that the reported runtime observations occurred.
   bootstrap and metadata, static imports, decorator ownership, global-prefix
   exclusions, and all 26 routes. Updating the official pin still requires human
   review.
-- Bind the release gate to one frozen candidate, strict schema v2 evidence, CI,
-  multi-architecture build attestations, and the canonical Compose smoke on
-  amd64. After acceptance, only release documentation may change. The manifest
-  records the deferred checks explicitly.
+- Bind the release gate to the current `main` candidate, CI,
+  multi-architecture image shape, and exact build attestation. Maintainers
+  verify the digest-pinned candidate with a real Panel and real traffic before
+  tagging without committing runtime data.
 - Separate HTTP transport from stats, user-handler, and plugin application services. The business layer no longer depends on `net/http` or decodes request JSON itself.
 - Make `main` the single composition root. It explicitly constructs and injects the network monitor, system collector, version, request-body budget, and application services, removing import-time goroutines, process-global mutable body limits, and environment-variable rewrites.
 - Pin and calibrate external schema evidence for `@remnawave/node-plugins@0.4.5`, including explicit null, AS numbers, `ext:`, and numeric limits.

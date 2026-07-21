@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=e7e512183e8070b99a7a977aaffafd6fa4b14257316192113364827225e33a27 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=eeeb79d224806379f399a4e9b2e3531742517027e75cf4c9fa1a3992d6b3a6a6 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -134,7 +134,6 @@ go test -count=1 ./internal/contract
 | `cmd/contract-probe` | 对官方节点和候选节点执行 mTLS 黑盒契约比较 |
 | `cmd/contract-source-check` | 从固定官方 Git object 重建并核验源码证据 manifest |
 | `cmd/asn-builder` | 将固定 ASN 数据源构建为紧凑的只读前缀数据库 |
-| `cmd/release-evidence-check` | 校验发布验收 manifest、Git ancestry 与发行资产摘要 |
 | `cmd/docs-check` | 校验 Markdown 结构、相对链接、锚点和入口可达性 |
 
 ### 运行时包
@@ -164,14 +163,12 @@ go test -count=1 ./internal/contract
 | --- | --- |
 | `.github/workflows/ci.yml` | 必需的 Go、仓库、installer 与 Linux 网络管理 CI 门禁 |
 | `.github/workflows/container.yml` | 候选多架构镜像构建、attestation 与不可变候选标签 |
-| `.github/workflows/release.yml` | 生成正式 Release 资产，并将已验收的镜像摘要晋升为发布标签 |
+| `.github/workflows/release.yml` | 生成正式 Release 资产，并将已验证候选的镜像摘要晋升为发布标签 |
 | `.github/workflows/contract-sync.yml`、`.github/workflows/security.yml` | 官方版本监测与定时安全检查 |
 | `scripts/check*.sh` | Go、仓库、供应链和完整门禁的稳定入口 |
 | `scripts/install*.sh`、`scripts/upgrade.sh`、`scripts/uninstall.sh` | 原生安装、资产事务、升级回滚和卸载 |
 | `deploy/` | systemd/OpenRC service、原生 `node.env` 与生产单文件 Compose 模板 |
 | `compose.yaml`、`compose.build.yaml` | GHCR 运行配置与本地源码构建覆盖层 |
-| `docs/development/acceptance/` | 版本化、脱敏的正式验收记录；schema 与 digest 由机器校验，候选阶段才创建 |
-| `docs/releases/` | 与 Git tag 一一对应的 GitHub Release note；候选阶段才创建 |
 | `Dockerfile` | 双架构 Node、固定 rw-core/geo/ASN 资产和最小 runtime 镜像 |
 
 请求的主链路是：
@@ -210,7 +207,7 @@ git diff
 
 测试范围应与改动风险相匹配。完整仓库检查适合在一个逻辑批次完成后或提交 Pull Request 前运行，不必每次小改动都执行。
 
-`v2.8.0` 的 M8 门禁要求：冻结候选的镜像摘要必须在正式发布前，使用真实 Panel 和真实代理流量完成 `amd64` Docker 生产 smoke。`arm64-production-runtime`、`native-systemd-install`、`native-openrc-install`、50,000 用户负载、24 小时 soak 和故障/回滚方案仍处于延期状态，不阻塞本次发布。
+正式发布前，维护者应使用不可变的 `sha-<main commit>` 候选镜像确认它能在仓库维护的 Compose 限制下正常启动、连接真实 Panel 并承载真实代理流量。运行观测只用于人工发布判断，不作为文件提交到仓库。
 
 ## 常见修改路径
 

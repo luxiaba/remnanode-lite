@@ -92,7 +92,7 @@ go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
 ./bin/remnanode-lite version
 ```
 
-This binary is suitable for a CLI smoke test. Running the full daemon also requires a valid Panel Secret, mTLS material, rw-core, Linux capabilities, and a supported host-network environment. Starting the daemon directly on macOS is not integration acceptance.
+This binary is suitable for a CLI smoke test. Running the full daemon also requires a valid Panel Secret, mTLS material, rw-core, Linux capabilities, and a supported host-network environment. Starting the daemon directly on macOS is not integration verification.
 
 ## Pinned Official Contract Source
 
@@ -126,7 +126,6 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | `cmd/contract-probe` | mTLS black-box contract comparison between an official node and a candidate |
 | `cmd/contract-source-check` | Reconstruct and verify the source-evidence manifest from pinned official Git objects |
 | `cmd/asn-builder` | Build a compact, read-only prefix database from the pinned ASN source |
-| `cmd/release-evidence-check` | Validate the release acceptance manifest, Git ancestry, and release-asset digests |
 | `cmd/docs-check` | Validate Markdown structure, relative links, anchors, and entry-point reachability |
 
 ### Runtime Packages
@@ -155,15 +154,13 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | Path | Responsibility |
 | --- | --- |
 | `.github/workflows/ci.yml` | Required Go, repository, installer, and Linux network-management CI gate |
-| `.github/workflows/container.yml` | Candidate multi-architecture image build, attestation, and immutable candidate tags |
-| `.github/workflows/release.yml` | Formal Release assets and promotion of an accepted image digest |
+| `.github/workflows/container.yml` | Multi-architecture image build, attestation, and the immutable `sha-<40-character-main-commit>` candidate |
+| `.github/workflows/release.yml` | Release assets and promotion of the verified candidate digest to the exact version and `latest` |
 | `.github/workflows/contract-sync.yml`, `.github/workflows/security.yml` | Official-version monitoring and scheduled security checks |
 | `scripts/check*.sh` | Stable Go, repository, supply-chain, and complete-gate entry points |
 | `scripts/install*.sh`, `scripts/upgrade.sh`, `scripts/uninstall.sh` | Native installation, asset transactions, upgrade rollback, and uninstall |
 | `deploy/` | systemd/OpenRC service definitions, native `node.env`, and the production single-file Compose template |
 | `compose.yaml`, `compose.build.yaml` | GHCR runtime configuration and local source-build override |
-| `docs/development/acceptance/` | Versioned and redacted release acceptance records whose schema and digests are machine-validated, created only for a frozen candidate |
-| `docs/releases/` | GitHub Release notes paired with Git tags, created only for a frozen candidate |
 | `Dockerfile` | Dual-architecture Node build, pinned rw-core/geo/ASN assets, and minimal runtime image |
 
 The primary request path is:
@@ -202,7 +199,13 @@ git diff
 
 Scale the test scope with the risk of the change. The complete repository check belongs after a coherent batch or before opening a pull request, not after every small edit.
 
-For `v2.8.0`, publication requires the frozen digest to pass the `amd64` Docker production smoke with a real Panel and real proxy traffic. The `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, 50,000-user load, 24-hour soak, and fault/rollback profiles remain deferred and do not block this release.
+Before tagging a release, merge `dev` into `main`, wait for the immutable
+`sha-<40-character-main-commit>` image, and verify that exact candidate with a
+real Panel and real proxy traffic. This is a maintainer decision, not a source
+artifact: do not commit host inventories, container details, logs, or smoke
+records. The tag must point to the current `main` HEAD; the release workflow
+then verifies the candidate image and its attestation before promoting the same
+digest to the exact version and `latest`. GitHub generates the Release notes.
 
 ## Common Change Paths
 

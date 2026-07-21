@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=791dbf53538385f44345c2103197c965d186b14458f462db70c57feff757e8b4 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=a3bcaf0ddf308d4b447ebb560551e76fd8f7ab37bb1656660549e6261dbf048d -->
 
 # 原生 Linux 部署
 
@@ -19,7 +19,7 @@ Release 二进制支持 Linux `amd64` 和 `arm64`。安装器支持 systemd 与 
 | Ubuntu 24.04 | systemd | arm64 |
 | Alpine 3.22 | OpenRC | arm64 |
 
-CI 会交叉构建两种架构，并在 Ubuntu 上运行 Linux 网络管理测试。`v2.8.0` 的阻断性生产 smoke 覆盖真实小内存 `linux/amd64` 主机上的 Docker；原生 systemd/OpenRC 安装、真实 `arm64` 运行、5 万用户负载、24 小时持续运行，以及故障和回滚注入仍是后续验证。大规模部署前，请先在目标发行版上测试原生安装。Debian/Ubuntu 之外的系统还需要提前安装脚本所需命令。
+CI 会交叉构建两种架构，并在 Ubuntu 上运行 Linux 网络管理测试。为发布 `v2.8.0`，维护者还在真实 `linux/amd64` 主机上，以受维护的容器限制接入真实 Panel 和代理流量检查了 Docker 候选。这是维护者作出的发布判断，不是要求向仓库提交数据的证据门禁。原生 systemd/OpenRC 安装、真实 `arm64` 运行、整机 512 MiB 目标、5 万用户负载、24 小时持续运行，以及故障和回滚注入仍是后续验证。大规模部署前，请先在目标发行版上测试原生安装。Debian/Ubuntu 之外的系统还需要提前安装脚本所需命令。
 
 目标 tag 必须已经发布 GitHub Release，并包含二进制归档、support 文件、`SHA256SUMS` 和 ASN 数据库。`edge` 或 `sha-*` GHCR 候选镜像不能替代原生 Release 资产。
 

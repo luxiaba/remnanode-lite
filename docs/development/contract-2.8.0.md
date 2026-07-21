@@ -11,7 +11,7 @@ This document and `internal/contract` jointly define the project's compatibility
 - Repository: `https://github.com/remnawave/node.git`
 - Version: `2.8.0`
 - Commit: `596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`
-- Panel version used for integration acceptance: `2.8.1` (independent of the project version)
+- Panel version used for integration verification: `2.8.1` (independent of the project version)
 
 Route methods come from the four official controllers. Request and response shapes come from the Zod schemas under `libs/contract/commands`; application errors come from `libs/contract/constants/errors` and `HttpExceptionFilter`. `internal/contract/official-source-manifest.json` records the SHA-256 of every evidence blob and the 26 method/path/controller-decorator entries extracted from the source.
 
@@ -106,7 +106,7 @@ With `LOW_MEMORY=1`, the public `/node` server defaults to a 16 MiB request-body
 
 Production init reads only `/etc/remnanode/node.env`; it does not fall back to a service-writable working directory. The configuration must be a regular, non-symlink file of at most 1 MiB, 4,096 lines, and 256 assignments. Configuration and Secret files are checked and bounded-read through the same descriptor opened with `O_NOFOLLOW|O_NONBLOCK`. systemd and OpenRC do not export the complete configuration environment; `GOMEMLIMIT` and version overrides are validated and applied by the same Go parser.
 
-The real-rw-core `v26.6.27` gate at 1 CPU, 448 MiB, and no swap covers a 1k-user start, unchanged sync, 50k-user restart, hot add/remove, and statistics RPCs. Its dated M6 engineering cgroup peak was 143.9 MiB. This baseline predates the frozen `v2.8.0` candidate and is not current-candidate runtime evidence. Reproduction conditions and per-stage measurements are in [`resource-budget.md`](resource-budget.md).
+The real-rw-core `v26.6.27` gate at 1 CPU, 448 MiB, and no swap covers a 1k-user start, unchanged sync, 50k-user restart, hot add/remove, and statistics RPCs. Its dated M6 engineering cgroup peak was 143.9 MiB. This is a repeatable engineering baseline, not a guarantee for every workload. Reproduction conditions and per-stage measurements are in [`resource-budget.md`](resource-budget.md).
 
 ## Go Transport, System, and Supply-Chain Implementation
 
@@ -118,7 +118,7 @@ Project assets live under `/usr/local/lib/remnanode` and `/usr/local/share/remna
 
 An upgrade backs up the binary, service definition, support assets, `node.env`, and optional rw-core assets. If the refreshed service or port check fails, every item is restored. Fault injection with bad service definitions on Ubuntu/systemd and Alpine/OpenRC verified digest and runtime-state restoration. Full-uninstall tests also verified that unrelated same-named processes remain running and generic Xray files remain untouched.
 
-The dated M7 systemd/OpenRC and bad-service rollback observations above are engineering baselines. They were not produced from the frozen `v2.8.0` candidate and do not count as its runtime acceptance evidence.
+The dated M7 systemd/OpenRC and bad-service rollback observations above are engineering baselines. They apply only to the recorded commits and environments.
 
 Whole-process shutdown shares one 25-second application budget rather than restarting a timeout for each component. HTTPS and Unix intake, log rotation, and background version probing receive cancellation first. rw-core gets up to five seconds for SIGINT plus five seconds for SIGKILL. Only after core is confirmed stopped may plugins use the remaining budget to remove private nft tables. A transient core or plugin cleanup error is retried once within the same deadline.
 
@@ -173,9 +173,20 @@ The table summarizes only core constraints. Executable schemas in `internal/cont
 
 The previously recorded TLS/socket and system supply-chain differences are closed. There is currently no known static P1/P2 difference in the `/node` contract.
 
-The release-blocking runtime profile for `v2.8.0` is `docker-production-smoke-v2`. The exact candidate image digest must run through the production Compose template on a recorded native `x86_64`/`amd64` host, report the expected version, connect to a real Panel 2.8.1, carry real proxy traffic, record host capacity plus cgroup memory and PID observations, and remain healthy with zero OOM kills and zero restarts. Host size is not an admission limit; the container must still have exactly 448 MiB memory, no additional container swap, 1 CPU, and 256 PIDs.
+Before publishing `v2.8.0`, the maintainer verifies the immutable
+`sha-<40-character-main-commit>` image with the production Compose template on
+native `x86_64`/`amd64`, confirms the expected version and a real Panel 2.8.1
+connection, and carries real proxy traffic. This operational confirmation stays
+outside the source repository. The container itself remains bounded to 448 MiB
+memory, no additional container swap, 1 CPU, and 256 PIDs.
 
-The `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, repeated 50,000-user load, 24-hour soak, and fault/rollback profiles are deferred and non-blocking. The acceptance manifest and release risks must show that they were not run, rather than reporting them as passed.
+The annotated tag must point to the current `main` HEAD. The release workflow
+resolves that commit's `sha-*` candidate, verifies its two runnable Linux
+manifests, associated BuildKit attestations, and GitHub source attestation, then
+promotes the same digest to `2.8.0` and `latest` without rebuilding it. GitHub
+generates the Release notes automatically.
+
+Native `arm64` runtime coverage, systemd and OpenRC installation, repeated 50,000-user load, long soak, and fault-injection testing remain useful follow-up validation. They must not be described as completed unless they were actually run.
 
 Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd and OpenRC remain equivalent native deployment entry points.
 
@@ -205,7 +216,7 @@ go run ./cmd/contract-source-check \
 
 To update a pinned contract, confirm `OfficialNodeCommit` and the evidence-directory inventory, then pass `-write` explicitly to regenerate the manifest. Review the manifest diff and rerun the normal contract tests. The checkout may be dirty or point `HEAD` elsewhere because the pinned commit object is the only input; verification fails if the repository does not contain that object.
 
-Run the isolated firewall test on a Linux acceptance host with root, unshare, and nft:
+Run the isolated firewall test on a Linux host with root, unshare, and nft:
 
 ```bash
 sudo env "PATH=$PATH" REMNANODE_NFT_INTEGRATION=1 \
@@ -239,4 +250,4 @@ If the certificate contains only DNS names while a target uses an IP address, al
 
 By default it performs only 11 non-destructive requests: health checks, statistics with `reset=false`, and read-only inbound-user queries. It compares status, response category, application error code, schema, and `SemanticSHA256` after removing dynamic fields. It records raw body size and SHA-256 for audit purposes, but does not use either to decide semantic equality and does not compare machine metrics, traffic values, or timing. Reports contain neither JWTs nor raw response bodies.
 
-Start/stop, user mutations, connection dropping, IP-statistics reset, report draining, and nftables operations require both explicit `-routes` and `-allow-mutating` and must run only in an isolated acceptance environment.
+Start/stop, user mutations, connection dropping, IP-statistics reset, report draining, and nftables operations require both explicit `-routes` and `-allow-mutating` and must run only in an isolated test environment.

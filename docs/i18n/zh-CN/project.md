@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/project.md; source-sha256=42b097b505896a33c359d49d9667de3ac2e265b739b98291463cc3bc34088d81 -->
+<!-- translation: locale=zh-CN; source=docs/project.md; source-sha256=bd5a753d95e9570a71ef8fc6bb1d11997d6ec7364d229526184d353872184e1a -->
 
 # 项目定位与目标
 

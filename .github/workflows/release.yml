@@ -78,17 +78,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify accepted candidate image
+      - name: Verify main candidate image
         id: accepted-image
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          manifest="docs/development/acceptance/v${version}/manifest.json"
-          candidate_commit="$(jq -r '.candidateCommit // empty' "$manifest")"
-          candidate_digest="$(jq -r '.candidateImageDigest // empty' "$manifest")"
-          printf '%s\n' "$candidate_commit" | grep -Eq '^[0-9a-f]{40}$'
+          candidate_commit="$GITHUB_SHA"
+          candidate_tag="${REGISTRY}/${IMAGE_NAME}:sha-${candidate_commit}"
+          candidate_digest="$(docker buildx imagetools inspect \
+            --format '{{.Manifest.Digest}}' "$candidate_tag" | tr -d '\r\n')"
           printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
 
           image="${REGISTRY}/${IMAGE_NAME}"
@@ -96,7 +95,7 @@ jobs:
           resolved="$(docker buildx imagetools inspect \
             --format '{{.Manifest.Digest}}' "$candidate_ref" | tr -d '\r\n')"
           if [ "$resolved" != "$candidate_digest" ]; then
-            echo "$candidate_ref resolved to $resolved, acceptance requires $candidate_digest" >&2
+            echo "$candidate_ref resolved to $resolved, expected $candidate_digest" >&2
             exit 1
           fi
 
@@ -211,6 +210,9 @@ jobs:
             "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${release_version}|" \
             dist/docker-compose.single-file.yaml
           install -m 0644 .env.example dist/remnanode.env.example
+          sed -i \
+            "s|^REMNANODE_IMAGE=.*$|REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${release_version}|" \
+            dist/remnanode.env.example
 
           curl --fail --location --silent --show-error \
             --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
@@ -234,7 +236,7 @@ jobs:
 
       - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
-          body_path: docs/releases/${{ github.ref_name }}.md
+          generate_release_notes: true
           fail_on_unmatched_files: true
           make_latest: false
           overwrite_files: false

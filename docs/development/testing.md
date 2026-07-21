@@ -10,8 +10,8 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 - Changes to state, locks, goroutines, cancellation, or lifecycle behavior require race testing.
 - Changes to officially observable behavior require the pinned-source contract tests.
 - Only Linux tests can support claims about capabilities, netlink, nftables, process groups, or cgroups.
-- Release acceptance is versioned. For `v2.8.0`, the only blocking runtime check is `docker-production-smoke-v2` on a recorded native `amd64`/`x86_64` host with a real Panel and real proxy traffic. Host capacity is recorded, while the canonical container limits remain strict.
-- `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, 50,000-user load, 24-hour soak, and fault/rollback profiles remain deferred and non-blocking. Unit tests do not turn an unrun profile into a pass.
+- Before tagging, verify the immutable `sha-<40-character-main-commit>` candidate with a real Panel and real proxy traffic under the production limits. This is a manual release decision; runtime observations are not committed to the repository.
+- The exact whole-host 512 MiB target, native installation paths, arm64 runtime, large-user load, long soak, and fault injection remain useful follow-up checks. Unit tests must not be presented as substitutes for an environment they do not exercise.
 - Test data must not contain real Secrets, JWTs, certificates, private keys, node IPs, hostnames, or raw responses.
 
 ## Quick Selection
@@ -27,8 +27,8 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Complete repository gate | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | High |
 | Linux network management | Two network-namespace integration tests | Linux/root |
 | Low-memory budget | `scripts/test-low-memory.sh --rw-core ...` | Docker/real core |
-| Official-versus-candidate behavior | `go run ./cmd/contract-probe ...` | Isolated acceptance environment |
-| Formal release | `bash scripts/release-check.sh` | Frozen candidate only |
+| Official-versus-candidate behavior | `go run ./cmd/contract-probe ...` | Isolated test environment |
+| Formal release | `bash scripts/release-check.sh` | Current tagged `main` commit only |
 
 ## Go Tests
 
@@ -190,9 +190,9 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` combines the Go gate, repository gate, offline installer tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. Release checks and reports that claim complete results must require it explicitly.
+`check.sh` combines the Go gate, repository gate, offline installer tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. The release workflow requires the scanner explicitly.
 
-A successful `check.sh` run is not production acceptance for `v2.8.0`. It does not run the frozen image digest with a real Panel and real traffic on a recorded native `amd64`/`x86_64` host, nor does it run the deferred whole-host 512 MiB, load, soak, native-init, `arm64`, or fault-injection profiles.
+A successful `check.sh` run does not prove production behavior. It does not run the candidate image with a real Panel and real traffic, nor does it exercise every supported architecture, init system, host size, load, or fault path.
 
 ## Installer Tests
 
@@ -205,7 +205,7 @@ bash scripts/check-repository.sh
 
 `test-install-ops.sh` uses temporary directories and command mocks to verify locking, permissions, path safety, Secret migration, atomic replacement, failure rollback, systemd/OpenRC state transitions, and uninstall isolation without changing real `/etc/remnanode` state or starting local services.
 
-Some branches run only when `flock` is available. A macOS result cannot replace the Ubuntu CI job or observations from a real native host. The `native-systemd-install` and `native-openrc-install` profiles are deferred for `v2.8.0`, but installer changes still require the appropriate CI and offline transaction tests.
+Some branches run only when `flock` is available. A macOS result cannot replace the Ubuntu CI job or an appropriate native Linux check. Installer changes still require the corresponding CI and offline transaction tests.
 
 ## Linux Network-Management Integration Tests
 
@@ -247,7 +247,7 @@ Prerequisites:
 - `--rw-core` points to an executable Linux rw-core for the same architecture as Docker.
 - The host supports Docker memory, CPU, swap, and PID limits.
 
-The dated M6 50,000-user result is an engineering baseline, not runtime evidence for the frozen `v2.8.0` candidate. Repeating that load against the candidate is deferred and non-blocking under the current M8 profile.
+The dated M6 50,000-user result is an engineering baseline for comparing later resource-sensitive changes; it does not characterize a different build automatically.
 
 Run this test after changes to resource handling, request parsing, retained configuration, queues, logs, concurrency limits, or the rw-core lifecycle. Record the cgroup peak; the Go process RSS alone is not the relevant metric. See the [resource budget](resource-budget.md) for the dated baseline.
 
@@ -296,7 +296,7 @@ go run ./cmd/contract-probe \
   -target candidate=https://127.0.0.1:3222
 ```
 
-The first target is the comparison baseline. By default, the probe runs only non-destructive safe routes. Start, stop, user mutations, connection cleanup, statistics reset, report draining, and nftables operations require both explicit `-routes` and `-allow-mutating`, and must run only in an isolated acceptance environment.
+The first target is the comparison baseline. By default, the probe runs only non-destructive safe routes. Start, stop, user mutations, connection cleanup, statistics reset, report draining, and nftables operations require both explicit `-routes` and `-allow-mutating`, and must run only in an isolated test environment.
 
 The probe never prints the JWT or raw response bodies. If a certificate contains only DNS names while the target uses an IP address, pass `-server-name`; there is no option to disable TLS verification.
 
@@ -309,13 +309,26 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-This script is for a frozen release candidate with the evidence required by its versioned profile. It expects a clean worktree, finalized Release notes and `CHANGELOG.md`, a valid evidence manifest, and valid candidate ancestry before it runs the complete repository checks. Failure is normal on a development branch that does not yet have those materials. Never fabricate evidence or weaken a check just to make the gate pass.
+This script is the final source preflight. It expects a clean worktree, a
+project version matching `RELEASE_TAG`, a dated `CHANGELOG.md` entry, the pinned
+official source, and the complete repository checks. In the tag workflow it
+also requires an annotated tag at `HEAD`.
 
-For `v2.8.0`, the frozen image digest must pass `docker-production-smoke-v2` before publication. The `docker-smoke.json` record covers a native `amd64`/`x86_64` Compose run, the actual host memory, CPU, disk, and swap inventory, exact `448 MiB / 1 CPU / no container swap / 256 PIDs` container limits, expected version output, real Panel connectivity and proxy traffic, cgroup memory and PID observations, container health, OOM state, and restart count. The manifest records `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, the 50,000-user load, 24-hour soak, and fault/rollback profiles as deferred and non-blocking.
+The container released for that tag is not rebuilt. Every `main` commit first
+publishes `sha-<40-character-commit>`. Before creating the tag, the maintainer
+manually confirms that this exact candidate starts cleanly, connects to a real
+Panel, and carries real proxy traffic under the production container limits.
+Do not add host details, logs, container identifiers, or runtime JSON to the
+repository.
 
-These observations are attested by the operator. The validator binds them to the candidate commit and image digest and checks the required fields, timing, and internal consistency, but it cannot prove that the physical run occurred. Treat the record as an accountable audit claim, not unforgeable proof.
+The tag must point to the current `main` HEAD. The release workflow resolves
+its `sha-*` candidate, requires exactly the runnable `linux/amd64` and
+`linux/arm64` manifests with their BuildKit attestations, verifies the GitHub
+attestation against the tagged commit, and promotes that same digest to the
+exact version and `latest`. It publishes the release archives and lets GitHub
+generate the Release notes automatically.
 
-See the [versioning policy](../versioning.md) for tag, version, and `latest` semantics, and the [release process](../release.md) for candidate freeze and release steps.
+See the [versioning policy](../versioning.md) for tag, version, and `latest` semantics, and the [release process](../release.md) for candidate verification and publication steps.
 
 ## Selecting Tests by Change
 
@@ -325,18 +338,18 @@ See the [versioning policy](../versioning.md) for tag, version, and `latest` sem
 | Ordinary Go logic | Owning package tests | `bash scripts/check-go.sh` |
 | Locks, state, workers, shutdown | Owning package race test | Full race suite and related lifecycle tests |
 | HTTP/API/schema | `nodeapi`, `httpserver`, `contract` | Pinned-source contract tests and black-box comparison |
-| Xray lifecycle | `xray` and `httpserver` race tests | `amd64` Docker production smoke; resource test when risk requires it |
+| Xray lifecycle | `xray` and `httpserver` race tests | Real Panel/container check; resource test when risk requires it |
 | Users and statistics | `nodehandler`, `stats`, `xrayrpc` | Contract response tests and Panel differential testing |
 | Plugin pure logic | `plugin` race test | HTTP lifecycle interleaving tests |
 | nftables/socket destruction | Corresponding Linux unit test | Both namespace integration tests |
 | Configuration/Secret/JWT | `config`, `secret`, `auth`, server security | Installer Secret flow |
-| Shell/service | `bash scripts/check-repository.sh`, `bash scripts/test-install-ops.sh` | Real systemd/OpenRC (expanded; deferred for `v2.8.0`) |
-| Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build plus `amd64` candidate smoke with strict container limits; whole-host 512 MiB and `arm64` runtimes are deferred |
+| Shell/service | `bash scripts/check-repository.sh`, `bash scripts/test-install-ops.sh` | Real systemd/OpenRC when the change affects native runtime behavior |
+| Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build plus risk-driven real-environment verification |
 | Dependency or downloadable asset | `go mod tidy -diff`, supply-chain checks, govulncheck | Dual-architecture build, SBOM, and attestation |
 | Project version | `bash scripts/check-version.sh` | Release preflight |
 | Official contract upgrade | Full contract and pinned-source tests | Black-box all registered routes and complete Panel flow |
 | Protobuf wire | `scripts/generate-protobuf.sh --check`, `go test ./internal/xrayrpc` | Real rw-core and golden-wire regression |
-| Resource limit | Related unit/race tests | Risk-driven `test-low-memory.sh`; candidate 50k load and soak are deferred for `v2.8.0` |
+| Resource limit | Related unit/race tests | Risk-driven `test-low-memory.sh`, large-user load, or soak |
 
 “Minimum verification” is for the development loop, not necessarily the entire pull-request requirement. For a cross-component change, take the union of the applicable rows.
 
@@ -352,7 +365,13 @@ The required gate in `.github/workflows/ci.yml` aggregates four parallel jobs:
 | `netadmin` | Both Linux namespace integration tests |
 | `gate` | Requires every job above to report success |
 
-The container workflow is path-filtered, so it does not run on every pull request. When container inputs change on `main`, it builds and attests a manifest, then publishes an immutable candidate tag. The tag-triggered release workflow promotes the same digest recorded in the acceptance manifest. A path-filtered “not run” is not a failure, and an optional container job must not become a required check on pull requests where it cannot appear.
+The container workflow remains path-filtered for pull requests, so it does not
+run on every PR. Every push to `main`, however, builds and attests the manifest
+and publishes the immutable `sha-<40-character-commit>` candidate. The
+tag-triggered release workflow resolves that candidate, verifies its shape and
+attestation, and promotes the same digest. A path-filtered “not run” is not a
+failure, and an optional container job must not become a required check on pull
+requests where it cannot appear.
 
 ## Writing Tests
 
@@ -371,5 +390,5 @@ The container workflow is path-filtered, so it does not run on every pull reques
 - A macOS success covers no `//go:build linux` file.
 - `check.sh` may skip govulncheck when it is not installed; set `REQUIRE_GOVULNCHECK=1` for a complete report.
 - `check-repository.sh` may skip Compose schema validation when Docker Compose is unavailable.
-- `release-check.sh` is not a normal development command and is expected to fail before candidate evidence exists.
+- `release-check.sh` is a final source preflight, not a normal inner-loop development command.
 - A successful Go binary build does not prove pinned Docker assets, multiple architectures, or Linux capabilities.

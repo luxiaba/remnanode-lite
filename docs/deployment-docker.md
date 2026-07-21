@@ -17,7 +17,7 @@ The container has one application supervisor: `remnanode-lite` starts and reaps 
 - Docker `json-file` rotation of `2 MiB x 2` for Node logs;
 - no persistent data volume. Recreating the container clears runtime configuration copies and logs, and the Panel sends the Xray configuration again.
 
-These are strict container cgroup limits and remain required when the Docker host is larger. The `docker-production-smoke-v2` profile may run on such a host, but it verifies that the container still has exactly a `448 MiB` memory limit, a `448 MiB` combined memory-and-swap limit, `1 CPU`, and `256 PIDs`. Equal memory and combined limits leave no additional container swap allowance. Proving the separate whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk` is deferred follow-up work; the container smoke must not be presented as that proof. These limits are not an SLA for every traffic pattern or plugin combination. See the [resource budget](development/resource-budget.md) for measurements and boundaries.
+These are strict container cgroup limits and remain required when the Docker host is larger. Equal memory and combined memory-and-swap limits leave no additional container swap allowance. The separate whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk` remains an engineering target, not an SLA for every traffic pattern or plugin combination. See the [resource budget](development/resource-budget.md) for measurements and boundaries.
 
 ## Choose an image
 
@@ -33,10 +33,9 @@ ghcr.io/luxiaba/remnanode-lite
 | `X.Y.Z` | Formal build aligned with the corresponding official version | Recommended for production |
 | `latest` | Most recent stable build that passed the release process | Opt-in stable tracking; not a rollback identifier |
 | `sha-<40-character-commit>` | Candidate built for a `main` commit | Discover the candidate, then resolve and pin its digest |
-| `candidate-sha-<40-character-commit>` | Independently rebuilt candidate manually dispatched from `main` | Discover a manual rebuild, then resolve and pin its digest |
 | `edge` | Moving candidate for current `main` | Short-term observation only |
 
-By project policy, exact versions, `sha-*`, and `candidate-sha-*` are not intentionally moved, but registry tags are not technically immutable. Use a `name@sha256:...` manifest digest for the strongest pin. Before the first formal Release, `latest` and exact version tags do not exist. Select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) and record its manifest digest.
+By project policy, exact versions and `sha-*` are not intentionally moved, but registry tags are not technically immutable. Use a `name@sha256:...` manifest digest for the strongest pin. Before the first formal Release, `latest` and exact version tags do not exist. Select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) and record its manifest digest.
 
 See the [version model](versioning.md) for naming and promotion rules.
 
@@ -92,11 +91,10 @@ Before the first formal Release, or when testing a new candidate, download the C
 ```bash
 (
   set -euo pipefail
-  candidate_tag=REPLACE_WITH_FULL_SHA_OR_CANDIDATE_SHA_TAG
+  candidate_tag=REPLACE_WITH_FULL_SHA_TAG
   case "$candidate_tag" in
     sha-*) candidate_commit="${candidate_tag#sha-}" ;;
-    candidate-sha-*) candidate_commit="${candidate_tag#candidate-sha-}" ;;
-    *) echo "candidate tag must be sha-<commit> or candidate-sha-<commit>" >&2; exit 1 ;;
+    *) echo "candidate tag must be sha-<commit>" >&2; exit 1 ;;
   esac
   printf '%s\n' "$candidate_commit" | grep -Eq '^[0-9a-f]{40}$'
 
@@ -115,7 +113,7 @@ EOF
 )
 ```
 
-Choose a full `sha-<40-character-commit>` or `candidate-sha-<40-character-commit>` tag from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite). Replace the placeholder port and Secret before startup. For formal acceptance, resolve the tag to its manifest digest and set `REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>` in `.env`. Candidate tags are test builds and must not be presented as released versions.
+Choose a full `sha-<40-character-commit>` tag from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite). Replace the placeholder port and Secret before startup. Resolve the tag to its manifest digest and set `REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>` in `.env` for the strongest pin. Candidate tags are test builds and must not be presented as released versions.
 
 ### Environment and Secret syntax
 
@@ -207,11 +205,11 @@ There is no container runtime state or Xray configuration volume to migrate; the
 
 ## Release candidates
 
-When a container input changes on `main`, the `container` workflow builds `linux/amd64` and `linux/arm64` images, publishes a multi-architecture manifest, and records build provenance. Once those steps pass, it publishes the `sha-<commit>` tag and updates `edge` if that commit is still the head of `main`. These checks identify how an image was built; they do not prove that it runs correctly.
+For every `main` commit, the `container` workflow builds `linux/amd64` and `linux/arm64` images, publishes a multi-architecture manifest, and records build provenance. Once those steps pass, it publishes the `sha-<commit>` tag and updates `edge` if that commit is still the head of `main`. These checks identify how an image was built; they do not prove that it runs correctly.
 
-The `docker-production-smoke-v2` profile requires a 600-second smoke test on a real native `linux/amd64` / `x86_64` host, using the canonical Compose file and a manifest-digest pin. The host may have more CPU, memory, disk, or host swap than the whole-machine target; the evidence instead verifies the exact container cgroup limits, health, memory and PID observations, Panel connectivity, rw-core startup, real proxy traffic, OOM state, and restart count. Whole-host `512 MiB RAM / 1 vCPU / 2 GB disk / zero swap` validation, `arm64-production-runtime`, native systemd and OpenRC installation, the 50,000-user load test, 24-hour soak, and fault and rollback injection remain follow-up work rather than `v2.8.0` release blockers. The complete requirements and evidence format are in the [release acceptance protocol](development/release-acceptance.md#docker-production-smoke).
+Before creating a version tag, a maintainer runs the digest-pinned candidate with the canonical Compose file, confirms that it becomes healthy, connects to a real Panel, starts rw-core, and carries representative proxy traffic. The container limits remain `448 MiB / 1 CPU / no additional container swap / 256 PIDs`, even when the host is larger.
 
-A candidate has no GitHub Release assets and is not a formal Release. Build attestations cover the build chain, while runtime records describe what an operator observed; neither should be presented as proof of the other.
+This is an operational confirmation, not repository content. Do not commit host inventory, container identifiers, logs, Secrets, or smoke output. A candidate has no GitHub Release assets and is not a formal Release; its build attestation describes the build chain, not runtime behavior.
 
 ## Pin a digest and verify provenance
 
@@ -276,7 +274,7 @@ Use one verified manifest digest throughout a fleet rollout and keep the previou
 
 Rollback does not depend on moving a registry tag. Restore each node's recorded previous Compose file or digest, run `pull` and `up --force-recreate`, and confirm Panel connectivity and real traffic again. Until the issue has a clear conclusion, do not continue with untouched nodes or prune the previous image from canaries.
 
-Release acceptance does not replace a staged production rollout. Keep the acceptance record linked from the Release notes, then observe each fleet stage on its own.
+Pre-release verification does not replace a staged production rollout. Observe each fleet stage on its own and keep operational records in the system used to manage that fleet, not in this source repository.
 
 ## Repository-root Compose and `.env`
 

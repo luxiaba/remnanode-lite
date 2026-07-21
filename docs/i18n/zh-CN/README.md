@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=34692a3d5409e2908865e40698c133f518c4799b6af21c02a69e41b05d502054 -->
+<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=9cf72339bcf005b2ab44a865a692f7d4eae91d5a1bd515962814700cc0be306f -->
 
 # Remnanode Lite 文档中心
 
@@ -44,9 +44,9 @@
 
 1. 先阅读[版本与镜像标签策略](versioning.md)，不要把 `Version` 与 `ContractVersion` 绑定。
 2. 查看[改造路线](development/roadmap.md)与当前兼容契约。
-3. 按[发布流程](release.md)冻结候选、准备记录并执行门禁。
-4. 验收数据必须遵循[发布验收证据协议](development/release-acceptance.md)。
-5. 发布结果写入[英文变更日志](../../../CHANGELOG.md)和对应 Release note；不存在 Git tag 与 Release 资产时，不得把开发版本描述成已发布版本。
+3. 在 `dev` 准备版本、[英文变更日志](../../../CHANGELOG.md)、文档和测试，再将它们提升到 `main`。
+4. 按[发布流程](release.md)使用真实 Panel 和真实流量验证 `sha-<commit>` 候选，然后创建 annotated tag。运行观测不写入仓库。
+5. 只有 GitHub Release、发布资产和 GHCR 精确版本标签都存在时，版本才算正式发布。
 
 ## 完整导航
 
@@ -56,7 +56,7 @@
 | --- | --- |
 | [项目定位与目标](project.md) | 出发点、与官方的关系、目标、非目标、受众和当前状态 |
 | [版本与镜像标签策略](versioning.md) | 项目版本、契约版本、正式对齐版本及 GHCR 标签语义 |
-| [改造路线](development/roadmap.md) | 已完成里程碑、当前发布验收和后续事项 |
+| [改造路线](development/roadmap.md) | 已完成里程碑和后续事项 |
 | [贡献指南](contributing.md) | 分支、提交、测试、审查和文档同步要求 |
 | [安全策略](security.md) | 漏洞报告方式、受支持版本和敏感信息边界 |
 | [许可证（英文）](../../../LICENSE) | AGPL-3.0-only 许可说明；本地化树不复制许可证 |
@@ -85,12 +85,11 @@
 | [官方 2.8.0 契约基线](development/contract-2.8.0.md) | 固定官方证据、26 条路由、请求响应和已知差异 |
 | [历史审计整改记录](archive/2026-07-audit-remediation.md) | 首轮静态审计的历史范围；不作为当前状态真相源 |
 
-### 发布与验收
+### 发布
 
 | 文档 | 内容 |
 | --- | --- |
-| [发布流程](release.md) | 候选冻结、验收、tag、Release、GHCR 和回滚 |
-| [发布验收证据协议](development/release-acceptance.md) | 验收文件、环境、数据边界和机器校验规则 |
+| [发布流程](release.md) | 候选验证、tag、GitHub Release、GHCR 和回滚 |
 | [变更日志（英文）](../../../CHANGELOG.md) | 已发布和待发布的用户可见变化；本地化树不复制该文件 |
 
 ## 关键概念
@@ -101,7 +100,7 @@
 
 ### 候选镜像不是正式版本
 
-`edge`、`sha-*` 和 `candidate-sha-*` 都是来自 `main` 的测试构建。只有 Git tag、GitHub Release 和对应 GHCR 精确标签都已发布，才算正式版本。需要严格固定镜像时，应使用多架构 manifest digest。
+`edge` 和 `sha-*` 都是来自 `main` 的构建，不是正式版本。只有 Git tag、GitHub Release 和对应 GHCR 精确标签都已发布，才算正式版本。需要严格固定镜像时，应使用多架构 manifest digest。
 
 ### 兼容性不只有一个层面
 
@@ -118,8 +117,7 @@
 | operation epoch | 识别一次 Xray start/stop 操作所有权的递增值，不是 rw-core 进程身份 |
 | process lease | 绑定具体 rw-core process epoch 与 abstract socket 的短期许可，防止一次 mutation 跨进程执行 |
 | lifecycle lease | HTTP 层协调 start、stop、Plugin/用户 mutation 和 reset-capable stats 的共享/独占许可，不是持久锁文件 |
-| 候选 `C` | 代码进入 `main` 后被冻结并接受真实环境验收的 commit |
-| 最终提交 `F` | `C` 之后只增加发布资料的最终 `main` commit；正式 Git tag 指向它 |
+| 发布候选 | 当前 `main` 提交及其不可变的 `sha-<commit>` 镜像 |
 | manifest digest | GHCR 多架构镜像索引的 `sha256:...` 内容地址，比可移动 tag 更适合严格固定 |
 
 ## 文档真相源
@@ -134,7 +132,7 @@
 | 容器运行约束 | `compose.yaml`、`Dockerfile` | 解释为何设置能力、资源与 tmpfs |
 | CI 与发布行为 | `.github/workflows`、`scripts/*check*.sh` | 给出维护流程并与自动化保持一致 |
 | 正式发布状态 | Git tag、GitHub Releases、GHCR 精确标签 | 不预告为既成事实，不使用不存在的下载地址 |
-| 资源上限 | 代码常量、集成测试和候选验收记录 | 区分设计上限、工程基线与正式验收数据 |
+| 资源上限 | 代码常量、集成测试和带日期的测量结果 | 区分设计上限与特定条件下的实测数据 |
 
 ## 文档维护约定
 

@@ -640,17 +640,12 @@ func orphanedDocuments(documents map[string]document) []string {
 
 	var problems []string
 	for path := range documents {
-		if _, ok := visited[path]; ok || versionedDocument(path) {
+		if _, ok := visited[path]; ok {
 			continue
 		}
 		problems = append(problems, fmt.Sprintf("%s: document is not reachable from README.md", path))
 	}
 	return problems
-}
-
-func versionedDocument(path string) bool {
-	return strings.HasPrefix(path, "docs/releases/") ||
-		strings.HasPrefix(path, "docs/development/acceptance/")
 }
 
 func fatalf(format string, args ...any) {

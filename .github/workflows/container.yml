@@ -7,19 +7,7 @@ env:
 on:
   workflow_dispatch:
   push:
-    branches: [dev, main]
-    paths:
-      - ".github/workflows/container.yml"
-      - ".dockerignore"
-      - ".env.example"
-      - "Dockerfile"
-      - "compose.yaml"
-      - "deploy/compose.single-file.yaml"
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "internal/**"
-      - "scripts/promote-image-tag.sh"
+    branches: [main]
   pull_request:
     branches: [main, dev]
     paths:
@@ -44,7 +32,7 @@ permissions:
 
 jobs:
   build:
-    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -209,22 +197,32 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish immutable candidate tag
+        id: candidate
         env:
           SOURCE_DIGEST: ${{ needs.publish-main.outputs.digest }}
         run: |
           set -euo pipefail
           image="${REGISTRY}/${IMAGE_NAME}"
-          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
-            tag="candidate-sha-${GITHUB_SHA}"
+          tag="sha-${GITHUB_SHA}"
+          candidate_ref="${image}:${tag}"
+          candidate_digest="$(docker buildx imagetools inspect \
+            --format '{{.Manifest.Digest}}' "$candidate_ref" 2>/dev/null | tr -d '\r\n' || true)"
+          if [ -n "$candidate_digest" ]; then
+            printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+              echo "$candidate_ref returned an invalid digest: $candidate_digest" >&2
+              exit 1
+            }
+            echo "$candidate_ref already exists at $candidate_digest; keeping the immutable candidate"
           else
-            tag="sha-${GITHUB_SHA}"
+            bash scripts/promote-image-tag.sh immutable "$image" "$SOURCE_DIGEST" "$tag"
+            candidate_digest="$SOURCE_DIGEST"
           fi
-          bash scripts/promote-image-tag.sh immutable "$image" "$SOURCE_DIGEST" "$tag"
+          printf 'digest=%s\n' "$candidate_digest" >> "$GITHUB_OUTPUT"
 
       - name: Promote current main image to edge
         if: github.event_name == 'push'
         env:
-          SOURCE_DIGEST: ${{ needs.publish-main.outputs.digest }}
+          SOURCE_DIGEST: ${{ steps.candidate.outputs.digest }}
         run: |
           set -euo pipefail
           git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'

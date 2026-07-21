@@ -7,20 +7,22 @@ first independent release line in July 2026. It is historical context, not a
 backlog or an onboarding guide. The audit predates the repository history
 reset, so its original baseline commit is no longer present. Current facts live
 in the code and tests, the [2.8.0 contract baseline](../development/contract-2.8.0.md),
-the [resource budget](../development/resource-budget.md), and the
-[release acceptance protocol](../development/release-acceptance.md).
+the [resource budget](../development/resource-budget.md), and the current
+[release process](../release.md).
 
 The M8 plan below originally required native and dual-runtime testing, a
-50,000-user run, and a 24-hour soak. For the unpublished `v2.8.0` candidate, it
-has been replaced by schema version 2 and `docker-production-smoke-v2`. The
-current profile strictly validates the container resource boundary on a
-recorded host; exact whole-host 512 MiB runtime, the older scenarios, and the
-other named follow-up profiles are deferred and non-blocking. Use the current
-acceptance protocol as the release gate.
+50,000-user run, and a 24-hour soak. The repository no longer treats those
+runtime observations as versioned source artifacts. The current process builds
+one immutable `sha-<40-character-commit>` candidate for every `main` commit.
+After the maintainer verifies that candidate with a real Panel and real traffic,
+an annotated tag on the current `main` HEAD triggers attestation verification,
+promotion of the same digest to the exact version and `latest`, and automatic
+GitHub Release notes. Use the current release guide for publication policy;
+this archive records only the historical plan.
 
 When this record was written, M0-M7 remediation was complete and M8 covered the
-real Panel/Linux, resource, recovery, and long-running tests for a frozen
-candidate. Automatic recovery from power loss or a forcibly terminated
+real Panel/Linux, resource, recovery, and long-running tests planned for the
+release candidate. Automatic recovery from power loss or a forcibly terminated
 installer or supervisor was out of scope. Operators recover by rerunning the
 installer, rebooting the host, or recreating the container as appropriate.
 
@@ -70,12 +72,11 @@ installer, rebooting the host, or recreating the container as appropriate.
    migration, disk and archive preflight checks, reliable shutdown and rollback,
    and process-identity health checks.
 6. **Trusted test chain:** derived the static contract from pinned official
-   source and SDK evidence. Later release tests bind scenario results to exit
-   codes, log digests, and binary digests.
-7. **Freeze and acceptance preparation:** run tests, race detection, vet, static
-   analysis, and both architecture builds before freezing the candidate. The
-   original plan then called for systemd, OpenRC, Panel 2.8.1, real rw-core,
-   50,000-user, and 24-hour soak tests.
+   source and SDK evidence, with executable checks for code and artifacts.
+7. **Release preparation:** run tests, race detection, vet, static analysis,
+   and both architecture builds before tagging. The original plan then called
+   for systemd, OpenRC, Panel 2.8.1, real rw-core, 50,000-user, and 24-hour soak
+   tests.
 
 ## Commit Strategy Used at the Time
 

@@ -11,11 +11,9 @@ The first release line starts at `2.8.0` with these goals:
 - Behavioral compatibility with official Node `2.8.0@596f015`.
 - Real integration validation against Panel `2.8.1`.
 - Resolution of known lifecycle, plugin, firewall, contract, and installation supply-chain defects.
-- Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk` as
-  an engineering target; candidate-bound whole-host runtime validation follows
-  after the first release.
-- Linux `amd64` and `arm64` artifacts, with `2.8.0` runtime acceptance scoped to the production `amd64` Docker profile.
-- Keep Debian/systemd and Alpine/OpenRC installation paths available, with native runtime acceptance deferred beyond the first release.
+- Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk` as an engineering target.
+- Linux `amd64` and `arm64` artifacts, with real Panel and traffic verification before release.
+- Keep Debian/systemd and Alpine/OpenRC installation paths available.
 
 The project version and official contract version move independently. `X.Y.Z-rnl.N` identifies a project-specific iteration, whether it develops the next version line early or improves an existing official baseline. A plain `X.Y.Z` release is allowed only after alignment with that official contract is complete. Monitoring a new official release creates an issue; it never changes the contract or publishes anything automatically. See the [versioning model](../versioning.md).
 
@@ -28,7 +26,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 5. Every concurrency limit, queue, request body, and cache must have an explicit bound.
 6. The Node owns only its rw-core process, internal sockets, and private nftables table; it does not own the host firewall policy. Destroying sockets by IP can affect the host network namespace and is treated as an explicit, documented side effect.
 7. `dev` is the stable development and integration branch. Topic branches enter it through PR and CI. `main` is the release branch and accepts only candidates that have passed the code gate on `dev`.
-8. A candidate becomes the frozen M8 candidate `C` only after it reaches `main`. No feature work is mixed into `C` after that point, and all real acceptance results bind to its commit.
+8. Every `main` commit gets one immutable `sha-<40-character-commit>` container candidate. A release tag points to the current `main` HEAD only after the maintainer has verified that candidate with a real Panel and real traffic.
 
 ## Compatibility boundary
 
@@ -50,22 +48,31 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M5 Users, connections, and statistics | Complete |
 | M6 512 MiB resource work | Complete |
 | M7 System integration and supply chain | Complete |
-| M8 Release acceptance | In progress |
+| M8 Release preparation | Complete |
 
-The M6 50,000-user measurement from 2026-07-15 and the M7 init/distribution snapshots from 2026-07-19 remain useful engineering baselines. They predate candidate `C`, so they are not runtime evidence for the current M8 candidate and do not need to be repeated for `2.8.0`. M6 completed the bounded-resource implementation work; it did not complete the deferred `whole-host-512mib-runtime` profile.
+The M6 50,000-user measurement from 2026-07-15 and the M7
+init/distribution snapshots from 2026-07-19 remain useful engineering
+baselines. They document the resource work and give later changes a stable
+comparison point; they are not claims about every future build.
 
-`2.8.0` is still unreleased, with M8 in progress. The implementation, CI, candidate-image pipeline, and code-level 512 MiB controls are in place. One acceptance profile still blocks release: `docker-production-smoke-v2` on the frozen candidate. The run must resolve the candidate tag to an immutable manifest digest, use that digest with the production Compose template on a recorded native `amd64`/`x86_64` host, carry a real Panel connection and proxy traffic, and finish with the exact container resource limits, a healthy container, zero OOM kills, and zero restarts. The host inventory is recorded but is not required to match the whole-host 512 MiB target. A `sha-*` tag from `main` only locates a candidate; it is neither the acceptance identity nor a formal release.
+`2.8.0` is ready for the normal publication path. Development moves from
+`dev` to `main`; the container workflow publishes the immutable
+`sha-<40-character-main-commit>` image; the maintainer confirms that exact
+image with a real Panel and real proxy traffic; and an annotated tag on the
+current `main` HEAD starts publication. The release workflow verifies the
+candidate's multi-architecture manifest and GitHub attestation before promoting
+the same digest to `2.8.0` and `latest`. Runtime observations stay outside the
+source repository, and GitHub generates the Release notes.
 
 ## Current focus
 
-- **Now:** Complete the frozen candidate's `amd64` Docker production smoke and record host capacity, strict container limits, Panel, traffic, process state, memory, OOM, and restart observations required to finish M8.
+- **Now:** Publish `2.8.0` from the verified current `main` candidate.
 - **Next:** Evaluate the next official release detected by automation. Pin its source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements and do not block `2.8.0`:
 
-- `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, and `native-openrc-install` are deferred.
-- Candidate-scale 50,000-user load, a 24-hour soak, and fault/rollback injection are deferred extended-validation profiles.
+- More whole-host 512 MiB, arm64 runtime, native-install, large-user, soak, and fault-injection coverage can be added when it answers a concrete risk.
 - The installer has no persistent phase journal. Rerun it after `SIGKILL` or power loss; recreate the container for a container deployment.
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
 - Revisit the memory tradeoff of a resident active-config copy and runtime `dump-config` only with measured need.
@@ -81,7 +88,7 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 
 - Normalize the Go module, repository identity, version, and release ownership.
 - Pin official Node and Panel compatibility targets.
-- Establish the roadmap, acceptance gate, and branch/release policy.
+- Establish the roadmap, release gate, and branch/release policy.
 
 ### M1 - Contract evidence
 
@@ -137,15 +144,14 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Pinned rw-core, ASN, and release archives are verified before installation.
 - Fault-injection tests cover post-write failures and per-file digest restoration for rw-core assets and Node upgrade transactions.
 
-### M8 - Release acceptance
+### M8 - Release preparation
 
 - Pass Go tests, race tests, vet, static checks, script checks, and multi-platform builds.
-- Freeze the code candidate first and bind the blocking acceptance record to its commit and candidate image.
-- Complete the sole blocking runtime profile, `docker-production-smoke-v2`: an `amd64` production Compose deployment pinned to the candidate manifest digest on a recorded native host, with exact `448 MiB / 1 CPU / no container swap / 256 PIDs` limits, a real Panel connection and real proxy traffic, observed memory and PID usage, a running and healthy container, zero OOM kills, and zero restarts.
-- Keep the existing lifecycle coordinator, process-group cleanup, init, 50,000-user, and rollback tests as code-level or dated engineering evidence; do not present them as current-candidate runtime observations.
-- Defer `whole-host-512mib-runtime`, `arm64-production-runtime`, `native-systemd-install`, `native-openrc-install`, `50000-user-load`, `24h-soak`, and `fault-and-rollback-injection` as non-blocking follow-up validation.
-- Update the compatibility matrix, risk register, operations documentation, root `CHANGELOG.md`, and `2.8.0` release material.
-- Validate the release record and candidate identity according to [`release-acceptance.md`](release-acceptance.md), then permit only finalization changes.
+- Publish one immutable `sha-<40-character-commit>` image for every `main` commit, with runnable `linux/amd64` and `linux/arm64` manifests and their attestations.
+- Verify the selected candidate with a real Panel and real proxy traffic under the production container limits before tagging it. Keep host details, logs, and runtime records outside the repository.
+- Require the release tag to point to the current `main` HEAD. Verify the candidate manifest and source attestation, then promote the same digest to the exact version and `latest` without rebuilding it.
+- Keep the existing lifecycle, process-group cleanup, installer, 50,000-user, and rollback results as code-level tests or dated engineering baselines.
+- Update the compatibility documentation and dated root `CHANGELOG.md`; let GitHub generate the Release notes.
 
 ## Development and release rules
 
@@ -153,5 +159,6 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Daily changes enter `dev` first. Promote a release candidate from `dev` to `main` through a PR.
 - Keep each commit explainable and verifiable; do not mix unrelated formatting.
 - Run tests proportional to the change risk before merging. Failed checks do not enter `dev` or `main`.
+- Wait for the `main` `sha-*` candidate and verify it with a real Panel and real traffic before tagging. Do not commit operational test data.
 - Formal tags use `vX.Y.Z` or `vX.Y.Z-rnl.N` and exactly match project `Version`. Never overwrite an exact published tag.
 - Do not configure an upstream code remote. External implementations are protocol and behavioral evidence only.

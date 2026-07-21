@@ -17,7 +17,7 @@ Remnanode Lite is a lightweight control plane between Remnawave Panel and rw-cor
 - Terminate selected TCP connections through Linux `NETLINK_SOCK_DIAG` when permitted.
 - Keep requests, queues, logs, and concurrency bounded under a fixed resource budget.
 
-The project follows the official Node's observable behavior and protocol contract, but not its internal TypeScript architecture. Four versions move independently: the project release, the official Node contract, the Panel used for acceptance, and rw-core. Their sources of truth are the version package, contract evidence, acceptance records, and supply-chain pins.
+The project follows the official Node's observable behavior and protocol contract, but not its internal TypeScript architecture. Four versions move independently: the project release, the official Node contract, the Panel used for integration verification, and rw-core. Their sources of truth are the version package, contract evidence, release documentation, and supply-chain pins.
 
 The production targets are Linux `amd64` and `arm64` on a host constrained to `512 MiB RAM / 1 vCPU / 2 GB disk`. Build-tagged stubs for non-Linux systems keep the code buildable and unit tests runnable; they do not imply full production support on those systems.
 
@@ -75,7 +75,6 @@ The composition root is [`cmd/remnanode-lite/main.go`](../cmd/remnanode-lite/mai
 | `cmd/remnanode-lite` | Production CLI, dependency assembly, daemon startup, and coordinated shutdown |
 | `cmd/asn-builder` | Offline construction of the low-memory binary ASN index |
 | `cmd/contract-probe` | Controlled black-box contract comparison between official and candidate Nodes |
-| `cmd/release-evidence-check` | Validation of release acceptance records, Git ancestry, and artifacts |
 | `internal/config` | Bounded configuration reads, environment overrides, defaults, and Secret file reads |
 | `internal/secret` | Decode Panel `SECRET_KEY` and extract the CA, JWT public key, and Node certificate/private key |
 | `internal/auth` | RS256 JWT signature verification, `exp`/`nbf` checks, and optional identity-claim validation |
@@ -655,4 +654,4 @@ Use the following files as sources of truth when inspecting or changing behavior
 | Project and contract versions | `internal/version` and `internal/version/contract.version` |
 | Container runtime boundary | `compose.yaml` and `Dockerfile` |
 
-Documentation explains these constraints and their rationale. When documentation disagrees with an executable source of truth, inspect the code and tests first, then correct the documentation in the same change. Historical milestones and one-time acceptance measurements must not be treated as permanent architectural facts.
+Documentation explains these constraints and their rationale. When documentation disagrees with an executable source of truth, inspect the code and tests first, then correct the documentation in the same change. Historical milestones and one-time measurements must not be treated as permanent architectural facts.

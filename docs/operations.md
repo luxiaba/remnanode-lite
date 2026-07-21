@@ -182,8 +182,7 @@ After SIGTERM or SIGINT, the Node uses one 25-second application shutdown budget
 | `latest` | Moves with the newest stable Release | Small nodes that intentionally follow the stable channel after an explicit pull. |
 | `X.Y.Z` | Formal project version aligned with the corresponding official release | Pin an official-aligned build. |
 | `X.Y.Z-rnl.N` | Independent project iteration | Precise deployment and incident correlation. |
-| `sha-<commit>` | Candidate built from `main` | Real-server acceptance before formal release. |
-| `candidate-sha-<commit>` | Manually dispatched independent candidate | Acceptance when the automatic candidate is absent or must be rebuilt. |
+| `sha-<commit>` | Candidate built from `main` | Real-server verification before formal release. |
 | `name@sha256:<digest>` | Registry content address | Strongest immutable pin and rollback identity. |
 
 By project policy, exact tags and `sha-*` tags should not move, but registry tags are not technically immutable. Pin a manifest digest for strict reproduction.
@@ -332,7 +331,7 @@ After changing `NODE_PORT`, also update the Panel node configuration and host fi
 
 ## Resources and disk
 
-The canonical Docker configuration always enforces a `448 MiB` memory limit, a `448 MiB` combined memory-and-swap limit, `1 CPU`, and `256 PIDs`, even when the host is larger. Equal memory and combined limits leave no additional container swap allowance. The `docker-production-smoke-v2` profile may be collected on a larger host and validates these container limits plus runtime behavior. The separate whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk / zero swap` remains deferred and is not proven by that smoke. The Docker daemon, kernel, and other system services consume capacity outside the container limit.
+The canonical Docker configuration always enforces a `448 MiB` memory limit, a `448 MiB` combined memory-and-swap limit, `1 CPU`, and `256 PIDs`, even when the host is larger. Equal memory and combined limits leave no additional container swap allowance. The whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk` is an engineering target rather than an SLA for every workload. The Docker daemon, kernel, and other system services consume capacity outside the container limit.
 
 Docker:
 
