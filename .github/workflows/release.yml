@@ -5,14 +5,23 @@ env:
   IMAGE_NAME: luxiaba/remnanode-lite
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
     inputs:
+      operation:
+        description: Publish a new release or reconcile an already published channel
+        required: true
+        default: publish
+        type: choice
+        options:
+          - publish
+          - reconcile
+      version:
+        description: Exact X.Y.Z[-rnl.N] version to publish from current main
+        required: false
+        type: string
       release_tag:
         description: Published vX.Y.Z[-rnl.N] tag whose GHCR channel should be reconciled
-        required: true
+        required: false
         type: string
 
 concurrency:
@@ -24,7 +33,7 @@ permissions:
 
 jobs:
   prepare-release:
-    if: github.event_name == 'push'
+    if: inputs.operation == 'publish'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     permissions:
@@ -39,12 +48,35 @@ jobs:
       make_latest: ${{ steps.release-metadata.outputs.make_latest }}
       prerelease: ${{ steps.release-metadata.outputs.prerelease }}
       release_id: ${{ steps.draft-release.outputs.id }}
+      release_tag: ${{ steps.release-input.outputs.tag }}
       version: ${{ steps.release-metadata.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Resolve release request
+        id: release-input
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF" = refs/heads/main ] || {
+            echo "manual publication must be run from refs/heads/main, got $GITHUB_REF" >&2
+            exit 1
+          }
+          version="${VERSION_INPUT:-}"
+          printf '%s\n' "$version" | grep -Eq \
+            '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$' || {
+            echo "version must use X.Y.Z or X.Y.Z-rnl.N" >&2
+            exit 2
+          }
+          tag="v${version}"
+          bash scripts/release-metadata.sh "$tag" >/tmp/release-metadata
+          printf 'tag=%s\n' "$tag" >>"$GITHUB_OUTPUT"
+          cat /tmp/release-metadata >>"$GITHUB_OUTPUT"
+          cat /tmp/release-metadata
 
       - name: Verify release commit is the current main head
         run: |
@@ -56,10 +88,42 @@ jobs:
             exit 1
           fi
 
+      - name: Create annotated release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-input.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            bash scripts/verify-release-tag.sh "$RELEASE_TAG" "$GITHUB_SHA"
+            echo "release tag ${RELEASE_TAG} already exists at $GITHUB_SHA"
+            exit 0
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "release ${RELEASE_TAG} already exists" >&2
+            exit 1
+          fi
+          tag_sha="$(gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/git/tags" \
+            -f tag="$RELEASE_TAG" \
+            -f message="Remnanode Lite ${RELEASE_TAG#v}" \
+            -f object="$GITHUB_SHA" \
+            -f type=commit \
+            --jq .sha)"
+          printf '%s\n' "$tag_sha" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo "GitHub returned an invalid tag object sha: ${tag_sha:-<empty>}" >&2
+            exit 1
+          }
+          gh api --method POST \
+            "repos/${GITHUB_REPOSITORY}/git/refs" \
+            -f ref="refs/tags/${RELEASE_TAG}" \
+            -f sha="$tag_sha" >/dev/null
+
       - name: Verify the remote annotated tag is unchanged
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/verify-release-tag.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          RELEASE_TAG: ${{ steps.release-input.outputs.tag }}
+        run: bash scripts/verify-release-tag.sh "$RELEASE_TAG" "$GITHUB_SHA"
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -77,7 +141,7 @@ jobs:
 
       - name: Release preflight
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ steps.release-input.outputs.tag }}
           REQUIRE_GOVULNCHECK: "1"
           REQUIRE_TAG_AT_HEAD: "1"
           REMNANODE_OFFICIAL_SOURCE: ${{ github.workspace }}/.official-source
@@ -85,7 +149,9 @@ jobs:
 
       - name: Classify release
         id: release-metadata
-        run: bash scripts/release-metadata.sh "$GITHUB_REF_NAME" >>"$GITHUB_OUTPUT"
+        env:
+          RELEASE_TAG: ${{ steps.release-input.outputs.tag }}
+        run: bash scripts/release-metadata.sh "$RELEASE_TAG" >>"$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
@@ -267,6 +333,7 @@ jobs:
       - name: Verify release asset provenance
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_WORKFLOW_REF: ${{ github.ref }}
         run: |
           set -euo pipefail
           for asset in dist/*; do
@@ -274,7 +341,7 @@ jobs:
             gh attestation verify \
               "$asset" \
               --repo "$GITHUB_REPOSITORY" \
-              --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+              --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${RELEASE_WORKFLOW_REF}" \
               --source-digest "$GITHUB_SHA" \
               --deny-self-hosted-runners
           done
@@ -282,19 +349,20 @@ jobs:
       - name: Reject an already-published release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release-input.outputs.tag }}
         run: |
           set -euo pipefail
           releases="$(gh api --paginate \
             "repos/${GITHUB_REPOSITORY}/releases?per_page=100" | jq -sc \
-            --arg tag "$GITHUB_REF_NAME" '[.[][] | select(.tag_name == $tag)]')"
+            --arg tag "$RELEASE_TAG" '[.[][] | select(.tag_name == $tag)]')"
           count="$(jq 'length' <<<"$releases")"
           if [ "$count" -gt 1 ]; then
-            echo "multiple releases exist for $GITHUB_REF_NAME" >&2
+            echo "multiple releases exist for $RELEASE_TAG" >&2
             exit 1
           fi
           if [ "$count" -eq 1 ]; then
             [ "$(jq -r '.[0].draft' <<<"$releases")" = true ] || {
-              echo "$GITHUB_REF_NAME is already published and cannot be replaced" >&2
+              echo "$RELEASE_TAG is already published and cannot be replaced" >&2
               exit 1
             }
           fi
@@ -302,13 +370,15 @@ jobs:
       - name: Reconfirm the remote tag before creating the draft
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/verify-release-tag.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          RELEASE_TAG: ${{ steps.release-input.outputs.tag }}
+        run: bash scripts/verify-release-tag.sh "$RELEASE_TAG" "$GITHUB_SHA"
 
       - name: Create draft release and upload every asset
         id: draft-release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           draft: true
+          tag_name: ${{ steps.release-input.outputs.tag }}
           prerelease: ${{ steps.release-metadata.outputs.prerelease }}
           make_latest: false
           target_commitish: ${{ github.sha }}
@@ -328,12 +398,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.draft-release.outputs.id }}
+          RELEASE_TAG: ${{ steps.release-input.outputs.tag }}
         run: |
           set -euo pipefail
           printf '%s\n' "$RELEASE_ID" | grep -Eq '^[1-9][0-9]*$'
           release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
           [ "$(jq -r .draft <<<"$release")" = true ]
-          [ "$(jq -r .tag_name <<<"$release")" = "$GITHUB_REF_NAME" ]
+          [ "$(jq -r .tag_name <<<"$release")" = "$RELEASE_TAG" ]
           expected="$(
             for asset in dist/*; do
               [ -f "$asset" ] || continue
@@ -401,7 +472,8 @@ jobs:
       - name: Verify the remote tag before publishing the Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash scripts/verify-release-tag.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        run: bash scripts/verify-release-tag.sh "$RELEASE_TAG" "$GITHUB_SHA"
 
       - name: Publish the verified draft
         env:
@@ -409,10 +481,11 @@ jobs:
           MAKE_LATEST: ${{ needs.prepare-release.outputs.make_latest }}
           PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
         run: |
           set -euo pipefail
           release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
-          [ "$(jq -r .tag_name <<<"$release")" = "$GITHUB_REF_NAME" ]
+          [ "$(jq -r .tag_name <<<"$release")" = "$RELEASE_TAG" ]
 
           if [ "$(jq -r .draft <<<"$release")" = true ]; then
             published="$(gh api --method PATCH \
@@ -426,7 +499,7 @@ jobs:
           [ "$(jq -r .draft <<<"$published")" = false ]
           [ "$(jq -r .prerelease <<<"$published")" = "$PRERELEASE" ]
 
-          bash scripts/verify-release-latest.sh "$GITHUB_REF_NAME" "$MAKE_LATEST"
+          bash scripts/verify-release-latest.sh "$RELEASE_TAG" "$MAKE_LATEST"
 
   promote-channel:
     needs: [prepare-release, publish-container, finalize-release]
@@ -459,7 +532,7 @@ jobs:
         env:
           EXPECTED_PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
           SOURCE_DIGEST: ${{ needs.prepare-release.outputs.candidate_digest }}
           VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
@@ -491,7 +564,7 @@ jobs:
             "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" "$CHANNEL"
 
   reconcile-channel:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reconcile'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:

@@ -137,8 +137,14 @@ require_text .github/workflows/container.yml 'artifact-metadata: write'
 require_text .github/workflows/container.yml 'actions/attest@'
 
 release_workflow=.github/workflows/release.yml
+require_text "$release_workflow" 'operation:'
+require_text "$release_workflow" '- publish'
+require_text "$release_workflow" '- reconcile'
+require_text "$release_workflow" 'Create annotated release tag'
+require_text "$release_workflow" "repos/${literal_dollar}{GITHUB_REPOSITORY}/git/tags"
+require_text "$release_workflow" "repos/${literal_dollar}{GITHUB_REPOSITORY}/git/refs"
 require_text "$release_workflow" \
-  "bash scripts/release-metadata.sh \"${literal_dollar}GITHUB_REF_NAME\""
+  "bash scripts/release-metadata.sh \"${literal_dollar}RELEASE_TAG\""
 require_text "$release_workflow" 'bash scripts/build-native-bundle.sh dist/native amd64 arm64'
 require_text "$release_workflow" 'release-tool verify'
 require_text "$release_workflow" 'dist/install.sh'
@@ -163,7 +169,7 @@ require_text "$release_workflow" 'Promote the published release channel without 
 require_text "$release_workflow" 'needs: [prepare-release, publish-container, finalize-release]'
 require_text "$release_workflow" 'workflow_dispatch:'
 require_text "$release_workflow" 'reconcile-channel:'
-require_text "$release_workflow" "if: github.event_name == 'workflow_dispatch'"
+require_text "$release_workflow" "if: github.event_name == 'workflow_dispatch' && inputs.operation == 'reconcile'"
 require_text "$release_workflow" 'Reconcile the published release channel'
 require_text "$release_workflow" 'ref: refs/heads/main'
 require_text "$release_workflow" 'waiting for attested main candidate'
@@ -173,6 +179,9 @@ require_text "$release_workflow" \
   "candidate_tag=\"${literal_dollar}{REGISTRY}/${literal_dollar}{IMAGE_NAME}:sha-${literal_dollar}{candidate_commit}\""
 require_text "$release_workflow" '--cert-identity'
 require_text "$release_workflow" '/.github/workflows/container.yml@refs/heads/main'
+if grep -Eq '^[[:space:]]+tags:' "$release_workflow"; then
+  fail "release workflow must not publish from pushed tags; use workflow_dispatch"
+fi
 if grep -Fq 'docker/build-push-action@' "$release_workflow"; then
   fail "release workflow must promote the accepted candidate digest instead of rebuilding"
 fi
