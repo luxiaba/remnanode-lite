@@ -593,6 +593,9 @@ func extractBundleArchive(archivePath, destination string) (string, error) {
 	if err := requireRealDirectory(root); err != nil {
 		return "", fmt.Errorf("bundle archive is missing %s root: %w", bundleTopDirectory, err)
 	}
+	if err := chmodBundleDirectories(root); err != nil {
+		return "", err
+	}
 	return root, nil
 }
 
@@ -630,6 +633,9 @@ func copyBundleToGeneration(bundle *validatedBundle, generations string) (string
 		}
 	}
 	if err := copyBundleFile(bundle.Root, stage, "release-manifest.json", 0o644); err != nil {
+		return "", false, err
+	}
+	if err := chmodBundleDirectories(stage); err != nil {
 		return "", false, err
 	}
 	// The caller may have supplied a mutable bundle-root directory. Revalidate
@@ -679,6 +685,30 @@ func copyBundleFile(sourceRoot, destinationRoot, relative string, mode fs.FileMo
 	syncErr := file.Sync()
 	closeErr := file.Close()
 	return errors.Join(writeErr, syncErr, closeErr)
+}
+
+func chmodBundleDirectories(root string) error {
+	return filepath.WalkDir(root, func(current string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() {
+			return nil
+		}
+		info, err := os.Lstat(current)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("bundle path %q is not a real directory", current)
+		}
+		if info.Mode().Perm() != 0o755 {
+			if err := os.Chmod(current, 0o755); err != nil {
+				return fmt.Errorf("set bundle directory permissions on %s: %w", current, err)
+			}
+		}
+		return nil
+	})
 }
 
 func syncTreeDirectories(root string) error {

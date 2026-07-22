@@ -138,6 +138,9 @@ func TestOpenBundleArchivePreservesManifestModesUnderRestrictiveUmask(t *testing
 		t.Fatal(err)
 	}
 	defer bundle.Close()
+	assertMode(t, bundle.Root, 0o755)
+	assertMode(t, filepath.Join(bundle.Root, "share"), 0o755)
+	assertMode(t, filepath.Join(bundle.Root, "share", "xray"), 0o755)
 	assertMode(t, filepath.Join(bundle.Root, "LICENSE"), 0o644)
 	assertMode(t, filepath.Join(bundle.Root, "bin", "rnlctl"), 0o755)
 }
@@ -160,6 +163,9 @@ func TestCopyBundleToGenerationPreservesManifestModesUnderRestrictiveUmask(t *te
 	if _, err := validateBundleRoot(generationRoot, "amd64"); err != nil {
 		t.Fatal(err)
 	}
+	assertMode(t, generationRoot, 0o755)
+	assertMode(t, filepath.Join(generationRoot, "share"), 0o755)
+	assertMode(t, filepath.Join(generationRoot, "share", "xray"), 0o755)
 	assertMode(t, filepath.Join(generationRoot, "LICENSE"), 0o644)
 	assertMode(t, filepath.Join(generationRoot, "bin", "rnlctl"), 0o755)
 }

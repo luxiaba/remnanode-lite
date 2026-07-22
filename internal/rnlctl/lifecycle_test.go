@@ -241,6 +241,9 @@ func TestExternalNativeBundleInstallSmoke(t *testing.T) {
 		t.Fatalf("Status() = %#v", status)
 	}
 	generationRoot := filepath.Join(paths.Generations, result.Generation)
+	assertMode(t, generationRoot, 0o755)
+	assertMode(t, filepath.Join(generationRoot, "share"), 0o755)
+	assertMode(t, filepath.Join(generationRoot, "share", "xray"), 0o755)
 	assertMode(t, filepath.Join(generationRoot, "LICENSE"), 0o644)
 	assertMode(t, filepath.Join(generationRoot, "bin", "rnlctl"), 0o755)
 	assertMode(t, paths.EnvironmentFile, 0o640)
