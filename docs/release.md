@@ -3,10 +3,10 @@
 [Documentation home](README.md) | [Versioning and image tags](versioning.md)
 
 This guide is the maintainer procedure for publishing Remnanode Lite. A
-release identifies the reviewed `main` commit selected when the annotated tag
-is created. Its container is the multi-architecture candidate already built and
-attested for that commit; the release workflow verifies and retags that digest
-without rebuilding it.
+release identifies the reviewed `main` commit selected when the publish
+workflow creates the annotated tag. Its container is the multi-architecture
+candidate already built and attested for that commit; the release workflow
+verifies and retags that digest without rebuilding it.
 
 Release assets follow a draft-first path. The workflow builds, verifies,
 attests, uploads, and compares every asset while the GitHub Release is still a
@@ -18,6 +18,9 @@ dev -> pull request -> main -> sha-<commit> candidate
                                   |
                                   v
                         maintainer acceptance
+                                  |
+                                  v
+                     manual publish workflow
                                   |
                                   v
                        annotated v<version> tag
@@ -84,7 +87,7 @@ Direct commits to `main` are not part of the release procedure.
 | [`container`](../.github/workflows/container.yml) | Pull-request image builds and the attested `linux/amd64` plus `linux/arm64` candidate for each `main` commit |
 | [`security`](../.github/workflows/security.yml) | Vulnerability checks |
 | [`contract-sync`](../.github/workflows/contract-sync.yml) | Detects a new official Node release and opens an issue; it never changes the contract automatically |
-| [`release`](../.github/workflows/release.yml) | Validates the tag and candidate, creates release assets, publishes the GitHub Release, and promotes the correct channel |
+| [`release`](../.github/workflows/release.yml) | Creates the annotated tag for manual publication, validates the candidate, creates release assets, publishes the GitHub Release, and promotes the correct channel |
 
 After the container workflow succeeds for `main`, the candidate has two names:
 
@@ -212,9 +215,10 @@ gh attestation verify \
   --deny-self-hosted-runners
 ```
 
-## 6. Run the Tag Preflight
+## 6. Run the Release Preflight and Publish
 
-Tag only a clean checkout of the current remote `main` HEAD:
+Publish only the current remote `main` HEAD. Before dispatching the release,
+make sure your local checkout matches the candidate you accepted:
 
 ```bash
 git fetch origin main --tags
@@ -229,7 +233,8 @@ VERSION="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' \
 TAG="v${VERSION}"
 ```
 
-Run the release-specific preflight before creating the tag:
+Run the release-specific preflight locally when you want one final check before
+the GitHub run:
 
 ```bash
 export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned/remnawave-node
@@ -241,34 +246,51 @@ This requires a clean tree and verifies the version format, contract identity,
 dated changelog entry, strict translation freshness, Native bootstrap,
 repository checks, official source evidence, and vulnerability gate.
 
-Create an annotated tag and inspect it before pushing:
+Do not create or push the release tag from a workstation. Start the release
+workflow from GitHub Actions and let it create the annotated tag:
 
 ```bash
-git tag -a "$TAG" -m "Remnanode Lite ${VERSION}"
-test "$(git cat-file -t "$TAG")" = tag
-test "$(git rev-list -n 1 "$TAG")" = "$(git rev-parse origin/main)"
-git show --no-patch "$TAG"
-git push origin "$TAG"
+gh workflow run release.yml \
+  --repo luxiaba/remnanode-lite \
+  --ref main \
+  -f operation=publish \
+  -f version="$VERSION"
 ```
 
 For the current stable release, `VERSION` is `2.8.0` and `TAG` is `v2.8.0`.
 
-Pushing the tag starts the release workflow. Keep `main` frozen until its
-initial source-identity check succeeds. Exact tags must then remain immutable;
-the workflow re-reads the remote annotated tag before creating the draft,
-publishing the Release, and promoting the channel. Protect `v*` against update
-and deletion in the GitHub repository rules. If a source defect is discovered
-after the push, correct it on `main` and choose a new version rather than moving
-the tag to another commit.
+The manual workflow confirms that it is running on `refs/heads/main`, verifies
+that `GITHUB_SHA` is still the remote `main` HEAD, creates the annotated
+`v<version>` tag through the GitHub API, and then continues the same release
+run. The release workflow is not triggered by `v*` tag pushes; a workstation
+tag push is therefore never a supported publication path.
+
+Repository settings should protect the published result rather than block the
+release workflow:
+
+- Enable immutable releases, so a published GitHub Release and its associated
+  tag cannot be silently changed.
+- Add a `v*` tag ruleset that restricts tag updates and deletions and blocks
+  force pushes.
+- Do not enable tag creation restrictions unless the repository has a deliberate
+  automation bypass that lets the release workflow create `v<version>` tags.
+
+Keep `main` frozen until the workflow's initial source-identity check succeeds.
+The workflow re-reads the remote annotated tag before creating the draft,
+publishing the Release, and promoting the channel. If a source defect is
+discovered after the tag exists, correct it on `main` and choose a new version
+rather than moving the tag to another commit.
 
 ## 7. What the Release Workflow Verifies
 
-The tag workflow first establishes source and candidate identity:
+The publish workflow first establishes source and candidate identity:
 
-1. The tag commit must still be the reviewed `origin/main` HEAD when the
+1. The workflow run must come from `refs/heads/main` for manual publication,
+   and its `GITHUB_SHA` must still be the reviewed `origin/main` HEAD when the
    workflow performs its initial identity check. After that acceptance,
    subsequent `main` changes do not invalidate the in-progress release.
-2. The tag must be annotated and match `Version` exactly.
+2. The workflow creates or verifies an annotated tag matching `Version`
+   exactly, and every later publication boundary verifies that tag again.
 3. The pinned official source and the complete release gate must pass.
 4. The tag is classified as stable or preview from its syntax.
 5. The `sha-<commit>` candidate must exist and resolve to a valid manifest
@@ -326,8 +348,9 @@ Publication happens in a fixed order.
 ### 9.1 Attest Every Asset
 
 Every file in the release staging directory, including `SHA256SUMS`, receives
-a GitHub artifact attestation tied to the tag workflow and source commit. The
-workflow immediately verifies those attestations before creating the draft.
+a GitHub artifact attestation tied to the release workflow run and source
+commit. The workflow immediately verifies those attestations before creating
+the draft.
 
 ### 9.2 Create and Verify the Draft
 
@@ -449,18 +472,22 @@ The safe action depends on how far the workflow progressed.
 
 | Failure point | Expected external state | Recovery |
 | --- | --- | --- |
-| Candidate lookup or preflight | No draft or release created | Ensure CI and the container workflow succeeded, then rerun the failed release workflow for the same tag |
+| Tag creation, candidate lookup, or preflight | No draft or release created; the annotated tag may exist if creation succeeded first | Ensure CI and the container workflow succeeded, then rerun `operation=publish` for the same version |
 | Asset build, attestation, or upload | No draft, or a draft tied to the same commit | Rerun the workflow; matching draft assets may be replaced and are checked again |
 | Exact image promotion | Verified draft may exist; exact image may or may not exist | Rerun; immutable promotion accepts the existing tag only if its digest is already correct |
 | GitHub publication | Exact image and draft may exist | Rerun the failed job while the Release is still a draft |
 | GHCR channel promotion | GitHub Release and exact image are already published | Use the release workflow's manual channel reconciliation for that published tag |
 | Defect found after publication | Exact release remains published | Fix `main`, choose a new version, and complete a new release |
 
-Manual dispatch is a reconciliation path, not a second release path:
+Manual dispatch also provides a reconciliation path for an already published
+Release. Use `operation=reconcile`, not `operation=publish`, when only the
+moving GHCR channel needs repair:
 
 ```bash
 gh workflow run release.yml \
   --repo luxiaba/remnanode-lite \
+  --ref main \
+  -f operation=reconcile \
   -f release_tag=v2.8.0
 ```
 
