@@ -2,7 +2,7 @@ name: remnanode-lite
 
 services:
   remnanode-lite:
-    image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:2.8.0}"
+    image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1}"
     container_name: remnanode-lite
     hostname: remnanode-lite
     init: true

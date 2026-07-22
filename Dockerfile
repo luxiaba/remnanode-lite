@@ -34,47 +34,33 @@ RUN set -eux; \
       -o /out/remnanode-lite ./cmd/remnanode-lite; \
     env GOWORK=off GOFLAGS='' GOEXPERIMENT='' GOFIPS140=off CGO_ENABLED=0 \
       go build -mod=readonly -buildvcs=false -trimpath \
-      -ldflags='-s -w' -o /out/asn-builder ./cmd/asn-builder
+      -ldflags='-s -w' -o /out/asn-builder ./cmd/asn-builder; \
+    env GOWORK=off GOFLAGS='' GOEXPERIMENT='' GOFIPS140=off CGO_ENABLED=0 \
+      go build -mod=readonly -buildvcs=false -trimpath \
+      -ldflags='-s -w' -o /out/release-tool ./cmd/release-tool
 
 FROM --platform=$BUILDPLATFORM ${DEBIAN_IMAGE} AS assets
 
 ARG TARGETARCH
-ARG XRAY_CORE_VERSION=v26.6.27
-ARG XRAY_AMD64_SHA256=b3e5902d06d6282fe53cfa2fc426058b9aeaa429b2c812e20887cd47f26d08bf
-ARG XRAY_ARM64_SHA256=13a251379bea366c2cf10363ad71e75734193d401f26f518bf0c25e5c8f8c931
-ARG ASN_SOURCE_URL=https://github.com/ipverse/as-ip-blocks/archive/56d021c7536afb15317155e45b57e7b5c87a4700.tar.gz
-ARG ASN_SOURCE_SHA256=fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa978a33b674a58ec
 
 COPY --from=build /out/asn-builder /usr/local/bin/asn-builder
+COPY --from=build /out/release-tool /usr/local/bin/release-tool
+COPY release/runtime-assets.lock.json /runtime-assets.lock.json
 
-RUN set -eux; \
+RUN --mount=type=cache,target=/var/cache/remnanode-runtime-assets,sharing=locked \
+    set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl unzip; \
+    apt-get install -y --no-install-recommends ca-certificates; \
     rm -rf /var/lib/apt/lists/*; \
-    case "$TARGETARCH" in \
-      amd64) xray_asset='Xray-linux-64.zip'; xray_sha="$XRAY_AMD64_SHA256" ;; \
-      arm64) xray_asset='Xray-linux-arm64-v8a.zip'; xray_sha="$XRAY_ARM64_SHA256" ;; \
-      *) echo "unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
-    esac; \
-    curl --fail --location --silent --show-error \
-      --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
-      "https://github.com/XTLS/Xray-core/releases/download/${XRAY_CORE_VERSION}/${xray_asset}" \
-      -o /tmp/xray.zip; \
-    printf '%s  %s\n' "$xray_sha" /tmp/xray.zip | sha256sum --check --strict; \
-    install -d /assets/lib /assets/xray /assets/asn; \
-    unzip -p /tmp/xray.zip xray > /assets/lib/rw-core; \
-    unzip -p /tmp/xray.zip geoip.dat > /assets/xray/geoip.dat; \
-    unzip -p /tmp/xray.zip geosite.dat > /assets/xray/geosite.dat; \
-    chmod 0755 /assets/lib/rw-core; \
-    chmod 0644 /assets/xray/geoip.dat /assets/xray/geosite.dat; \
-    curl --fail --location --silent --show-error \
-      --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
-      "$ASN_SOURCE_URL" -o /tmp/as-ip-blocks.tar.gz; \
-    printf '%s  %s\n' "$ASN_SOURCE_SHA256" /tmp/as-ip-blocks.tar.gz | sha256sum --check --strict; \
-    asn-builder -format ipverse-tar-gz \
-      -in /tmp/as-ip-blocks.tar.gz -out /assets/asn/asn-prefixes.bin; \
-    chmod 0644 /assets/asn/asn-prefixes.bin; \
-    rm -f /tmp/xray.zip /tmp/as-ip-blocks.tar.gz /usr/local/bin/asn-builder
+    release-tool materialize \
+      --lock /runtime-assets.lock.json \
+      --arch "$TARGETARCH" \
+      --asn-builder /usr/local/bin/asn-builder \
+      --cache-dir /var/cache/remnanode-runtime-assets \
+      --out-dir /assets; \
+    rm -f /usr/local/bin/asn-builder \
+      /usr/local/bin/release-tool \
+      /runtime-assets.lock.json
 
 FROM ${DEBIAN_IMAGE} AS runtime
 
@@ -91,17 +77,29 @@ RUN set -eux; \
       /usr/local/lib/remnanode \
       /usr/local/share/remnanode/xray \
       /usr/local/share/remnanode/asn \
+      /usr/share/doc/remnanode-lite/licenses \
       /run/remnanode \
       /var/log/remnanode
 
 COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite
 COPY --from=assets --chmod=0755 /assets/lib/rw-core /usr/local/lib/remnanode/rw-core
-COPY --from=assets --chmod=0644 /assets/xray/geoip.dat /usr/local/share/remnanode/xray/geoip.dat
-COPY --from=assets --chmod=0644 /assets/xray/geosite.dat /usr/local/share/remnanode/xray/geosite.dat
-COPY --from=assets --chmod=0644 /assets/asn/asn-prefixes.bin /usr/local/share/remnanode/asn/asn-prefixes.bin
+COPY --from=assets --chmod=0644 /assets/share/xray/geoip.dat /usr/local/share/remnanode/xray/geoip.dat
+COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat /usr/local/share/remnanode/xray/geosite.dat
+COPY --from=assets --chmod=0644 /assets/share/asn/asn-prefixes.bin /usr/local/share/remnanode/asn/asn-prefixes.bin
+COPY --from=assets --chmod=0644 /assets/licenses/CC-BY-SA-4.0.txt /usr/share/doc/remnanode-lite/licenses/CC-BY-SA-4.0.txt
+COPY --from=assets --chmod=0644 /assets/licenses/CC0-1.0.txt /usr/share/doc/remnanode-lite/licenses/CC0-1.0.txt
+COPY --from=assets --chmod=0644 /assets/licenses/GPL-3.0-only.txt /usr/share/doc/remnanode-lite/licenses/GPL-3.0-only.txt
+COPY --from=assets --chmod=0644 /assets/licenses/MPL-2.0.txt /usr/share/doc/remnanode-lite/licenses/MPL-2.0.txt
 
-ENV XRAY_CORE_VERSION=v26.6.27 \
-    XRAY_BIN=/usr/local/lib/remnanode/rw-core \
+# Keep the runtime image self-describing. These small files let an operator
+# inspect the exact license, provenance, and source-offer terms without the
+# source checkout or a separate release archive.
+COPY --chmod=0644 LICENSE /usr/share/doc/remnanode-lite/LICENSE
+COPY --chmod=0644 release/bundle/THIRD_PARTY_NOTICES.md /usr/share/doc/remnanode-lite/THIRD_PARTY_NOTICES.md
+COPY --chmod=0644 release/bundle/SOURCE-OFFER.md /usr/share/doc/remnanode-lite/SOURCE-OFFER.md
+COPY --chmod=0644 release/runtime-assets.lock.json /usr/share/doc/remnanode-lite/runtime-assets.lock.json
+
+ENV XRAY_BIN=/usr/local/lib/remnanode/rw-core \
     GEO_DIR=/usr/local/share/remnanode/xray \
     ASN_DB_PATH=/usr/local/share/remnanode/asn/asn-prefixes.bin \
     LOG_DIR=/var/log/remnanode \
