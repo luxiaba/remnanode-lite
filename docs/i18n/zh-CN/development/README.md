@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=39b53327f4b5d0c6f2752133400e7f07e67fc67afbb014535e6b593def53a527 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=5cc1a6e6ee471524ca485cefa0960856c88aa664d84c4a1264f3e521961de0a7 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -37,7 +37,7 @@
 以下工具只在相应检查中需要：
 
 - ShellCheck `0.11.0`：Shell 与 OpenRC 静态检查。
-- actionlint `1.7.7`：GitHub Actions 静态检查。
+- actionlint `1.7.12`：GitHub Actions 静态检查。
 - govulncheck `1.1.4`：可达 Go 漏洞扫描。
 - Docker Engine 与 Docker Compose v2：Compose 校验、镜像构建和资源测试。
 - Linux 的 `iproute2`、`nftables`、`unshare` 与 root 权限：网络管理集成测试。
@@ -50,7 +50,7 @@
 actionlint 与 govulncheck 可以按 CI 固定版本安装：
 
 ```bash
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 export PATH="$(go env GOPATH)/bin:$PATH"
 ```

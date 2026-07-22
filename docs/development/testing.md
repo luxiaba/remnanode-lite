@@ -146,12 +146,12 @@ An upgrade to the plugin version must reconcile official `package.json` and `pac
 
 - A Go toolchain exactly matching `go.mod`.
 - ShellCheck exactly `0.11.0`.
-- An available actionlint executable; use `1.7.7` for CI parity.
+- An available actionlint executable; use `1.7.12` for CI parity.
 
 Install the Go tools with:
 
 ```bash
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 ```
 

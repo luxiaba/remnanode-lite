@@ -32,7 +32,7 @@ Use the same Go patch release as CI whenever possible. A normal `go test` may al
 The following tools are needed only for their corresponding checks:
 
 - ShellCheck `0.11.0` for shell and OpenRC static analysis.
-- actionlint `1.7.7` for GitHub Actions static analysis.
+- actionlint `1.7.12` for GitHub Actions static analysis.
 - govulncheck `1.1.4` for reachable Go vulnerability scanning.
 - Docker Engine and Docker Compose v2 for Compose validation, image builds, and resource testing.
 - Linux `iproute2`, `nftables`, `unshare`, and root privileges for network-management integration tests.
@@ -42,7 +42,7 @@ The repository intentionally has no `Makefile`. Scripts under `scripts/` are the
 `scripts/install-ci-checks.sh` is specific to GitHub-hosted runners. It requires `GITHUB_PATH`, `RUNNER_TEMP`, and a Linux toolchain; do not run it as a local setup script. Install actionlint and govulncheck at the versions pinned by CI:
 
 ```bash
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 export PATH="$(go env GOPATH)/bin:$PATH"
 ```

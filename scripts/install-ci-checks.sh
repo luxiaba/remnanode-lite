@@ -41,7 +41,7 @@ install -m 0755 \
   "$download_dir/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" \
   "$tool_bin/shellcheck"
 
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 go_bin="$(go env GOPATH)/bin"
 

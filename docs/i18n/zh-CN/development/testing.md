@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=94c4682d140f4f0bdebf6af32110b038acec1200bacaec2f9373b289d074e9f9 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=3da39dbbb8ff0612d55ca78dde6b579b3d0ab79c5515e095f857025f0db5161c -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -154,12 +154,12 @@ tar -tzf "$plugin_tgz" \
 
 - Go toolchain 与 `go.mod` 完全一致。
 - ShellCheck 恰好为 `0.11.0`。
-- actionlint 可执行；为复现 CI，使用 `1.7.7`。
+- actionlint 可执行；为复现 CI，使用 `1.7.12`。
 
 安装 Go 工具：
 
 ```bash
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 ```
 
