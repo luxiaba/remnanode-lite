@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=dd6d5523016be30ce31743f95d40280684a1f780effa4dab47fe622effe19227 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=94c4682d140f4f0bdebf6af32110b038acec1200bacaec2f9373b289d074e9f9 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -215,6 +215,18 @@ go test -race -count=1 ./cmd/release-tool ./internal/rnlctl
 ```
 
 bootstrap fixtures 覆盖精确版本下载、本地归档摘要、`--yes`、`--prepare-only`、Secret 文件和移动通道拒绝。`internal/rnlctl` 使用临时 root 与 service fake，覆盖严格 manifest、锁和 journal、generation 原子选择、服务状态恢复、回滚、repair、账号所有权及 purge 安全；不会写入真实 `/etc/remnanode-lite` 或启动宿主服务。
+
+当归档结构、runtime assets 或 release 脚本发生变化时，还要构建并验证真实 bundle：
+
+```bash
+mkdir -p dist/native
+bash scripts/build-native-bundle.sh dist/native amd64 arm64
+version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
+bash scripts/test-native-release-bundle.sh "dist/native/remnanode-lite_${version}_linux_amd64.tar.gz" amd64
+bash scripts/test-native-release-bundle.sh "dist/native/remnanode-lite_${version}_linux_arm64.tar.gz" arm64
+```
+
+构建需要精确 Go toolchain 和完整的固定 runtime asset cache。只有在 cache 完整时才使用 `RNL_OFFLINE_BUILD=1`。bundle smoke test 会用真实 `rnlctl` 生命周期代码打开生成的归档，在带限制 `umask` 的临时 test root 中安装，同时保留假的 service-manager 边界。若改动影响 service-manager 行为，它不能替代真实 systemd/OpenRC 检查。
 
 ## Linux 网络管理集成测试
 
