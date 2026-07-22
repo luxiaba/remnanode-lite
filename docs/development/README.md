@@ -89,7 +89,9 @@ Normal tests and builds do not require `.env`, Panel, `SECRET_KEY`, or a local r
 go test -count=1 ./...
 mkdir -p bin
 go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
+go build -trimpath -o bin/rnlctl ./cmd/rnlctl
 ./bin/remnanode-lite version
+./bin/rnlctl version
 ```
 
 This binary is suitable for a CLI smoke test. Running the full daemon also requires a valid Panel Secret, mTLS material, rw-core, Linux capabilities, and a supported host-network environment. Starting the daemon directly on macOS is not integration verification.
@@ -127,6 +129,8 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | `cmd/contract-source-check` | Reconstruct and verify the source-evidence manifest from pinned official Git objects |
 | `cmd/asn-builder` | Build a compact, read-only prefix database from the pinned ASN source |
 | `cmd/docs-check` | Validate Markdown structure, relative links, anchors, and entry-point reachability |
+| `cmd/rnlctl` | Native host lifecycle command: generations, service state, upgrade, rollback, repair, and uninstall |
+| `cmd/release-tool` | Validate the runtime lock; materialize assets; build and verify deterministic Native bundles and SPDX SBOMs |
 
 ### Runtime Packages
 
@@ -147,19 +151,22 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | `internal/connections`, `internal/netadmin` | User/IP connection resolution and Linux socket destruction |
 | `internal/system`, `internal/asn` | System metrics, network monitoring, and compact ASN lookup |
 | `internal/contract` | Executable behavioral contract and differential semantics for the pinned official version |
+| `internal/rnlctl` | Native bundle verification, durable transactions, filesystem layout, service-manager adapters, and recovery |
 | `internal/version` | Project version and official contract version; see the versioning policy for their distinct meanings |
 
 ### Engineering and Delivery Paths
 
 | Path | Responsibility |
 | --- | --- |
-| `.github/workflows/ci.yml` | Required Go, repository, installer, and Linux network-management CI gate |
+| `.github/workflows/ci.yml` | Required Go, repository, Native bootstrap/lifecycle, and Linux network-management CI gate |
 | `.github/workflows/container.yml` | Multi-architecture image build, attestation, and the immutable `sha-<40-character-main-commit>` candidate |
-| `.github/workflows/release.yml` | Release assets and promotion of the verified candidate digest to the exact version and `latest` |
+| `.github/workflows/release.yml` | Draft-first Release assets, Native bundles and attestations, exact image tag, and stable/preview channel promotion |
 | `.github/workflows/contract-sync.yml`, `.github/workflows/security.yml` | Official-version monitoring and scheduled security checks |
 | `scripts/check*.sh` | Stable Go, repository, supply-chain, and complete-gate entry points |
-| `scripts/install*.sh`, `scripts/upgrade.sh`, `scripts/uninstall.sh` | Native installation, asset transactions, upgrade rollback, and uninstall |
-| `deploy/` | systemd/OpenRC service definitions, native `node.env`, and the production single-file Compose template |
+| `scripts/build-native-bundle.sh` | Reproducible `amd64`/`arm64` Native bundle build around `release-tool` |
+| `release/native/install.sh` | POSIX bootstrap for an exact online Release, local archive, or extracted bundle |
+| `release/runtime-assets.lock.json` | Exact Xray, GeoIP, GeoSite, ASN, license, source, size, and digest inputs shared by Docker and Native builds |
+| `deploy/` | systemd/OpenRC service definitions, Native `node.env`, and the production single-file Compose template |
 | `compose.yaml`, `compose.build.yaml` | GHCR runtime configuration and local source-build override |
 | `Dockerfile` | Dual-architecture Node build, pinned rw-core/geo/ASN assets, and minimal runtime image |
 
@@ -204,8 +211,10 @@ Before tagging a release, merge `dev` into `main`, wait for the immutable
 real Panel and real proxy traffic. This is a maintainer decision, not a source
 artifact: do not commit host inventories, container details, logs, or smoke
 records. The tag must point to the current `main` HEAD; the release workflow
-then verifies the candidate image and its attestation before promoting the same
-digest to the exact version and `latest`. GitHub generates the Release notes.
+then verifies the candidate image and its attestation, builds and attests the
+Native assets, and promotes the same digest to the exact version. Plain
+`X.Y.Z` releases advance `latest`; `X.Y.Z-rnl.N` prereleases advance `preview`
+and never change GitHub or GHCR `latest`.
 
 ## Common Change Paths
 
@@ -219,7 +228,8 @@ digest to the exact version and `latest`. GitHub generates the Release notes.
 | Configuration, Secret, or authentication | `internal/config`, `internal/secret`, `internal/auth`, `internal/httpserver` | Bound inputs, preserve safe file handling, and keep Secrets out of logs |
 | Linux system capability | `*_linux.go` and corresponding `*_stub.go` | Non-Linux builds must compile; Linux behavior must be tested on Linux |
 | Docker image | `Dockerfile`, `compose*.yaml`, `.dockerignore`, container workflow | Pinned asset digests, multiple architectures, resource limits, and ephemeral logs |
-| Install, upgrade, or uninstall | `scripts/`, `deploy/` | Locking, atomic replacement, rollback, permissions, and systemd/OpenRC symmetry |
+| Native install, upgrade, rollback, repair, or uninstall | `internal/rnlctl`, `cmd/rnlctl`, `release/native/install.sh`, `deploy/` | Exact bundle identity, durable journal, atomic generation selection, service intent, permissions, and recovery |
+| Runtime asset or Native bundle format | `release/runtime-assets.lock.json`, `cmd/release-tool`, `scripts/build-native-bundle.sh` | Docker/Native parity, deterministic archive, architecture checks, manifest/SBOM integrity, source and license provenance |
 | Project version | `internal/version`, installers, Compose, release workflow | Do not recouple the project version to the contract version |
 | Official contract upgrade | `internal/version/contract.version`, `internal/contract`, source manifest, pinned CI ref, contract documentation | Pin the source commit, extract and review the diff, then implement; never infer complete Zod equivalence automatically |
 
@@ -240,6 +250,8 @@ The project targets a whole machine with `512 MiB RAM / 1 vCPU / 2 GB disk`. Eve
 - `xray.Manager` owns the rw-core process and Xray lifecycle.
 - `plugin.Service` and `plugin.State` own plugin state and firewall plans.
 - `httpserver` orders operations that cross Xray and Plugin.
+- `rnlctl.Engine` owns persistent Native generations, transaction state, and
+  desired service state. The daemon never edits these files.
 
 Do not bypass these entry points from a new handler to mutate shared state, and do not introduce a reverse lock order.
 
@@ -263,7 +275,12 @@ scripts/generate-protobuf.sh --check
 
 The script requires `protoc --version` to return exactly `libprotoc 35.1` and installs the pinned Go plugin in an isolated temporary directory. `--check` regenerates and compares the result byte for byte. A wire-schema change must also prove that golden wire encoding, Handler/Stats behavior, and real rw-core integration have not drifted unexpectedly.
 
-Docker base images, GitHub Actions, rw-core, the ASN source, and downloadable assets are all pinned by version or digest. An upgrade must update the verification scripts and provenance documentation together; changing only a URL is not sufficient.
+Docker base images and GitHub Actions are pinned by digest or commit. rw-core,
+GeoIP, GeoSite, ASN source, generated ASN output, and redistributed license
+texts are pinned together in `release/runtime-assets.lock.json`. A runtime
+upgrade must update the lock, materialization tests, generated provenance, and
+both Docker and Native verification paths together; changing only a URL is not
+sufficient.
 
 ## Next Steps
 

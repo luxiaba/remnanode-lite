@@ -2,7 +2,7 @@
 
 [Back to the documentation index](README.md)
 
-Docker Compose is the preferred deployment method for low-memory nodes. A server needs only a permission-restricted YAML file and Docker Engine; it does not need the source tree, a Go toolchain, or a persistent log volume.
+Docker Compose is the default deployment method for low-memory nodes. A server needs only a permission-restricted YAML file and Docker Engine; it does not need the source tree, a Go toolchain, or a persistent log volume. Hosts that cannot run Docker can use the self-contained [Native Linux bundle](deployment-native.md).
 
 The primary workflow on this page uses the single-file Compose layout suited to fleets of independent small nodes. Both supported templates can read deployment values from a same-directory `.env`; the repository-root `compose.yaml` remains available for centralized configuration or local source builds.
 
@@ -29,13 +29,14 @@ ghcr.io/luxiaba/remnanode-lite
 
 | Tag | Behavior | Recommended use |
 | --- | --- | --- |
-| `X.Y.Z-rnl.N` | Independently versioned project iteration that passed the release process | Recommended for production and precise rollback |
+| `X.Y.Z-rnl.N` | Exact project preview that passed the release process | Controlled preview testing and precise rollback |
 | `X.Y.Z` | Formal build aligned with the corresponding official version | Recommended for production |
 | `latest` | Most recent stable build that passed the release process | Opt-in stable tracking; not a rollback identifier |
+| `preview` | Most recently promoted `rnl.N` prerelease | Opt-in preview tracking; not a rollback identifier |
 | `sha-<40-character-commit>` | Candidate built for a `main` commit | Discover the candidate, then resolve and pin its digest |
 | `edge` | Moving candidate for current `main` | Short-term observation only |
 
-By project policy, exact versions and `sha-*` are not intentionally moved, but registry tags are not technically immutable. Use a `name@sha256:...` manifest digest for the strongest pin. Before the first formal Release, `latest` and exact version tags do not exist. Select a real candidate from the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) and record its manifest digest.
+By project policy, exact versions and `sha-*` are not intentionally moved, but registry tags are not technically immutable. Use a `name@sha256:...` manifest digest for the strongest pin. Select only a tag that exists in the [GHCR package](https://github.com/luxiaba/remnanode-lite/pkgs/container/remnanode-lite) and record its manifest digest.
 
 See the [version model](versioning.md) for naming and promotion rules.
 
@@ -260,11 +261,11 @@ docker compose logs --tail=100 remnanode-lite
 
 To roll back, restore the previously verified Compose file and `.env`, or change the active image setting back to the previous exact version or digest, then repeat `pull` and `up`. Never implement rollback by moving an old version tag.
 
-`latest` does not replace a running container. Tracking it still requires periodic, explicit pull and recreate operations, with the previous digest recorded before each update.
+`latest` and `preview` do not replace a running container. Tracking either channel still requires periodic, explicit pull and recreate operations, with the previous digest recorded before each update.
 
 ## Fleet rollout
 
-Use one verified manifest digest throughout a fleet rollout and keep the previous digest for rollback. Exact version tags are easier to read, but deployment records should still retain `name@sha256:...`. Do not send `latest` or `edge` directly to every node.
+Use one verified manifest digest throughout a fleet rollout and keep the previous digest for rollback. Exact version tags are easier to read, but deployment records should still retain `name@sha256:...`. Do not send `latest`, `preview`, or `edge` directly to every node.
 
 1. Group nodes by architecture, distribution, region, and primary traffic profile. Record the current digest, target digest, and rollback Compose file for every node.
 2. Start with a small canary group that represents the fleet's networks and architectures. Observe at least one traffic peak. Confirm Panel connectivity, rw-core synchronization, real proxy traffic, memory, restarts, processes, disk, and logs.

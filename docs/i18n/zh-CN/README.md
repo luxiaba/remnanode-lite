@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=9cf72339bcf005b2ab44a865a692f7d4eae91d5a1bd515962814700cc0be306f -->
+<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=1f30cfeb382f0e94a02fbfe921f36c0c144907b994f8d9a54ab21136206fc8e4 -->
 
 # Remnanode Lite 文档中心
 
@@ -15,9 +15,9 @@
 ### 我要部署一个节点
 
 1. 先阅读[项目定位与目标](project.md)，确认支持范围和非目标。
-2. Docker 用户使用 [Docker Compose 部署](deployment-docker.md)；systemd/OpenRC 用户使用[原生 Linux 部署](deployment-native.md)。
+2. Docker 用户使用 [Docker Compose 部署](deployment-docker.md)；Rocky/Debian systemd 主机使用[原生 Linux 部署](deployment-native.md)，OpenRC 目前是实验性路径。
 3. 按[配置参考](configuration.md)填写运行参数、Secret 和可选能力。
-4. 在选择镜像前阅读[版本与镜像标签策略](versioning.md)，区分 `latest`、精确版本、`edge` 和 `sha-*`。
+4. 在选择发行物前阅读[版本与镜像标签策略](versioning.md)，区分稳定版、预览版、精确版本与移动通道。
 5. 启动后按[运维手册](operations.md)检查服务健康、Panel 连接和 rw-core 日志。
 
 目标机器是整机 `512 MiB RAM / 1 vCPU / 2 GB disk` 时，应保留仓库提供的内存、CPU、PID、tmpfs 和日志限制，不要在生产节点上进行源码构建。
@@ -28,7 +28,7 @@
 2. 对照[配置参考](configuration.md)确认当前部署方式的配置来源与覆盖关系。
 3. 对照[资源预算](development/resource-budget.md)理解内存、磁盘、日志和关闭预算。
 4. 出现协议或生命周期问题时，查看[架构与运行时设计](architecture.md)和[契约基线](development/contract-2.8.0.md)。
-5. 回滚必须使用之前记录的精确版本或 manifest digest，不使用 `edge`，也不依赖 `latest` 的历史指向。
+5. Docker 回滚使用之前记录的精确版本或 manifest digest；Native 回滚使用保留的 previous generation。不要依赖移动通道的历史指向。
 
 ### 我要阅读或修改 Go 代码
 
@@ -66,7 +66,7 @@
 | 文档 | 内容 |
 | --- | --- |
 | [Docker Compose 部署](deployment-docker.md) | 单文件部署、资源限制、镜像选择、日志、更新和回滚 |
-| [原生 Linux 部署](deployment-native.md) | Debian/Ubuntu systemd 与 Alpine OpenRC 安装、升级和卸载 |
+| [原生 Linux 部署](deployment-native.md) | Rocky/Debian systemd 与实验性 OpenRC 的安装、升级、回滚、修复和卸载 |
 | [配置参考](configuration.md) | runtime、容器、安装器和构建变量的作用域、默认值与安全要求 |
 | [运维手册](operations.md) | 健康检查、日志、更新、回滚、磁盘维护和故障排查 |
 | [根目录 Compose](../../../compose.yaml) | 生产容器约束的可执行配置 |
@@ -102,6 +102,8 @@
 
 `edge` 和 `sha-*` 都是来自 `main` 的构建，不是正式版本。只有 Git tag、GitHub Release 和对应 GHCR 精确标签都已发布，才算正式版本。需要严格固定镜像时，应使用多架构 manifest digest。
 
+Native Linux 不提供候选或移动通道安装入口。`install.sh --version` 与 `rnlctl upgrade --to` 只接受已经拥有完整 GitHub Release bundle 的精确 `X.Y.Z` 或 `X.Y.Z-rnl.N`。
+
 ### 兼容性不只有一个层面
 
 契约测试、真实 Panel 连接、资源测试和发行环境测试回答的是不同问题。任何一项都不能代表全部兼容性，因此文档应明确写出实际测了什么。
@@ -112,6 +114,8 @@
 | --- | --- |
 | Node | 长期运行的 `remnanode-lite` 控制进程；接收 Panel 请求并拥有 rw-core 生命周期 |
 | rw-core | 实际承载代理数据面的 Xray Core 二进制，由 Node 启停和管理 |
+| `rnlctl` | 管理 Native generation、服务状态、health、升级、回滚、修复和卸载的宿主工具 |
+| generation | 一份完整、已验证的 Native bundle；`current` 原子选择当前版本，最多保留一个 `previous` |
 | `Version` | 本项目构建、GitHub Release 和精确镜像的版本身份 |
 | `ContractVersion` | 当前已实现并默认向 Panel 上报的官方 Node 行为基线 |
 | operation epoch | 识别一次 Xray start/stop 操作所有权的递增值，不是 rw-core 进程身份 |

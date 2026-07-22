@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=eeeb79d224806379f399a4e9b2e3531742517027e75cf4c9fa1a3992d6b3a6a6 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=39b53327f4b5d0c6f2752133400e7f07e67fc67afbb014535e6b593def53a527 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -166,7 +166,7 @@ go test -count=1 ./internal/contract
 | `.github/workflows/release.yml` | 生成正式 Release 资产，并将已验证候选的镜像摘要晋升为发布标签 |
 | `.github/workflows/contract-sync.yml`、`.github/workflows/security.yml` | 官方版本监测与定时安全检查 |
 | `scripts/check*.sh` | Go、仓库、供应链和完整门禁的稳定入口 |
-| `scripts/install*.sh`、`scripts/upgrade.sh`、`scripts/uninstall.sh` | 原生安装、资产事务、升级回滚和卸载 |
+| `cmd/rnlctl`、`release/native/install.sh`、`internal/rnlctl` | Native bundle 安装、generation 事务、升级、回滚、修复和卸载 |
 | `deploy/` | systemd/OpenRC service、原生 `node.env` 与生产单文件 Compose 模板 |
 | `compose.yaml`、`compose.build.yaml` | GHCR 运行配置与本地源码构建覆盖层 |
 | `Dockerfile` | 双架构 Node、固定 rw-core/geo/ASN 资产和最小 runtime 镜像 |

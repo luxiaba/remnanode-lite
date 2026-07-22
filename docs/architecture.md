@@ -4,7 +4,7 @@
 
 This document is for maintainers encountering Remnanode Lite for the first time. It describes the boundaries, runtime flows, state ownership, and resource constraints implemented by the current code. Its purpose is to explain how the system works and which invariants a code change must preserve. It is not a deployment reference or a release checklist for a particular version.
 
-For deployment, see [Docker Compose deployment](deployment-docker.md). For the route-by-route external API contract, see the [current official contract baseline](development/contract-2.8.0.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
+For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the route-by-route external API contract, see the [current official contract baseline](development/contract-2.8.0.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
 
 ## 1. System Role
 
@@ -66,6 +66,14 @@ flowchart LR
 
 Control flow normally enters through Panel. Proxy data traffic is handled directly by rw-core on the host network. nftables changes and socket destruction are kernel side effects, available only on Linux with `CAP_NET_ADMIN`.
 
+### 2.1 Deployment and Native lifecycle boundary
+
+Docker and Native Linux deliver the same Node and pinned runtime assets, but their host lifecycle is different. A container is disposable: Compose selects one image and Panel repopulates runtime state after recreation. Native Linux uses `rnlctl` to select one verified generation under `/usr/local/lib/remnanode-lite` and records lifecycle state under `/var/lib/remnanode-lite-installer`.
+
+`rnlctl` is a host administration process, not part of the resident Node. Its transaction engine verifies a complete release bundle, prepares the service definition, changes `current` and `previous` generation links, preserves enabled/running state, and commits only after the selected binary and private health socket pass. A durable journal makes an interrupted mutation visible to `status --json` and recoverable through `repair`. The independent `/usr/local/sbin/rnlctl` binary is never a symlink into the generation being repaired.
+
+This delivery state is separate from the in-memory Xray lifecycle described below. Native generations persist software and service intent; they never persist the complete Panel-provided Xray configuration.
+
 ## 3. Packages and Dependency Direction
 
 The composition root is [`cmd/remnanode-lite/main.go`](../cmd/remnanode-lite/main.go). It constructs concrete components and connects them through small interfaces. Runtime packages do not use a global service locator or dynamic plugin loading.
@@ -75,6 +83,8 @@ The composition root is [`cmd/remnanode-lite/main.go`](../cmd/remnanode-lite/mai
 | `cmd/remnanode-lite` | Production CLI, dependency assembly, daemon startup, and coordinated shutdown |
 | `cmd/asn-builder` | Offline construction of the low-memory binary ASN index |
 | `cmd/contract-probe` | Controlled black-box contract comparison between official and candidate Nodes |
+| `cmd/rnlctl` | Native host administration CLI |
+| `cmd/release-tool` | Deterministic runtime materialization, Native bundle/SBOM construction, and verification |
 | `internal/config` | Bounded configuration reads, environment overrides, defaults, and Secret file reads |
 | `internal/secret` | Decode Panel `SECRET_KEY` and extract the CA, JWT public key, and Node certificate/private key |
 | `internal/auth` | RS256 JWT signature verification, `exp`/`nbf` checks, and optional identity-claim validation |
@@ -95,6 +105,7 @@ The composition root is [`cmd/remnanode-lite/main.go`](../cmd/remnanode-lite/mai
 | `internal/bodylimit` | Raw and decoded request-body limits, plus compression decoder admission |
 | `internal/executil` | External command execution with context, bounded output, and reliable finalization |
 | `internal/doctor` | Native-deployment checks for configuration, assets, capabilities, and tools |
+| `internal/rnlctl` | Native generation, transaction journal, service-manager, repair, and uninstall engine |
 | `internal/version` | Project release version and the contract version reported to Panel |
 | `internal/contract` | Independent evidence model for the official contract; not part of the daemon runtime path |
 
@@ -125,7 +136,7 @@ The daemon entry point is `runNode`, which `main` calls when no CLI arguments ar
 
 1. Parse runtime configuration.
    - An explicitly configured `REMNANODE_ENV` path has priority.
-   - Otherwise, use `/etc/remnanode/node.env` if it exists, then fall back to `.env`.
+   - Otherwise, use `/etc/remnanode-lite/node.env` if it exists, then fall back to `.env`.
    - Load file values first, then override them with known, non-empty process environment variables.
 2. Create the immutable request-body budget for the public `/node` server. Parsed contract and core version values remain in `Config` and are not written back to the process environment.
 3. Apply the Go soft memory limit. An explicit `GOMEMLIMIT` takes precedence over the `180 MiB` default selected by `LOW_MEMORY=1`.
@@ -507,8 +518,12 @@ The outer systemd or Compose stop grace must exceed the application's 25-second 
 | ASN prefix data | `asn.DB` | Read-only file + `ReadAt` | Read-only on-disk asset |
 | nftables rules | Linux kernel | Plugin transaction + backend mutex | Network namespace |
 | rw-core logs | Capped writers / periodic rotation | Writer mutex / rotation mutex | `LOG_DIR`, normally tmpfs in a container |
+| Native selected generations | `rnlctl` | Process lock + durable journal + atomic files/symlinks | Across host restarts until upgrade/uninstall |
+| Native service intent and account ownership | `rnlctl` | Strict JSON state committed after service verification | Across host restarts until uninstall/purge |
 
 The Node does not persist the complete Xray configuration received from Panel, the Plugin snapshot, user hashes, or Torrent reports. Correct recovery after a process restart comes from Panel synchronizing state again, not from reading stale local state.
+
+Native lifecycle state records release identity, generation selection, service intent, repair cache identity, and whether the installer created the service account. It contains no Panel Secret and no active Xray configuration. `/etc/remnanode-lite/secret.key` is a separate root-managed file.
 
 The ASN database uses the custom little-endian `RWASNDB\x01` format. It reads a matching ASN's prefix blob only when needed, without using mmap or loading the whole database into memory. Startup checks only the header and magic. Corruption elsewhere in the file normally appears as an empty lookup result, so startup is not a full-database validation.
 
@@ -653,5 +668,7 @@ Use the following files as sources of truth when inspecting or changing behavior
 | Protobuf wire contract | `internal/xrayrpc/wire/wire.proto` + wire golden tests |
 | Project and contract versions | `internal/version` and `internal/version/contract.version` |
 | Container runtime boundary | `compose.yaml` and `Dockerfile` |
+| Native filesystem and transaction boundary | `internal/rnlctl`, `release/native/install.sh`, and `deploy/remnanode-lite.*` |
+| Runtime asset provenance and bundle shape | `release/runtime-assets.lock.json` and `cmd/release-tool` |
 
 Documentation explains these constraints and their rationale. When documentation disagrees with an executable source of truth, inspect the code and tests first, then correct the documentation in the same change. Historical milestones and one-time measurements must not be treated as permanent architectural facts.

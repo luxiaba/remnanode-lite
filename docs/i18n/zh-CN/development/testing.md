@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=0902bbd152531d3c38b6c327a6760cdef9e63f5f61ef58d18fd5fcc63d4775d8 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=dd6d5523016be30ce31743f95d40280684a1f780effa4dab47fe622effe19227 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -26,7 +26,8 @@
 | 普通 Go 回归 | `go test -count=1 ./...` | 中 |
 | Go 提交前检查 | `bash scripts/check-go.sh` | 中至高 |
 | Shell、Docker、workflow 或供应链 | `bash scripts/check-repository.sh` | 中至高 |
-| Installer 事务 | `bash scripts/test-install-ops.sh` | 高 |
+| Native bootstrap 或 bundle 格式 | `sh release/native/install_test.sh`、`go test ./cmd/release-tool` | 中至高 |
+| Native 生命周期或 service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | 高 |
 | 完整仓库门禁 | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | 高 |
 | Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
 | 低内存预算 | `scripts/test-low-memory.sh --rw-core ...` | Docker/真实 core |
@@ -203,20 +204,17 @@ REQUIRE_GOVULNCHECK=1 \
 
 `check.sh` 成功并不能证明生产行为。它不会让候选镜像连接真实 Panel、承载真实流量，也不会覆盖所有支持架构、init 系统、宿主规格、负载和故障路径。
 
-## Installer 测试
+## Native 发行与生命周期测试
 
-安装、升级、卸载、service unit、OpenRC 或 `install-env-helpers.sh` 变化至少运行：
+修改 `release/native/install.sh`、bundle 格式、`rnlctl`、service 定义、账号所有权、升级、回滚、修复或卸载时运行：
 
 ```bash
-bash scripts/test-install-ops.sh
-bash scripts/check-repository.sh
+sh release/native/install_test.sh
+go test -count=1 ./cmd/release-tool ./internal/rnlctl ./cmd/rnlctl
+go test -race -count=1 ./cmd/release-tool ./internal/rnlctl
 ```
 
-`test-install-ops.sh` 使用临时目录和命令替身，离线验证锁、权限、路径安全、Secret
-迁移、原子替换、失败回滚、systemd/OpenRC 状态转换和卸载隔离。它不会改动真实
-`/etc/remnanode` 或启动本机服务。
-
-测试中的部分分支只有系统提供 `flock` 时才会运行。macOS 结果不能替代 Ubuntu CI 或适当的原生 Linux 检查。安装器行为变化仍须运行对应的 CI 和离线事务测试。
+bootstrap fixtures 覆盖精确版本下载、本地归档摘要、`--yes`、`--prepare-only`、Secret 文件和移动通道拒绝。`internal/rnlctl` 使用临时 root 与 service fake，覆盖严格 manifest、锁和 journal、generation 原子选择、服务状态恢复、回滚、repair、账号所有权及 purge 安全；不会写入真实 `/etc/remnanode-lite` 或启动宿主服务。
 
 ## Linux 网络管理集成测试
 
@@ -342,7 +340,8 @@ REQUIRE_GOVULNCHECK=1 \
 | 插件纯逻辑 | `plugin` race | HTTP lifecycle 交错测试 |
 | nftables/socket destroy | 对应 Linux unit test | 两条 namespace 集成测试 |
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
-| Shell/service | `bash scripts/check-repository.sh`、`bash scripts/test-install-ops.sh` | 风险需要时运行真实 systemd/OpenRC |
+| Native bootstrap | `sh release/native/install_test.sh` | 在目标主机安装精确 Release |
+| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`、`go test -race ./internal/rnlctl` | 改动 Native runtime 行为时实测 systemd/OpenRC |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建，以及严格容器限制下的真实候选验证 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |
@@ -360,7 +359,7 @@ REQUIRE_GOVULNCHECK=1 \
 | --- | --- |
 | `go` | 固定官方源码 + `scripts/check-go.sh` |
 | `repository` | 安装固定静态工具 + `scripts/check-repository.sh` |
-| `installer` | `scripts/test-install-ops.sh` |
+| `native` | `sh release/native/install_test.sh`、runtime lock 校验 |
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
 

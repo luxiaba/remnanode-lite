@@ -102,9 +102,9 @@ The resource design keeps the official HTTP contract while placing explicit limi
 
 The complete Xray Go module was replaced with a minimal protobuf wire client calibrated against the official generated types. Five account types, Handler requests, Stats messages, and deterministic golden-wire tests jointly pin compatibility.
 
-With `LOW_MEMORY=1`, the public `/node` server defaults to a 16 MiB request-body limit and the Go runtime receives a 180 MiB managed-memory soft limit. Explicit `BODY_LIMIT_MB` accepts `1..1024`; invalid, negative, or overflowing values fail process startup instead of falling back silently. The internal Unix webhook retains its independent 8 KiB fixed limit. Debian and Alpine installers enable low-memory mode automatically when whole-machine memory is no more than 512 MiB.
+With `LOW_MEMORY=1`, the public `/node` server defaults to a 16 MiB request-body limit and the Go runtime receives a 180 MiB managed-memory soft limit. Explicit `BODY_LIMIT_MB` accepts `1..1024`; invalid, negative, or overflowing values fail process startup instead of falling back silently. The internal Unix webhook retains its independent 8 KiB fixed limit. The maintained Docker and Native templates enable low-memory mode by default.
 
-Production init reads only `/etc/remnanode/node.env`; it does not fall back to a service-writable working directory. The configuration must be a regular, non-symlink file of at most 1 MiB, 4,096 lines, and 256 assignments. Configuration and Secret files are checked and bounded-read through the same descriptor opened with `O_NOFOLLOW|O_NONBLOCK`. systemd and OpenRC do not export the complete configuration environment; `GOMEMLIMIT` and version overrides are validated and applied by the same Go parser.
+Production Native services set `REMNANODE_ENV=/etc/remnanode-lite/node.env`; they do not fall back to a service-writable working directory. The configuration must be a regular, non-symlink file of at most 1 MiB, 4,096 lines, and 256 assignments. Configuration and Secret files are checked and bounded-read through the same descriptor opened with `O_NOFOLLOW|O_NONBLOCK`. systemd and OpenRC do not export the complete configuration environment; `GOMEMLIMIT` and version overrides are validated and applied by the same Go parser.
 
 The real-rw-core `v26.6.27` gate at 1 CPU, 448 MiB, and no swap covers a 1k-user start, unchanged sync, 50k-user restart, hot add/remove, and statistics RPCs. Its dated M6 engineering cgroup peak was 143.9 MiB. This is a repeatable engineering baseline, not a guarantee for every workload. Reproduction conditions and per-stage measurements are in [`resource-budget.md`](resource-budget.md).
 
@@ -114,9 +114,9 @@ The public server requires TLS 1.3 or later and disables Go's automatic HTTP/2 n
 
 systemd and OpenRC run under the dedicated `remnanode:remnanode` account. Configuration is `root:remnanode 0640`; state and log directories are `remnanode:remnanode 0750`. The service receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd also narrows the bounding set to those capabilities and enables `NoNewPrivileges`, read-only system paths, namespace/syscall/address-family restrictions, `448 MiB` memory, zero swap, 1 CPU, and 256 tasks. Alpine 3.22 measurements for `supervise-daemon` showed `CapInh/Prm/Eff/Amb=0x1400` and `NoNewPrivs=1`; an `nft` child launched by the service could create the private table.
 
-Project assets live under `/usr/local/lib/remnanode` and `/usr/local/share/remnanode`; the project does not take ownership of generic Xray paths. Release archives, rw-core zips, custom cores, and ASN data must pass SHA-256, structure, and version checks before installation. The audited digest for pinned rw-core `v26.6.27` cannot be overridden.
+Native project assets live in verified generations under `/usr/local/lib/remnanode-lite`; Docker uses private image paths under `/usr/local/lib/remnanode` and `/usr/local/share/remnanode`. Neither deployment takes ownership of generic system Xray paths. One release bundle contains Node, `rnlctl`, rw-core, geo data, ASN data, notices, and service material. The outer archive, strict manifest, architecture, versions, and every payload digest are verified before installation.
 
-An upgrade backs up the binary, service definition, support assets, `node.env`, and optional rw-core assets. If the refreshed service or port check fails, every item is restored. Fault injection with bad service definitions on Ubuntu/systemd and Alpine/OpenRC verified digest and runtime-state restoration. Full-uninstall tests also verified that unrelated same-named processes remain running and generic Xray files remain untouched.
+Native upgrade creates a complete generation, atomically selects it, restores the previous enabled/running service state, validates the binary version, and waits for the private healthcheck before commit. Failure restores the committed generation; one previous generation remains available for explicit rollback. Full-uninstall tests also verify that unrelated processes, pre-existing account objects, and generic Xray files remain untouched.
 
 The dated M7 systemd/OpenRC and bad-service rollback observations above are engineering baselines. They apply only to the recorded commits and environments.
 
@@ -173,22 +173,25 @@ The table summarizes only core constraints. Executable schemas in `internal/cont
 
 The previously recorded TLS/socket and system supply-chain differences are closed. There is currently no known static P1/P2 difference in the `/node` contract.
 
-Before publishing `v2.8.0`, the maintainer verifies the immutable
+The `v2.8.0` candidate was verified as the immutable
 `sha-<40-character-main-commit>` image with the production Compose template on
-native `x86_64`/`amd64`, confirms the expected version and a real Panel 2.8.1
-connection, and carries real proxy traffic. This operational confirmation stays
-outside the source repository. The container itself remains bounded to 448 MiB
-memory, no additional container swap, 1 CPU, and 256 PIDs.
+native `x86_64`/`amd64`, including its version, a real Panel 2.8.1 connection,
+and real proxy traffic. This operational confirmation stays outside the source
+repository. The container remains bounded to 448 MiB memory, no additional
+container swap, 1 CPU, and 256 PIDs.
 
-The annotated tag must point to the current `main` HEAD. The release workflow
-resolves that commit's `sha-*` candidate, verifies its two runnable Linux
-manifests, associated BuildKit attestations, and GitHub source attestation, then
-promotes the same digest to `2.8.0` and `latest` without rebuilding it. GitHub
-generates the Release notes automatically.
+Every annotated release tag must point to the current `main` HEAD. The release
+workflow resolves that commit's `sha-*` candidate, verifies its two runnable
+Linux manifests and attestations, builds and verifies both Native bundles, and
+promotes the same digest without rebuilding. A plain stable version advances
+`latest`; an `rnl.N` prerelease such as `2.8.0-rnl.1` advances `preview` only.
 
-Native `arm64` runtime coverage, systemd and OpenRC installation, repeated 50,000-user load, long soak, and fault-injection testing remain useful follow-up validation. They must not be described as completed unless they were actually run.
+Additional Native `arm64` runtime coverage, distribution-specific systemd and
+OpenRC installation, repeated 50,000-user load, long soak, and fault injection
+remain useful follow-up validation. They must not be described as completed
+unless they were actually run.
 
-Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd and OpenRC remain equivalent native deployment entry points.
+Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd is the maintained Native service path; OpenRC is experimental and requires verified cgroup v2 controllers.
 
 Both maintained production Compose templates use `remnanode-lite` for the
 service, container, and hostname. They interpolate the same explicit runtime

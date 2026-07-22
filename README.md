@@ -12,11 +12,11 @@
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-[Docker quick start](#docker-quick-start) · [Configuration](docs/configuration.md) · [Operations](docs/operations.md) · [Documentation](docs/README.md)
+[Docker quick start](#docker-quick-start) · [Native Linux](#native-linux) · [Configuration](docs/configuration.md) · [Operations](docs/operations.md) · [Documentation](docs/README.md)
 
 </div>
 
-Remnanode Lite runs a Remnawave-compatible Node on Linux. It receives configuration from Remnawave Panel, supervises rw-core, manages users and plugin rules, and reports system and traffic statistics. The Docker image bundles rw-core and its runtime data files.
+Remnanode Lite runs a Remnawave-compatible Node on Linux. It receives configuration from Remnawave Panel, supervises rw-core, manages users and plugin rules, and reports system and traffic statistics. Docker images and Native Linux bundles both include the exact rw-core and runtime data selected for that release.
 
 The maintained deployment profile is designed for a server with **512 MiB RAM, 1 vCPU, and 2 GB of disk**. Images are available for both `linux/amd64` and `linux/arm64`.
 
@@ -27,10 +27,12 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 
 - Implements the Remnawave Node `2.8.0` API contract.
 - Runs the Node as one Go process that directly manages rw-core, without Node.js or s6.
-- Includes a maintained low-memory Compose profile for 512 MiB servers.
+- Uses Docker Compose as the simplest deployment path, with a self-contained Native Linux option for hosts that cannot run Docker.
+- Includes the same maintained low-memory profile for container and Native services on 512 MiB servers.
 - Supports live user updates, statistics, connection management, and the official plugin rule formats.
 - Publishes multi-architecture images to GHCR with SBOM, provenance, and build attestations.
-- Uses one Compose file for deployment. No source tree or persistent data volume is required, and `.env` remains optional.
+- Publishes verified `amd64` and `arm64` Native bundles with transactional install, upgrade, rollback, and repair through `rnlctl`.
+- Uses one Compose file for Docker deployment. No source tree or persistent data volume is required, and `.env` remains optional.
 
 ## Docker quick start
 
@@ -85,6 +87,40 @@ docker compose logs --tail=100 remnanode-lite
 The container should become healthy, then the Node should return online in the Panel. Confirm the deployment with real proxy traffic. Container health alone does not check Panel connectivity or rw-core traffic.
 
 The official container's `NODE_PORT` and `SECRET_KEY` can be reused when migrating. Stop the old container before starting this one. The [Docker deployment guide](docs/deployment-docker.md) covers migration, exact-version installs, digest pinning, and rollback.
+
+## Native Linux
+
+Use the Native bundle when Docker is unavailable or too expensive for the host. Rocky Linux 9 with systemd is the primary target; Rocky Linux 8 and Debian 12 are compatible. OpenRC support is experimental and requires a working cgroup v2 setup.
+
+Native installs never follow a moving channel. The first Native release is
+planned as `2.8.0-rnl.1` and is not published yet. Once that exact GitHub
+prerelease is available, download `install.sh` and `SHA256SUMS`, verify the
+installer, and name the release explicitly:
+
+```bash
+VERSION=2.8.0-rnl.1
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
+curl -fLO "${BASE}/install.sh"
+curl -fLO "${BASE}/SHA256SUMS"
+grep '  install.sh$' SHA256SUMS | sha256sum --check --strict -
+
+sudo sh ./install.sh --version "$VERSION" --port 38329
+```
+
+The installer securely prompts for the complete Panel Secret when one is not already installed. It verifies and installs one complete generation: Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, and service definitions. After startup:
+
+```bash
+sudo rnlctl status --json
+sudo rnlctl doctor
+sudo rnlctl logs node --lines 100
+```
+
+The first planned release using this Native lifecycle is `2.8.0-rnl.1`,
+implementing contract `2.8.0`. It will be a GitHub prerelease and will not move
+the stable `latest` channel. Read the [Native Linux guide](docs/deployment-native.md)
+before fleet rollout; it covers prerequisites, unattended and offline
+installation, exact-version upgrades, rollback, repair, and uninstall.
 
 ## Docker Compose environment variables
 
@@ -147,6 +183,7 @@ docker compose up -d --no-build --force-recreate
 | `X.Y.Z` | Stable Release aligned with the corresponding official Node contract. Recommended for production and rollback. |
 | `X.Y.Z-rnl.N` | A tested Remnanode Lite iteration for work ahead of or beyond an official alignment point. |
 | `latest` | The most recently completed stable Release. It moves, so it is not a rollback reference. |
+| `preview` | The most recently promoted `rnl.N` prerelease. It never advances `latest`. |
 | `sha-<commit>` | Immutable image built from a specific `main` commit. Use it to verify a release candidate. |
 | `edge` | Current `main` image for short-lived testing only. |
 
@@ -156,6 +193,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 
 | Item | Current baseline |
 | --- | --- |
+| Next Native preview (planned) | `2.8.0-rnl.1` |
 | Node contract | `2.8.0` |
 | rw-core | `v26.6.27` |
 | Platforms | `linux/amd64`, `linux/arm64` |
@@ -201,14 +239,16 @@ go mod download
 go test -count=1 ./...
 mkdir -p bin
 go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
+go build -trimpath -o bin/rnlctl ./cmd/rnlctl
 ./bin/remnanode-lite version
+./bin/rnlctl version
 ```
 
 Linux network integration, real rw-core behavior, and Panel compatibility are separate test layers. Start with the [development guide](docs/development/README.md) before changing those areas.
 
 ## Security
 
-The container uses host networking and holds `NET_ADMIN`, so it can change networking state on the host. Run only trusted images and prefer an exact version or manifest digest. Keep the Compose file at mode `0600`, and restrict access to the Docker socket and host administrator accounts.
+Docker and Native services use the host network namespace and hold `NET_ADMIN`, so they can change networking state on the host. Run only trusted release artifacts and prefer an exact version or manifest digest. Keep the Compose directory or `/etc/remnanode-lite` private, and restrict access to the Docker socket and host administrator accounts.
 
 Do not post Secrets, certificates, real Node details, or vulnerability exploits in a public Issue. Follow [SECURITY.md](SECURITY.md) for private reporting.
 

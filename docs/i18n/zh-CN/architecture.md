@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d14398316f857d2ee475ae8b391bd0240b0c0eef01fbad4dae9a0bdb3822ad73 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=55cbca863d4264b8ef599f48c671f902706ba6c694bc1e6a0cf8620b34245c5f -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -128,7 +128,7 @@ cmd/remnanode-lite
 
 1. 解析运行配置。
    - `REMNANODE_ENV` 显式指定路径时优先。
-   - 否则优先已有的 `/etc/remnanode/node.env`，最后回退 `.env`。
+   - 否则优先已有的 `/etc/remnanode-lite/node.env`，最后回退 `.env`。
    - 配置文件值先加载，已知且非空的进程环境变量再覆盖它们。
 2. 创建公开 `/node` server 的不可变请求体预算；经过配置解析的 contract/core 版本值保留在 `Config`，不写回进程环境。
 3. 应用 Go 内存软上限。显式 `GOMEMLIMIT` 优先于 `LOW_MEMORY=1` 的 `180 MiB` 默认值。

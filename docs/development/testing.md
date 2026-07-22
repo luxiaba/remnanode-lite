@@ -23,7 +23,8 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Normal Go regression | `go test -count=1 ./...` | Medium |
 | Go pre-commit gate | `bash scripts/check-go.sh` | Medium to high |
 | Shell, Docker, workflow, or supply chain | `bash scripts/check-repository.sh` | Medium to high |
-| Installer transaction | `bash scripts/test-install-ops.sh` | High |
+| Native bootstrap or bundle format | `sh release/native/install_test.sh`, `go test ./cmd/release-tool` | Medium to high |
+| Native lifecycle state or service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | High |
 | Complete repository gate | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | High |
 | Linux network management | Two network-namespace integration tests | Linux/root |
 | Low-memory budget | `scripts/test-low-memory.sh --rw-core ...` | Docker/real core |
@@ -190,22 +191,42 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` combines the Go gate, repository gate, offline installer tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. The release workflow requires the scanner explicitly.
+`check.sh` combines the Go gate, repository gate, offline Native bootstrap tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. The release workflow requires the scanner explicitly.
 
 A successful `check.sh` run does not prove production behavior. It does not run the candidate image with a real Panel and real traffic, nor does it exercise every supported architecture, init system, host size, load, or fault path.
 
-## Installer Tests
+## Native Delivery and Lifecycle Tests
 
-A change to installation, upgrade, uninstall, service definitions, OpenRC, or `install-env-helpers.sh` requires at least:
+A change to `release/native/install.sh`, the release bundle format, `rnlctl`,
+service definitions, account ownership, upgrade, rollback, repair, or
+uninstall requires the focused checks below:
 
 ```bash
-bash scripts/test-install-ops.sh
-bash scripts/check-repository.sh
+sh release/native/install_test.sh
+go test -count=1 ./cmd/release-tool ./internal/rnlctl ./cmd/rnlctl
+go test -race -count=1 ./cmd/release-tool ./internal/rnlctl
 ```
 
-`test-install-ops.sh` uses temporary directories and command mocks to verify locking, permissions, path safety, Secret migration, atomic replacement, failure rollback, systemd/OpenRC state transitions, and uninstall isolation without changing real `/etc/remnanode` state or starting local services.
+The bootstrap fixtures exercise exact-version downloads, local archive
+checksums, `--yes`, `--prepare-only`, Secret-file handling, and refusal of
+moving channels. `internal/rnlctl` tests use temporary roots and service fakes
+to cover strict manifests, locks and journals, atomic generation selection,
+service-state restoration, rollback, repair, account ownership, and purge
+safety. They never write the real `/etc/remnanode-lite` tree or start a host
+service.
 
-Some branches run only when `flock` is available. A macOS result cannot replace the Ubuntu CI job or an appropriate native Linux check. Installer changes still require the corresponding CI and offline transaction tests.
+Build and verify real bundles when the archive shape, runtime assets, or
+release scripts change:
+
+```bash
+mkdir -p dist/native
+bash scripts/build-native-bundle.sh dist/native amd64 arm64
+```
+
+The build requires the exact Go toolchain and the pinned runtime asset cache.
+Use `RNL_OFFLINE_BUILD=1` only with a complete cache. A macOS test result does
+not replace the Linux CI bootstrap job or a real systemd/OpenRC check when
+service-manager behavior changed.
 
 ## Linux Network-Management Integration Tests
 
@@ -324,11 +345,12 @@ repository.
 The tag must point to the current `main` HEAD. The release workflow resolves
 its `sha-*` candidate, requires exactly the runnable `linux/amd64` and
 `linux/arm64` manifests with their BuildKit attestations, verifies the GitHub
-attestation against the tagged commit, and promotes that same digest to the
-exact version and `latest`. It publishes the release archives and lets GitHub
-generate the Release notes automatically.
+attestation against the tagged commit, builds and attests both Native bundles,
+and promotes that same digest to the exact version without rebuilding. A plain
+`X.Y.Z` tag is stable and advances `latest`; an `X.Y.Z-rnl.N` tag is a GitHub
+prerelease and advances `preview` only.
 
-See the [versioning policy](../versioning.md) for tag, version, and `latest` semantics, and the [release process](../release.md) for candidate verification and publication steps.
+See the [versioning policy](../versioning.md) for tag, version, and channel semantics, and the [release process](../release.md) for candidate verification and publication steps.
 
 ## Selecting Tests by Change
 
@@ -343,7 +365,8 @@ See the [versioning policy](../versioning.md) for tag, version, and `latest` sem
 | Plugin pure logic | `plugin` race test | HTTP lifecycle interleaving tests |
 | nftables/socket destruction | Corresponding Linux unit test | Both namespace integration tests |
 | Configuration/Secret/JWT | `config`, `secret`, `auth`, server security | Installer Secret flow |
-| Shell/service | `bash scripts/check-repository.sh`, `bash scripts/test-install-ops.sh` | Real systemd/OpenRC when the change affects native runtime behavior |
+| Native bootstrap | `sh release/native/install_test.sh` | Exact-release install on the target host |
+| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`, `go test -race ./internal/rnlctl` | Real systemd/OpenRC when the change affects Native runtime behavior |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build plus risk-driven real-environment verification |
 | Dependency or downloadable asset | `go mod tidy -diff`, supply-chain checks, govulncheck | Dual-architecture build, SBOM, and attestation |
 | Project version | `bash scripts/check-version.sh` | Release preflight |
@@ -361,7 +384,7 @@ The required gate in `.github/workflows/ci.yml` aggregates four parallel jobs:
 | --- | --- |
 | `go` | Pinned official source plus `scripts/check-go.sh` |
 | `repository` | Install pinned static tools plus `scripts/check-repository.sh` |
-| `installer` | `scripts/test-install-ops.sh` |
+| `native` | `sh release/native/install_test.sh`, runtime-lock validation |
 | `netadmin` | Both Linux namespace integration tests |
 | `gate` | Requires every job above to report success |
 

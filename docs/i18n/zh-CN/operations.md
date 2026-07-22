@@ -1,154 +1,88 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=26c82a97a0e0729474144a85684b20c207a215c2c810d8328c24846b65a58d48 -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=f03602e2e244d99b290147dcf772200e2b61349c488094934abe70a55fcb3c50 -->
 
-# 运维手册
+# 运维与故障排查
 
-> 这是中文译文；涉及运维规则时，请以[英文原文](../../operations.md)为准。
+[英文原文](../../operations.md) · [文档索引](README.md) · [Docker 部署](deployment-docker.md) · [Native 部署](deployment-native.md) · [配置参考](configuration.md)
 
-[返回文档索引](README.md)
+Remnanode Lite 的持久数据很少。Panel 仍是代理配置的真相源，日常运维主要确认四件事：Node 进程、Panel 连接、rw-core 状态和真实代理流量。
 
-本文介绍节点上线后的日常操作：检查状态、查看日志、更新或回滚，以及排查常见故障。
+## 每项检查能证明什么
 
-## 运行状态模型
-
-Remnanode Lite 同时管理两个不同层次的进程状态：
-
-- Node 是长期运行的 HTTPS 服务，负责认证 Panel 请求、统计、插件和 rw-core 生命周期。
-- rw-core 只在 Panel 下发 `/node/xray/start` 后运行。
-
-Node 不持久化 Panel 下发的完整 Xray 配置。容器、服务或主机重启后，Node 先上线并报告 core 离线；Panel 健康循环随后重新下发配置。这是与官方 Node 对齐的正常恢复路径。
-
-“进程运行”“容器 healthy”“Panel 在线”和“rw-core online”不是同一状态：
-
-| 层次 | 能证明什么 | 不能证明什么 |
+| 检查 | 能证明 | 不能证明 |
 | --- | --- | --- |
-| service/container running | Node 主进程仍存在 | 监听端口、认证和 core 状态 |
-| Compose `healthy` | PID 1 存在且内部 Unix Socket 已建立 | Panel 可达、mTLS/JWT 或 rw-core online |
-| TCP 端口由 Node 持有 | Node 已监听配置端口 | Secret、Panel 网络和认证正确 |
-| Panel 节点在线 | Panel 已通过 mTLS/JWT 与 Node 通信 | 所有代理入站端口均可达 |
-| Panel 显示 core online | rw-core 已启动且内部 gRPC readiness 通过 | 每个代理协议和外部网络均正常 |
+| 容器或服务在运行 | supervisor 看见 Node 进程 | 内部 health 可用 |
+| Docker health 或 `rnlctl status --json` 正常 | 私有 Unix socket 可响应，受管状态一致 | Panel 能访问公网端口 |
+| Panel 显示 Node online | mTLS/JWT 与 Panel-to-Node 路径正常 | rw-core 已有可用代理配置 |
+| Panel 显示 rw-core online | core 启动和内部 gRPC 正常 | 所有代理路径都可传输 |
+| 客户端真实传输 | 当前测试路径端到端可用 | 所有协议、地址族和路由都可用 |
 
-`/node/xray/healthcheck` 是受 mTLS 和 JWT 保护的 Panel API，不是匿名 HTTP 探活端点。不要在外部监控中直接发送普通 curl 请求。
+公开的 `/node/xray/healthcheck` 需要 mTLS 与 JWT，不是匿名监控端点。
 
-## 日常状态检查
-
-### Docker Compose
-
-```bash
-docker compose ps
-docker compose logs --tail=100 remnanode-lite
-ss -H -lntp 'sport = :38329'
-```
-
-应在 Compose 文件及可选 `.env` 所在目录运行命令。Compose 会自动用该 `.env` 做变量插值，同名已导出 shell 变量的优先级更高。只有 Compose `environment` mapping 中显式声明的变量会进入容器，不会整份注入 `.env`。
-
-将 `38329` 换成实际 `NODE_PORT`。Compose healthcheck 会在容器内运行：
-
-```text
-remnanode-lite healthcheck
-```
-
-该命令会在 2 秒超时内连接 `INTERNAL_SOCKET_PATH` 对应的 Unix socket，确认 Node 正在接受内部连接，而不只是检查 socket 文件。它不会测试 Panel 网络、mTLS/JWT 或注册状态。如果 Compose 显示 `healthy`，但 Panel 仍显示离线，请继续检查端口、防火墙、Secret 和 Panel 配置。
-
-### systemd
-
-```bash
-sudo systemctl --no-pager status remnawave-node
-sudo systemctl show remnawave-node \
-  --property=ActiveState,SubState,MainPID,MemoryCurrent,TasksCurrent
-sudo ss -H -lntp 'sport = :2222'
-sudo remnanode-lite doctor
-```
-
-### OpenRC
-
-```bash
-rc-service remnawave-node status
-ss -H -lntp 'sport = :2222'
-remnanode-lite doctor
-```
-
-`doctor` 检查配置、Secret 格式、rw-core、geo、ASN、nft、ss 和当前进程能力。它不连接 Panel，也不证明 core 已启动。当前实现还会检查 systemd unit，因此 OpenRC 上缺少 systemd unit 的 WARN 可以忽略；ERROR 需要处理。
-
-指定其它原生配置文件：
-
-```bash
-sudo remnanode-lite doctor --env /path/to/node.env
-```
-
-容器部署通常不使用 `doctor` 作为健康检查：默认镜像没有 `/etc/remnanode/node.env`，而配置来自环境变量。以 Compose health、Node 日志和 Panel 状态为准。
-
-## CLI 命令速查
-
-`remnanode-lite` 不带参数时启动 daemon。其它子命令用于只读诊断、安装器内部校验或明确的管理操作：
-
-| 命令 | 用途 | 注意事项 |
-| --- | --- | --- |
-| `remnanode-lite version` | 显示项目版本与编译时默认契约版本 | 不解析 `node.env`，也不读取进程环境；可用于二进制 smoke test。daemon 实际上报值仍可由已校验配置中的 `NODE_CONTRACT_VERSION` 覆盖 |
-| `remnanode-lite doctor [--env PATH]` | 检查原生配置、Secret、资产、工具和 capability | 不连接 Panel，也不启动 rw-core |
-| `remnanode-lite validate-secret` | 从 stdin 校验并规范化 Secret，但不输出内容 | 适合写盘或重启前验证；成功退出码为 0 |
-| `remnanode-lite canonicalize-secret <path\|->` | 将规范化 Secret 写到 stdout | 输出仍是完整敏感数据，只能重定向到权限受限文件，不能进入日志 |
-| `remnanode-lite kill-sockets` | 交互读取一个 IP，并销毁本地或远端地址匹配该 IP 的 connected TCP socket | 需要 `CAP_NET_ADMIN`；CLI 直接调用内核适配器，不经过业务层的本机地址保护 |
-| `remnanode-lite release-url <tag> <arch>` | 生成受校验的 Release 归档 URL | 供安装器使用，tag 和架构不合法时失败 |
-| `remnanode-lite install-script-url <tag> <script>` | 生成受校验的安装脚本 URL | 只接受允许的脚本名，主要供 bootstrap 使用 |
-
-查看参数摘要：
-
-```bash
-remnanode-lite --help
-```
-
-不要在运行中的生产容器里再启动第二个 daemon；进程和 nftables 所有权按单实例设计。
-
-`kill-sockets` 是管理工具，不是健康检查。它会在整个 network namespace 中匹配 local **或** remote address，不按 PID 或容器过滤。输入宿主机本地地址可能关闭无关连接，因此只能在隔离节点上使用，并且必须先确认目标地址不是本机地址。
-
-## 日志
-
-### Node 日志
-
-| 部署方式 | 查看命令 | 保存方式 |
-| --- | --- | --- |
-| Docker | `docker compose logs -f remnanode-lite` | Docker `json-file`，生产模板为 `2 MiB x 2`。 |
-| systemd | `journalctl -u remnawave-node -f` | 由宿主 journald 配额管理。 |
-| OpenRC | `tail -F /var/log/remnanode/openrc.log` | 文件，由 Node 每 10 秒检查轮转。 |
-
-systemd 的 `LogRateLimitIntervalSec=30s`、`LogRateLimitBurst=200` 只限制单位时间消息数，不是长期磁盘上限。2 GB 磁盘主机还应合理配置宿主 journald 总配额，并定期检查：
-
-```bash
-journalctl --disk-usage
-df -h
-```
-
-### rw-core 日志
-
-rw-core 的 stdout 和 stderr 分开保存：
-
-```text
-/var/log/remnanode/xray.out.log
-/var/log/remnanode/xray.err.log
-```
+## 例行检查
 
 Docker：
 
 ```bash
+docker compose ps
+docker compose logs --tail=100 remnanode-lite
+docker inspect remnanode-lite --format \
+  'image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
+docker exec remnanode-lite remnanode-lite version
+ss -H -lntp 'sport = :38329'
+```
+
+Native：
+
+```bash
+sudo rnlctl status --json
+sudo rnlctl doctor
+sudo rnlctl logs node --lines 100
+sudo rnlctl logs core-errors --lines 100
+ss -H -lntp 'sport = :38329'
+```
+
+`status --json` 会给出 current/previous generation、版本、服务管理器、启用与活动状态、repair 能力和待处理操作。状态为 degraded 或 recovery-required 时返回非零。 `doctor` 会校验 manifest、文件摘要、链接、配置、Secret、服务、内部 health 和修复缓存，但不会连接 Panel 或制造代理流量。
+
+底层服务视图：
+
+```bash
+sudo systemctl --no-pager --full status remnanode-lite.service
+sudo systemctl show remnanode-lite.service \
+  --property=ActiveState,SubState,MainPID,MemoryCurrent,MemoryPeak,TasksCurrent
+
+# OpenRC（实验性）
+sudo rc-service remnanode-lite status
+```
+
+## 日志
+
+| 部署 | Node 日志 | 存储 |
+| --- | --- | --- |
+| Docker | `docker compose logs -f remnanode-lite` | Docker `json-file`，维护模板为 `2 MiB x 2` |
+| Native systemd | `sudo rnlctl logs node --follow` | 宿主 journald 策略 |
+| Native OpenRC | `sudo rnlctl logs node --follow` | `/var/log/remnanode-lite/openrc.log` 与 `.err.log` |
+
+小型 systemd 主机应为 journald 设置合理的宿主机配额，并监控 `journalctl --disk-usage` 与 `df -h`。
+
+Docker 的 rw-core 使用容器私有路径：
+
+```bash
 docker exec -it remnanode-lite \
   tail -n 50 -F /var/log/remnanode/xray.out.log
-
 docker exec -it remnanode-lite \
   tail -n 50 -F /var/log/remnanode/xray.err.log
 ```
 
-原生部署：
+Native 使用：
 
 ```bash
-remnanode-xlogs
-remnanode-xerrors
+sudo rnlctl logs core --follow
+sudo rnlctl logs core-errors --follow
 ```
 
-每条 rw-core 日志保留当前文件和一个 `.1` 文件，两者都限制为 4 MiB。正常情况下两条日志合计占用 16 MiB；轮转时临时文件可能短暂再增加约 8 MiB。
+Native 文件位于 `/var/log/remnanode-lite/xray.out.log` 和 `xray.err.log`。每条流保留当前文件和一个 `.1`，阈值为 4 MiB。Docker 把 core 日志目录放在 28 MiB tmpfs，重建容器即可清空。
 
-Docker 把 `/var/log/remnanode` 放在 28 MiB tmpfs 中，重建容器即可清空，不占用持久磁盘。OpenRC 还会写入 `openrc.log` 和 `openrc.err.log`，每 10 秒检查一次，并在 4 MiB 时执行 copy-truncate，因此文件可能在两次检查之间略微超过阈值。
-
-## 启停和重建
+## 启停
 
 Docker：
 
@@ -159,50 +93,37 @@ docker compose up -d --no-build
 docker compose down
 ```
 
-systemd：
+Native：
 
 ```bash
-sudo systemctl restart remnawave-node
-sudo systemctl stop remnawave-node
-sudo systemctl start remnawave-node
+sudo rnlctl restart
+sudo rnlctl stop
+sudo rnlctl start
 ```
 
-OpenRC：
-
-```bash
-rc-service remnawave-node restart
-rc-service remnawave-node stop
-rc-service remnawave-node start
-```
-
-Node 收到 SIGTERM/SIGINT 后使用共享的 25 秒应用关闭预算：停止接收请求、停止 rw-core 进程组，再清理插件和私有 nft 表。Compose 提供 35 秒 grace，systemd 提供 30 秒外层 timeout，OpenRC 使用 `TERM/30/KILL/5`。不要用 `kill -9` 作为日常重启方式。
+使用 `--prepare-only` 创建的安装必须先运行 `rnlctl activate`。正常运维不要使用 `kill -9`，否则会绕过 HTTP drain、rw-core 进程组关闭和 nftables 清理。
 
 ## Docker 更新与回滚
 
-### 镜像引用
+| 引用 | 用途 |
+| --- | --- |
+| `name@sha256:<digest>` | 最强 production 固定和回滚身份 |
+| `X.Y.Z` | 精确稳定版 |
+| `X.Y.Z-rnl.N` | 精确预览版 |
+| `latest` | 可选稳定移动通道 |
+| `preview` | 可选预览移动通道，不用于 production 回滚 |
+| `sha-<40-character-commit>` | main 候选验证 |
+| `edge` | 短期 main 开发观察 |
 
-| 引用 | 特性 | 推荐用途 |
-| --- | --- | --- |
-| `latest` | 随最新稳定发布移动 | 主动 pull 后统一跟随稳定版的小节点。 |
-| `X.Y.Z` | 完成对应官方版本对齐时的项目正式版本 | 固定官方对齐版本。 |
-| `X.Y.Z-rnl.N` | 项目自主迭代版本 | 精确部署和问题定位。 |
-| `sha-<commit>` | 从 main 提交构建的不可变候选 | 正式发布前验证。 |
-| `name@sha256:<digest>` | Registry 内容寻址 | 最严格的不可变固定和回滚。 |
+受控更新流程：
 
-精确 tag 和 `sha-*` 按项目发布策略不应移动，但 Registry tag 本身不是技术上的不可变对象。需要严格复现时固定 manifest digest。
-
-### 受控更新
-
-1. 记录当前 Compose、可选 `.env` 和实际生效的镜像引用。
-2. 阅读目标 Release notes，确认契约、rw-core 和配置变化。
-3. 修改 `.env` 中的 `REMNANODE_IMAGE`，或明确内联的 `image:`，使其指向新精确 tag 或 digest。
-4. 拉取并强制重新创建。
-5. 检查容器、端口、日志和 Panel。
+1. 记录当前精确 tag 或 manifest digest。
+2. 阅读目标 Release notes。
+3. 修改 `.env` 中的 `REMNANODE_IMAGE` 或内联的 `image:`。
+4. pull 并重建容器。
+5. 检查 health、Panel 和代表性流量。
 
 ```bash
-cp -p docker-compose.yaml docker-compose.yaml.rollback
-[ ! -f .env ] || cp -p .env .env.rollback
-
 docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build --force-recreate
@@ -210,137 +131,48 @@ docker compose ps
 docker compose logs --tail=100 remnanode-lite
 ```
 
-使用 `latest` 时同样必须显式执行 pull/recreate。仅运行 `docker compose restart` 不会检查新镜像。
+`latest` 和 `preview` 不会自动更新运行容器，`docker compose restart` 也不会 pull。回滚时恢复之前记录的精确 tag 或 digest，再重复 pull/recreate。
 
-### 一次性 service 与容器改名迁移
+## Native 更新、回滚与修复
 
-旧模板曾把 Compose service、容器和 hostname 命名为 `remnanode`。普通 `up --force-recreate` 不保证删除旧 service：它可能成为 orphan，而 host network 会让新旧容器争用同一端口。
-
-如果可以，应在替换旧 Compose 文件前先停止旧部署。换成新文件后，先清理同 project 的 orphan；若仍有旧容器，只能在检查镜像并确认身份后显式删除：
+Native 只接受精确版本：
 
 ```bash
-docker compose down --remove-orphans
-docker container inspect remnanode \
-  --format 'name={{.Name}} image={{.Config.Image}}' 2>/dev/null || true
+sudo rnlctl upgrade --to 2.8.0-rnl.2
+sudo rnlctl rollback
 ```
 
-如果检查返回容器，应先确认它确实是旧 Node。确认后才单独执行破坏性命令：
+升级把完整 Node/runtime bundle 作为新 generation，并把旧 generation 保留为 previous。若状态显示 `recovery-required`：
 
 ```bash
-docker rm -f remnanode
+sudo rnlctl status --json
+sudo rnlctl repair
+sudo rnlctl doctor
 ```
 
-旧名称消失后，再启动当前 service：
+repair 使用已验证的缓存恢复已提交版本，绝不会自动升级。生命周期变更共用 `/run/remnanode-lite-installer/operation.lock`；等待当前操作完成，不要删除 lock 或 `/var/lib/remnanode-lite-installer/journal.json` 强行并发。
+
+## 修改配置
+
+Docker 修改 `.env` 或 Compose mapping 后重新校验并创建容器。Native 保持 `/etc/remnanode-lite/node.env` 与 `secret.key` 为 `root:remnanode`、服务不可写，然后运行：
 
 ```bash
-docker compose up -d --no-build
-docker compose ps
+sudo rnlctl doctor
+sudo rnlctl restart
 ```
 
-预期运行名称为 `remnanode-lite`，绝不能同时保留两个名称。属于另一个 Compose project 的旧容器不会被 `down --remove-orphans` 删除，因此必须执行上述显式检查。
+Secret 轮换要原子替换 `/etc/remnanode-lite/secret.key`，见 [Native 部署](deployment-native.md#修改端口或-secret)。修改 `NODE_PORT` 时同步更新 Panel 与宿主机防火墙。两种部署都使用 host networking，没有端口转换层。
 
-### 回滚
+## 资源检查
 
-恢复上一个 Compose 输入，或把实际生效的镜像设置改回已验证的精确 tag/digest：
-
-```bash
-cp -p docker-compose.yaml.rollback docker-compose.yaml
-[ ! -f .env.rollback ] || cp -p .env.rollback .env
-chmod 600 docker-compose.yaml
-
-docker compose pull
-docker compose up -d --no-build --force-recreate
-docker compose ps
-```
-
-不要通过覆盖旧 tag 实现回滚。清理前记录一个已验证的旧版本 tag 或 manifest digest，并确认对应镜像仍在本机；始终至少保留这一个明确的回滚镜像：
-
-```bash
-docker system df
-docker image prune
-```
-
-`docker image prune` 默认只删除 dangling image。不要使用会删除所有未运行镜像的批量清理参数，除非已经逐项确认不会删除上述回滚镜像。
-
-不要在 2 GB 生产主机上从源码构建镜像。Go 工具链、基础层和 BuildKit cache 可能明显超过运行时磁盘预算。
-
-## 原生更新与回滚
-
-原生升级由事务脚本完成，不要在运行中手工覆盖二进制。完整命令和事务语义见 [原生 Linux 部署](deployment-native.md#升级)。
-
-日常原则：
-
-- 固定目标 Release tag，不使用分支下载地址。
-- 显式 `--upgrade` 默认保留 rw-core；Release notes 要求时才加 `--upgrade-xray`。不要用重复 `--install` 代替，因为完整安装上的 `--install` 默认会同步 rw-core/geo/ASN。
-- 升级前 stopped 的服务在显式 upgrade 后仍保持 stopped。
-- 只有目标版本进程实际持有配置端口，事务才会提交。
-- 失败时先阅读脚本给出的备份目录和回滚结果，不要删除保留的唯一备份。
-- 回退只选择真实存在的旧 Release；不兼容时同步恢复对应配置和 core。
-
-安装、升级、rw-core 更新和卸载共用 `/run/lock/remnanode-installer.lock`。看到 installer 正在运行时应等待现有操作结束，不要删除锁文件或并行启动另一个变更入口。
-
-## Secret 和端口变更
-
-### Docker
-
-修改 Compose mapping 或同目录 `.env` 后重新创建。shell 优先于 `.env`，且只有 mapping 中声明的键会注入容器：
-
-```bash
-chmod 600 docker-compose.yaml
-docker compose config --quiet
-docker compose up -d --no-build --force-recreate
-```
-
-不要运行无 `--quiet` 的 `docker compose config`，否则展开后的实际生效 Secret 会打印到终端或采集日志。
-
-### 原生部署
-
-先把新 Secret 写入仅当前用户可读的临时文件并校验，再原子替换正式文件：
-
-```bash
-umask 077
-secret_tmp="$(mktemp)"
-printf '%s' '新的完整 Secret Key' >"$secret_tmp"
-remnanode-lite validate-secret <"$secret_tmp"
-
-sudo install -o root -g remnanode -m 0640 \
-  "$secret_tmp" /etc/remnanode/secret.key.new
-sudo mv -f /etc/remnanode/secret.key.new /etc/remnanode/secret.key
-rm -f "$secret_tmp"
-```
-
-然后检查 `/etc/remnanode/node.env` 的有效赋值。非空 `SECRET_KEY` 的优先级高于 `SECRET_KEY_FILE`；若从旧版内联配置迁移，必须清空前者，并让后者指向刚替换的文件：
-
-```env
-SECRET_KEY=
-SECRET_KEY_FILE=/etc/remnanode/secret.key
-```
-
-同一键有重复赋值时最后一个值生效，因此应删除旧的重复项。确认配置后再检查并重启：
-
-```bash
-sudo remnanode-lite doctor
-sudo systemctl restart remnawave-node
-```
-
-OpenRC 将最后一行替换为：
-
-```bash
-rc-service remnawave-node restart
-```
-
-如果校验、安装或配置编辑中途失败，先删除本次临时文件，不要重启服务。不要只覆盖 `secret.key` 而保留非空的内联 `SECRET_KEY`，否则 Node 仍会使用旧值。
-
-修改 `NODE_PORT` 后还必须同步 Panel 节点配置和宿主防火墙。host network 下不能依靠 Compose `ports:` 修正端口不一致。
-
-## 资源与磁盘
-
-规范 Docker 配置始终严格执行 `448 MiB` 内存上限、`448 MiB` 内存与 swap 合计上限、`1 CPU` 和 `256 PIDs`，即使宿主机更大也不放宽。两个 448 MiB 上限相等，因此容器没有额外 swap 配额。整机 `512 MiB RAM / 1 vCPU / 2 GB disk` 是设计目标，不是对任意流量形态的保证；Docker daemon、内核和其它系统服务均在容器限制之外占用资源。
+维护的 Docker 与 Native 配置限制为 `448 MiB RAM`、不额外使用 swap、`1 CPU`、`256 PIDs/tasks`。整机 `512 MiB / 1 vCPU / 2 GB` 是工程目标，不保证任意用户数和协议组合。
 
 Docker：
 
 ```bash
 docker stats --no-stream remnanode-lite
+docker inspect remnanode-lite --format \
+  'oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
 docker system df
 df -h
 ```
@@ -348,121 +180,71 @@ df -h
 systemd：
 
 ```bash
-systemctl show remnawave-node \
+systemctl show remnanode-lite.service \
   --property=MemoryCurrent,MemoryPeak,TasksCurrent,CPUUsageNSec
 journalctl --disk-usage
 df -h
 ```
 
-OpenRC/cgroup v2：
+OpenRC 的 cgroup 为 `/sys/fs/cgroup/openrc.remnanode-lite`（位于检测到的 cgroup v2 root 下），启动时校验 memory、swap、CPU 和 PID 限制。不要在只有 2 GB 磁盘的生产主机上构建项目。
 
-```bash
-service_cgroup=/sys/fs/cgroup/openrc.remnawave-node
-cat "${service_cgroup}/memory.current"
-cat "${service_cgroup}/memory.peak"
-cat "${service_cgroup}/pids.current"
-```
+## 网络与安全边界
 
-不同环境的 cgroup 根也可能是 `/sys/fs/cgroup/unified`。OpenRC service 启动前会验证实际路径和全部资源限制。
+两种部署都运行在宿主网络命名空间中。`CAP_NET_ADMIN` 用于项目私有 nftables 表和选择性 TCP socket destroy；`CAP_NET_BIND_SERVICE` 允许 rw-core 监听 1024 以下端口。
 
-## 网络和安全边界
+- 只运行可信精确版本或已验证 digest。
+- 不要使用 `privileged: true`、root Native 服务或额外 capability。
+- 条件允许时只让 Panel 地址访问 Node API 端口。
+- 按 Panel 下发配置开放代理端口。
+- 保护 Docker socket、root 权限、Compose 目录和 `/etc/remnanode-lite`。
+- 项目只拥有自己的运行时 nftables 表，不拥有宿主机全局 firewall 或 sysctl。
 
-Docker 使用 host network，`CAP_NET_ADMIN` 作用于宿主网络命名空间。它是 nftables 插件和 socket destroy 所需能力，同时意味着容器必须被视为受信任的网络管理组件：
-
-- 只运行本项目发布并验证过的镜像。
-- 不使用 `privileged: true`，不要增加无关 capabilities。
-- 宿主防火墙只对 Panel 地址开放 Node API 端口。
-- 代理入站端口仍需按 Panel 实际下发配置开放。
-- 限制 Docker socket 和主机管理员权限；实际注入的 Secret 可通过 Docker inspect 被主机管理员读取。
-
-原生服务使用非 root 用户和相同的两个最小 capability。`CAP_NET_ADMIN` 缺失时 Node 基本连接可能仍正常，但 nftables 插件和连接销毁会降级。
-
-## 常见故障
+## 常见问题
 
 ### `illegal base64 data at input byte 0`
 
-常见原因是 Compose 写成列表形式并把引号带入值：
-
-```yaml
-- SECRET_KEY="..."
-```
-
-改为 mapping：
-
-```yaml
-SECRET_KEY: "..."
-```
-
-如果仍失败，重新从 Panel 获取完整 Secret，确认没有前后空格、截断或多行包装。
+Secret 不是有效 base64/base64url、被截断、含空白，或 Compose list 中的引号进入了值。重新从 Panel 获取完整 Secret，并使用配置文档中的 mapping 格式。
 
 ### `SECRET_KEY missing required fields`
 
-base64 可以解码，但内容不是当前 Panel 节点页提供的完整 Secret JSON。重新生成或复制节点 Secret，不要只提供 JWT、公钥或单个证书。
+值可以解码，但不是完整 Node Secret。JWT、证书或私钥片段都不够。
 
 ### `address already in use`
-
-host network 下已有宿主进程占用端口：
 
 ```bash
 ss -H -lntp 'sport = :38329'
 ```
 
-停止冲突服务，或同步修改 Node 配置、Panel 节点端口和防火墙。
+停止冲突服务，或同时修改 Panel、主机配置和防火墙。不要让官方容器与 Lite 使用同一宿主端口。
 
-### 容器 healthy，但 Panel 离线
+### 本地 healthy，Panel offline
 
-依次确认：
+依次确认端口与 Panel 一致、正确进程持有端口、firewall/路由可达、Secret 属于该 Node、系统时间正确、日志无 TLS/JWT/listen 错误。本地 health 不会覆盖这些外部链路。
 
-1. `NODE_PORT` 与 Panel 完全一致。
-2. 宿主端口由目标 Node 进程监听。
-3. Panel 到节点的防火墙和路由可达。
-4. Secret 来自当前节点，且系统时间正确。
-5. Node 日志中没有 TLS、JWT 或监听错误。
+### Node online，rw-core offline
 
-Compose health 只检查内部 Socket，不覆盖以上链路。
-
-### Node 在线，但 rw-core 离线
-
-刚重启时先等待 Panel 下一次健康循环。若持续离线：
-
-```bash
-docker exec -it remnanode-lite \
-  tail -n 100 /var/log/remnanode/xray.err.log
-```
-
-原生部署使用 `remnanode-xerrors`。检查 rw-core 二进制、geo 数据、端口冲突和 Panel 下发配置。低内存模式允许 readiness 最多等待 90 秒，不应在大配置启动数秒后立即判定失败。
+读取 core error 日志，检查端口冲突和 Panel 下发配置。低内存模式对大配置允许更长 readiness 时间，不要只凭重启后的几秒钟判定失败。
 
 ### `CAP_NET_ADMIN not available`
 
-恢复仓库提供的 Compose capabilities 或原生 service 文件并重启。不要为了消除警告改用 `privileged: true`。缺少该能力时 nftables 和 `NETLINK_SOCK_DIAG` socket destroy 不可用。
+恢复仓库提供的 capability 配置或运行 repair。不要用 privileged 容器或 root 服务掩盖错误。
 
-### `ASN database unavailable`
+### ASN database unavailable
 
-Node 会继续运行，但插件 `asList` 共享列表为空。Docker 镜像应已包含数据库；原生部署可按目标 Release 重新执行带 `--upgrade-xray` 的升级，或使用经过 SHA-256 校验的 `ASN_DB_URL`/`ASN_DB_SHA256`。
+Node 继续运行，但 `asList` 为空。Docker 和 Native bundle 都包含锁定版本的数据库；重建已验证镜像，或执行 `rnlctl repair`/精确版本升级，不要向当前 generation 下载未固定的数据。
 
-### OpenRC 报告 cgroup controller
+### OpenRC cgroup 检查失败
 
-确认主机使用 cgroup v2，memory、cpu、pids controller 已委托给 OpenRC，且 service cgroup 的以下值生效：
+修复 cgroup v2 delegation，或改用受支持的 systemd/Docker。不要跳过资源检查。
 
-```text
-memory.max=469762048
-memory.swap.max=0
-cpu.max=100000 100000
-pids.max=256
-```
+### Native 提示需要 repair
 
-不建议绕过校验启动。修复宿主 cgroup 配置，或改用受支持的 Docker/systemd 部署。
-
-### 升级或卸载拒绝继续
-
-脚本在无法可靠确认 service 状态、Node/rw-core 退出、锁所有权或文件安全边界时会保守失败。先处理日志指出的具体状态；不要手工删除 installer lock、事务备份，或在进程仍运行时覆盖文件。
+保留 `status --json` 用于诊断并运行 `rnlctl repair`。不要手动删除 `/usr/local/lib/remnanode-lite` 或 `/var/lib/remnanode-lite-installer` 中的文件。
 
 ## 备份范围
 
-需要备份的持久配置很少：
+- Docker：Compose、可选 `.env`、当前精确镜像 tag 或 digest。
+- Native：`/etc/remnanode-lite/node.env`、`/etc/remnanode-lite/secret.key`、当前精确 Release 版本。
+- Fleet：上一已知可用的精确版本或 digest。
 
-- 单文件部署：Compose 文件；使用 `.env` 时，还要备份同目录且权限为 `0600` 的 `.env`。
-- 原生部署：`/etc/remnanode/node.env` 和 `/etc/remnanode/secret.key`。
-- 回滚记录：当前镜像 digest 或项目 Release tag。
-
-无需备份 `/run/remnanode`、Docker tmpfs 日志或 Panel 下发的 Xray runtime 配置。Secret 备份应使用与其它私钥相同的加密、访问控制和销毁策略。
+按私钥保护 Secret 备份。不要备份 `/run`、Docker tmpfs 日志、Panel 下发的 runtime Xray 配置或 Native generation 目录来替代 Release 和 `rnlctl` 状态。

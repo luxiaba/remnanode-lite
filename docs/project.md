@@ -6,7 +6,7 @@ Remnanode Lite is a lightweight Remnawave Node written in Go. It aims to behave 
 
 The project is maintained independently. Official `remnawave/node` defines the protocol and observable behavior we follow, but this repository has its own architecture, versioning, and development history.
 
-The project name is **Remnanode Lite**, and the executable is `remnanode-lite`. Native installations keep the service name `remnawave-node.service`, and the matching OpenRC name, so existing upgrade and monitoring commands continue to work.
+The project name is **Remnanode Lite**, and the executable is `remnanode-lite`. Native installations use `remnanode-lite.service` on systemd and `remnanode-lite` on OpenRC. The names are deliberately distinct from the official `remnawave/node` service and container.
 
 ## Origin
 
@@ -60,7 +60,7 @@ In this project, compatibility means matching the behavior of a stated official 
 ### Bounded resources
 
 - Target a complete production host with `512 MiB RAM / 1 vCPU / 2 GB disk`.
-- Provide consistent Linux `amd64` and `arm64` builds and container images.
+- Provide consistent Linux `amd64` and `arm64` container images and self-contained Native bundles.
 - Set explicit limits for memory, request bodies, concurrency, queues, temporary files, and logs.
 - Use ephemeral and reclaimable container runtime logs by default; production nodes do not require persistent logs.
 
@@ -97,7 +97,7 @@ Recreating a container is an accepted operational recovery method when its runti
 
 | Role | Primary concern | Recommended entry point |
 | --- | --- | --- |
-| Node deployer | Panel onboarding, low-resource settings, image selection | [Docker Compose deployment](deployment-docker.md) |
+| Node deployer | Panel onboarding, low-resource settings, image or bundle selection | [Docker Compose deployment](deployment-docker.md) or [Native Linux](deployment-native.md) |
 | Operator | Health, logs, updates, rollback, and fault diagnosis | Operations path in the [documentation index](README.md) |
 | Go developer | Package boundaries, lifecycle, testing, and change standards | [Architecture](architecture.md), [development guide](development/README.md) |
 | Release maintainer | Versions, compatibility evidence, image tags, and gates | [Versioning](versioning.md), [Release process](release.md) |
@@ -105,7 +105,7 @@ Recreating a container is an accepted operational recovery method when its runti
 
 ## Project status
 
-The repository has an independent Git history, automated tests, and a GHCR candidate-image workflow. The contract compiled into the binary is recorded in [`internal/version/contract.version`](../internal/version/contract.version); its official source and known differences are documented in the versioned [contract baseline](development/contract-2.8.0.md).
+The repository has an independent Git history, automated tests, a GHCR candidate-image workflow, and a Native bundle release workflow. The contract compiled into the binary is recorded in [`internal/version/contract.version`](../internal/version/contract.version); its official source and known differences are documented in the versioned [contract baseline](development/contract-2.8.0.md).
 
 A version in source identifies the build, not a published Release. Check Git tags, GitHub Releases, and exact GHCR tags to see what is actually available. Project version, contract version, Panel integration target, and rw-core version remain separate; [Versioning and image tags](versioning.md) explains how they relate.
 

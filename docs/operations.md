@@ -1,129 +1,93 @@
-# Operations Guide
+# Operations and Troubleshooting
 
-[Back to the documentation index](README.md)
+[Documentation home](README.md) | [Docker deployment](deployment-docker.md) | [Native deployment](deployment-native.md) | [Configuration](configuration.md)
 
-This guide covers the day-to-day work of running a node: checking its state, reading logs, updating or rolling back, and finding the cause of common failures.
+Remnanode Lite has a deliberately small persistent footprint. Panel remains the source of truth for active proxy configuration, so routine operations focus on four things: the Node process, Panel connectivity, rw-core state, and real proxy traffic.
 
-## Runtime state model
+## What each check proves
 
-Remnanode Lite manages two different levels of process state:
-
-- The Node is the long-running HTTPS service responsible for authenticating Panel requests, statistics, plugins, and the rw-core lifecycle.
-- rw-core runs only after the Panel sends `/node/xray/start`.
-
-The Node does not persist the complete Xray configuration received from the Panel. After a container, service, or host restart, the Node comes online and initially reports the core offline. A later Panel health cycle sends the configuration again. This is the normal recovery path aligned with the official Node.
-
-"Process running," "container healthy," "node online in the Panel," and "rw-core online" are different states:
-
-| Layer | What it proves | What it does not prove |
+| Check | Proves | Does not prove |
 | --- | --- | --- |
-| Service or container running | The Node process still exists | Listening port, authentication, or core state |
-| Compose `healthy` | The internal Unix listener accepted an active healthcheck connection | Panel reachability, mTLS/JWT, or rw-core online |
-| Node owns the TCP port | The Node is listening on the configured port | Correct Secret, Panel network path, or authentication |
-| Node online in the Panel | The Panel communicated with the Node over mTLS and JWT | Reachability of every proxy inbound port |
-| Core online in the Panel | rw-core started and passed internal gRPC readiness | Correct behavior of every proxy protocol and external network path |
+| Container or service is running | A supervisor sees a live Node process | The process accepts internal health checks |
+| Docker health or `rnlctl status --json` is healthy | The Node accepts a request through its private Unix socket and managed state is coherent | Panel can reach the public port |
+| Node is online in Panel | mTLS/JWT and the Panel-to-Node path work | rw-core has a working proxy configuration |
+| rw-core is online in Panel | Core startup and its internal gRPC path succeeded | Every inbound and outbound route carries traffic |
+| A representative client transfers traffic | The tested proxy path works end to end | Every protocol, address family, or route works |
 
-`/node/xray/healthcheck` is a Panel API protected by mTLS and JWT, not an anonymous HTTP probe. Do not send an ordinary curl request to it from external monitoring.
+The public `/node/xray/healthcheck` route is authenticated with mTLS and JWT. It is not an anonymous HTTP monitoring endpoint.
 
-## Routine status checks
+## Routine checks
 
 ### Docker Compose
+
+Run commands from the directory containing `docker-compose.yaml` and its optional `.env`:
 
 ```bash
 docker compose ps
 docker compose logs --tail=100 remnanode-lite
+docker inspect remnanode-lite --format \
+  'image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
 ss -H -lntp 'sport = :38329'
 ```
 
-Run Compose from the directory containing the Compose file and its optional `.env`. Compose automatically uses that file for interpolation, while an exported shell variable with the same name takes precedence. Only variables explicitly declared in the Compose `environment` mapping enter the container; `.env` is not injected wholesale.
+Replace `38329` with the effective `NODE_PORT`. The Compose healthcheck runs `remnanode-lite healthcheck` inside the container. It connects to the private Unix socket with a short deadline; it does not contact Panel.
 
-Replace `38329` with the configured `NODE_PORT`. The Compose healthcheck runs this command inside the container:
-
-```text
-remnanode-lite healthcheck
-```
-
-The command connects to the Unix socket at `INTERNAL_SOCKET_PATH` with a two-second timeout. This shows that the Node is accepting internal connections, not just that the socket file exists. It does not test the Panel network path, mTLS/JWT, or registration. If Compose reports `healthy` while the Panel shows the node offline, check the port, firewall, Secret, and Panel settings below.
-
-### systemd
+Check the running identity:
 
 ```bash
-sudo systemctl --no-pager status remnawave-node
-sudo systemctl show remnawave-node \
-  --property=ActiveState,SubState,MainPID,MemoryCurrent,TasksCurrent
-sudo ss -H -lntp 'sport = :2222'
-sudo remnanode-lite doctor
+docker exec remnanode-lite remnanode-lite version
 ```
 
-### OpenRC
+### Native Linux
+
+Use the lifecycle view first:
 
 ```bash
-rc-service remnawave-node status
-ss -H -lntp 'sport = :2222'
-remnanode-lite doctor
+sudo rnlctl status --json
+sudo rnlctl doctor
+sudo rnlctl logs node --lines 100
+sudo rnlctl logs core-errors --lines 100
+ss -H -lntp 'sport = :38329'
 ```
 
-`doctor` checks configuration, Secret format, rw-core, geo data, ASN data, nft, ss, and current process capabilities. It does not connect to the Panel and does not prove that the core has started. The current implementation also checks the systemd unit, so the missing-unit WARN can be ignored on OpenRC; ERROR findings require action.
+`status --json` returns a stable machine-readable model with the deployment state, current and previous generation IDs, version, service manager, enabled/active flags, repair capability, pending operation, and problems. It exits non-zero for a degraded or recovery-required installation.
 
-To inspect a different native configuration file:
+`doctor` verifies lifecycle state, generation manifests and file digests, generation links, configuration, the Secret, service state, internal health, and cached repair material. It does not connect to Panel or generate proxy traffic.
+
+Low-level service-manager views remain useful:
 
 ```bash
-sudo remnanode-lite doctor --env /path/to/node.env
+# systemd
+sudo systemctl --no-pager --full status remnanode-lite.service
+sudo systemctl show remnanode-lite.service \
+  --property=ActiveState,SubState,MainPID,MemoryCurrent,MemoryPeak,TasksCurrent
+
+# OpenRC (experimental)
+sudo rc-service remnanode-lite status
 ```
-
-Container deployments normally do not use `doctor` as their healthcheck. The default image has no `/etc/remnanode/node.env`, because configuration comes from environment variables. Use Compose health, Node logs, and Panel state.
-
-## CLI command reference
-
-Running `remnanode-lite` without arguments starts the daemon. Other subcommands provide read-only diagnostics, installer validation, or explicit administrative operations:
-
-| Command | Purpose | Important behavior |
-| --- | --- | --- |
-| `remnanode-lite version` | Print the project version and compiled default contract version | Does not parse `node.env` or read the process environment, so it is suitable for a binary smoke test. The daemon's reported value can still be overridden by validated `NODE_CONTRACT_VERSION` configuration. |
-| `remnanode-lite doctor [--env PATH]` | Check native configuration, Secret, assets, tools, and capabilities | Does not connect to the Panel or start rw-core. |
-| `remnanode-lite validate-secret` | Validate and canonicalize a Secret from stdin without printing it | Suitable before writing or restarting; success exits with status 0. |
-| `remnanode-lite canonicalize-secret <path\|->` | Write a canonicalized Secret to stdout | Output is still the complete secret material. Redirect it only to a restricted file and never to logs. |
-| `remnanode-lite kill-sockets` | Interactively read one IP and destroy connected TCP sockets whose local or remote address matches it | Requires `CAP_NET_ADMIN`. The CLI calls the kernel adapter directly and does not apply the application layer's local-address protection. |
-| `remnanode-lite release-url <tag> <arch>` | Produce a validated Release archive URL | Used by installers; invalid tags or architectures fail. |
-| `remnanode-lite install-script-url <tag> <script>` | Produce a validated installer script URL | Accepts only allowlisted script names and is primarily used for bootstrap. |
-
-Display the argument summary:
-
-```bash
-remnanode-lite --help
-```
-
-Do not start a second daemon inside a running production container; process and nftables ownership assume one instance.
-
-`kill-sockets` is an administrative tool, not a health check. It matches the local **or** remote address across the whole network namespace and does not filter by PID or container. A host-local address can therefore close unrelated connections. Use it only on an isolated node and only after confirming that the address is not local.
 
 ## Logs
 
-### Node logs
+### Node output
 
 | Deployment | Command | Storage |
 | --- | --- | --- |
-| Docker | `docker compose logs -f remnanode-lite` | Docker `json-file`; the production template uses `2 MiB x 2`. |
-| systemd | `journalctl -u remnawave-node -f` | Controlled by host journald quotas. |
-| OpenRC | `tail -F /var/log/remnanode/openrc.log` | File checked for rotation by the Node every 10 seconds. |
+| Docker | `docker compose logs -f remnanode-lite` | Docker `json-file`, `2 MiB x 2` in maintained Compose |
+| Native systemd | `sudo rnlctl logs node --follow` | Host journald policy |
+| Native OpenRC | `sudo rnlctl logs node --follow` | `/var/log/remnanode-lite/openrc.log` and `.err.log` |
 
-systemd's `LogRateLimitIntervalSec=30s` and `LogRateLimitBurst=200` limit message count over time; they are not a long-term disk limit. On a 2 GB host, configure an appropriate total journald quota and inspect it regularly:
+On a small systemd host, set an appropriate host-wide journald quota and monitor it:
 
 ```bash
 journalctl --disk-usage
 df -h
 ```
 
-### rw-core logs
+The managed systemd drop-in rate-limits service records on systemd 247 or newer, but rate limiting is not a disk quota.
 
-rw-core stdout and stderr are stored separately:
+### rw-core output
 
-```text
-/var/log/remnanode/xray.out.log
-/var/log/remnanode/xray.err.log
-```
-
-Docker:
+Docker uses container-private paths:
 
 ```bash
 docker exec -it remnanode-lite \
@@ -133,18 +97,16 @@ docker exec -it remnanode-lite \
   tail -n 50 -F /var/log/remnanode/xray.err.log
 ```
 
-Native deployment:
+Native deployment uses `rnlctl`:
 
 ```bash
-remnanode-xlogs
-remnanode-xerrors
+sudo rnlctl logs core --follow
+sudo rnlctl logs core-errors --follow
 ```
 
-Each rw-core stream keeps a current file and one `.1` file, both limited to 4 MiB. Temporary rotation files can briefly add about 8 MiB beyond the normal 16 MiB total.
+The Native files are `/var/log/remnanode-lite/xray.out.log` and `xray.err.log`. Each stream keeps one current file and one `.1` file with a 4 MiB rotation threshold. Docker places its core log directory on a 28 MiB tmpfs, so recreating the container clears those logs and consumes no persistent disk.
 
-Docker stores `/var/log/remnanode` on a 28 MiB tmpfs, so recreating the container clears the logs without using persistent disk. OpenRC also writes `openrc.log` and `openrc.err.log`; it checks them every 10 seconds and copy-truncates at 4 MiB. A file may grow slightly past that threshold between checks.
-
-## Start, stop, and recreate
+## Start and stop
 
 Docker:
 
@@ -155,50 +117,41 @@ docker compose up -d --no-build
 docker compose down
 ```
 
-systemd:
+Native:
 
 ```bash
-sudo systemctl restart remnawave-node
-sudo systemctl stop remnawave-node
-sudo systemctl start remnawave-node
+sudo rnlctl restart
+sudo rnlctl stop
+sudo rnlctl start
 ```
 
-OpenRC:
+Use `rnlctl activate` instead of `start` for an installation created with `--prepare-only`.
 
-```bash
-rc-service remnawave-node restart
-rc-service remnawave-node stop
-rc-service remnawave-node start
-```
-
-After SIGTERM or SIGINT, the Node uses one 25-second application shutdown budget: stop accepting requests, stop the rw-core process group, then clean up plugins and the private nftables table. Compose supplies a 35-second grace period, systemd supplies a 30-second outer timeout, and OpenRC uses `TERM/30/KILL/5`. Do not use `kill -9` for routine restarts.
+On SIGTERM or SIGINT, the Node shares one 25-second application shutdown budget across HTTP draining, rw-core process-group termination, plugin cleanup, and private nftables cleanup. Compose allows 35 seconds, systemd allows 30 seconds, and OpenRC uses `TERM/30/KILL/5`. Avoid `kill -9` during routine operations; it bypasses coordinated cleanup and can leave Native lifecycle state requiring repair.
 
 ## Docker update and rollback
 
-### Image references
+Choose the image reference according to the rollout:
 
-| Reference | Property | Recommended use |
-| --- | --- | --- |
-| `latest` | Moves with the newest stable Release | Small nodes that intentionally follow the stable channel after an explicit pull. |
-| `X.Y.Z` | Formal project version aligned with the corresponding official release | Pin an official-aligned build. |
-| `X.Y.Z-rnl.N` | Independent project iteration | Precise deployment and incident correlation. |
-| `sha-<commit>` | Candidate built from `main` | Real-server verification before formal release. |
-| `name@sha256:<digest>` | Registry content address | Strongest immutable pin and rollback identity. |
+| Reference | Use |
+| --- | --- |
+| `name@sha256:<digest>` | Strongest production pin and rollback identity |
+| `X.Y.Z` | Exact stable release |
+| `X.Y.Z-rnl.N` | Exact preview release |
+| `latest` | Opt-in moving stable channel; resolves only when pulled |
+| `preview` | Opt-in moving preview channel; not a production rollback reference |
+| `sha-<40-character-commit>` | Immutable-by-policy `main` candidate for release verification |
+| `edge` | Moving `main` build for short-lived development testing |
 
-By project policy, exact tags and `sha-*` tags should not move, but registry tags are not technically immutable. Pin a manifest digest for strict reproduction.
+For a controlled update:
 
-### Controlled update
-
-1. Record the current Compose file, optional `.env`, and effective image reference.
-2. Read the target Release notes and identify contract, rw-core, and configuration changes.
-3. Change `REMNANODE_IMAGE` in `.env`, or an intentionally inline `image:`, to the new exact tag or digest.
-4. Pull and force-recreate.
-5. Check the container, port, logs, and Panel.
+1. Record the current effective image or manifest digest.
+2. Read the target Release notes.
+3. Change `REMNANODE_IMAGE` in `.env`, or the intentionally inline `image:` value.
+4. Pull and recreate the container.
+5. Check health, Panel state, and representative traffic.
 
 ```bash
-cp -p docker-compose.yaml docker-compose.yaml.rollback
-[ ! -f .env ] || cp -p .env .env.rollback
-
 docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build --force-recreate
@@ -206,137 +159,80 @@ docker compose ps
 docker compose logs --tail=100 remnanode-lite
 ```
 
-Tracking `latest` still requires an explicit pull and recreate. `docker compose restart` alone never checks for a new image.
+`latest` and `preview` do not update a running container. `docker compose restart` also does not pull. A moving tag is resolved only by an explicit pull, and a recreate is required to run the new image.
 
-### One-time service and container rename
+Rollback by restoring the previously recorded exact tag or digest, then repeat the pull and recreate commands. Do not retag an older image as a release version, and do not rely on what `latest` meant at an earlier date.
 
-Templates older than this naming change used `remnanode` for the Compose service, container, and hostname. An ordinary `up --force-recreate` does not guarantee that the old service is removed: it can become an orphan, and host networking then makes the old and new containers compete for the same ports.
-
-Stop the old deployment before replacing its Compose file when possible. With the new file in place, remove same-project orphans, then inspect and explicitly remove a remaining legacy container only after confirming its image:
-
-```bash
-docker compose down --remove-orphans
-docker container inspect remnanode \
-  --format 'name={{.Name}} image={{.Config.Image}}' 2>/dev/null || true
-```
-
-If inspection returns a container, confirm that it is the legacy Node. Only then run the destructive command separately:
-
-```bash
-docker rm -f remnanode
-```
-
-After the legacy name is absent, start the current service:
-
-```bash
-docker compose up -d --no-build
-docker compose ps
-```
-
-The expected running name is `remnanode-lite`. Never leave both names running. A legacy container owned by a different Compose project is not removed by `down --remove-orphans`, which is why the explicit inspection is required.
-
-### Rollback
-
-Restore the previous Compose inputs, or change the active image setting back to a verified exact tag or digest:
-
-```bash
-cp -p docker-compose.yaml.rollback docker-compose.yaml
-[ ! -f .env.rollback ] || cp -p .env.rollback .env
-chmod 600 docker-compose.yaml
-
-docker compose pull
-docker compose up -d --no-build --force-recreate
-docker compose ps
-```
-
-Do not move an old tag to implement rollback. Before cleanup, record one verified prior version tag or manifest digest and confirm that the corresponding image is still local. Always retain at least this one explicit rollback image:
+Before pruning images, confirm that at least one known-good rollback image is still local:
 
 ```bash
 docker system df
 docker image prune
 ```
 
-By default, `docker image prune` removes only dangling images. Do not use broad options that delete every unused image unless you have verified individually that the rollback image will remain.
+The command above removes dangling images by default. Avoid broad prune options on a small node unless you have checked every retained rollback image.
 
-Do not build from source on a production host with only 2 GB of disk. The Go toolchain, base layers, and BuildKit cache can substantially exceed the runtime disk budget.
+## Native update, rollback, and repair
 
-## Native update and rollback
-
-Native upgrades use transactional scripts. Do not overwrite a running binary manually. See [Native Linux deployment](deployment-native.md#upgrade) for commands and transaction semantics.
-
-Operational rules:
-
-- Pin the target Release tag; never download from a branch URL.
-- Explicit `--upgrade` preserves rw-core by default. Add `--upgrade-xray` only when required by the Release notes. Do not substitute a repeated `--install`, because `--install` on a complete installation synchronizes rw-core, geo, and ASN assets by default.
-- A service that was stopped before an explicit upgrade remains stopped.
-- The transaction commits only when a target-version process actually owns the configured port.
-- On failure, read the reported backup directory and rollback result before changing anything. Do not delete the only retained backup.
-- Select only a real older Release for rollback. Restore matching configuration and core assets when compatibility requires it.
-
-Installation, upgrade, rw-core updates, and uninstall share `/run/lock/remnanode-installer.lock`. If an installer is active, wait for it to finish. Do not remove the lock file or start a second mutating entry point in parallel.
-
-## Change the Secret or port
-
-### Docker
-
-Edit the Compose mapping or the same-directory `.env`, then recreate. The shell takes precedence over `.env`, and only keys declared in the mapping are injected into the container:
+Native upgrades accept exact versions only:
 
 ```bash
-chmod 600 docker-compose.yaml
+sudo rnlctl upgrade --to 2.8.0-rnl.2
+```
+
+The complete Node/runtime bundle becomes a new generation. The transaction preserves the service's enabled and active state, validates the selected binary, and waits for internal health before committing. It retains the former generation as `previous`.
+
+Rollback is one command:
+
+```bash
+sudo rnlctl rollback
+```
+
+If `status --json` reports `recovery-required`, inspect it and run repair rather than editing links or state files:
+
+```bash
+sudo rnlctl status --json
+sudo rnlctl repair
+sudo rnlctl doctor
+```
+
+Repair uses the verified cached bundle for the committed generation and never upgrades. If that cache is damaged, provide the matching exact archive and digest as described in the [Native deployment guide](deployment-native.md#recover-an-interrupted-operation).
+
+Only one lifecycle mutation runs at a time under
+`/run/remnanode-lite-installer/operation.lock`. Wait for the active command.
+Never delete the lock or `/var/lib/remnanode-lite-installer/journal.json` to
+force another operation through.
+
+## Change configuration
+
+For Docker, edit `.env` or the Compose mapping, then validate and recreate:
+
+```bash
 docker compose config --quiet
 docker compose up -d --no-build --force-recreate
 ```
 
-Do not run `docker compose config` without `--quiet`; the expanded effective Secret would be printed to the terminal or collected logs.
-
-### Native deployment
-
-Write the new Secret to a temporary file readable only by the current user, validate it, then replace the production file atomically:
+For Native Linux, keep `/etc/remnanode-lite/node.env` and `secret.key` owned by `root:remnanode` and not writable by the service. Validate before restarting:
 
 ```bash
-umask 077
-secret_tmp="$(mktemp)"
-printf '%s' 'PASTE_THE_NEW_COMPLETE_SECRET_KEY' >"$secret_tmp"
-remnanode-lite validate-secret <"$secret_tmp"
-
-sudo install -o root -g remnanode -m 0640 \
-  "$secret_tmp" /etc/remnanode/secret.key.new
-sudo mv -f /etc/remnanode/secret.key.new /etc/remnanode/secret.key
-rm -f "$secret_tmp"
+sudo rnlctl doctor
+sudo rnlctl restart
 ```
 
-Then inspect effective assignments in `/etc/remnanode/node.env`. A non-empty `SECRET_KEY` takes precedence over `SECRET_KEY_FILE`. When migrating from legacy inline configuration, clear the former and point the latter at the file just replaced:
+Secret rotation requires an atomic replacement of `/etc/remnanode-lite/secret.key`; see [Native deployment](deployment-native.md#change-the-port-or-secret). A non-empty inline `SECRET_KEY` is not allowed in a managed Native configuration.
 
-```env
-SECRET_KEY=
-SECRET_KEY_FILE=/etc/remnanode/secret.key
-```
+When changing `NODE_PORT`, update the Panel record and host firewall to the same value. Both deployment methods use host networking; there is no port translation layer to compensate for a mismatch.
 
-The last occurrence of a duplicated key wins, so remove stale duplicate assignments. Validate configuration before restarting:
+## Resource checks
 
-```bash
-sudo remnanode-lite doctor
-sudo systemctl restart remnawave-node
-```
-
-On OpenRC, replace the last line with:
-
-```bash
-rc-service remnawave-node restart
-```
-
-If validation, installation, or configuration editing fails partway through, remove the temporary file from this attempt and do not restart the service. Do not replace only `secret.key` while leaving a non-empty inline `SECRET_KEY`; the Node would continue using the old inline value.
-
-After changing `NODE_PORT`, also update the Panel node configuration and host firewall. With host networking, Compose `ports:` cannot correct a mismatch.
-
-## Resources and disk
-
-The canonical Docker configuration always enforces a `448 MiB` memory limit, a `448 MiB` combined memory-and-swap limit, `1 CPU`, and `256 PIDs`, even when the host is larger. Equal memory and combined limits leave no additional container swap allowance. The whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk` is an engineering target rather than an SLA for every workload. The Docker daemon, kernel, and other system services consume capacity outside the container limit.
+The maintained Docker and Native service profiles enforce `448 MiB RAM`, no additional service/container swap, `1 CPU`, and `256 PIDs/tasks`. The whole-host `512 MiB / 1 vCPU / 2 GB` target remains an engineering target, not a guarantee for every user count, protocol mix, or plugin configuration.
 
 Docker:
 
 ```bash
 docker stats --no-stream remnanode-lite
+docker inspect remnanode-lite --format \
+  'oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
 docker system df
 df -h
 ```
@@ -344,121 +240,86 @@ df -h
 systemd:
 
 ```bash
-systemctl show remnawave-node \
+systemctl show remnanode-lite.service \
   --property=MemoryCurrent,MemoryPeak,TasksCurrent,CPUUsageNSec
 journalctl --disk-usage
 df -h
 ```
 
-OpenRC with cgroup v2:
+OpenRC uses `/sys/fs/cgroup/openrc.remnanode-lite` under the detected cgroup v2 root. The service checks `memory.max=469762048`, `memory.swap.max=0`, `cpu.max=100000 100000`, and `pids.max=256` before starting.
 
-```bash
-service_cgroup=/sys/fs/cgroup/openrc.remnawave-node
-cat "${service_cgroup}/memory.current"
-cat "${service_cgroup}/memory.peak"
-cat "${service_cgroup}/pids.current"
-```
-
-Some environments use `/sys/fs/cgroup/unified` as the cgroup root. The OpenRC service validates its actual path and every resource limit before startup.
+Do not build the project on a production host constrained to 2 GB of disk. The Go toolchain, module cache, BuildKit cache, and intermediate assets can exceed the runtime budget.
 
 ## Network and security boundary
 
-Docker uses host networking, so `CAP_NET_ADMIN` applies to the host network namespace. The capability is required by the nftables plugin and socket destruction, and it means the container must be treated as a trusted network-management component:
+Both deployment methods run in the host network namespace. `CAP_NET_ADMIN` allows the Node to manage its private nftables table and destroy selected TCP sockets through `NETLINK_SOCK_DIAG`; `CAP_NET_BIND_SERVICE` lets rw-core bind ports below 1024.
 
-- Run only images published and verified by this project.
-- Do not use `privileged: true` or add unrelated capabilities.
-- Allow the Node API port through the host firewall only from Panel addresses.
-- Open proxy inbound ports according to the configuration actually sent by the Panel.
-- Restrict the Docker socket and host administrator access. A host administrator can read the effective injected Secret through Docker inspect.
-
-Native services run as a non-root user with the same two minimal capabilities. Without `CAP_NET_ADMIN`, basic Node connectivity may still work, but nftables plugins and connection destruction degrade.
+- Run only a trusted exact release or verified manifest digest.
+- Do not use `privileged: true`, run the Native service as root, or add unrelated capabilities.
+- Restrict the Node API port to Panel addresses when practical.
+- Open proxy ports according to the configuration sent by Panel.
+- Protect Docker socket access, root access, the Compose directory, and `/etc/remnanode-lite`.
+- The project does not own the host firewall or sysctl policy beyond its private runtime nftables table.
 
 ## Common failures
 
 ### `illegal base64 data at input byte 0`
 
-The common cause is a Compose list value that includes literal quotes:
-
-```yaml
-- SECRET_KEY="..."
-```
-
-Use a mapping instead:
-
-```yaml
-SECRET_KEY: "..."
-```
-
-If validation still fails, obtain the complete Secret from the Panel again and check for leading or trailing spaces, truncation, or multiline wrapping.
+The Secret is not valid base64/base64url, is truncated, contains whitespace, or includes literal Compose quote characters. Obtain the complete Secret from Panel again. In Compose, use the mapping form shown in the [configuration reference](configuration.md#docker).
 
 ### `SECRET_KEY missing required fields`
 
-The value decodes as base64, but its JSON is not the complete Secret shown for the current node in the Panel. Regenerate or copy the full node Secret; do not provide only a JWT, public key, or individual certificate.
+The value decodes, but it is not the complete Secret for this Node. A JWT, public key, certificate, or private-key fragment is insufficient.
 
 ### `address already in use`
 
-With host networking, another host process already owns the port:
+Another host process owns the configured port:
 
 ```bash
 ss -H -lntp 'sport = :38329'
 ```
 
-Stop the conflicting service, or change the Node configuration, Panel node port, and firewall together.
+Stop the conflicting service or change the Node port in Panel, host configuration, and firewall together. Do not run the official and Lite containers on the same host ports.
 
-### Container healthy, but Panel offline
+### Healthy locally, offline in Panel
 
-Check in order:
+Check, in order:
 
-1. `NODE_PORT` exactly matches the Panel.
-2. The intended Node process owns the host port.
-3. Firewall and routing allow the Panel to reach the node.
-4. The Secret belongs to this node and system time is correct.
-5. Node logs contain no TLS, JWT, or listen errors.
+1. `NODE_PORT` matches the Panel record.
+2. The intended process owns that port.
+3. Firewall and routing allow Panel to reach it.
+4. The Secret belongs to this Node.
+5. System time is correct.
+6. Node logs contain no TLS, JWT, or listen error.
 
-Compose health checks only the internal socket and does not cover these paths.
+Local health does not exercise any of these external links.
 
-### Node online, but rw-core offline
+### Node online, rw-core offline
 
-Immediately after a restart, wait for the next Panel health cycle. If rw-core remains offline:
-
-```bash
-docker exec -it remnanode-lite \
-  tail -n 100 /var/log/remnanode/xray.err.log
-```
-
-For a native deployment, run `remnanode-xerrors`. Check the rw-core binary, geo data, port conflicts, and configuration sent by the Panel. Low-memory mode permits up to 90 seconds for readiness; do not declare failure only a few seconds into a large configuration startup.
+Read `core-errors`, check for port conflicts, and review the configuration sent by Panel. Low-memory mode permits a longer readiness window for large configurations. Do not diagnose failure solely from the first few seconds after a restart.
 
 ### `CAP_NET_ADMIN not available`
 
-Restore the repository-supplied Compose capabilities or native service definition and restart. Do not switch to `privileged: true` to suppress the warning. Without this capability, nftables and `NETLINK_SOCK_DIAG` socket destruction are unavailable.
+Restore the repository-supplied Compose capabilities or repair the managed Native service definition. Without the capability, the base Panel API may start, but nftables plugins and connection destruction are unavailable. Do not switch to a privileged container or root service to hide the error.
 
-### `ASN database unavailable`
+### ASN database unavailable
 
-The Node continues to run, but the plugin `asList` shared list is empty. The Docker image should contain the database. For a native deployment, repeat the upgrade for the target Release with `--upgrade-xray`, or use an `ASN_DB_URL` and `ASN_DB_SHA256` pair whose checksum has been verified.
+The Node continues, but plugin `asList` resolves to an empty list. Docker and Native release bundles include one pinned database. Recreate the container from a verified image, or run `rnlctl repair`/an exact Native upgrade; do not download an unpinned database into the active generation.
 
-### OpenRC reports a cgroup controller failure
+### OpenRC cgroup check fails
 
-Confirm that the host uses cgroup v2, that OpenRC has delegated memory, CPU, and PIDs controllers, and that these values are effective in the service cgroup:
+The experimental OpenRC service requires writable cgroup v2 memory, CPU, and PID controllers plus `cgroup.kill`. Repair the host delegation or use a supported systemd/Docker deployment. Do not bypass the start check because the documented resource and cleanup behavior would no longer hold.
 
-```text
-memory.max=469762048
-memory.swap.max=0
-cpu.max=100000 100000
-pids.max=256
-```
+### Native mutation says repair is required
 
-Do not bypass the startup validation. Repair the host cgroup configuration or use a supported Docker or systemd deployment.
-
-### Upgrade or uninstall refuses to continue
-
-The scripts fail conservatively when they cannot reliably establish service state, Node or rw-core exit, lock ownership, or filesystem safety. Resolve the specific condition reported in the log. Do not manually remove the installer lock or transaction backups, and do not overwrite files while processes remain alive.
+An operation left a durable journal or managed state no longer matches the selected generation. Run `rnlctl status --json`, preserve its output for diagnosis, and use `rnlctl repair`. Do not remove files from `/usr/local/lib/remnanode-lite` or `/var/lib/remnanode-lite-installer` by hand.
 
 ## Backup scope
 
-Very little persistent state needs backup:
+Back up only the material needed to recreate the deployment:
 
-- Single-file deployment: the Compose file and, when used, its same-directory mode-`0600` `.env`.
-- Native deployment: `/etc/remnanode/node.env` and `/etc/remnanode/secret.key`.
-- Rollback identity: the current image digest or project Release tag.
+- Docker: Compose file, optional `.env`, and the current exact image tag or digest.
+- Native: `/etc/remnanode-lite/node.env`, `/etc/remnanode-lite/secret.key`, and the current exact release version.
+- Fleet operations: the previous known-good exact version or digest.
 
-Do not back up `/run/remnanode`, Docker tmpfs logs, or Xray runtime configuration sent by the Panel. Protect Secret backups with the same encryption, access-control, and destruction policy used for other private keys.
+Protect Secret backups as private-key material. Do not back up `/run`, Docker tmpfs logs, rw-core configuration sent by Panel, or Native generation directories as a substitute for release assets and `rnlctl` state.

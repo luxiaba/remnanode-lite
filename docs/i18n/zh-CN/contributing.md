@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=82097beaf0c388331eac11295088a691b952858b667b81f9422fc71634752ee3 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=10f5ed4b7ca86851705a9d50f207dac342fc580934f0a3aa2ad52af8a0d3e359 -->
 
 # 贡献指南
 

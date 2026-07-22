@@ -7,11 +7,11 @@ This document collects dated engineering measurements and the current resource p
 ## Production Boundary
 
 The production target is a whole machine with `512 MiB RAM / 1 vCPU / 2 GB
-disk`. The standard container reserves room for the host by limiting the Node
-and rw-core together to `448 MiB` memory, a `448 MiB` combined
-memory-and-swap limit, `1 CPU`, and `256` PIDs. Equal memory and combined
-memory-and-swap limits leave no additional container swap allowance, even when
-the host has swap.
+disk`. Docker Compose and the Native service reserve room for the host by
+limiting the Node and rw-core together to `448 MiB` memory, no additional
+service/container swap, `1 CPU`, and `256` PIDs/tasks. Equal container memory
+and memory-and-swap limits leave no additional container swap allowance, even
+when the host has swap.
 
 Before tagging, the maintainer verifies the immutable
 `sha-<40-character-main-commit>` image with a real Panel and real proxy traffic
@@ -88,21 +88,50 @@ The two rw-core log streams use capped writers. Each current file and its `.1` f
 
 OpenRC also writes `openrc.log` and `openrc.err.log` through the supervisor. It checks and copy-truncates them every 10 seconds. Each `.1` file uses a `4 MiB` threshold after a successful check, but a current file may grow past that threshold before the next poll; this is not a hard byte limit. The four current-plus-`.1` pairs therefore have a `32 MiB` threshold budget, or about `48 MiB` if all four fixed temporary files remain, plus any growth of the two current files during one polling interval.
 
-The systemd journal accepts at most 200 service log records every 30 seconds, while byte usage and long-term growth remain subject to the host's journald quota. A future extended check should measure a log fault storm and long-term growth on a whole machine with `2 GB` of disk; these thresholds are not a substitute for that result.
+On systemd 247 or newer, the managed hardening drop-in accepts at most 200
+service log records every 30 seconds. Older systemd uses the base unit without
+that directive. Byte usage and long-term growth remain subject to the host's
+journald quota in both cases; rate limiting is not a disk quota.
 
-Installation and upgrade store large assets in root-only `/var/lib/remnanode-installer`, not in the potentially memory-backed `/tmp`. All five mutating entry points hold `/run/lock/remnanode-installer.lock`. Nested installers reuse and verify the same open file description. `RNL_TMP_ROOT` does not affect the lock path, and no exit path removes its inode.
+Native lifecycle state and cached archives live in root-only
+`/var/lib/remnanode-lite-installer`. Every mutating `rnlctl` operation holds
+`/run/remnanode-lite-installer/operation.lock`, and a durable `journal.json` records the
+transaction boundary. A crash therefore becomes an explicit
+`recovery-required` state instead of an implicit half-install. `rnlctl repair`
+restores the committed generation and intended service state from verified
+cached material.
 
-Synchronous child processes that change packages, files, or services inherit the lock. If the parent exits unexpectedly, serialization therefore lasts until the mutation finishes. Downloads, archive inspection, Node/rw-core self-checks, status queries, and the OpenRC start chain close their own lock descriptor first, so a short-lived tool or resident supervisor cannot keep the lock after the installer finishes.
+The active and previous releases are complete generations under
+`/usr/local/lib/remnanode-lite/generations`; their matching repair archives are
+also retained. A third successful upgrade removes the superseded generation
+and cache. This deliberately spends bounded disk space to provide one local
+rollback. Operators on unusually small disks should check free space before an
+upgrade and keep the 2 GB whole-host target in mind.
 
-Release archives are limited to `64 MiB` compressed, `128 MiB` extracted, and `64` entries. The rw-core zip, custom core, geo, and ASN paths each have hard limits for downloads and streaming extraction. Local `GEO_ZAPRET_FILE` and `IP_ZAPRET_FILE` inputs are limited to `64 MiB` each and use atomic staging in the destination directory. Downloads have a `300s` overall limit plus connection and low-speed timeouts; tar and unzip operations have a `120s` limit.
+Root lifecycle operations use private mode-`0700` workspaces and remove them
+after the operation. A safe, absolute `TMPDIR` supplied by the operator takes
+priority; unsafe values are ignored. Otherwise the bootstrap and lifecycle
+controller prefer `/var/lib/remnanode-lite-installer/tmp` and fall back to
+`/var/tmp`. The Go controller uses the platform temporary directory only as a
+last compatibility fallback when neither normal root is usable. Normal root
+operations therefore keep transient extraction off a memory-backed `/tmp` on
+small hosts.
 
-An upgrade first reserves space for the existing backup plus `512 MiB`. Once the rw-core download passes zip-structure validation, it calculates the requirement for each installer, core, geo, and ASN target filesystem. The calculation includes actual archive entries, optional custom core and ASN data, backups, staging, and a `64 MiB` safety margin per filesystem.
+The bootstrap, lifecycle engine, and release verifier cap a Native archive at
+`512 MiB`. Verification allows at most 512 archive entries, 512 MiB total
+uncompressed payload, and 256 MiB for any one payload. Manifests and lifecycle
+state have independent small bounds. Archives are copied into private,
+root-only workspaces before parsing so a caller cannot replace the checked
+path during installation.
 
-When upgrade invokes the rw-core installer, the outer transaction is the only backup owner and does not duplicate the same assets. A standalone installer that cannot complete rollback keeps its root-only transaction directory and returns failure rather than deleting the only backup.
+Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, notices, SBOM, and service
+material form one bundle. There is no separate Native core/data updater and no
+custom runtime-asset URL path; this keeps the disk peak and rollback identity
+attached to one release generation.
 
 Production `node.env` must be a regular, non-symlink file. Go reads at most `1 MiB` before setting the memory soft limit and accepts no more than `4096` lines and `256` assignments. A single line may be up to `1 MiB`, allowing migration of legacy inline Secrets up to `256 KiB`.
 
-Both `node.env` and `SECRET_KEY_FILE` are opened once with `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`. The same descriptor passes through `fstat -> bounded read -> fstat`, avoiding check/open races and FIFO blocking. systemd and OpenRC start with fixed `REMNANODE_ENV=/etc/remnanode/node.env` and `/usr/bin/env -i`, retaining only `PATH/HOME/USER/LOGNAME`. The Go configuration parser validates and applies `GOMEMLIMIT` and contract/core version overrides. Secrets and unknown configuration values never enter the Node or rw-core environment.
+Both `node.env` and `SECRET_KEY_FILE` are opened once with `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`. The same descriptor passes through `fstat -> bounded read -> fstat`, avoiding check/open races and FIFO blocking. systemd and OpenRC start with fixed `REMNANODE_ENV=/etc/remnanode-lite/node.env` and `/usr/bin/env -i`, retaining only `PATH/HOME/USER/LOGNAME`. The Go configuration parser validates and applies `GOMEMLIMIT` and contract/core version overrides. Secrets and unknown configuration values never enter the Node or rw-core environment.
 
 ## Protection Policies
 
@@ -113,10 +142,14 @@ Both `node.env` and `SECRET_KEY_FILE` are opened once with `O_NOFOLLOW|O_NONBLOC
 - Decoded webhooks enter a bounded queue of `64` items served by one worker. A full queue waits only within the internal request's `30s` deadline. If capacity does not recover, the request is canceled, or the service is closing, the server returns `503 + Retry-After` rather than reporting an event that was never admitted as successful.
 - The torrent-report ring retains at most the newest `1024` entries.
 - Once Xray is ready, the decoded configuration tree and canonical JSON are released; only hashes and runtime state remain.
-- Debian and Alpine installers automatically set `LOW_MEMORY=1` when `MemTotal <= 512 MiB`.
+- The maintained Docker and Native templates set `LOW_MEMORY=1` by default.
 - OpenRC verifies cgroup v2 limits of `448 MiB` memory, zero swap, 1 CPU, and 256 PIDs, plus the startup shell's actual cgroup membership. It refuses to start if a controller is unavailable or a write does not take effect. Shutdown does not depend on OpenRC 0.62.6 removing the path: `stop_post` first moves itself out, kills the exact service cgroup through `cgroup.kill`, waits up to 5 seconds for `populated=0`, and then removes the directory.
 
-The OpenRC cleanup above covers a normal stop in which init runs `stop_post`. The shared installer lock prevents concurrent writes, but it is not a persistent phase journal for `SIGKILL` or power loss. The project also does not promise automatic cleanup of a residual cgroup if `supervise-daemon` exits abnormally. Recover by rerunning the installer or rebooting a native deployment, or by recreating the container.
+The OpenRC cleanup above covers a normal stop in which init runs `stop_post`.
+The lifecycle journal covers host file and service intent, but it cannot make
+an abnormal `supervise-daemon` exit remove a residual kernel cgroup. Stop the
+remaining service processes or reboot that experimental host, then use
+`rnlctl repair` if lifecycle status reports an interrupted operation.
 
 Any change to request decoding, the Xray configuration lifecycle, RPC messages, report queues, or the dependency graph should rerun this engineering gate and compare stage peaks. That comparison is a maintenance guardrail, not release paperwork.
 
