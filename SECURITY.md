@@ -31,13 +31,15 @@ other copies.
 ## Supported Versions
 
 Only published releases receive security support. `edge` and `sha-*` are
-candidate builds without a long-term maintenance
-commitment. The standing policy is:
+candidate builds without a long-term maintenance commitment. An `rnl.N`
+version is a prerelease even when it is newer than the current stable release.
+The standing policy is:
 
 | Version | Security support |
 | --- | --- |
 | Stable release referenced by `latest` | Receives security fixes |
 | Previous stable release on the same release line | High-impact issues are addressed where upgrade or rollback remains practical |
+| Published `rnl.N` release referenced by `preview` | Best-effort fixes until a replacement preview or stable release is available |
 | `edge`, historical candidates, and older releases | No guaranteed fixes; upgrade to a supported release |
 
 The applicable GitHub Security Advisory and release notes may narrow or extend
@@ -56,6 +58,10 @@ service:
 - The current container starts as root, drops every other capability, enables
   `no-new-privileges`, and uses a read-only root filesystem. Host networking and
   `NET_ADMIN` nevertheless remain an explicit host trust boundary.
+- Native services run as the non-login `remnanode-lite` user with only
+  `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd applies a capability
+  bounding set and sandboxing; experimental OpenRC support applies and verifies
+  its resource cgroup before startup.
 - Run only verified images produced by this repository. Pin an exact version or
   manifest digest in production and verify its build attestation.
 - The Node does not persist the complete Xray configuration received from
@@ -70,17 +76,19 @@ them.
 
 ## Secret Handling
 
-For native systemd and OpenRC deployments, store the secret in
-`/etc/remnanode/secret.key` with owner and mode `root:remnanode 0640`. The Go
+For Native systemd and OpenRC deployments, store the Secret in
+`/etc/remnanode-lite/secret.key` with owner and mode `root:remnanode-lite 0640`. The Go
 process reads configuration and secret files through bounded, no-symlink file
 paths; it does not export the complete `node.env` as the service environment.
 
-The single-file Compose deployment necessarily stores the secret inline. It is
+Docker receives the Secret as an environment value whether it comes from a
+same-directory `.env` or is written directly in the Compose mapping. It is
 therefore visible in container metadata readable through `docker inspect`.
-Protect the file with:
+Protect both files when present:
 
 ```bash
 chmod 600 docker-compose.yaml
+[ ! -f .env ] || chmod 600 .env
 ```
 
 Also restrict access to the Docker socket, backups, shell history, and host
@@ -92,8 +100,8 @@ explicit value is accepted only after Go configuration parsing. Other
 unmanaged environment variables are still inherited, so do not inject
 unrelated secrets into the Node container or native service.
 
-Never commit `.env`, an expanded Compose file containing a real secret,
-`/etc/remnanode/node.env`, `secret.key`, certificates, private keys, host
+Never commit `.env`, an expanded Compose file containing a real Secret,
+`/etc/remnanode-lite/node.env`, `secret.key`, certificates, private keys, host
 inventories, or raw runtime captures.
 
 ## Supply-Chain Controls
@@ -109,8 +117,13 @@ The repository currently applies these controls:
   against download digests.
 - Release images include an SBOM, BuildKit provenance, and a GitHub build
   attestation.
-- Release binaries, the Compose asset, and data assets are covered by
-  `SHA256SUMS`.
+- Native `amd64` and `arm64` bundles contain a strict file manifest, an SPDX
+  SBOM, exact runtime provenance, license notices, and a separate installer.
+- Every published release asset is covered by `SHA256SUMS` and a GitHub build
+  attestation. Native online install and upgrade resolve exact versions only.
+- `rnlctl` keeps at most two verified generations, commits lifecycle changes
+  through a durable transaction journal, and repairs from a verified cached
+  bundle rather than downloading an unversioned replacement.
 
 These controls do not make builds byte-for-byte reproducible. The Debian
 packages installed by the Dockerfile are not yet pinned to a snapshot and exact
@@ -130,7 +143,8 @@ posture or release status.
   contract limits on external input before side effects.
 - Bound processes, queues, request bodies, concurrency, external-command
   output, and shutdown duration.
-- Keep a single owner for rw-core, plugin snapshots, and nftables state. A
+- Keep a single owner for rw-core, plugin snapshots, nftables state, and Native
+  generation selection. A
   failed side effect must not commit a false local success state.
 - Own only this project's rw-core process, internal sockets, and fixed nftables
   tables. Do not take over the host's general firewall policy.

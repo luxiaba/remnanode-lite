@@ -21,12 +21,26 @@ fi
 git diff --check
 git diff --cached --check
 go run ./cmd/docs-check
-shellcheck -x scripts/*.sh deploy/remnawave-node.openrc
+native_shell_files=()
+while IFS= read -r -d '' file; do
+  native_shell_files+=("$file")
+done < <(find release/native -type f -name '*.sh' -print0)
+[ "${#native_shell_files[@]}" -gt 0 ] || {
+  echo "Native release scripts are missing" >&2
+  exit 1
+}
+shellcheck -x scripts/*.sh deploy/remnanode-lite.openrc "${native_shell_files[@]}"
 for script in scripts/*.sh; do
   bash -n "$script"
 done
-sh -n deploy/remnawave-node.openrc
+for script in "${native_shell_files[@]}"; do
+  sh -n "$script"
+done
+sh -n deploy/remnanode-lite.openrc
 actionlint
+bash scripts/check-version-test.sh
+bash scripts/verify-release-tag-test.sh
+bash scripts/verify-release-latest-test.sh
 bash scripts/test-docker-packaging.sh
 bash scripts/check-supply-chain.sh
 

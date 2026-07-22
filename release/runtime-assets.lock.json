@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 2,
+  "xray": {
+    "version": "v26.6.27",
+    "commit": "45cf2898ab12e97a55dd8f1f3d78d903340bdc9e",
+    "sourceURL": "https://github.com/XTLS/Xray-core/tree/45cf2898ab12e97a55dd8f1f3d78d903340bdc9e",
+    "architectures": {
+      "amd64": {
+        "archive": {
+          "url": "https://github.com/XTLS/Xray-core/releases/download/v26.6.27/Xray-linux-64.zip",
+          "sha256": "b3e5902d06d6282fe53cfa2fc426058b9aeaa429b2c812e20887cd47f26d08bf",
+          "size": 21197571
+        },
+        "core": {
+          "archivePath": "xray",
+          "sha256": "8ef87ac07f95617e094b8e9302ea3e0c2d0edaa7045d57b455fdee28b3c9e41e",
+          "size": 37433470,
+          "license": "MPL-2.0"
+        }
+      },
+      "arm64": {
+        "archive": {
+          "url": "https://github.com/XTLS/Xray-core/releases/download/v26.6.27/Xray-linux-arm64-v8a.zip",
+          "sha256": "13a251379bea366c2cf10363ad71e75734193d401f26f518bf0c25e5c8f8c931",
+          "size": 19742958
+        },
+        "core": {
+          "archivePath": "xray",
+          "sha256": "53ad04b1ddcba6f4ff8834b3db2e9a596456441259cea3e4f03f86cd39e22884",
+          "size": 35061886,
+          "license": "MPL-2.0"
+        }
+      }
+    }
+  },
+  "geoIP": {
+    "version": "202606250051",
+    "commit": "14643bbb36652911e928bfef799aa46372de1d7f",
+    "sourceURL": "https://github.com/Loyalsoldier/geoip/tree/14643bbb36652911e928bfef799aa46372de1d7f",
+    "sourceArtifact": {
+      "url": "https://github.com/Loyalsoldier/geoip/archive/14643bbb36652911e928bfef799aa46372de1d7f.tar.gz",
+      "sha256": "e71b392b0d2c2d4f4203d93ef59f5d88f00765f84b7f2a46fdb0f6d9abb136d5",
+      "size": 1394831
+    },
+    "artifact": {
+      "url": "https://github.com/Loyalsoldier/geoip/releases/download/202606250051/geoip.dat",
+      "sha256": "e551b66e9300a98ecc94a5dc8c86a3973bf7033138b0fa61eb0638419ce50057",
+      "size": 18486901
+    },
+    "license": "NOASSERTION",
+    "licenseRationale": "The compiled database combines data from multiple sources under different licenses."
+  },
+  "geoSite": {
+    "version": "202606262300",
+    "commit": "31fa173fc342e550822ad25da6e0e28bed9e1f73",
+    "sourceURL": "https://github.com/Loyalsoldier/v2ray-rules-dat/tree/31fa173fc342e550822ad25da6e0e28bed9e1f73",
+    "sourceArtifact": {
+      "url": "https://github.com/Loyalsoldier/v2ray-rules-dat/archive/31fa173fc342e550822ad25da6e0e28bed9e1f73.tar.gz",
+      "sha256": "3ea2cf6fcd74ea3152c9419b44029c4995772f8f4f25e1e91a346d183a158cf6",
+      "size": 21274
+    },
+    "artifact": {
+      "url": "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202606262300/geosite.dat",
+      "sha256": "1417d29aa40e07fa3cd92e730e8d81921a78b8e573849ca2a4b8199c7c1d3b2b",
+      "size": 10440755
+    },
+    "license": "GPL-3.0-only"
+  },
+  "asn": {
+    "commit": "56d021c7536afb15317155e45b57e7b5c87a4700",
+    "source": {
+      "url": "https://github.com/ipverse/as-ip-blocks/archive/56d021c7536afb15317155e45b57e7b5c87a4700.tar.gz",
+      "sha256": "fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa978a33b674a58ec",
+      "size": 16175007
+    },
+    "output": {
+      "sha256": "8384ea40dd78786df51ff62e8c2018a9c582940b975bfea89c647c498a2ac997",
+      "size": 5072593,
+      "license": "CC0-1.0"
+    }
+  },
+  "licenses": {
+    "MPL-2.0": {
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MPL-2.0.txt",
+      "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172",
+      "size": 16727
+    },
+    "GPL-3.0-only": {
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/GPL-3.0-only.txt",
+      "sha256": "fb981668c18a279e285fc4d83fba1e836cc84dd4daa73c9697d3cfd2d8aca6e0",
+      "size": 34674
+    },
+    "CC-BY-SA-4.0": {
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/CC-BY-SA-4.0.txt",
+      "sha256": "cde7883b9050a1104f4ac19a1572aafd6e5d7323b68351aaf51fbf4beba54966",
+      "size": 18375
+    },
+    "CC0-1.0": {
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/CC0-1.0.txt",
+      "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "size": 7048
+    }
+  }
+}

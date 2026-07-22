@@ -1,296 +1,268 @@
-<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=a3bcaf0ddf308d4b447ebb560551e76fd8f7ab37bb1656660549e6261dbf048d -->
+<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=fb885b51d8c29e4e508f0831c35acf0bc49255d1ef9083b40a26febaf496b77d -->
+
 # Нативное развёртывание Linux
 
-> Это русский перевод. Если правила установки расходятся с [английским руководством](../../deployment-native.md), используйте английский оригинал.
+> Русский перевод; при изменении правил используйте [английский оригинал](../../deployment-native.md).
 
-[К индексу документации на русском](README.md)
+[Индекс документации](README.md) · [Конфигурация](configuration.md) · [Эксплуатация](operations.md) · [Версионирование](versioning.md)
 
-В этом руководстве описана установка Remnanode Lite из бинарных файлов GitHub Release на хосте с systemd или OpenRC. Нативный вариант не требует Docker daemon и позволяет системному менеджеру служб запускать Node напрямую. Если Docker уже установлен, [Docker Compose](deployment-docker.md) остаётся более простым способом.
+Нативный вариант запускает `remnanode-lite` непосредственно через systemd или OpenRC. Он подходит для небольших хостов, где Docker нельзя установить или где постоянные расходы Docker Engine daemon и container runtime не подходят. Native не означает отсутствие фоновой службы: `remnanode-lite` всё равно работает под systemd или OpenRC. Для большинства узлов Docker Compose остаётся вариантом по умолчанию. Самодостаточные Native lifecycle bundle распространяются как GitHub Releases с точным тегом; стабильный `2.8.0` содержит первый bundle.
 
-Бинарный файл называется `remnanode-lite`. При нативной установке сохраняется имя службы `remnawave-node`, чтобы прежние команды обновления, мониторинга и управления продолжали работать.
+Каждый опубликованный bundle содержит Node, `rnlctl`, rw-core, GeoIP, GeoSite, данные ASN, определения служб, лицензии и SPDX SBOM. Manifest фиксирует digest каждого файла. Установщик сначала проверяет digest внешнего архива и только затем изменяет хост.
 
-## Граница поддержки
+Bundle `2.8.0` реализует контракт официального Node `2.8.0`. Установка и обновление принимают только точную версию Release, содержащего Native lifecycle bundle, например `2.8.0`. Имена движущихся каналов `latest`, `preview`, `edge` и `sha-*` для Native недопустимы.
 
-Бинарные файлы выпускаются для Linux `amd64` и `arm64`. Установщик поддерживает systemd и OpenRC; во время разработки были проверены следующие установки:
+## Поддерживаемые хосты
 
-| Платформа | Менеджер сервисов | Архитектура |
+| Хост | Менеджер служб | Уровень поддержки |
 | --- | --- | --- |
-| Ubuntu 24.04 | systemd | arm64 |
-| Alpine 3.22 | OpenRC | arm64 |
+| Rocky Linux 9 | systemd | Основная цель |
+| Rocky Linux 8 | systemd 239 | Совместим; новый hardening drop-in автоматически не устанавливается |
+| Debian 12 | systemd | Совместим |
+| Другие актуальные дистрибутивы с systemd | systemd | Должны работать, но сначала проверьте конкретный образ |
+| OpenRC с доступными контроллерами cgroup v2 | OpenRC | Экспериментально |
 
-CI выполняет кросс-компиляцию обеих архитектур и тесты сетевого администрирования Linux на Ubuntu. Перед созданием тега `v2.8.0` сопровождающие также проверили Docker-кандидат на реальном хосте `linux/amd64`, с установленными проектом ограничениями контейнера, настоящей Panel и proxy-трафиком. Это было решением сопровождающих о выпуске, а не требованием хранить данные проверки в репозитории. Нативная установка systemd/OpenRC, работа на `arm64`, целевой хост с 512 MiB, нагрузка в 50 000 пользователей, 24-часовой прогон и испытания отказа и отката остаются последующей проверкой. Перед массовым развёртыванием испытайте нативную установку на своём дистрибутиве. На системах, отличных от Debian и Ubuntu, заранее установите команды, необходимые скриптам.
+Native lifecycle bundle собираются для Linux `amd64` и `arm64`. Служба ограничена `448 MiB RAM`, без дополнительного swap, `1 CPU` и `256 tasks`, чтобы оставить запас на хосте `512 MiB / 1 vCPU / 2 GB`. OpenRC дополнительно требует `supervise-daemon`, `checkpath`, `rc-update`, cgroup v2, доступные для записи контроллеры memory/CPU/PID и `cgroup.kill`; при отсутствии этих условий запуск блокируется.
 
-Целевой тег должен иметь опубликованный GitHub Release с бинарными архивами, файлами support, `SHA256SUMS` и базой ASN. Кандидатные образы GHCR `edge` или `sha-*` не заменяют нативные артефакты Release.
+Установщик не меняет репозитории пакетов, sysctl, firewall, SELinux или синхронизацию времени. Это ответственность администратора хоста.
 
 ## Предварительные требования
 
-- Доступ root.
-- Linux amd64 или arm64.
-- Созданный в Panel узел и его полный Secret Key.
-- Порт Node, настроенный в Panel, совпадает с `NODE_PORT` хоста.
-- Правильное системное время и рабочий доступ к сети.
-- Перед первой установкой или синхронизацией ресурсов rw-core рекомендуется не менее 1 GiB свободного места. Установщик вычисляет фактический бюджет по каждой файловой системе для скачивания, распаковки, staging целевых файлов и существующих резервных копий.
-- Bash, curl и `flock` из util-linux установлены до bootstrap.
-- Firewall хоста разрешает Panel доступ к порту Node API и открывает входящие proxy-порты, необходимые фактической конфигурации.
+Запускайте установщик от root. Для онлайн-установки нужны systemd (либо описанная экспериментальная среда OpenRC), `nft` из nftables, `ss` из iproute2, `useradd` и `groupadd`, если выделенная учётная запись `remnanode-lite` ещё не существует, доверенное хранилище CA, `curl` или `wget`, GNU tar и gzip. Порт Node должен быть доступен Panel, а входящие proxy-порты — соответствовать конфигурации Panel.
 
-Шаблоны systemd и OpenRC ограничивают сервис до `448 MiB RAM / 0 swap / 1 CPU / 256 tasks`. Для OpenRC дополнительно требуются доступные для записи и фактически действующие контроллеры memory, CPU и PIDs в cgroup v2. Если любой контроллер недоступен, сервис отказывается запускаться.
+Rocky Linux 8/9:
 
-### Зависимости bootstrap
+```bash
+sudo dnf install -y ca-certificates curl nftables iproute
+```
 
-Ubuntu или Debian:
+Debian 12:
 
 ```bash
 sudo apt-get update
-sudo apt-get install --yes curl util-linux
+sudo apt-get install -y ca-certificates curl nftables iproute2
 ```
 
-Alpine:
+Поддерживайте правильное системное время: неправильные часы ломают mTLS и JWT.
+
+## Установка точной версии
+
+Скачайте installer и список digest из одного GitHub Release, проверьте installer, затем запустите его:
 
 ```bash
-apk add --no-cache bash curl util-linux
+VERSION=2.8.0
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
+workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
+trap 'rm -rf "$workdir"' EXIT
+cd "$workdir"
+curl -fLO "${BASE}/install.sh"
+curl -fLO "${BASE}/SHA256SUMS"
+grep '  install.sh$' SHA256SUMS | sha256sum --check --strict -
+
+sudo sh ./install.sh --version "$VERSION" --port 38329
 ```
 
-Затем установщик добавляет зависимости времени выполнения, включая CA certificates, tar, unzip, iproute2 и nftables.
+Замените `38329` портом, настроенным для этого Node в Panel. Если действующий Secret ещё не установлен, installer запросит его без отображения на экране и попросит отдельное подтверждение. Онлайн installer скачивает только архив точной версии для данной архитектуры; он не следует за GitHub Latest или движущимся каналом образов.
 
-## Установка с systemd
+### Неинтерактивная установка
 
-Выберите точный тег, для которого уже опубликован Release. Допустимы и версии, согласованные с официальными, и независимые итерации проекта:
-
-```bash
-release_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
-```
-
-Интерактивная установка запрашивает порт и Secret:
-
-```bash
-curl -fsSL \
-  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node.sh" \
-  | sudo env RNL_TAG="${release_tag}" bash
-```
-
-Для неинтерактивной установки передавайте Secret через файл с ограниченными правами, чтобы он не остался в истории shell:
+Положите полный Secret Panel во временный обычный файл и передайте его через `--secret-file`. Флаг `--yes` пропускает только подтверждение:
 
 ```bash
 umask 077
-printf '%s' 'PASTE_THE_COMPLETE_SECRET_KEY_FROM_THE_PANEL' > /tmp/remnanode-secret.key
+printf '%s\n' 'PASTE_THE_COMPLETE_PANEL_SECRET_KEY' >/root/remnanode-lite.secret
 
-curl -fsSL \
-  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node.sh" \
-  | sudo env RNL_TAG="${release_tag}" bash -s -- \
-      --install --yes --port 2222 --secret-file /tmp/remnanode-secret.key
+sudo sh ./install.sh \
+  --version "$VERSION" \
+  --port 38329 \
+  --secret-file /root/remnanode-lite.secret \
+  --yes
 
-rm -f /tmp/remnanode-secret.key
+rm -f /root/remnanode-lite.secret
 ```
 
-Проверьте установку:
+Не передавайте Secret аргументом командной строки: его могут увидеть список процессов и история shell.
+
+### Подготовить без запуска
+
+`--prepare-only` устанавливает и проверяет выпуск, но не включает и не запускает службу:
 
 ```bash
-sudo systemctl --no-pager status remnawave-node
-sudo ss -H -lntp 'sport = :2222'
-sudo remnanode-lite doctor
+sudo sh ./install.sh --version "$VERSION" --port 38329 --prepare-only --yes
+sudo rnlctl activate --secret-file /root/remnanode-lite.secret
 ```
 
-## Установка с Alpine/OpenRC
+Подготовленную установку нельзя запускать через `rnlctl start`: `activate` явно проверяет конфигурацию, включает службу, запускает её и ждёт внутреннего healthcheck.
 
-Для Alpine предусмотрена отдельная точка входа:
+## Офлайн-установка
+
+С подключённой машины скачайте из одного Release и сохраните имена трёх файлов:
+
+```text
+install.sh
+remnanode-lite_<version>_linux_<architecture>.tar.gz
+SHA256SUMS
+```
+
+Проверьте их и перенесите на целевой хост:
 
 ```bash
-release_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
-
-curl -fsSL \
-  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node-alpine.sh" \
-  | env RNL_TAG="${release_tag}" bash
+grep -E '  (install\.sh|remnanode-lite_.*_linux_(amd64|arm64)\.tar\.gz)$' \
+  SHA256SUMS | sha256sum --check --strict -
+sudo sh ./install.sh \
+  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
+  --port 38329
 ```
 
-Неинтерактивные параметры совпадают с systemd:
+Если `--sha256` не указан, installer берёт единственную совпадающую строку из `SHA256SUMS`, лежащего рядом с архивом. Для production лучше использовать архив и независимо загруженный checksum-файл, а не только распакованный каталог.
+
+## Раскладка файлов
+
+```text
+/usr/local/sbin/rnlctl
+/usr/local/bin/remnanode-lite -> /usr/local/lib/remnanode-lite/current/bin/remnanode-lite
+
+/usr/local/lib/remnanode-lite/
+├── current -> generations/<generation-id>
+├── previous -> generations/<previous-id>       # появляется после первого обновления
+└── generations/<generation-id>/
+
+/etc/remnanode-lite/
+├── node.env
+└── secret.key
+
+/var/lib/remnanode-lite/
+/var/log/remnanode-lite/
+/run/remnanode-lite/
+
+/var/lib/remnanode-lite-installer/
+├── state.json
+├── journal.json                                # во время операции или восстановления
+├── retained.json                               # может остаться после обычного удаления
+├── bundles/
+└── tmp/                                        # root-only временный каталог на диске
+```
+
+Installer предпочитает безопасный явно заданный `TMPDIR`. Иначе используется `/var/lib/remnanode-lite-installer/tmp`, а если его нельзя подготовить — `/var/tmp`. Workspace каждой операции имеет режим `0700` и удаляется при выходе. Это не даёт большому архиву попасть в `/tmp`, который на хосте 512 MiB может быть tmpfs.
+
+`rnlctl` — отдельный обычный файл, принадлежащий root, а не ссылка в текущий generation. Поэтому инструмент восстановления остаётся доступным при проверке ссылок. Служба работает от непривилегированного пользователя и группы `remnanode-lite`; `uninstall --purge` удаляет только созданные этим установщиком и не изменённые identity.
+
+Имена служб: `remnanode-lite.service` для systemd и `remnanode-lite` для OpenRC:
 
 ```bash
-curl -fsSL \
-  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${release_tag}/scripts/install-node-alpine.sh" \
-  | env RNL_TAG="${release_tag}" bash -s -- \
-      --install --yes --port 2222 --secret-file /root/remnanode-secret.key
+systemctl status remnanode-lite.service
+rc-service remnanode-lite status
 ```
 
-Проверьте установку:
+## Проверка после установки
 
 ```bash
-rc-service remnawave-node status
-ss -H -lntp 'sport = :2222'
-remnanode-lite doctor
+sudo rnlctl status --json
+sudo rnlctl doctor
+sudo rnlctl logs node --lines 100
+sudo rnlctl logs core-errors --lines 100
+remnanode-lite version
 ```
 
-Сейчас `doctor` также проверяет unit systemd, поэтому WARN об отсутствии unit systemd ожидаем в OpenRC. Ошибки ERROR влияют на код завершения и основной результат. Сквозное соединение с Panel всё равно необходимо подтвердить в Panel.
+`status --json` проверяет выбранный generation, конфигурацию, службу, права, cache восстановления и внутренний Unix socket. `doctor` выдаёт отдельный результат по каждой подсистеме. Эти команды не доказывают связь с Panel и работоспособность proxy-трафика: проверьте их отдельно.
 
-## Параметры установщика
-
-Обе точки входа предоставляют одинаковые основные параметры:
-
-| Параметр | Описание |
+| Состояние | Значение |
 | --- | --- |
-| `--install` | Новая установка. Если обнаружена полная установка, переключается на обновление с возможностью отката и по умолчанию синхронизирует rw-core, geo и ASN из целевого Release. Добавьте `--skip-xray`, чтобы сохранить существующие ресурсы. |
-| `--upgrade` | Явно обновить Node, сервис и support, по умолчанию сохранив rw-core. |
-| `--uninstall` | Перейти к процедуре удаления. |
-| `--yes`, `-y` | Пропустить подтверждение. Если Secret отсутствует, установка завершается без запуска сервиса. |
-| `--dry-run` | Предварительно показать действия без изменения системы. |
-| `--skip-xray` | Не устанавливать rw-core. Только для продвинутых сред, самостоятельно предоставляющих совместимый core. |
-| `--low-memory` | Принудительно записать `LOW_MEMORY=1` в конфигурацию. Рекомендуется для узлов с малым объёмом памяти. |
-| `--port PORT` | HTTPS-порт Node в диапазоне `1..65535`; по умолчанию 2222. |
-| `--secret-file PATH` | Безопасно прочитать, канонизировать и проверить Secret из обычного файла. |
+| `absent` | Управляемой Native-установки нет |
+| `prepared` | Установлено и проверено, но намеренно выключено |
+| `installed` | Файлы, состояние службы и health согласованы |
+| `degraded` | Установка есть, но одна или несколько проверок не пройдены |
+| `recovery-required` | Остался journal или нечитаемое состояние; нужен repair |
 
-Установщик автоматически включает режим малого объёма памяти, если общий `MemTotal <= 512 MiB`. Если `node.env` уже существует, текущие порт и выбор режима малого объёма памяти сохраняются, пока они не переопределены явно.
-
-## Транзакция установки
-
-Установщик:
-
-1. Получает глобальную блокировку установщика, отклоняя параллельную установку, обновление, обновление rw-core или удаление.
-2. Проверяет архитектуру, бюджет диска и базовые команды.
-3. Создаёт выделенную системную учётную запись `remnanode:remnanode` и каталоги с ограниченными правами.
-4. Скачивает `SHA256SUMS` и архив архитектуры целевого Release, затем проверяет контрольные суммы, структуру и версию бинарного файла.
-5. Устанавливает Node, файлы support, закреплённый rw-core, geo-данные и компактную базу ASN.
-6. Проверяет и сохраняет Secret, устанавливает определение сервиса и вспомогательные команды журналов.
-7. Запускает сервис и подтверждает, что настроенным TCP-портом владеет ровно один целевой процесс Node.
-
-Повторный запуск `--install` для полной установки переходит к транзакционному обновлению и обновляет rw-core, geo и ASN из выбранного Release. Явный `--upgrade` по умолчанию сохраняет эти ресурсы; чтобы обновить их, добавьте `--upgrade-xray`. Частичная установка переходит к восстановлению, а не рассматривается как обычное обновление.
-
-## Структура файловой системы
-
-| Путь | Владелец или назначение |
-| --- | --- |
-| `/usr/local/bin/remnanode-lite` | Основная программа Node. |
-| `/usr/local/bin/remnanode-xlogs` | Просмотр stdout rw-core. |
-| `/usr/local/bin/remnanode-xerrors` | Просмотр stderr rw-core. |
-| `/etc/remnanode/node.env` | `root:remnanode 0640`; конфигурация времени выполнения. |
-| `/etc/remnanode/secret.key` | `root:remnanode 0640`; Secret Panel. |
-| `/usr/local/lib/remnanode/rw-core` | Частный rw-core проекта. |
-| `/usr/local/lib/remnanode/support/<tag>` | Сервис и support установщика, соответствующие установленному Release. |
-| `/usr/local/lib/remnanode/support-current` | Управляемая символическая ссылка на текущий каталог support. |
-| `/usr/local/share/remnanode/xray` | Geo и необязательные данные zapret. |
-| `/usr/local/share/remnanode/asn/asn-prefixes.bin` | Компактная база ASN. |
-| `/var/lib/remnanode` | Рабочий каталог сервиса. Node не сохраняет здесь конфигурацию Xray от Panel. |
-| `/var/log/remnanode` | Журналы rw-core; OpenRC также хранит здесь журналы supervisor. |
-| `/run/remnanode` | Каталог Unix-сокета, очищаемый при перезагрузке. |
-| `/var/lib/remnanode-installer` | Каталог скачивания, распаковки и транзакций, доступный только root. |
-| `/run/lock/remnanode-installer.lock` | Блокировка, общая для всех изменяющих систему точек входа установщика. |
-
-Проект не владеет общими путями `/usr/local/bin/xray` и `/usr/local/share/xray` и не удаляет их.
-
-Определения сервисов в репозитории находятся в [`deploy/remnawave-node.service`](../../../deploy/remnawave-node.service) и [`deploy/remnawave-node.openrc`](../../../deploy/remnawave-node.openrc).
-
-## Модель безопасности сервиса
-
-Нативный сервис не работает от root. systemd и OpenRC используют выделенного пользователя `remnanode` и предоставляют только:
-
-- `CAP_NET_ADMIN` для управления таблицей nftables проекта и уничтожения сокетов через `NETLINK_SOCK_DIAG`.
-- `CAP_NET_BIND_SERVICE`, чтобы rw-core мог прослушивать порты с 1 по 1023.
-
-systemd также применяет ограничивающий набор capabilities, `NoNewPrivileges`, системные каталоги только для чтения, ограничения namespace, syscall и address family, а также частные временные каталоги. OpenRC использует `supervise-daemon`, `no_new_privs` и пределы cgroup v2.
-
-Менеджер сервисов не экспортирует `node.env`. Перед запуском rw-core Node удаляет из окружения дочернего процесса Secret Panel, путь к файлу Secret и путь к файлу конфигурации Node, затем передаёт пути ресурсов и внутренний токен, необходимые core.
-
-## Управление сервисом
-
-systemd:
+## Служба и журналы
 
 ```bash
-sudo systemctl status remnawave-node
-sudo systemctl restart remnawave-node
-sudo systemctl stop remnawave-node
-sudo journalctl -u remnawave-node -f
+sudo rnlctl start
+sudo rnlctl stop
+sudo rnlctl restart
+sudo rnlctl logs node --follow
+sudo rnlctl logs core --follow
+sudo rnlctl logs core-errors --follow
 ```
 
-OpenRC:
+Вывод Node через systemd попадает в journald; OpenRC использует `/var/log/remnanode-lite/openrc.log` и `openrc.err.log`. Вывод rw-core всегда находится в `/var/log/remnanode-lite/xray.out.log` и `xray.err.log`; `rnlctl logs` выбирает правильный backend и следует за ротацией.
+
+## Обновление и откат
+
+Онлайн-обновление принимает только точную версию:
 
 ```bash
-rc-service remnawave-node status
-rc-service remnawave-node restart
-rc-service remnawave-node stop
-tail -F /var/log/remnanode/openrc.log
+sudo rnlctl upgrade --to 2.8.0-rnl.2
 ```
 
-На обеих платформах журналы rw-core можно просматривать командами:
+Для офлайн-обновления используйте проверенный архив:
 
 ```bash
-remnanode-xlogs
-remnanode-xerrors
+sudo rnlctl upgrade \
+  --bundle ./remnanode-lite_2.8.0-rnl.2_linux_amd64.tar.gz \
+  --sha256 '<64-character-sha256>' \
+  --expected-version 2.8.0-rnl.2
 ```
 
-После перезапуска сервиса Node сначала сообщает, что rw-core offline, и ждёт нового запроса start от Panel. Это ожидаемо и не означает потерю локальной конфигурации или ошибку запуска сервиса.
+Транзакция сохраняет состояние enabled/running, проверяет все файлы и ждёт внутренний health перед фиксацией. Хранятся только current и previous; не заменяйте бинарный файл прямой записью в `/usr/local/bin/remnanode-lite`.
 
-## Обновление
-
-Выберите тег целевого Release:
+Откат к сохранённому предыдущему generation:
 
 ```bash
-target_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
-
-curl -fsSL \
-  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${target_tag}/scripts/upgrade.sh" \
-  | sudo env RNL_TAG="${target_tag}" bash -s -- --yes
+sudo rnlctl rollback
+sudo rnlctl rollback --to '<previous-generation-id>'
 ```
 
-По умолчанию обновляются только Node, сервис и файлы support, а установленный rw-core сохраняется. Если целевой Release явно требует соответствующий core или нужно обновить данные geo и ASN:
+## Восстановление прерванной операции
+
+Изменяющие команды используют root-only журнал и lock `/run/remnanode-lite-installer/operation.lock`. При сообщении о необходимости восстановления не удаляйте вручную lock, journal, generation или cache:
 
 ```bash
-curl -fsSL \
-  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${target_tag}/scripts/upgrade.sh" \
-  | sudo env RNL_TAG="${target_tag}" bash -s -- --yes --upgrade-xray
+sudo rnlctl status --json
+sudo rnlctl doctor
+sudo rnlctl repair
 ```
 
-Транзакция обновления:
+Если cache повреждён, передайте архив уже записанной версии с `--expected-version`. `repair` восстанавливает состояние, но не выполняет незапрошенное обновление.
 
-1. Записывает, работал ли сервис; при делегировании из install также записывает, был ли сервис включён при загрузке.
-2. Сохраняет резервные копии бинарного файла, определения сервиса, файлов support, `node.env`, `secret.key` и необязательных ресурсов rw-core, geo и ASN.
-3. Останавливает Node и процесс rw-core, указанный конфигурацией, и подтверждает их завершение.
-4. Атомарно заменяет целевые файлы и мигрирует поддерживаемую устаревшую конфигурацию.
-5. Восстанавливает работающее состояние только тогда, когда сервис работал до обновления или делегированная установка требует его запуска.
-6. Проверяет версию бинарного файла и фиксирует транзакцию только после того, как ровно один целевой процесс владеет настроенным портом.
+## Порт и Secret
 
-Явное обновление не запускает службу, если она была остановлена заранее. При ошибке проверки скрипт пытается восстановить исходные файлы, регистрацию при загрузке и состояние службы. Если откат завершить не удаётся, резервная копия остаётся в каталоге установщика, доступном только root, а скрипт завершается с ошибкой.
-
-Изменение `node.env` или Secret не требует повторной установки. Обновите файлы с правильными правами, как описано в [русском справочнике по конфигурации](configuration.md), затем перезапустите сервис.
-
-## Откат на предыдущую версию
-
-Используйте только старый тег, для которого проект действительно выпустил Release:
+`/etc/remnanode-lite/node.env` — файл данных, а не shell-скрипт. Secret хранится в `/etc/remnanode-lite/secret.key` с владельцем `root:remnanode-lite` и режимом `0640`. Для ротации создайте root-only временный файл, проверьте его и замените атомарно:
 
 ```bash
-old_tag='vX.Y.Z-rnl.N' # or vX.Y.Z
-
-curl -fsSL \
-  "https://raw.githubusercontent.com/luxiaba/remnanode-lite/${old_tag}/scripts/upgrade.sh" \
-  | sudo env RNL_TAG="${old_tag}" bash -s -- --yes
+umask 077
+secret_tmp="$(mktemp)"
+printf '%s\n' 'PASTE_THE_NEW_COMPLETE_SECRET_KEY' >"$secret_tmp"
+remnanode-lite validate-secret <"$secret_tmp"
+sudo install -o root -g remnanode-lite -m 0640 \
+  "$secret_tmp" /etc/remnanode-lite/secret.key.new
+sudo mv -f /etc/remnanode-lite/secret.key.new /etc/remnanode-lite/secret.key
+rm -f "$secret_tmp"
+sudo rnlctl restart
 ```
 
-Добавьте `--upgrade-xray`, если старой версии требуется соответствующий rw-core. Перед откатом прочитайте примечания обоих Releases и убедитесь в совместимости конфигурации и базовых контрактов.
+При изменении `NODE_PORT` одновременно обновите Panel и firewall, затем выполните `sudo rnlctl doctor` и `sudo rnlctl restart`.
 
 ## Удаление
 
-Предпочтительно использовать скрипт support, установленный с текущей версией:
+Обычное удаление убирает службу, бинарные файлы, generation, runtime-состояние, журналы и cache установщика, но оставляет `/etc/remnanode-lite` для безопасной повторной установки:
 
 ```bash
-sudo bash /usr/local/lib/remnanode/support-current/scripts/uninstall.sh
+sudo rnlctl uninstall
 ```
 
-Неинтерактивные режимы:
+Для удаления конфигурации и метаданных явно подтвердите purge:
 
-| Режим | Команда | Сохраняемые данные |
-| --- | --- | --- |
-| Сохранить конфигурацию | `--keep-config --yes` | `node.env`, Secret, журналы, данные и rw-core/geo/ASN. |
-| Очистить данные времени выполнения | `--purge --yes` | rw-core/geo/ASN. |
-| Удалить все ресурсы проекта | `--full` | Конфигурация, журналы, данные и rw-core/geo/ASN проекта не сохраняются. |
-| Предварительный просмотр | Добавьте `--dry-run` | Изменения не выполняются. |
+```bash
+sudo rnlctl uninstall --purge --yes
+```
 
-Файлы удаляются только после подтверждения, что менеджер сервисов остановился, а целевые процессы Node и rw-core завершились. Установщик также удаляет частную таблицу nftables проекта, но не завершает посторонние процессы со схожими именами и не удаляет общие пути Xray.
+Purge не удаляет системные пакеты, правила firewall, sysctl, сторонние установки Xray или данные администратора.
 
-Даже с `--full` сохраняются следующие системные элементы:
+## Безопасность
 
-- системные пользователь и группа `remnanode`;
-- общие системные пакеты, установленные установщиком;
-- marker-каталог `/var/lib/remnanode-installer`, доступный только root.
-
-Эти элементы сохраняются для более безопасной повторной установки. Поэтому `--full` удаляет все файлы проекта, но не возвращает хост в точности к состоянию до установки.
-
-## Дальнейшая эксплуатация
-
-Проверки состояния, бюджеты журналов, политика обновления и диагностика описаны в [русском руководстве по эксплуатации](operations.md).
+- Каталог `/etc/remnanode-lite` должен иметь `root:remnanode-lite 0750`, файлы конфигурации и Secret — `0640`.
+- В Native `node.env` не записывайте непустой `SECRET_KEY`; используйте `SECRET_KEY_FILE`.
+- Службе нужны только `CAP_NET_ADMIN` и `CAP_NET_BIND_SERVICE`; не запускайте её от root для обхода ошибки capability.
+- Перед массовым обновлением сохраните предыдущую точную версию и проверьте Panel и реальный трафик.

@@ -13,7 +13,9 @@ The first release line starts at `2.8.0` with these goals:
 - Resolution of known lifecycle, plugin, firewall, contract, and installation supply-chain defects.
 - Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk` as an engineering target.
 - Linux `amd64` and `arm64` artifacts, with real Panel and traffic verification before release.
-- Keep Debian/systemd and Alpine/OpenRC installation paths available.
+- Keep Rocky Linux 9/systemd as the primary Native target, with Rocky Linux 8
+  and Debian 12 as compatible targets. OpenRC remains an explicitly
+  experimental cgroup v2 path.
 
 The project version and official contract version move independently. `X.Y.Z-rnl.N` identifies a project-specific iteration, whether it develops the next version line early or improves an existing official baseline. A plain `X.Y.Z` release is allowed only after alignment with that official contract is complete. Monitoring a new official release creates an issue; it never changes the contract or publishes anything automatically. See the [versioning model](../versioning.md).
 
@@ -49,31 +51,34 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M6 512 MiB resource work | Complete |
 | M7 System integration and supply chain | Complete |
 | M8 Release preparation | Complete |
+| M9 Self-contained Native distribution | Ready for publication |
 
 The M6 50,000-user measurement from 2026-07-15 and the M7
 init/distribution snapshots from 2026-07-19 remain useful engineering
 baselines. They document the resource work and give later changes a stable
 comparison point; they are not claims about every future build.
 
-`2.8.0` is ready for the normal publication path. Development moves from
-`dev` to `main`; the container workflow publishes the immutable
-`sha-<40-character-main-commit>` image; the maintainer confirms that exact
-image with a real Panel and real proxy traffic; and an annotated tag on the
-current `main` HEAD starts publication. The release workflow verifies the
-candidate's multi-architecture manifest and GitHub attestation before promoting
-the same digest to `2.8.0` and `latest`. Runtime observations stay outside the
-source repository, and GitHub generates the Release notes.
+The clean stable `2.8.0` release is the official-contract baseline and includes
+the first self-contained Native bundle. Its tag publishes exact Docker and
+Native assets and advances the GHCR `latest` channel. Runtime observations stay
+outside the source repository, and GitHub generates the Release notes.
 
 ## Current focus
 
-- **Now:** Publish `2.8.0` from the verified current `main` candidate.
-- **Next:** Evaluate the next official release detected by automation. Pin its source and review the contract diff before selecting a project version line.
+- **Now:** Publish the clean stable `2.8.0` release after its exact candidate
+  image and Native bundles have passed the release workflow.
+- **Next:** Evaluate the next official release detected by automation. Pin its
+  source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
-The following are accepted limitations or later enhancements and do not block `2.8.0`:
+The following are accepted limitations or later enhancements and do not block
+the `2.8.0` stable release:
 
 - More whole-host 512 MiB, arm64 runtime, native-install, large-user, soak, and fault-injection coverage can be added when it answers a concrete risk.
-- The installer has no persistent phase journal. Rerun it after `SIGKILL` or power loss; recreate the container for a container deployment.
+- The Native journal cannot recover a host power loss that leaves an abnormal
+  OpenRC cgroup populated. Stop the residual process or reboot that host, then
+  run `rnlctl repair`; recreate a container when its runtime state is not
+  recoverable.
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
 - Revisit the memory tradeoff of a resident active-config copy and runtime `dump-config` only with measured need.
 - P3 test additions remain for top-level `runNode` failure convergence and cancellation of active Unix-server handlers.
@@ -139,7 +144,10 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Align directory permissions and lifecycle behavior between Debian/systemd and Alpine/OpenRC.
 - Pin every Release, rw-core, ASN, and helper-script asset and verify its digest.
 - Ensure installation, upgrade, rollback, and uninstall do not affect processes or nftables tables outside this project.
-- Ubuntu 24.04/systemd and Alpine 3.22/OpenRC have passed real fresh-install, repeat-install, upgrade, invalid-service rollback, start/stop, and isolated-uninstall exercises.
+- Ubuntu 24.04/systemd and Alpine 3.22/OpenRC snapshots remain historical
+  engineering baselines for predecessor installer work. The supported Native
+  lifecycle is now `rnlctl`; systemd is the maintained path and OpenRC remains
+  experimental until the target host is checked.
 - Both non-root service processes retain only effective and ambient `NET_ADMIN` and `NET_BIND_SERVICE`.
 - Pinned rw-core, ASN, and release archives are verified before installation.
 - Fault-injection tests cover post-write failures and per-file digest restoration for rw-core assets and Node upgrade transactions.
@@ -149,9 +157,26 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Pass Go tests, race tests, vet, static checks, script checks, and multi-platform builds.
 - Publish one immutable `sha-<40-character-commit>` image for every `main` commit, with runnable `linux/amd64` and `linux/arm64` manifests and their attestations.
 - Verify the selected candidate with a real Panel and real proxy traffic under the production container limits before tagging it. Keep host details, logs, and runtime records outside the repository.
-- Require the release tag to point to the current `main` HEAD. Verify the candidate manifest and source attestation, then promote the same digest to the exact version and `latest` without rebuilding it.
+- Require the release tag to point to the current `main` HEAD. Verify the
+  candidate manifest and source attestation, build and attest Native bundles,
+  then promote the same digest to the exact version without rebuilding it.
+  Plain stable tags advance `latest`; `rnl.N` tags advance `preview` only.
 - Keep the existing lifecycle, process-group cleanup, installer, 50,000-user, and rollback results as code-level tests or dated engineering baselines.
 - Update the compatibility documentation and dated root `CHANGELOG.md`; let GitHub generate the Release notes.
+
+### M9 - Self-contained Native distribution
+
+- Publish one verified bundle per Linux architecture with Node, `rnlctl`,
+  rw-core, geo/ASN data, service material, manifest, SPDX SBOM, notices, and
+  exact provenance.
+- Replace distribution-specific shell mutation logic with the tested Go
+  lifecycle engine and its durable generation journal.
+- Support systemd on Rocky Linux 9 as the primary Native target, Rocky Linux 8
+  and Debian 12 as compatible targets, and OpenRC as an explicitly experimental
+  cgroup v2 path.
+- Exercise exact install, prepare/activate, upgrade, rollback, repair,
+  uninstall, tamper refusal, account isolation, and interrupted-operation
+  recovery before publishing `2.8.0`.
 
 ## Development and release rules
 

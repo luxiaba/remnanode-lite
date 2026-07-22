@@ -31,9 +31,18 @@ grep -Eq "^## \[${version//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md 
   exit 1
 }
 
+REMNANODE_OFFICIAL_SOURCE='' bash scripts/check-go.sh
 REMNANODE_DOCS_STRICT_TRANSLATIONS=1 \
   REMNANODE_OFFICIAL_SOURCE='' \
-  bash scripts/check.sh
+  bash scripts/check-repository.sh
+sh release/native/install_test.sh
+
+if command -v govulncheck >/dev/null 2>&1; then
+  govulncheck ./...
+elif [ "${REQUIRE_GOVULNCHECK:-0}" = "1" ]; then
+  echo "govulncheck is required but not installed" >&2
+  exit 1
+fi
 
 if [ "${REQUIRE_TAG_AT_HEAD:-0}" = "1" ]; then
   [ "$(git cat-file -t "refs/tags/${release_tag}" 2>/dev/null || true)" = tag ] || {

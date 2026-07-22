@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=eeeb79d224806379f399a4e9b2e3531742517027e75cf4c9fa1a3992d6b3a6a6 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=5cc1a6e6ee471524ca485cefa0960856c88aa664d84c4a1264f3e521961de0a7 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -37,7 +37,7 @@
 以下工具只在相应检查中需要：
 
 - ShellCheck `0.11.0`：Shell 与 OpenRC 静态检查。
-- actionlint `1.7.7`：GitHub Actions 静态检查。
+- actionlint `1.7.12`：GitHub Actions 静态检查。
 - govulncheck `1.1.4`：可达 Go 漏洞扫描。
 - Docker Engine 与 Docker Compose v2：Compose 校验、镜像构建和资源测试。
 - Linux 的 `iproute2`、`nftables`、`unshare` 与 root 权限：网络管理集成测试。
@@ -50,7 +50,7 @@
 actionlint 与 govulncheck 可以按 CI 固定版本安装：
 
 ```bash
-go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
 go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 export PATH="$(go env GOPATH)/bin:$PATH"
 ```
@@ -166,7 +166,7 @@ go test -count=1 ./internal/contract
 | `.github/workflows/release.yml` | 生成正式 Release 资产，并将已验证候选的镜像摘要晋升为发布标签 |
 | `.github/workflows/contract-sync.yml`、`.github/workflows/security.yml` | 官方版本监测与定时安全检查 |
 | `scripts/check*.sh` | Go、仓库、供应链和完整门禁的稳定入口 |
-| `scripts/install*.sh`、`scripts/upgrade.sh`、`scripts/uninstall.sh` | 原生安装、资产事务、升级回滚和卸载 |
+| `cmd/rnlctl`、`release/native/install.sh`、`internal/rnlctl` | Native bundle 安装、generation 事务、升级、回滚、修复和卸载 |
 | `deploy/` | systemd/OpenRC service、原生 `node.env` 与生产单文件 Compose 模板 |
 | `compose.yaml`、`compose.build.yaml` | GHCR 运行配置与本地源码构建覆盖层 |
 | `Dockerfile` | 双架构 Node、固定 rw-core/geo/ASN 资产和最小 runtime 镜像 |

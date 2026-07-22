@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=7e54f4a61ba543b3aff6a250084f7a1e21de5a6b7bccbfe3033c2e60120a2ce1 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=9887c72a241cea014b9199760b2be4ab27a37641e2d82743c65d49e27cd570e3 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -16,7 +16,8 @@
 - 修复已知生命周期、插件、防火墙、契约和安装供应链问题。
 - 以在 `512 MiB RAM / 1 vCPU / 2 GB disk` 的 Linux 节点稳定运行为工程目标。
 - 提供 Linux `amd64` 与 `arm64` 产物，发布前用真实 Panel 和真实流量验证候选。
-- 保留 Debian/systemd 与 Alpine/OpenRC 安装路径。
+- 以 Rocky Linux 9/systemd 作为 Native 的主要目标，兼容 Rocky Linux 8 和
+  Debian 12；OpenRC 保留为明确标注的 cgroup v2 实验路径。
 
 项目版本与官方契约版本彼此独立。`X.Y.Z-rnl.N` 是项目自己的迭代标识，既可以用于提前开发下一条版本线，也可以继续完善已有的官方基线。纯 `X.Y.Z` 只有在对应官方契约完成对齐后才能发布。官方发布监测只会创建同步 Issue，不会自动修改契约或发布任何内容。完整规则见[版本模型](../versioning.md)。
 
@@ -52,21 +53,28 @@
 | M6 512 MiB 资源优化 | 已完成 |
 | M7 系统与供应链 | 已完成 |
 | M8 发布准备 | 已完成 |
+| M9 自包含 Native 发行 | 已准备发布 |
 
 2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们记录资源优化结果，为后续改动提供稳定对比，不代表所有未来构建。
 
-`2.8.0` 已具备正常发布条件。代码从 `dev` 合入 `main` 后，容器 workflow 会生成不可变的 `sha-<main提交>` 镜像；维护者使用真实 Panel 和真实代理流量确认该镜像；随后在当前 `main` HEAD 上创建 annotated tag。发布 workflow 校验多架构 manifest 和 GitHub attestation，再把同一 digest 晋升为 `2.8.0` 和 `latest`。运行观测不写入源码仓库，Release notes 由 GitHub 自动生成。
+干净的稳定版 `2.8.0` 是官方契约基线，并包含首个自包含 Native bundle。它的 tag 会发布
+精确的 Docker 与 Native 资产，并推进 GHCR `latest` 通道。运行观测不写入源码仓库，
+Release notes 由 GitHub 自动生成。
 
 ## 当前重点
 
-- **当前**：从已经验证的当前 `main` 候选发布 `2.8.0`。
-- **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码和差分，再决定项目版本线。
+- **当前**：在精确候选镜像和 Native bundle 通过发布 workflow 后，发布干净的稳定版
+  `2.8.0`。
+- **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码并审查契约
+  差异，再决定项目版本线。
 - **后续**：在不牺牲 512 MiB 目标的前提下改进可观测性、自动化升级和更多发行环境验证。
 
-以下事项作为已接受限制或后续增强，不阻塞 `2.8.0`：
+以下事项作为已接受限制或后续增强，不阻塞稳定版 `2.8.0`：
 
 - 可在具体风险需要时补充整机 512 MiB、arm64 运行、原生安装、大用户量、soak 和故障注入覆盖。
-- 安装器不维护持久化阶段日志。被 `SIGKILL` 或掉电中断后重新运行安装器；容器部署则重新创建容器。
+- Native journal 无法自动恢复“主机断电且留下异常 OpenRC cgroup 进程”的状态。
+  应先停止残留进程或重启主机，再运行 `rnlctl repair`；容器运行时状态无法恢复时，
+  重新创建容器。
 - OpenRC 正常执行 `stop_post` 时会清理专用 cgroup。`supervise-daemon` 异常退出后，通过重启主机或重新部署恢复。
 - 只有出现实测需求时，才重新评估活动配置常驻副本与运行时 `dump-config` 的内存取舍。
 - P3 测试补强：`runNode` 顶层失败收敛，以及 Unix server 活动 handler 取消。
@@ -130,7 +138,9 @@
 - 对齐 Debian/systemd 与 Alpine/OpenRC 的目录权限和生命周期。
 - 所有 Release、rw-core、ASN 与辅助脚本都必须固定版本并校验摘要。
 - 安装、升级、失败回滚和卸载不得影响不属于本项目的进程或 nftables 表。
-- Ubuntu 24.04/systemd 与 Alpine 3.22/OpenRC 已通过真实的全新安装、重复安装、升级、错误 service 回滚、启停和隔离卸载测试。
+- Ubuntu 24.04/systemd 与 Alpine 3.22/OpenRC 的测试快照仅作为旧版安装器的历史
+  工程基线保留。当前受支持的 Native 生命周期由 `rnlctl` 管理；systemd 是维护路径，
+  OpenRC 在目标主机完成验证前仍属于实验路径。
 - 两边的非 root 服务进程都只保留 `NET_ADMIN` 和 `NET_BIND_SERVICE` 的 effective 与 ambient capability。
 - 固定的 rw-core、ASN 与 Release 归档都会在安装前校验。
 - 故障注入测试覆盖写入后失败，以及 rw-core 资产和 Node 升级事务的逐文件摘要恢复。
@@ -140,9 +150,22 @@
 - 通过 `go test`、race、vet、静态检查、脚本检查和多架构构建。
 - 为每个 `main` 提交发布一个不可变的 `sha-<40位提交>` 镜像，并包含 `linux/amd64`、`linux/arm64` runnable manifest 与对应 attestation。
 - 打 tag 前，在生产容器限制下使用真实 Panel 和真实代理流量验证候选；宿主详情、日志和运行记录不写入仓库。
-- 正式 tag 必须指向当前 `main` HEAD。校验候选 manifest 与源码 attestation 后，在不重建容器的情况下把同一 digest 晋升为精确版本和 `latest`。
+- 正式 tag 必须指向当前 `main` HEAD。校验候选 manifest 和源码 attestation，
+  构建并证明 Native bundle，再在不重建容器的情况下把同一 digest 晋升为精确版本。
+  纯稳定版 tag 更新 `latest`，`rnl.N` tag 只更新 `preview`。
 - 将生命周期、进程组清理、安装器、50,000 用户和回滚结果保留为代码测试或带日期的工程基线。
 - 更新兼容文档和带日期的根 `CHANGELOG.md`，Release notes 由 GitHub 自动生成。
+
+### M9 - 自包含 Native 发行
+
+- 为每个 Linux 架构发布一个经过验证的 bundle，其中包含 Node、`rnlctl`、rw-core、
+  Geo/ASN 数据、service 文件、manifest、SPDX SBOM、第三方说明和完整来源信息。
+- 使用经过测试的 Go 生命周期引擎及其持久 generation journal，取代各发行版专用的
+  Shell 状态修改逻辑。
+- 以 Rocky Linux 9/systemd 为主要 Native 目标，兼容 Rocky Linux 8 和 Debian 12；
+  OpenRC 明确标记为实验性的 cgroup v2 路径。
+- 在发布 `2.8.0` 前，覆盖精确版本安装、prepare/activate、升级、回滚、修复、
+  卸载、篡改拒绝、账号隔离和中断操作恢复。
 
 ## 开发与发布规则
 

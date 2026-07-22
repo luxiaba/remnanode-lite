@@ -1,29 +1,35 @@
+# Native installs place this managed unit in /usr/local/lib/systemd/system.
+# Administrator overrides belong in /etc/systemd/system/remnanode-lite.service.d.
 [Unit]
 Description=Remnanode Lite
 Documentation=https://github.com/luxiaba/remnanode-lite
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=60s
+StartLimitBurst=5
 
 [Service]
 Type=simple
-User=remnanode
-Group=remnanode
+User=remnanode-lite
+Group=remnanode-lite
 UMask=0077
 # remnanode-lite parses node.env itself as a bounded data file. Do not have
 # systemd export the entire file: this prevents a legacy inline SECRET_KEY or
 # unknown variables from entering the process environment.
-WorkingDirectory=/var/lib/remnanode
-ExecStart=/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode USER=remnanode LOGNAME=remnanode REMNANODE_ENV=/etc/remnanode/node.env /usr/local/bin/remnanode-lite
+# The installer owns /usr/local/bin/remnanode-lite as a root-owned stable
+# symlink into the atomically selected runtime generation.
+WorkingDirectory=/var/lib/remnanode-lite
+ExecStart=/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode-lite USER=remnanode-lite LOGNAME=remnanode-lite REMNANODE_ENV=/etc/remnanode-lite/node.env /usr/local/bin/remnanode-lite
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
 KillMode=control-group
-LogRateLimitIntervalSec=30s
-LogRateLimitBurst=200
 LimitNOFILE=1048576
 TasksMax=256
 CPUQuota=100%
 MemoryMax=448M
+# MemorySwapMax is effective with cgroup v2. On Rocky 8's default cgroup v1,
+# MemoryMax remains effective while swap usage follows the host policy.
 MemorySwapMax=0
 
 # nftables and NETLINK_SOCK_DIAG socket destruction require NET_ADMIN.
@@ -32,11 +38,11 @@ AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 
-RuntimeDirectory=remnanode
+RuntimeDirectory=remnanode-lite
 RuntimeDirectoryMode=0750
-StateDirectory=remnanode
+StateDirectory=remnanode-lite
 StateDirectoryMode=0750
-LogsDirectory=remnanode
+LogsDirectory=remnanode-lite
 LogsDirectoryMode=0750
 
 ProtectSystem=strict
@@ -46,15 +52,10 @@ PrivateDevices=true
 PrivateMounts=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
-ProtectKernelLogs=true
 ProtectControlGroups=true
-ProtectClock=true
-ProtectHostname=true
-ProtectProc=invisible
 RemoveIPC=true
 RestrictNamespaces=true
 RestrictRealtime=true
-RestrictSUIDSGID=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
 SystemCallArchitectures=native

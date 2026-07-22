@@ -1,231 +1,146 @@
-<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=502032a0a637be8281456087ced1f9e20ef3b9290d4114536b362ad83596ca43 -->
+<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=8413f3e87bdafa768f4e28d360fb369e781b1689cd197bf31e57ac759bf08693 -->
 
 # 配置参考
 
-> 这是中文译文；涉及配置规则时，请以[英文原文](../../configuration.md)为准。
+[英文原文](../../configuration.md) · [文档索引](README.md) · [Docker 部署](deployment-docker.md) · [Native 部署](deployment-native.md) · [运维手册](operations.md)
 
-[返回文档索引](README.md)
+大多数节点只需要两个值：Panel 中为该 Node 配置的端口，以及该 Node 的完整 Secret Key。维护的 Docker 和 Native 模板已经设置好小机器所需的路径和资源策略。
 
-本文列出 Remnanode Lite 支持的配置，以及每项配置由哪里读取。Node 运行参数、Docker Compose 变量和安装器选项属于不同部分，即使名称相似，也不一定由同一个程序处理。
+## 配置来源
 
-## 来源与优先级
+守护进程先读取一个有界的环境风格数据文件，再用已知且非空的进程环境变量覆盖：
 
-Node 启动时按以下顺序选择配置文件：
-
-1. 启动环境中的 `REMNANODE_ENV` 指定路径。
-2. 已存在的 `/etc/remnanode/node.env`。
+1. 进程显式设置的 `REMNANODE_ENV`；
+2. 存在时的 `/etc/remnanode-lite/node.env`；
 3. 当前工作目录中的 `.env`。
 
-Node 先读取配置文件，再用进程环境中已知且非空的变量覆盖它。空环境变量不会清除文件中的值；两个 Secret 配置同时存在时，`SECRET_KEY` 优先于 `SECRET_KEY_FILE`。
+文件按 `KEY=value` 数据解析，绝不会由 shell 执行。未知键不会产生作用，也不会因为写入文件就进入子进程环境。Native 服务使用干净的启动环境，只保留 `REMNANODE_ENV=/etc/remnanode-lite/node.env` 和必要的身份变量。
 
-systemd 和 OpenRC 通过 `REMNANODE_ENV` 指向 `/etc/remnanode/node.env`，但不会 source 或导出整份文件。Node 把它当作数据文件解析，因此未知键和 Secret 不会自动进入进程环境。
+Docker Compose 的 `.env` 是另一套机制：Compose 在创建容器前用于 YAML 插值，导出的 shell 变量优先于 `.env`；Compose 文件只传入 `environment` mapping 中明确列出的值，不会把整个 `.env` 注入容器。
 
-宿主机上供 Docker Compose 使用的 `.env` 属于另一套机制。Compose 在创建容器前完成插值，只传递 Compose 文件中明确映射的运行变量。容器不会把宿主机的 `.env` 当作 Node 配置文件打开。
+## 运行时变量
 
-修改配置后必须重启 Node 或重新创建容器；当前不支持配置热加载。
-
-## Node 运行时配置
-
-下表中的键由 Go 进程直接读取。默认路径对应本项目容器镜像和原生安装器的标准布局。
-
-| 变量 | 必需 | 默认值 | 作用与约束 |
+| 变量 | 必需 | 默认值 | 作用 |
 | --- | --- | --- | --- |
-| `NODE_PORT` | 是 | 无 | Panel 连接 Node 的 HTTPS 端口。所有启动方式都只接受 `1..65535`，非法值在监听前失败。 |
-| `NODE_BIND_ADDR` | 否 | 空 | HTTPS 监听地址。空值表示所有本地地址；多网卡主机可填写 Panel 可达的指定 IP。 |
-| `SECRET_KEY` | 条件必需 | 空 | Panel 下发的完整 Secret Key。非空时优先于 `SECRET_KEY_FILE`。 |
-| `SECRET_KEY_FILE` | 条件必需 | 空 | 从普通文件读取 Secret。原生部署使用 `/etc/remnanode/secret.key`。 |
-| `XRAY_BIN` | 否 | `/usr/local/lib/remnanode/rw-core` | rw-core 可执行文件路径。 |
-| `GEO_DIR` | 否 | `/usr/local/share/remnanode/xray` | `geoip.dat`、`geosite.dat` 和可选 zapret 数据目录。 |
-| `LOG_DIR` | 否 | `/var/log/remnanode` | rw-core stdout/stderr 日志目录。 |
-| `ASN_DB_PATH` | 否 | `/usr/local/share/remnanode/asn/asn-prefixes.bin` | compact ASN 数据库。不可用时 `asList` 共享列表降级为空，其它核心能力继续运行。 |
-| `INTERNAL_SOCKET_PATH` | 否 | `/run/remnanode/internal.sock` | Node 与 rw-core 间的 Unix Socket。生产部署通常不应修改。 |
-| `INTERNAL_REST_TOKEN` | 否 | 每次启动随机生成 | 内部配置和 webhook token。留空最安全；固定值主要用于受控调试。 |
-| `DISABLE_HASHED_SET_CHECK` | 否 | `false` | 为 true 时不再用配置 hash 跳过无变化启动，每次 start 都会重启 core。仅用于调试。 |
-| `LOW_MEMORY` | 否 | `false` | 启用低内存策略。生产 Compose 默认开启；原生安装器在整机内存不超过 512 MiB 时自动开启。 |
-| `BODY_LIMIT_MB` | 否 | `0`（自动） | 公开 `/node` HTTPS server 的额外请求体上限，允许 `0..1024`。低内存模式下显式值不能超过 16；内部 Unix webhook 固定为 8 KiB。 |
-| `GOMEMLIMIT` | 否 | 空 | Go runtime 管理内存的软上限。支持纯字节数、`B/KiB/MiB/GiB/TiB` 和 `off`；显式值优先于低内存默认值。 |
-| `NODE_CONTRACT_VERSION` | 否 | 编译时契约版本 | 覆盖向 Panel 上报的 `nodeVersion`。只用于契约调试或紧急兼容验证。 |
-| `XRAY_CORE_VERSION` | 否 | 探测实际二进制 | 覆盖上报的 rw-core 版本。它不会安装、升级或校验对应二进制。 |
+| `NODE_PORT` | 是 | 模板使用 `2222` | Panel 访问 Node 的 HTTPS 端口，必须与 Panel 一致 |
+| `NODE_BIND_ADDR` | 否 | 空 | 监听的 IPv4/IPv6 地址；空值表示所有本地地址 |
+| `SECRET_KEY` | 条件必需 | 空 | Docker 使用的完整 Panel Secret；非空时优先于 `SECRET_KEY_FILE` |
+| `SECRET_KEY_FILE` | 条件必需 | 空 | 从普通文件读取完整 Secret；Native 使用 `/etc/remnanode-lite/secret.key` |
+| `XRAY_BIN` | 否 | `/usr/local/lib/remnanode-lite/current/lib/rw-core` | 受管 rw-core 可执行文件 |
+| `GEO_DIR` | 否 | `/usr/local/lib/remnanode-lite/current/share/xray` | `geoip.dat` 与 `geosite.dat` 所在目录 |
+| `LOG_DIR` | 否 | `/var/log/remnanode-lite` | rw-core 输出目录 |
+| `ASN_DB_PATH` | 否 | `/usr/local/lib/remnanode-lite/current/share/asn/asn-prefixes.bin` | 插件 `asList` 使用的 ASN 数据库 |
+| `INTERNAL_SOCKET_PATH` | 否 | `/run/remnanode-lite/internal.sock` | rw-core 与本地 healthcheck 使用的私有 Unix socket |
+| `INTERNAL_REST_TOKEN` | 否 | 启动时随机生成 | 私有 Unix HTTP 服务的 token；通常留空 |
+| `DISABLE_HASHED_SET_CHECK` | 否 | `false` | 调试开关；开启后每次 start 都重启 rw-core |
+| `LOW_MEMORY` | 否 | 模板为 `1` | 512 MiB 配置：Go 软上限 180 MiB、请求预算 16 MiB、较长 readiness 等待 |
+| `BODY_LIMIT_MB` | 否 | 自动 | 请求体预算；低内存模式自动为 16 MiB，否则为 256 MiB |
+| `GOMEMLIMIT` | 否 | 自动 | Go runtime 软上限，可用 `KiB/MiB/GiB/TiB` 或 `off` |
+| `NODE_CONTRACT_VERSION` | 否 | 编译时 `ContractVersion` | 向 Panel 报告的契约版本，仅用于兼容性调试 |
+| `XRAY_CORE_VERSION` | 否 | 从 rw-core 探测 | 无法探测时的调试覆盖值 |
 
-布尔值不区分大小写，接受 `true/false`、`1/0` 或 `yes/no`。非法布尔值、数值或版本字符串会使 Node 在监听前退出，而不是静默回退。
+布尔值接受 `true/false`、`1/0`、`yes/no`。`NODE_PORT` 范围为 `1..65535`。`BODY_LIMIT_MB` 接受 `1..1024`，但 `LOW_MEMORY=1` 时不能超过 `16`。空值或 `0` 使用自动值。
 
-### 低内存模式
+`GOMEMLIMIT` 只是 Go runtime 的软上限，不是整个进程或宿主机的 RSS 限制；维护的服务/容器上限仍为 `448 MiB`。
 
-`LOW_MEMORY=1` 同时改变以下运行边界：
+## Panel Secret
 
-| 项目 | 普通模式 | 低内存模式 |
-| --- | ---: | ---: |
-| Go 软内存上限 | Go 默认策略 | 180 MiB |
-| Node API TCP 连接上限 | 128 | 16 |
-| 活动 HTTP handler | 32 | 4 |
-| 自动请求体上限 | 256 MiB | 16 MiB |
-| rw-core readiness 等待 | 20 秒 | 90 秒 |
+Secret 是 Panel 为单个 Node 签发的完整值，包含 mTLS 和 JWT 所需材料。JWT、证书、私钥或截短字符串都不能替代它。
 
-这些值不是容器或 cgroup hard limit。`GOMEMLIMIT` 约束 Go runtime 管理的内存，不等同于仅限制 heap 或整个进程 RSS；rw-core、Go 进程的非 runtime 内存、tmpfs 和其它内存仍共同计入 Compose/systemd/OpenRC 的 448 MiB 总限制。
+### Docker
 
-公开路由还有更小的逐路由上限。即使把 `BODY_LIMIT_MB` 设置得更大，当前单个公开请求的有效上限也不会超过 16 MiB。
+把 Secret 写入同目录且权限为 `0600` 的 `.env`：
 
-### Secret Key
+```env
+NODE_PORT=38329
+SECRET_KEY=PASTE_THE_COMPLETE_PANEL_SECRET_KEY
+```
 
-Secret 是 base64 或 base64url 编码 JSON，支持有或无 padding，编码内容最大 256 KiB。解码后必须包含：
+Compose 推荐 mapping 形式：
+
+```yaml
+environment:
+  SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY in .env}"
+```
+
+不要使用 `- SECRET_KEY="..."` 的 list 形式；引号可能被当作值的一部分，造成 base64 解码失败。Docker 会把注入的环境值写入本地容器元数据，因此要保护 Compose 目录和 Docker socket。
+
+### Native Linux
+
+Native 生命周期将 Secret 与 `node.env` 分开：
+
+```env
+SECRET_KEY=
+SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
+```
+
+安装器验证后以 `root:remnanode-lite 0640` 写入 Secret。安装或激活时使用 `--secret-file`，不要把 Secret 作为命令行参数。
+
+## Compose 插值变量
+
+维护的 Compose 文件只把以下值传入容器：
+
+| 变量 | Compose fallback | 是否传入 Node | 说明 |
+| --- | --- | --- | --- |
+| `REMNANODE_IMAGE` | 发行模板为精确版本；单文件模板默认 `latest` | 否 | 镜像 tag 或 `name@sha256:...`，生产优先精确版本或 digest |
+| `NODE_PORT` | `2222` | 是 | Panel 到 Node 的端口 |
+| `NODE_BIND_ADDR` | 空 | 是 | 可选绑定地址 |
+| `SECRET_KEY` | 无 | 是 | 缺失或为空时 Compose 插值失败 |
+| `LOW_MEMORY` | `1` | 是 | 小机器配置 |
+| `DISABLE_HASHED_SET_CHECK` | `false` | 是 | 仅调试 |
+| `BODY_LIMIT_MB` | 空 | 是 | 空值使用 daemon 自动值 |
+| `GOMEMLIMIT` | 空 | 是 | 空值使用低内存默认值 |
+
+插值优先级是 shell 环境、`.env`、YAML 中的 `${NAME:-fallback}`。运行 `docker compose config --quiet` 可校验模板而不打印展开后的 Secret。
+
+Docker 镜像中的以下路径位于容器私有文件系统中。它们与 Native 路径使用相同的项目名称，但并不属于宿主机布局：
 
 ```text
-caCertPem
-jwtPublicKey
-nodeCertPem
-nodeKeyPem
+XRAY_BIN=/usr/local/lib/remnanode-lite/rw-core
+GEO_DIR=/usr/local/share/remnanode-lite/xray
+ASN_DB_PATH=/usr/local/share/remnanode-lite/asn/asn-prefixes.bin
+LOG_DIR=/var/log/remnanode-lite
+INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 ```
 
-原生部署推荐保存为独立文件：
+这些路径只属于发布镜像，不会与 Native 宿主机目录冲突。维护的 Compose tmpfs 与日志命令已经与之对应；如有覆盖，必须保持一致。
 
-```bash
-sudo install -d -o root -g remnanode -m 0750 /etc/remnanode
-printf '%s' '粘贴完整 Secret Key' \
-  | sudo tee /etc/remnanode/secret.key >/dev/null
-sudo chown root:remnanode /etc/remnanode/secret.key
-sudo chmod 0640 /etc/remnanode/secret.key
-```
+## Native `node.env`
 
-Secret 文件必须是普通非符号链接文件。内容可以没有换行，或只带一个 LF/CRLF 结尾；内部空白会被拒绝。
-
-Docker 单文件部署应使用 YAML mapping：
-
-```yaml
-environment:
-  NODE_PORT: "38329"
-  SECRET_KEY: "粘贴完整 Secret Key"
-  LOW_MEMORY: "1"
-```
-
-不要使用 `- SECRET_KEY="..."` 列表写法。列表中的引号会成为变量值的一部分，导致 base64 解码失败。包含 Secret 的 Compose 或 `.env` 文件应设置为 `0600`，且不得提交到 Git。
-
-## node.env 语法与边界
-
-`node.env` 使用受限 dotenv 语法，而不是 shell 脚本：
+模板见 [`deploy/node.env.example`](../../../deploy/node.env.example)：
 
 ```env
 NODE_PORT=2222
 SECRET_KEY=
-SECRET_KEY_FILE=/etc/remnanode/secret.key
+SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
+XRAY_BIN=/usr/local/lib/remnanode-lite/current/lib/rw-core
+GEO_DIR=/usr/local/lib/remnanode-lite/current/share/xray
+LOG_DIR=/var/log/remnanode-lite
+ASN_DB_PATH=/usr/local/lib/remnanode-lite/current/share/asn/asn-prefixes.bin
+INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 LOW_MEMORY=1
-BODY_LIMIT_MB=
 ```
 
-解析规则：
+`rnlctl` 会在安装时重写受管路径键，并拒绝重复的受管赋值。管理员可在同一文件中设置 `NODE_BIND_ADDR`、`BODY_LIMIT_MB` 和 `GOMEMLIMIT`，但不要把受管路径改到系统共用的 Xray 安装。`node.env` 与 Secret 必须是普通、非符号链接文件。
 
-- 允许空行、以 `#` 开头的注释和可选的 `export KEY=value` 前缀。
-- 值可以不加引号，也可以使用一对单引号或双引号。
-- 不执行命令、变量展开或 shell substitution。
-- 同一键重复出现时最后一个值生效；安装器会合并其管理的重复键。
-- 文件最多 1 MiB、4096 行和 256 个赋值。
-- Linux 上使用 `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC` 打开，并在同一文件描述符上比较读取前后状态。
-- 未知键计入文件限制，但不会进入 Node 配置或自动传给 rw-core。
+## 修改配置
 
-原生标准文件的所有者和权限为 `root:remnanode 0640`。
-
-### 原生低内存示例
-
-```env
-NODE_PORT=2222
-NODE_BIND_ADDR=
-SECRET_KEY=
-SECRET_KEY_FILE=/etc/remnanode/secret.key
-
-XRAY_BIN=/usr/local/lib/remnanode/rw-core
-GEO_DIR=/usr/local/share/remnanode/xray
-LOG_DIR=/var/log/remnanode
-ASN_DB_PATH=/usr/local/share/remnanode/asn/asn-prefixes.bin
-INTERNAL_SOCKET_PATH=/run/remnanode/internal.sock
-INTERNAL_REST_TOKEN=
-
-DISABLE_HASHED_SET_CHECK=false
-LOW_MEMORY=1
-BODY_LIMIT_MB=
-```
-
-一般不需要再写 `GOMEMLIMIT=180MiB`，因为 `LOW_MEMORY=1` 已提供相同的 Go 默认软限制。只有完成资源测量后才应覆盖它。
-
-受维护的原生模板是 [`deploy/node.env.example`](../../../deploy/node.env.example)。
-
-## Docker Compose 插值
-
-在部署目录中运行 Compose 时，它会自动读取 Compose 文件同目录下名为 `.env` 的文件。仓库根目录的 `.env.example` 和正式 Release 资产 `remnanode.env.example` 都只是模板；需要把其中一个复制或下载为 `.env`，并设置为 `0600`。保留 example 文件名时不会被自动读取。
-
-这些插值的优先级为 shell 环境变量 > `.env` > Compose 文件中的 `${VARIABLE:-fallback}`。使用 `:-` 时，最终值未设置或为空会采用回退值。`SECRET_KEY` 使用必填的 `${VARIABLE:?message}` 形式，未设置或为空时，Compose 会在部署前直接失败。
-
-| 变量 | `.env` 中必需 | Compose 回退值 | 消费方与用途 |
-| --- | --- | --- | --- |
-| `REMNANODE_IMAGE` | 否 | 模板选择的镜像；正式 Release 资产使用对应 Release 的精确版本 | 仅供 Compose 使用的镜像 tag 或 `name@sha256:...`，不传入 Node。 |
-| `NODE_PORT` | 否 | `2222` | Compose -> Node。Node 运行时必需，由 Compose 回退值补齐；必须与 Panel 一致。 |
-| `NODE_BIND_ADDR` | 否 | 空 | Compose -> Node。空值表示监听所有本地地址。 |
-| `SECRET_KEY` | 是，除非直接写在 YAML 中 | 无；空值会使插值失败 | Compose -> Node。Panel 的完整 Secret，会出现在本机 Docker 元数据中。 |
-| `LOW_MEMORY` | 否 | `1` | Compose -> Node。启用受维护的小型节点运行策略。 |
-| `DISABLE_HASHED_SET_CHECK` | 否 | `false` | Compose -> Node。仅用于调试的强制重启行为。 |
-| `BODY_LIMIT_MB` | 否 | 空（自动） | Compose -> Node。为空时低内存模式使用 16 MiB。 |
-| `GOMEMLIMIT` | 否 | 空（自动） | Compose -> Node。为空时低内存模式使用 180 MiB。 |
-
-Compose 只把服务 `environment` 映射中明确列出的 7 个运行变量传入容器。`REMNANODE_IMAGE` 由 Compose 自己消费，`.env` 中的未知键不会注入容器。这种显式允许列表与 `env_file:` 指令不同。
-
-推荐的 Release 流程把 `remnanode.env.example` 下载为 `.env`。如果要保持不使用 `.env` 的单文件部署，可以直接用 YAML 值替换必填插值：
-
-```yaml
-environment:
-  NODE_PORT: "${NODE_PORT:-38329}"
-  SECRET_KEY: "PASTE_THE_COMPLETE_SECRET_KEY"
-```
-
-受维护的回退值是 `2222`；上面的 `38329` 只是示例，实际端口必须与 Panel 一致。任何包含 Secret 的文件都应保持 `0600` 且不得提交。请从 [`deploy/compose.single-file.yaml`](../../../deploy/compose.single-file.yaml) 开始，并遵循 [Docker Compose 部署](deployment-docker.md)。
-
-`latest` 只改变下次 pull 解析到的镜像，不会自动替换运行容器：
+Docker：
 
 ```bash
-docker compose pull
+docker compose config --quiet
 docker compose up -d --no-build --force-recreate
 ```
 
-## 安装器和升级器配置
-
-下列变量由 shell 脚本消费，不属于 daemon runtime。部分资产设置可以保存在 `node.env`，供下次 `install-xray.sh` 使用。
-
-| 变量/选项 | 消费方 | 作用 |
-| --- | --- | --- |
-| `RNL_REPO` | 所有安装脚本 | Release 来源仓库，默认 `luxiaba/remnanode-lite`。 |
-| `RNL_TAG` | 安装/升级/卸载 | 精确 tag，例如 `vX.Y.Z` 或 `vX.Y.Z-rnl.N`。 |
-| `RNL_INSTALL_XRAY=0` / `--skip-xray` | install | 全新安装时跳过 rw-core。常规生产安装不建议使用。 |
-| `RNL_UPGRADE_XRAY=1` / `--upgrade-xray` | upgrade | 同步升级 rw-core/geo/ASN。默认保留现有 rw-core。 |
-| `RNL_INSTALL_ASN=0` | install-xray | 跳过 ASN 数据库；`asList` 降级为空。 |
-| `RNL_TMP_ROOT` | installer | 高级选项，覆盖 root-only 事务目录；默认 `/var/lib/remnanode-installer`。 |
-| `CUSTOM_CORE_URL` | install-xray | 自定义 Linux core 二进制 HTTPS URL。 |
-| `CUSTOM_CORE_SHA256` | install-xray | 自定义 core 的必需 SHA-256。 |
-| `ASN_DB_URL` | install-xray | 自定义 RWASNDB HTTPS URL。 |
-| `ASN_DB_SHA256` | install-xray | 自定义 ASN 数据库的必需 SHA-256。 |
-| `GEO_ZAPRET_FILE` | install | 将本地文件原子复制为 `geo-zapret.dat`。 |
-| `IP_ZAPRET_FILE` | install | 将本地文件原子复制为 `ip-zapret.dat`。 |
-| `XRAY_CORE_VERSION` / `--version` | install-xray | 选择 rw-core Release。非项目固定版本还必须提供 SHA-256。 |
-| `XRAY_CORE_SHA256` / `--sha256` | install-xray | 非固定 rw-core Release 的必需摘要。 |
-
-`RNL_ENSURE_SERVICE_STARTED`、`RNL_ENSURE_SERVICE_ENABLED` 和 `RNL_EXTERNAL_ASSET_ROLLBACK` 属于安装器内部事务协议，不应手工设置。
-
-自定义 core 仍使用所选 rw-core Release 中的 geo 数据，然后以已校验的自定义二进制替换 core。所有自定义 URL 必须同时提供 SHA-256；缺少摘要时会在写入目标路径前失败。
-
-安装和升级的行为有意不同。在完整安装上再次执行 `install-node*.sh --install`，会刷新目标 Release 中的 rw-core、geo 和 ASN；显式 `--upgrade` 或直接运行 `upgrade.sh` 则默认保留现有资产，只有指定 `--upgrade-xray` 或 `RNL_UPGRADE_XRAY=1` 才会刷新。
-
-## 版本覆盖
-
-项目版本、官方契约版本和 rw-core 版本是三个独立概念：
-
-- 项目版本决定 Release、二进制和镜像 tag。
-- 契约版本表示当前实际实现并向 Panel 报告的官方 Node API 基线。
-- rw-core 版本表示实际捆绑或安装的 core。
-
-不要根据项目版本推断契约版本，也不要通过 override 提前伪报兼容性。查看当前二进制声明：
+Native：
 
 ```bash
-remnanode-lite version
+sudo rnlctl doctor
+sudo rnlctl restart
 ```
 
-## 下一步
+修改 `NODE_PORT` 时同时更新 Panel 和宿主机防火墙。Host networking 不会替你做端口转换。
 
-- Docker 配置：[Docker Compose 部署](deployment-docker.md)
-- systemd/OpenRC：[原生 Linux 部署](deployment-native.md)
-- 健康、日志和故障处理：[运维手册](operations.md)
+## 维护者变量
+
+`REMNANODE_OFFICIAL_SOURCE`、`REMNANODE_CONTRACT_CA`、`REMNANODE_CONTRACT_CERT`、`REMNANODE_CONTRACT_KEY`、`RNL_ASSET_CACHE_DIR`、`RNL_OFFLINE_BUILD`、`SOURCE_REVISION` 和 `SOURCE_DATE_EPOCH` 只用于构建、契约测试和 CI，不是生产安装器变量。runtime 资产版本与摘要统一锁定在 [`release/runtime-assets.lock.json`](../../../release/runtime-assets.lock.json) 中。

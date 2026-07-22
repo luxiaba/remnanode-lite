@@ -11,9 +11,9 @@ If a document disagrees with the code, a published Release asset, or observed be
 ### I want to deploy a node
 
 1. Read [Project scope and goals](project.md) to confirm the support boundary and non-goals.
-2. Use [Docker Compose deployment](deployment-docker.md) for containers or [Native Linux deployment](deployment-native.md) for systemd and OpenRC.
+2. Use [Docker Compose deployment](deployment-docker.md) for the default path or [Native Linux deployment](deployment-native.md) when Docker is unavailable.
 3. Use the [Configuration reference](configuration.md) for runtime settings, the Panel Secret, and optional capabilities.
-4. Read [Versioning and image tags](versioning.md) before selecting `latest`, an exact version, `edge`, or a candidate tag.
+4. Read [Versioning and image tags](versioning.md) before selecting a container channel or an exact Docker/Native release.
 5. After startup, follow [Operations and troubleshooting](operations.md) to check container health, Panel connectivity, and rw-core logs.
 
 For a complete host with `512 MiB RAM / 1 vCPU / 2 GB disk`, preserve the repository's memory, CPU, PID, tmpfs, and log limits. Do not build from source on the production node.
@@ -24,7 +24,7 @@ For a complete host with `512 MiB RAM / 1 vCPU / 2 GB disk`, preserve the reposi
 2. Confirm configuration sources and precedence in the [Configuration reference](configuration.md).
 3. Use the [Resource budget](development/resource-budget.md) to understand memory, disk, log, and shutdown budgets.
 4. For protocol or lifecycle failures, consult [Architecture and runtime design](architecture.md) and the [2.8.0 contract baseline](development/contract-2.8.0.md).
-5. Roll back with a previously recorded exact version or manifest digest. Do not use `edge` or rely on a historical meaning of `latest`.
+5. Roll Docker back with a recorded exact version or manifest digest; roll Native back with its retained previous generation. Do not rely on a historical meaning of a moving channel.
 
 ### I want to read or change the Go code
 
@@ -63,13 +63,14 @@ You do not need to read every design document first:
 | Document | Purpose |
 | --- | --- |
 | [Docker Compose deployment](deployment-docker.md) | Single-file deployment, resource limits, image selection, logs, updates, and rollback |
-| [Native Linux deployment](deployment-native.md) | Debian/Ubuntu systemd and Alpine OpenRC installation, upgrade, and uninstall |
+| [Native Linux deployment](deployment-native.md) | Rocky/Debian systemd and experimental OpenRC installation, upgrade, rollback, repair, and uninstall |
 | [Configuration reference](configuration.md) | Runtime, container, installer, and build variables with defaults and security rules |
 | [Operations and troubleshooting](operations.md) | Health, logs, updates, rollback, disk maintenance, and fault diagnosis |
 | [Root Compose file](../compose.yaml) | Executable production container constraints |
 | [Single-file Compose template](../deploy/compose.single-file.yaml) | Complete inline-variable template for many independent small nodes |
 | [Container environment template](../.env.example) | Variables for the optional `.env` deployment model |
 | [Native environment template](../deploy/node.env.example) | Node configuration template used by systemd and OpenRC |
+| [`rnlctl` command](../cmd/rnlctl/main.go) | Native lifecycle administration entry point |
 | [Resource budget](development/resource-budget.md) | 512 MiB target, measured engineering baselines, protections, and shutdown budget |
 
 ### Architecture, development, and testing
@@ -88,6 +89,8 @@ You do not need to read every design document first:
 | --- | --- |
 | [Release process](release.md) | Candidate verification, tags, GitHub Release, GHCR, and rollback |
 | [Changelog](../CHANGELOG.md) | Published and pending user-visible changes |
+| [Source offer](../release/bundle/SOURCE-OFFER.md) | Source-availability notice shipped with Native bundles |
+| [Third-party notices](../release/bundle/THIRD_PARTY_NOTICES.md) | License and attribution notices shipped with Native bundles |
 
 ## Essential concepts
 
@@ -99,6 +102,8 @@ You do not need to read every design document first:
 
 `edge` and `sha-*` images are builds from `main`, not Releases. A version becomes a formal Release only when its Git tag, GitHub Release, and exact GHCR tag have been published. Pin the multi-architecture manifest digest when you need an exact, content-addressed image.
 
+Native Linux has no candidate or moving-channel install path. `install.sh --version` and `rnlctl upgrade --to` accept only exact `X.Y.Z` or `X.Y.Z-rnl.N` versions whose complete bundle and checksum list exist in a GitHub Release.
+
 ### Compatibility has more than one layer
 
 Contract tests, a successful Panel connection, resource testing, and distribution testing answer different questions. No single result proves all of them, so compatibility notes should always say what was actually tested.
@@ -109,6 +114,8 @@ Contract tests, a successful Panel connection, resource testing, and distributio
 | --- | --- |
 | Node | Long-running `remnanode-lite` control process that receives Panel requests and owns rw-core lifecycle |
 | rw-core | Xray Core binary that carries proxy traffic and is started and stopped by Node |
+| `rnlctl` | Native host lifecycle tool for verified generations, service state, health, upgrade, rollback, repair, and uninstall |
+| generation | One verified Native bundle selected atomically through `current`, with at most one retained `previous` generation |
 | `Version` | Identity of the project build, GitHub Release, and exact image version |
 | `ContractVersion` | Official Node behavior baseline implemented and reported to Panel by default |
 | operation epoch | Increasing ownership token for one Xray start or stop operation; not process identity |

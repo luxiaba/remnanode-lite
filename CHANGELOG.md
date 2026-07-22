@@ -4,7 +4,65 @@
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and focuses on changes that matter to users and operators. GitHub Releases provide the full diff for each published version.
 
-## [2.8.0] - 2026-07-21
+## [2.8.0] - 2026-07-22
+
+This stable release implements the official Node `2.8.0` contract and adds the
+self-contained Native Linux distribution. It publishes exact `2.8.0` images
+and bundles and advances the stable GHCR and GitHub `latest` channels.
+
+### Added
+
+- Added verified Native bundles for Linux `amd64` and `arm64`. Each bundle
+  contains `remnanode-lite`, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data,
+  service material, exact source and license notices, a strict file manifest,
+  and an SPDX SBOM.
+- Added the POSIX `install.sh` bootstrap for an exact online Release, a local
+  archive plus SHA-256, or an extracted bundle. Interactive and unattended
+  Secret input, custom Node port, and prepare-only installation are supported.
+- Added `rnlctl` as the Native lifecycle interface: install, activate, exact
+  upgrade, rollback, repair, uninstall, start/stop/restart, structured status
+  and doctor output, and service/core log access.
+- Added durable Native transaction state, a verified repair cache, and atomic
+  `current`/`previous` generation selection. Only the active and one rollback
+  generation are retained.
+- Added a systemd 239-compatible base unit for Rocky Linux 8/9 and Debian 12.
+  A version-gated hardening drop-in is installed on systemd 247 or newer.
+  OpenRC is available as an experimental cgroup v2 path.
+- Added draft-first Release publication for Native assets, SHA-256 and GitHub
+  attestations for every asset, exact image promotion without rebuilding, and
+  a reconcile action for a failed post-publication channel update.
+
+### Changed
+
+- Native host paths now consistently use `/etc/remnanode-lite`,
+  `/usr/local/lib/remnanode-lite`, `/var/lib/remnanode-lite`, and
+  `/var/log/remnanode-lite`; the service name is `remnanode-lite` on systemd
+  and OpenRC.
+- Replaced the former distribution-specific shell installers and independent
+  runtime-asset update paths with one complete release bundle and a Go
+  lifecycle engine. Node, rw-core, geo data, ASN data, notices, and service
+  definitions now upgrade and roll back as one generation.
+- Native install and upgrade accept exact `X.Y.Z` or `X.Y.Z-rnl.N` versions
+  only. `latest`, `preview`, `edge`, and `sha-*` are container references and
+  are never resolved by Native lifecycle commands.
+- Reworked the English deployment, configuration, operations, architecture,
+  development, security, and contribution documentation around Docker as the
+  default path and Native Linux as a first-class release format.
+
+### Security
+
+- Verify the outer Native archive digest, strict manifest schema, target
+  architecture, project and contract versions, every payload path/mode/size/
+  digest, and the embedded Node/rnlctl ELF architecture before installation.
+- Snapshot caller-provided bundles into a root-only workspace before
+  validation, preventing path replacement during installation.
+- Keep `rnlctl` as an independent root-owned regular file so repair remains
+  available while generation links are damaged or changing.
+- Track user and group creation separately. Purge removes only identities the
+  installer created and refuses deletion when an identity no longer matches
+  the recorded account.
+
+## Pre-release implementation history
 
 This entry covers the first independent release line of
 `luxiaba/remnanode-lite`. It implements the official Node 2.8.0 contract.
@@ -46,7 +104,7 @@ Operational test data is intentionally not stored in the source repository.
 - Strip the Panel Secret, Secret-file path, Node configuration path, and caller-supplied internal token from the rw-core child environment. Only required resource paths and a controlled internal webhook token are reintroduced; that token is random by default for each start.
 - Require JWT headers and claims to contain exactly one complete JSON value. A correctly signed token with a second trailing JSON value is rejected.
 - Require TLS 1.3 or newer externally and disable HTTP/2. Invalid JWTs, unknown routes, and unsupported methods destroy the connection in line with the official behavior.
-- Run native systemd and OpenRC services as the dedicated `remnanode` user with only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. The systemd unit also applies capability bounding, sandboxing, 448 MiB/no-swap/1 CPU, and 256-task limits.
+- Run native systemd and OpenRC services as the dedicated `remnanode-lite` user with only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. The systemd unit also applies capability bounding, sandboxing, 448 MiB/no-swap/1 CPU, and 256-task limits.
 - Verify SHA-256, structure, and version before writing Release archives, rw-core, custom core, or ASN assets. The audited digest for the pinned rw-core version cannot be overridden, and GitHub Actions are pinned to complete commit SHAs.
 - Start systemd and OpenRC from an empty environment. Go reads `node.env` and the Secret through the same bounded file descriptor with `O_NOFOLLOW|O_NONBLOCK`; symlinks, FIFOs, devices, oversized files, and files changed during reading fail before startup.
 - Reject unsafe ownership, permissions, symlinks, and hard links in managed paths. Log helpers, rw-core, geo files, and ASN data use same-directory staging and atomic replacement; the outer upgrade transaction backs up and verifies service-file changes.

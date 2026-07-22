@@ -1,217 +1,280 @@
 # Versioning and Image Tags
 
-[Back to the documentation index](README.md)
+[Back to the documentation index](README.md) | [Release process](release.md)
 
-Remnanode Lite tracks four versions: the project release, the official Node
-contract, the Panel used for integration testing, and the bundled rw-core. They
-do not always move together, so a single "current version" would be ambiguous.
+Remnanode Lite separates project identity from compatibility claims. A build
+can evolve independently while continuing to implement an older, verified
+official Node contract. Release names and moving image channels are separate as
+well: an exact version identifies one release, while `preview` and `latest`
+select release classes.
 
-This document is the authoritative naming and image-channel policy. The operational procedure is defined in the [Release process](release.md).
+This document defines those identities and channels. The release workflow is
+the executable source of truth for publication, with
+`scripts/release-metadata.sh` providing the stable-versus-preview
+classification.
 
-## Four independent dimensions
+## Independent Version Dimensions
 
 | Dimension | Source of truth | Meaning |
 | --- | --- | --- |
-| Project `Version` | `internal/version/version.go` | Identity of this project's source, binaries, GitHub Release, and exact image tag |
-| Official `ContractVersion` | `internal/version/contract.version` and pinned source evidence | Official Node behavior actually implemented and reported to Panel |
-| Panel integration target | Release documentation and maintainer verification | Panel version used for integration verification, not a compile-time version |
-| rw-core version | `Dockerfile`, installers, and Release metadata | Core version packaged and verified in the image or native installation |
+| Project `Version` | `internal/version/version.go` | Identity embedded in this project's source, binaries, release assets, and exact container tag |
+| Official `ContractVersion` | `internal/version/contract.version`, `internal/version/version.go`, and pinned contract evidence | Official Node behavior implemented and reported to the Panel |
+| Panel integration target | Maintainer release verification | Panel version used for real integration checks; it is not compiled into the release identity |
+| rw-core and runtime assets | `release/runtime-assets.lock.json` | Exact core, GeoIP, GeoSite, ASN, source, license, and checksum inputs packaged for Docker and Native Linux |
 
-`Version` and `ContractVersion` are deliberately separate. The project can begin a future development line or continue improving an already aligned contract without claiming a new official behavior baseline.
-
-For example:
+`Version` and `ContractVersion` move independently. For example:
 
 ```text
-Version:         2.8.1-rnl.1
+Version:         2.8.0
 ContractVersion: 2.8.0
 ```
 
-This means Remnanode Lite has entered its `2.8.1` project line while the only proven and reportable official Node contract remains `2.8.0`. `ContractVersion` may change to `2.8.1` only after pinning official 2.8.1 source, reviewing the contract delta, updating the implementation, and completing verification.
+This identifies the stable Remnanode Lite release that includes the first
+Native Linux distribution while retaining the verified official Node `2.8.0`
+contract. A future `rnl.N` suffix describes this project's release; it is not a
+revision published by the official project.
 
-## Project version formats
+Changing `ContractVersion` requires pinned official source, a reviewed contract
+delta, corresponding implementation and test changes, and completed
+compatibility verification. Changing only `Version` never expands the claimed
+contract.
 
-Formal project versions use one of two formats.
+## Release Classes
 
-### Independent iteration: `X.Y.Z-rnl.N`
+Every formal project version uses exactly one of two formats.
 
-`rnl.N` is a Remnanode Lite iteration number. It is not the Nth revision of an official Release and does not by itself assert compatibility with official `X.Y.Z`.
+### Stable: `X.Y.Z`
 
-Use it to:
+A plain version is a stable release aligned with the same official Node
+contract. The repository checks require `Version` and `ContractVersion` to
+match for this form.
 
-- begin a project line before the corresponding official version is available;
-- fix defects, improve architecture, or reduce resource use on an existing contract baseline;
-- publish a verified build that contains project-specific evolution;
-- distinguish this project's build from an official version with the same numeric prefix.
+A stable release is published as:
 
-Within one `X.Y.Z` namespace, `N` starts at 1 and increases monotonically. A published number cannot be reused, and existing Git and exact image tags cannot be moved.
+- an annotated Git tag named `vX.Y.Z`;
+- a normal, non-prerelease GitHub Release;
+- an exact GHCR tag named `X.Y.Z`; and
+- the source of the moving GHCR `latest` tag.
 
-The first three components identify the project's development or Release line. They do not automatically equal `ContractVersion`; the release metadata must state the actual contract baseline separately.
+The GitHub Release is also marked Latest. A plain version is therefore both an
+immutable alignment point and the release selected by the stable channel when
+it is published successfully.
 
-### Officially aligned milestone: `X.Y.Z`
+### Preview: `X.Y.Z-rnl.N`
 
-A version without `rnl.N` is reserved for a formal Release that has completed behavioral alignment with the same official version. Before publishing it:
+An `rnl.N` version is a Remnanode Lite preview. It can be used to develop ahead
+of an official release or to improve code, architecture, delivery, and resource
+behavior while keeping an existing contract baseline.
 
-- `ContractVersion` must be the same `X.Y.Z`;
-- the official source version and immutable commit must be pinned;
-- contract comparison and implementation work must be complete;
-- required automated gates and real-environment verification must pass;
-- the release documentation must identify Panel, rw-core, architectures, and known limitations.
+A preview is published as:
 
-A plain `X.Y.Z` tag is an immutable alignment milestone, not a moving label for later fixes. Further project-specific work may be released as `X.Y.Z-rnl.N`.
+- an annotated Git tag named `vX.Y.Z-rnl.N`;
+- a GitHub prerelease;
+- an exact GHCR tag named `X.Y.Z-rnl.N`; and
+- the source of the moving GHCR `preview` tag.
 
-## Example timeline
+A preview never updates GHCR `latest` and never becomes GitHub's Latest
+Release. It may have passed the full automated release workflow, but it remains
+a preview until a plain stable version is published.
 
-These examples explain naming only; they do not claim that the listed versions exist:
+Within one `X.Y.Z` line, `N` starts at 1 and increases monotonically. Published
+numbers and exact tags are never reused. The numeric `X.Y.Z` prefix identifies
+the project development line; it does not imply that the same official
+contract has already been implemented.
 
-```text
-2.8.1-rnl.1  Begin the project 2.8.1 line while the contract may remain 2.8.0
-2.8.1-rnl.2  Continue implementation or fixes
-2.8.1        Complete formal alignment with official Node 2.8.1
-2.8.1-rnl.3  Continue independent improvements on that contract
-2.8.1-rnl.9  Publish a later verified build that latest may reference
-2.8.2-rnl.1  Begin the next project line and report the contract actually implemented
-```
+### Current Version Line
 
-Under Semantic Versioning, `rnl.N` is a prerelease identifier, so `2.8.1-rnl.9` sorts below plain `2.8.1` even when published later. This project does not use SemVer ordering to select the newest stable build. The Release workflow explicitly controls GitHub's Latest Release and GHCR `latest`.
-
-## Git tags and container tags
-
-Formal Git tags use a `v` prefix; image version tags do not:
-
-```text
-Git tag:       v2.8.1-rnl.9
-Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.1-rnl.9
-```
-
-Project policy makes both tags immutable, but they identify different objects:
-
-- The formal Git tag points to the current `main` head at publication.
-- The exact image tag points to the manifest digest already built and attested for that same commit.
-
-The Release workflow does not rebuild the container. It resolves the immutable
-`sha-<commit>` candidate, verifies its manifest and attestation, and promotes
-that exact digest.
-
-## Image channels
-
-| Reference | Mutability | Source | Intended use |
+| Release | Contract | Class | Status |
 | --- | --- | --- | --- |
-| `sha-<40-character-commit>` | Refuses a different value after first publication | Candidate for a specific `main` commit and attested manifest digest | Verification, exact reproduction, and diagnosis |
-| `edge` | Moving | Latest eligible `main` container build | Mainline observation, never a stability promise |
-| `X.Y.Z-rnl.N` | Immutable by policy | Corresponding independent project Release | Exact deployment and rollback of a verified project version |
-| `X.Y.Z` | Immutable by policy | Corresponding officially aligned Release | Exact deployment and rollback of an alignment milestone |
-| `latest` | Moving | Most recent formal Release that completed the stable workflow | Opt-in tracking of the recommended stable build |
-| `name@sha256:...` | Content addressed | Registry manifest digest | Strongest production pin and supply-chain verification |
+| `2.8.0` | `2.8.0` | Stable | Current stable release, including the first self-contained Native Linux bundle |
 
-A manual container workflow run on `main` uses the same `sha-<commit>` identity.
-It must not replace an existing tag with a different manifest digest.
+Semantic Versioning orders an `X.Y.Z-rnl.N` preview before its `X.Y.Z` stable
+counterpart. Do not infer publication order or channel selection from SemVer
+sorting. The release workflow assigns `preview` or `latest` explicitly from the
+tag format.
 
-### Meaning of `latest`
+## Git Tags and Exact Image Tags
 
-`latest` means the build this project currently recommends after completing the required stable Release workflow. It may point to a plain `X.Y.Z` alignment milestone or to a later `X.Y.Z-rnl.N` project Release.
+Formal Git tags include a `v` prefix. Container tags do not:
 
-Consequently:
+```text
+Git tag:       v2.8.0
+Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.0
+```
 
-- `latest` does not mean "identical to the newest official Node";
-- `latest` never points to `edge` and is not updated by an ordinary `main` push;
-- rebuilding or repairing an older Release must not move `latest` backward;
-- only the formal Release workflow may move it, and only after all promotion guards succeed;
-- changing `latest` does not replace a running container automatically.
+Both are immutable release identities, but they identify different objects:
 
-Creating a formal tag means the maintainer intends that version to enter the stable channel. A build that is not ready to become the recommended stable Release must remain in the `sha-*` candidate channel.
+- the annotated Git tag identifies the source commit accepted from `main`; and
+- the exact container tag identifies the already built and attested
+  multi-architecture manifest for that commit.
 
-A server configured with `latest` still requires an explicit update:
+The release workflow does not rebuild the container. It verifies the
+`sha-<commit>` candidate produced from `main`, then gives that same manifest
+digest the exact release tag.
+
+Repository rules should reject updates and deletion for `v*`. The workflow
+also resolves the remote annotated tag again before draft creation, Release
+publication, and channel promotion; any tag drift fails closed.
+
+Registry tags are names, not content addresses. Use
+`ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>` when a deployment must
+remain fixed even if a tag is changed accidentally.
+
+## Container References
+
+| Reference | Mutability | Meaning | Intended use |
+| --- | --- | --- | --- |
+| `sha-<40-character-commit>` | Immutable by policy | Attested candidate built from one `main` commit | Release verification, reproduction, and diagnosis |
+| `edge` | Moving | Most recent eligible `main` candidate | Mainline observation only |
+| `X.Y.Z-rnl.N` | Immutable by policy | One published preview | Controlled preview deployment and exact rollback |
+| `preview` | Moving | Preview most recently promoted by the release workflow | Opt-in preview tracking and evaluation |
+| `X.Y.Z` | Immutable by policy | One published stable release | Recommended production deployment and exact rollback |
+| `latest` | Moving | Stable release most recently promoted by the release workflow | Opt-in stable tracking |
+| `name@sha256:...` | Content addressed | One registry manifest digest | Strongest deployment and verification pin |
+
+An ordinary push to `main` can update `edge`, but it cannot update `preview` or
+`latest`. Only the release workflow promotes those channels after publishing a
+corresponding release.
+
+### Stable and Preview Channels Never Overlap
+
+The two moving channels are intentionally disjoint:
+
+- `latest` resolves only to a plain `X.Y.Z` stable release;
+- `preview` resolves only to an `X.Y.Z-rnl.N` prerelease;
+- a preview cannot advance, replace, or repair `latest`; and
+- a stable release cannot advance `preview`.
+
+Neither channel updates a running container automatically. Docker checks the
+tag only after an explicit pull and recreates the container only after an
+explicit Compose operation.
+
+## Choosing a Docker Reference
+
+For normal production deployments, use an exact stable version:
+
+```text
+ghcr.io/luxiaba/remnanode-lite:2.8.0
+```
+
+For the strongest pin, record and deploy its manifest digest:
+
+```text
+ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>
+```
+
+Use an exact preview only when the preview status and changes are acceptable:
+
+```text
+ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
+```
+
+`preview` is convenient for short-lived evaluation, but an exact preview tag or
+digest is preferable for fleet testing because it cannot move between nodes.
+Keep the previous exact reference for rollback.
+
+`latest` is an opt-in stable update channel, not a rollback identity. Even when
+tracking it, review the release, record the resolved digest, and update
+explicitly:
 
 ```bash
 docker compose pull
 docker compose up -d --no-build --force-recreate
 ```
 
-## Choosing a deployment reference
+Use `sha-<commit>` to verify the candidate that may become a release. Do not use
+`edge` for release acceptance because another `main` build can move it during
+testing.
 
-### Fixed production version
+## Native Linux Uses Exact Versions Only
 
-Use an exact project version or manifest digest:
+Native installation and upgrade resolve complete, versioned release bundles.
+They deliberately do not follow moving channels. The bootstrap installer
+accepts an exact version such as:
 
-```text
-ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>
+```bash
+sudo sh install.sh --version 2.8.0
 ```
 
-Both support reviewed changes, staged rollout, and prompt rollback. An exact version is readable and sufficient for most nodes. A digest is appropriate when the deployment must remain fixed even if a registry tag is moved accidentally.
+The administration CLI follows the same rule for an online upgrade:
 
-### Opt-in stable tracking
-
-Use:
-
-```text
-ghcr.io/luxiaba/remnanode-lite:latest
+```bash
+sudo rnlctl upgrade --to <exact-version>
 ```
 
-This is suitable only when operators review the release changes and deliberately pull and verify each update. `latest` is an update channel, not a rollback identity. Keep the previous exact version or digest for rollback.
+`latest`, `preview`, `edge`, and `sha-*` are not valid Native version inputs.
+Exact selection ensures that the archive name, `SHA256SUMS`, release manifest,
+embedded version, and source revision can be checked as one release identity.
 
-### Candidate verification
+## What Counts as Published
 
-Verification starts with `sha-<40-character-commit>`. Resolve the tag to a
-manifest digest before testing, use deployment files from the same commit, and
-keep that digest fixed through promotion. Do not test `edge` as the release
-candidate; a later `main` build can move it.
+A version string in source, a `main` candidate, or a Git tag alone is not a
+complete publication.
 
-## Publication and stability
+A published preview has all of the following:
 
-Changing `Version`, merging into `main`, or building a candidate image does not publish a formal Release. Publication requires at least:
+1. an annotated `vX.Y.Z-rnl.N` tag on the accepted `main` commit;
+2. a published GitHub prerelease with verified assets;
+3. an exact `X.Y.Z-rnl.N` GHCR tag matching the accepted candidate digest; and
+4. successful promotion of that digest to `preview`.
 
-1. consistent project, contract, and dependency metadata;
-2. the prescribed code checks and maintainer verification of the current `main` candidate with a real Panel and real traffic;
-3. a formal Git tag that is immutable under project policy;
-4. a GitHub Release with binary assets and promotion of the accepted digest to the exact GHCR version;
-5. verification of the candidate image digest and build attestation against its source commit;
-6. release metadata with the actual compatibility scope and known risks;
-7. successful promotion of that digest to GHCR `latest` and marking the corresponding GitHub Release as Latest.
+A published stable release has the corresponding plain `vX.Y.Z` tag, normal
+GitHub Release, exact `X.Y.Z` image, GitHub Latest designation, and GHCR
+`latest` promotion.
 
-A version string in the repository may be only a development target. Check the
-Git tag, GitHub Release, and exact GHCR tag to see whether it has been published.
-The source currently says `2.8.0`, but that string alone is not a release.
+Both classes use the same code, compatibility, asset, provenance, and
+attestation gates. The difference is the release status and channel, not a
+weaker build path for previews.
 
-## Synchronizing an official version
+Check Git tags, GitHub Releases, and exact GHCR tags before presenting a planned
+version or asset URL as available.
 
-When official Node publishes a new Release, automation only detects the change and opens an Issue. It does not modify `ContractVersion`, source code, or image tags. Synchronization requires:
+## Following Official Node Releases
 
-1. Pin the official version and immutable commit.
-2. Audit route, schema, error, side-effect, and plugin-dependency changes.
-3. Update versioned contract evidence and tests.
-4. Adjust the Go implementation and complete code regression testing.
-5. Verify the candidate with the target Panel, rw-core, and Linux environments.
-6. Update `ContractVersion` according to the verified result.
-7. Choose a plain aligned version or an appropriate `rnl.N` project version for publication.
+The scheduled contract workflow reports a new official release by opening an
+issue. It does not change `ContractVersion`, source code, project versions, or
+container tags.
 
-An early project line cannot skip steps 2 through 6 and report a contract it has not implemented.
+Synchronizing a new official contract requires:
 
-## Version output and Release metadata
+1. pinning the official version and immutable source commit;
+2. auditing routes, schemas, errors, side effects, and plugin dependencies;
+3. updating contract evidence and tests;
+4. aligning the Go implementation;
+5. verifying the candidate with the target Panel, rw-core, and Linux
+   environments; and
+6. changing `ContractVersion` only after the verified behavior is complete.
 
-The binary prints both identities:
+Choose the project version separately. A preview can start before alignment is
+finished, but it must continue to report the contract it actually implements.
+A plain stable version is valid only when its project and contract versions
+match.
+
+## Version Output and Release Metadata
+
+The Node and `rnlctl` report both project and contract identities:
 
 ```text
 remnanode-lite <Version> (contract <ContractVersion>)
+rnlctl <Version> (contract <ContractVersion>)
 ```
 
-The repository's changelog and release metadata should make these facts clear:
+Release records should also identify:
 
-- project version and Git tag;
-- release commit and image manifest digest;
-- `ContractVersion` and the pinned official source commit;
-- Panel version used for verification;
-- packaged rw-core version and asset digests;
-- `amd64` and `arm64` support status;
-- resource-verification scope;
-- known differences and rollback procedure;
-- image manifest digest and verification command.
+- the release class and promoted channel;
+- the project version, Git tag, and source commit;
+- the official contract version and pinned source commit;
+- the accepted container manifest digest and its attestation;
+- the Panel and runtime scope used for maintainer verification;
+- the locked rw-core and runtime asset versions;
+- the `amd64` and `arm64` publication status;
+- known differences, risks, and rollback reference; and
+- Native bundle checksums and asset attestations.
 
-GitHub generates the Release notes from merged changes. The project does not
-maintain a separate per-version Release note file in the repository, and it
-does not commit host inventories, smoke JSON, logs, or other runtime data.
+GitHub generates release notes from merged changes. Host inventories, Panel
+details, logs, secrets, and other runtime observations are not release assets
+and must not be committed.
 
-The `NODE_CONTRACT_VERSION` override is for controlled diagnostics and emergency
-compatibility tests only. It changes none of the implemented behavior, source
-evidence, binary identity, or Release claims and must never be used to claim
-compatibility that the code has not earned.
+`NODE_CONTRACT_VERSION` is limited to controlled diagnostics and emergency
+compatibility tests. It does not change implemented behavior, pinned evidence,
+binary identity, or release claims.

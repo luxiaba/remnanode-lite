@@ -59,7 +59,7 @@ jobs:
       - name: Repository, packaging, and build checks
         run: bash scripts/check-repository.sh
 
-  installer:
+  native:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -71,8 +71,11 @@ jobs:
         with:
           go-version: "1.26.5"
 
-      - name: Offline installer operations
-        run: bash scripts/test-install-ops.sh
+      - name: Offline Native bootstrap tests
+        run: sh release/native/install_test.sh
+
+      - name: Validate the shared runtime asset lock
+        run: go run ./cmd/release-tool validate --lock release/runtime-assets.lock.json
 
   netadmin:
     runs-on: ubuntu-24.04
@@ -100,13 +103,13 @@ jobs:
 
   gate:
     if: ${{ always() }}
-    needs: [go, repository, installer, netadmin]
+    needs: [go, repository, native, netadmin]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       GO_RESULT: ${{ needs.go.result }}
       REPOSITORY_RESULT: ${{ needs.repository.result }}
-      INSTALLER_RESULT: ${{ needs.installer.result }}
+      NATIVE_RESULT: ${{ needs.native.result }}
       NETADMIN_RESULT: ${{ needs.netadmin.result }}
     steps:
       - name: Require every CI job to pass
@@ -115,7 +118,7 @@ jobs:
           for result in \
             "$GO_RESULT" \
             "$REPOSITORY_RESULT" \
-            "$INSTALLER_RESULT" \
+            "$NATIVE_RESULT" \
             "$NETADMIN_RESULT"; do
             if [ "$result" != success ]; then
               echo "required CI job finished with result: $result" >&2

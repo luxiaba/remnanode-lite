@@ -8,11 +8,13 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -97,10 +99,17 @@ func runCLI(
 		}
 		return writeLine(version.String())
 	case "healthcheck":
-		if len(args) != 1 {
-			return usageError("usage: remnanode-lite healthcheck")
+		socketPath := ""
+		switch {
+		case len(args) == 1:
+		case len(args) == 3 && args[1] == "--socket" && strings.TrimSpace(args[2]) != "":
+			socketPath = strings.TrimSpace(args[2])
+		case len(args) == 2 && strings.HasPrefix(args[1], "--socket=") && strings.TrimSpace(strings.TrimPrefix(args[1], "--socket=")) != "":
+			socketPath = strings.TrimSpace(strings.TrimPrefix(args[1], "--socket="))
+		default:
+			return usageError("usage: remnanode-lite healthcheck [--socket PATH]")
 		}
-		return internalHealthcheck(stderr)
+		return internalHealthcheck(socketPath, stderr)
 	case "doctor":
 		doctorArgs := args[1:]
 		if len(doctorArgs) != 0 && (len(doctorArgs) != 2 || doctorArgs[0] != "--env" || doctorArgs[1] == "") {
@@ -149,20 +158,51 @@ func runCLI(
 	}
 }
 
-func internalHealthcheck(stderr io.Writer) int {
-	path := strings.TrimSpace(os.Getenv("INTERNAL_SOCKET_PATH"))
-	if path == "" {
-		path = config.DefaultInternalSocketPath
+func internalHealthcheck(socketPath string, stderr io.Writer) int {
+	socketPath = strings.TrimSpace(socketPath)
+	if socketPath == "" {
+		socketPath = strings.TrimSpace(os.Getenv("INTERNAL_SOCKET_PATH"))
+	}
+	if socketPath == "" {
+		socketPath = config.DefaultInternalSocketPath
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), internalHealthcheckTimeout)
 	defer cancel()
-	connection, err := (&net.Dialer{}).DialContext(ctx, "unix", path)
+	transport := &http.Transport{
+		DisableCompression:     true,
+		DisableKeepAlives:      true,
+		MaxResponseHeaderBytes: 8 << 10,
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
+		},
+	}
+	// The probe is an invariant check on one protected Unix endpoint. Do not
+	// follow a redirect returned by a stale or unrelated socket owner.
+	client := &http.Client{
+		Transport: transport,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	defer transport.CloseIdleConnections()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://remnanode-lite/internal/health", nil)
+	if err != nil {
+		fmt.Fprintf(stderr, "internal healthcheck failed: create request: %v\n", err)
+		return 1
+	}
+	request.Close = true
+	response, err := client.Do(request)
 	if err != nil {
 		fmt.Fprintf(stderr, "internal healthcheck failed: %v\n", err)
 		return 1
 	}
-	if err := connection.Close(); err != nil {
-		fmt.Fprintf(stderr, "internal healthcheck failed: close socket: %v\n", err)
+	if response.StatusCode != http.StatusOK {
+		_ = response.Body.Close()
+		fmt.Fprintf(stderr, "internal healthcheck failed: readiness returned HTTP %d\n", response.StatusCode)
+		return 1
+	}
+	if err := response.Body.Close(); err != nil {
+		fmt.Fprintf(stderr, "internal healthcheck failed: close response: %v\n", err)
 		return 1
 	}
 	return 0
@@ -357,11 +397,13 @@ func runNode() (runErr error) {
 		return fmt.Errorf("initialize HTTPS server: %w", err)
 	}
 
+	var publicReady atomic.Bool
 	unixServer := &unixconfig.Server{
 		Path:     cfg.InternalSocketPath,
 		Token:    cfg.InternalRESTToken,
 		Provider: manager,
 		Webhook:  pluginService,
+		Ready:    publicReady.Load,
 	}
 
 	serveErrors := make(chan error, 2)
@@ -382,8 +424,14 @@ func runNode() (runErr error) {
 
 	log.Printf("internal config socket listening on %s", cfg.InternalSocketPath)
 	startServer("internal config socket", func() error { return unixServer.ListenAndServe(ctx) })
-	log.Printf("remnanode-lite listening on %s", cfg.HTTPAddr())
-	startServer("HTTPS server", func() error { return server.ListenAndServeTLS(ctx) })
+	startServer("HTTPS server", func() error {
+		err := server.ListenAndServeTLSReady(ctx, func() {
+			publicReady.Store(true)
+			log.Printf("remnanode-lite listening on %s", cfg.HTTPAddr())
+		})
+		publicReady.Store(false)
+		return err
+	})
 
 	servers.Add(1)
 	go func() {

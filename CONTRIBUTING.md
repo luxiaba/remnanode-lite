@@ -215,17 +215,24 @@ The exact commands are in the
 
 ### Shell, installers, and service definitions
 
-- Bash scripts use `set -euo pipefail`. OpenRC service files remain compatible
-  with POSIX `sh`.
+- Bash scripts use `set -euo pipefail`. The public Native bootstrap and OpenRC
+  service remain compatible with POSIX `sh`.
 - Shell and service files use LF line endings; `.gitattributes` enforces this.
-- Replace files through a restricted temporary directory and an atomic rename
-  after validation, retaining an explicit rollback point.
-- Do not bypass the installer's shared lock, trust roots, download budgets,
-  path validation, or secret migration.
-- Keep systemd and OpenRC user, capability, resource, stop, and uninstall
-  semantics aligned.
-- Installer changes require the offline operational tests. Installing on a
-  real host does not replace failure-injection coverage.
+- `release/native/install.sh` is only the bootstrap. Durable lifecycle and
+  generation behavior belongs in `internal/rnlctl`; do not reimplement it in
+  shell.
+- Native installation and upgrade accept complete, verified bundles. Do not
+  add a path that updates Node, rw-core, geo data, or ASN data independently.
+- Preserve exact-version resolution, outer archive SHA-256 verification,
+  strict manifest/file verification, private snapshots, the operation lock,
+  durable journal, and two-generation rollback model.
+- Keep the base systemd unit valid on systemd 239. Add newer hardening only to
+  the version-gated drop-in. Treat OpenRC as experimental and preserve its
+  explicit cgroup v2 validation.
+- Installer or lifecycle changes require bootstrap fixtures, focused
+  `internal/rnlctl` tests, race coverage for affected state, bundle tamper
+  tests, and the relevant systemd/OpenRC host-controller tests. A successful
+  install on one real host does not replace failure-injection coverage.
 
 ### Generated code, dependencies, and supply chain
 
@@ -295,8 +302,8 @@ The minimum expectations are:
 - Run affected-package race tests for state or concurrency changes.
 - For API changes, run `nodeapi`, `httpserver`, `contract`, and pinned-source
   evidence tests.
-- Run repository checks for shell or deployment changes; add offline
-  operational tests for installer changes.
+- Run repository checks for shell or deployment changes; add offline bootstrap,
+  bundle, lifecycle, rollback, and repair tests for Native changes.
 - Run Linux network-namespace tests for nftables or netlink changes.
 - Run the low-memory test for resource ceilings or large-configuration paths.
 
@@ -316,7 +323,8 @@ but it must never be reported as passed when it was not run.
 
 CI is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Its
 `ci / gate` job aggregates Go and race checks, repository and packaging checks,
-offline installer operations, and isolated Linux network-administration tests.
+Native bootstrap/lifecycle checks, and isolated Linux network-administration
+tests.
 
 ## Commits
 
@@ -383,7 +391,7 @@ the wrong boundary with more comments.
 
 A normal contribution ends when it merges into `dev`; contributors do not
 publish it independently. Maintainers control the `dev -> main` promotion,
-candidate images, final tags, `latest`, and release assets under the
+candidate images, final tags, moving channels, and release assets under the
 [versioning policy](docs/versioning.md) and [release procedure](docs/release.md).
 
 Every `main` commit receives an immutable `sha-<commit>` candidate image. Before
@@ -394,8 +402,11 @@ commit host inventories, logs, Secrets, smoke JSON, or other production data.
 
 When the candidate is ready, create an annotated version tag on the current
 `main` HEAD. The Release workflow verifies the candidate manifest and build
-attestation, promotes that same digest to the exact version and `latest`, and
-lets GitHub generate the Release notes. `edge` and `sha-*` are not releases.
+attestation, builds and verifies both Native bundles, publishes all assets, and
+promotes the accepted image digest without rebuilding it. A plain `X.Y.Z`
+release advances `latest` and GitHub Latest; an `X.Y.Z-rnl.N` prerelease
+advances `preview` and never changes `latest`. `edge` and `sha-*` are not
+releases.
 
 ## License
 

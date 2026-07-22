@@ -21,6 +21,7 @@ on:
       - "go.sum"
       - "cmd/**"
       - "internal/**"
+      - "release/runtime-assets.lock.json"
       - "scripts/promote-image-tag.sh"
 
 concurrency:
@@ -34,23 +35,28 @@ jobs:
   build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
           version: v0.35.0
           driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
 
-      - name: Build linux/amd64 image without publishing
+      - name: Build linux/amd64 and linux/arm64 images without publishing
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           pull: true
           push: false
           outputs: type=cacheonly
@@ -143,6 +149,7 @@ jobs:
       packages: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     steps:
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
@@ -163,7 +170,7 @@ jobs:
           printf 'digest=%s\n' "$SOURCE_DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Attest main image
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.digest.outputs.digest }}
@@ -212,7 +219,11 @@ jobs:
               echo "$candidate_ref returned an invalid digest: $candidate_digest" >&2
               exit 1
             }
-            echo "$candidate_ref already exists at $candidate_digest; keeping the immutable candidate"
+            [ "$candidate_digest" = "$SOURCE_DIGEST" ] || {
+              echo "$candidate_ref already exists at $candidate_digest, expected $SOURCE_DIGEST" >&2
+              exit 1
+            }
+            echo "$candidate_ref already exists at the expected digest $candidate_digest"
           else
             bash scripts/promote-image-tag.sh immutable "$image" "$SOURCE_DIGEST" "$tag"
             candidate_digest="$SOURCE_DIGEST"

@@ -39,10 +39,8 @@ func ReleaseAssetURL(tag, arch string) (string, error) {
 		return "", fmt.Errorf("unsupported release architecture %q", arch)
 	}
 	return fmt.Sprintf(
-		"https://github.com/%s/releases/download/%s/remnanode-lite_linux_%s.tar.gz",
-		releaseRepo,
-		tag,
-		arch,
+		"https://github.com/%s/releases/download/%s/remnanode-lite_%s_linux_%s.tar.gz",
+		releaseRepo, tag, strings.TrimPrefix(tag, "v"), arch,
 	), nil
 }
 
@@ -50,13 +48,11 @@ func InstallScriptURL(tag, script string) (string, error) {
 	if !releaseTagPattern.MatchString(tag) {
 		return "", fmt.Errorf("invalid release tag %q", tag)
 	}
-	switch script {
-	case "install-node.sh", "install-node-alpine.sh", "install-xray.sh", "upgrade.sh", "uninstall.sh":
-	default:
+	if script != "install.sh" {
 		return "", fmt.Errorf("unsupported install script %q", script)
 	}
 	return fmt.Sprintf(
-		"https://raw.githubusercontent.com/%s/%s/scripts/%s",
+		"https://github.com/%s/releases/download/%s/%s",
 		releaseRepo,
 		tag,
 		script,

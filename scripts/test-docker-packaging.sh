@@ -4,19 +4,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+fail() {
+  echo "Docker packaging check: $*" >&2
+  exit 1
+}
+
 require_file() {
-  [ -f "$1" ] || {
-    echo "required Docker packaging file is missing: $1" >&2
-    exit 1
-  }
+  [ -f "$1" ] || fail "required file is missing: $1"
 }
 
 require_text() {
   local file="$1" text="$2"
-  grep -Fq -- "$text" "$file" || {
-    echo "$file is missing required Docker packaging text: $text" >&2
-    exit 1
-  }
+  grep -Fq -- "$text" "$file" || fail "$file is missing: $text"
 }
 
 for file in \
@@ -27,68 +26,111 @@ for file in \
   .env.example \
   .github/workflows/container.yml \
   .github/workflows/release.yml \
+  release/runtime-assets.lock.json \
+  release/bundle/THIRD_PARTY_NOTICES.md \
+  release/bundle/SOURCE-OFFER.md \
   scripts/promote-image-tag.sh \
-  docs/deployment-docker.md \
   deploy/compose.single-file.yaml; do
   require_file "$file"
 done
 
-if grep -Eqi '(^|[/:_-])latest([[:space:]/:@_-]|$)' Dockerfile; then
-  echo "Dockerfile must not use floating latest assets or base images" >&2
-  exit 1
-fi
+literal_dollar='$'
 
+if grep -Eqi '(^|[/:_-])latest([[:space:]/:@_-]|$)' Dockerfile; then
+  fail "Dockerfile must not use floating latest assets or base images"
+fi
 require_text Dockerfile '# syntax=docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56'
 require_text Dockerfile 'ARG GO_IMAGE=golang:1.26.5-bookworm@sha256:1ecb7edf62a0408027bd5729dfd6b1b8766e578e8df93995b225dfd0944eb651'
 require_text Dockerfile 'ARG DEBIAN_IMAGE=debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818'
-require_text Dockerfile 'ARG XRAY_CORE_VERSION=v26.6.27'
-require_text Dockerfile 'Xray-linux-64.zip'
-require_text Dockerfile 'Xray-linux-arm64-v8a.zip'
-require_text Dockerfile 'b3e5902d06d6282fe53cfa2fc426058b9aeaa429b2c812e20887cd47f26d08bf'
-require_text Dockerfile '13a251379bea366c2cf10363ad71e75734193d401f26f518bf0c25e5c8f8c931'
-require_text Dockerfile 'https://github.com/ipverse/as-ip-blocks/archive/56d021c7536afb15317155e45b57e7b5c87a4700.tar.gz'
-require_text Dockerfile 'fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa978a33b674a58ec'
-require_text Dockerfile 'asn-builder -format ipverse-tar-gz'
-require_text Dockerfile 'ENV XRAY_CORE_VERSION=v26.6.27'
+require_text Dockerfile 'COPY release/runtime-assets.lock.json /runtime-assets.lock.json'
+require_text Dockerfile 'release-tool materialize'
+require_text Dockerfile "--arch \"${literal_dollar}TARGETARCH\""
+require_text Dockerfile '--out-dir /assets'
+require_text Dockerfile 'COPY --from=assets --chmod=0755 /assets/lib/rw-core'
+require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geoip.dat'
+require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat'
+require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/asn/asn-prefixes.bin'
+require_text Dockerfile 'COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite'
+for license_file in CC-BY-SA-4.0 CC0-1.0 GPL-3.0-only MPL-2.0; do
+  require_text Dockerfile "COPY --from=assets --chmod=0644 /assets/licenses/${license_file}.txt /usr/share/doc/remnanode-lite/licenses/${license_file}.txt"
+done
+require_text Dockerfile 'COPY --chmod=0644 LICENSE /usr/share/doc/remnanode-lite/LICENSE'
+require_text Dockerfile 'COPY --chmod=0644 release/bundle/THIRD_PARTY_NOTICES.md /usr/share/doc/remnanode-lite/THIRD_PARTY_NOTICES.md'
+require_text Dockerfile 'COPY --chmod=0644 release/bundle/SOURCE-OFFER.md /usr/share/doc/remnanode-lite/SOURCE-OFFER.md'
+require_text Dockerfile 'COPY --chmod=0644 release/runtime-assets.lock.json /usr/share/doc/remnanode-lite/runtime-assets.lock.json'
+for required in \
+  'XRAY_BIN=/usr/local/lib/remnanode-lite/rw-core' \
+  'GEO_DIR=/usr/local/share/remnanode-lite/xray' \
+  'ASN_DB_PATH=/usr/local/share/remnanode-lite/asn/asn-prefixes.bin' \
+  'LOG_DIR=/var/log/remnanode-lite' \
+  'INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock'; do
+  require_text Dockerfile "$required"
+done
 require_text Dockerfile 'ENTRYPOINT ["/usr/local/bin/remnanode-lite"]'
+for stale_runtime_reference in \
+  '/usr/local/lib/remnanode/rw-core' \
+  '/usr/local/share/remnanode/xray' \
+  '/usr/local/share/remnanode/asn' \
+  '/run/remnanode/internal.sock' \
+  '/var/log/remnanode/' \
+  'remnanode.env.example' \
+  'container-entrypoint.sh'; do
+  if grep -Fq "$stale_runtime_reference" \
+    Dockerfile compose.yaml deploy/compose.single-file.yaml .github/workflows/release.yml; then
+    fail "packaging still contains legacy runtime reference: $stale_runtime_reference"
+  fi
+done
+for stale_pin in \
+  'ARG XRAY_CORE_VERSION=' \
+  'ARG XRAY_AMD64_SHA256=' \
+  'ARG XRAY_ARM64_SHA256=' \
+  'ARG ASN_SOURCE_URL=' \
+  'ARG ASN_SOURCE_SHA256=' \
+  'Xray-linux-64.zip' \
+  'Xray-linux-arm64-v8a.zip'; do
+  if grep -Fq "$stale_pin" Dockerfile; then
+    fail "Dockerfile duplicates runtime asset lock data: $stale_pin"
+  fi
+done
 
 version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
-[ -n "$version" ] || {
-  echo "application version is missing" >&2
-  exit 1
-}
+[ -n "$version" ] || fail "application version is missing"
 production_image="ghcr.io/luxiaba/remnanode-lite:${version}"
 require_text compose.yaml "$production_image"
 require_text .env.example "REMNANODE_IMAGE=${production_image}"
 require_text compose.build.yaml "image: remnanode-lite:${version}"
 require_text compose.build.yaml 'build:'
+
 for compose_file in compose.yaml compose.build.yaml deploy/compose.single-file.yaml; do
   require_text "$compose_file" '  remnanode-lite:'
   if grep -Eq '^[[:space:]]{2}remnanode:' "$compose_file"; then
-    echo "$compose_file still uses the legacy remnanode service name" >&2
-    exit 1
+    fail "$compose_file still uses the legacy remnanode service name"
   fi
 done
 for compose_file in compose.yaml deploy/compose.single-file.yaml; do
   require_text "$compose_file" 'container_name: remnanode-lite'
   require_text "$compose_file" 'hostname: remnanode-lite'
 done
-
 if grep -Eq '^[[:space:]]+build:' compose.yaml; then
-  echo "production compose.yaml must not require a source build" >&2
-  exit 1
+  fail "production compose.yaml must not require a source build"
 fi
 
-require_text compose.yaml 'network_mode: host'
-require_text compose.yaml 'init: true'
-require_text compose.yaml 'NET_ADMIN'
-require_text compose.yaml 'NET_BIND_SERVICE'
-require_text compose.yaml 'mem_limit: 448m'
-require_text compose.yaml 'memswap_limit: 448m'
-require_text compose.yaml 'cpus: 1.0'
-require_text compose.yaml 'pids_limit: 256'
-require_text compose.yaml 'read_only: true'
-require_text compose.yaml '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]'
+for required in \
+  'network_mode: host' \
+  'init: true' \
+  'NET_ADMIN' \
+  'NET_BIND_SERVICE' \
+  'mem_limit: 448m' \
+  'memswap_limit: 448m' \
+  'cpus: 1.0' \
+  'pids_limit: 256' \
+  'read_only: true' \
+  '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]' \
+  '/run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700' \
+  '/var/log/remnanode-lite:rw,noexec,nosuid,nodev,size=28m,mode=0750' \
+  'max-size: 2m'; do
+  require_text compose.yaml "$required"
+done
 
 require_text deploy/compose.single-file.yaml \
   "image: \"\${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:latest}\""
@@ -98,237 +140,89 @@ for variable in NODE_PORT NODE_BIND_ADDR LOW_MEMORY DISABLE_HASHED_SET_CHECK BOD
   require_text compose.yaml "${variable}: \"\${${variable}"
   require_text deploy/compose.single-file.yaml "${variable}: \"\${${variable}"
 done
-require_text deploy/compose.single-file.yaml 'network_mode: host'
-require_text deploy/compose.single-file.yaml 'init: true'
-require_text deploy/compose.single-file.yaml 'read_only: true'
-require_text deploy/compose.single-file.yaml 'mem_limit: 448m'
+for required in \
+  'network_mode: host' \
+  'init: true' \
+  'read_only: true' \
+  'mem_limit: 448m' \
+  '/run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700' \
+  '/var/log/remnanode-lite:rw,noexec,nosuid,nodev,size=28m,mode=0750'; do
+  require_text deploy/compose.single-file.yaml "$required"
+done
+if grep -Eq '^[[:space:]]*-[[:space:]]*SECRET_KEY=' deploy/compose.single-file.yaml; then
+  fail "single-file Compose must use a mapping for SECRET_KEY"
+fi
+if grep -Eq '^[[:space:]]+volumes:' deploy/compose.single-file.yaml; then
+  fail "single-file Compose must keep runtime logs ephemeral"
+fi
+if grep -Fq 'remnanode-logs' compose.yaml; then
+  fail "production Compose must keep rw-core logs ephemeral"
+fi
+if grep -Eq 'ghcr\.io/[^[:space:]]+:latest' compose.yaml .env.example; then
+  fail "production container configuration must default to an immutable version"
+fi
+
+container_workflow=.github/workflows/container.yml
+require_text "$container_workflow" '      - "release/runtime-assets.lock.json"'
+require_text "$container_workflow" 'Build linux/amd64 and linux/arm64 images without publishing'
+require_text "$container_workflow" 'platforms: linux/amd64,linux/arm64'
+require_text "$container_workflow" 'outputs: type=cacheonly'
+require_text "$container_workflow" 'push: false'
+require_text "$container_workflow" 'push-by-digest=true,name-canonical=true,push=true'
+require_text "$container_workflow" 'provenance: mode=max'
+require_text "$container_workflow" 'attest-main:'
+require_text "$container_workflow" 'push-to-registry: true'
+require_text "$container_workflow" 'scripts/promote-image-tag.sh immutable'
+require_text "$container_workflow" 'scripts/promote-image-tag.sh mutable'
+require_text "$container_workflow" "[ \"\$candidate_digest\" = \"\$SOURCE_DIGEST\" ]"
+if grep -Eq 'type=raw[^[:space:]]*latest' "$container_workflow"; then
+  fail "candidate workflow must not publish latest"
+fi
+
+release_workflow=.github/workflows/release.yml
+require_text "$release_workflow" 'Verify main candidate image'
+require_text "$release_workflow" 'remnanode-lite.env.example'
+require_text "$release_workflow" \
+  "candidate_tag=\"${literal_dollar}{REGISTRY}/${literal_dollar}{IMAGE_NAME}:sha-${literal_dollar}{candidate_commit}\""
+require_text "$release_workflow" 'scripts/promote-image-tag.sh immutable'
+require_text "$release_workflow" 'scripts/promote-image-tag.sh mutable'
+require_text "$release_workflow" 'scripts/verify-release-tag.sh'
+require_text "$release_workflow" 'scripts/verify-release-latest.sh'
+require_text "$release_workflow" 'Reconfirm the published Release and exact image'
+require_text "$release_workflow" 'Promote the published release channel without rebuilding'
+if grep -Fq 'docker/build-push-action@' "$release_workflow"; then
+  fail "release workflow must promote the accepted candidate digest instead of rebuilding"
+fi
+
 release_single_file="$(sed \
   "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${version}|" \
   deploy/compose.single-file.yaml)"
-grep -Fq "ghcr.io/luxiaba/remnanode-lite:${version}" <<<"$release_single_file"
+grep -Fq "$production_image" <<<"$release_single_file"
 if grep -Fq 'ghcr.io/luxiaba/remnanode-lite:latest' <<<"$release_single_file"; then
-  echo "release single-file Compose still contains latest" >&2
-  exit 1
+  fail "release single-file Compose still contains latest"
 fi
-if grep -Eq '^[[:space:]]*-[[:space:]]*SECRET_KEY=' deploy/compose.single-file.yaml; then
-  echo "single-file Compose must use a mapping for SECRET_KEY" >&2
-  exit 1
-fi
-if grep -Eq '^[[:space:]]+volumes:' deploy/compose.single-file.yaml; then
-  echo "single-file Compose must keep runtime logs ephemeral" >&2
-  exit 1
-fi
-
-require_text .github/workflows/release.yml 'packages: write'
-require_text .github/workflows/release.yml 'attestations: read'
-github_expression_prefix='$'
-require_text .github/workflows/release.yml \
-  "if [ \"${github_expression_prefix}GITHUB_SHA\" != \"${github_expression_prefix}main_head\" ]; then"
-require_text .github/workflows/release.yml 'needs: release'
-require_text .github/workflows/release.yml 'needs: publish-container'
-require_text .github/workflows/release.yml 'Verify main candidate image'
-require_text .github/workflows/release.yml "candidate_commit=\"\$GITHUB_SHA\""
-require_text .github/workflows/release.yml \
-  "candidate_tag=\"\${REGISTRY}/\${IMAGE_NAME}:sha-\${candidate_commit}\""
-require_text .github/workflows/release.yml '--cert-identity'
-require_text .github/workflows/release.yml '/.github/workflows/container.yml@refs/heads/main'
-require_text .github/workflows/release.yml '--source-digest'
-require_text .github/workflows/release.yml '--deny-self-hosted-runners'
-require_text .github/workflows/release.yml 'docker buildx imagetools inspect'
-require_text .github/workflows/release.yml 'docker buildx imagetools inspect --raw'
-require_text .github/workflows/release.yml 'vnd.docker.reference.type'
-require_text .github/workflows/release.yml 'vnd.docker.reference.digest'
-jq_index="\$index"
-jq_runnable="\$runnable"
-jq_attestations="\$attestations"
-require_text .github/workflows/release.yml "(${jq_index}.manifests | length) == 4"
-require_text .github/workflows/release.yml "(${jq_runnable} | length) == 2"
-require_text .github/workflows/release.yml "(${jq_attestations} | length) == 2"
-require_text .github/workflows/release.yml '["linux/amd64", "linux/arm64"]'
-if grep -Fq -- '--signer-workflow' .github/workflows/release.yml ||
-  grep -Fq -- '--source-ref' .github/workflows/release.yml; then
-  echo "release workflow must use an exact attestation certificate identity" >&2
-  exit 1
-fi
-require_text .github/workflows/release.yml \
-  "SOURCE_DIGEST: ${github_expression_prefix}{{ needs.release.outputs.candidate_digest }}"
-require_text .github/workflows/release.yml 'make_latest: false'
-require_text .github/workflows/release.yml 'overwrite_files: false'
-require_text .github/workflows/release.yml 'prerelease: false'
-require_text .github/workflows/release.yml 'generate_release_notes: true'
-if grep -Fq 'body_path:' .github/workflows/release.yml; then
-  echo "release workflow must not require a repository release-note file" >&2
-  exit 1
-fi
-require_text .github/workflows/release.yml 'promote-latest:'
-require_text .github/workflows/release.yml 'Publish accepted candidate as the exact release version'
-require_text .github/workflows/release.yml 'Promote attested image to GHCR latest'
-require_text .github/workflows/release.yml 'Mark GitHub release as latest'
-require_text .github/workflows/release.yml 'Revalidate main head before latest promotion'
-require_text .github/workflows/release.yml 'scripts/promote-image-tag.sh immutable'
-require_text .github/workflows/release.yml 'scripts/promote-image-tag.sh mutable'
-require_text .github/workflows/release.yml '-f make_latest=true'
-awk '
-  /^  promote-latest:$/ { in_job = 1; next }
-  in_job && /^  [A-Za-z0-9_-]+:$/ { exit }
-  in_job && /^      contents: write$/ { found = 1 }
-  END { exit(found ? 0 : 1) }
-' .github/workflows/release.yml || {
-  echo "release latest promotion requires contents: write" >&2
-  exit 1
-}
-require_text .github/workflows/release.yml 'image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a'
-require_text .github/workflows/release.yml 'dist/compose.yaml'
-require_text .github/workflows/release.yml 'dist/docker-compose.single-file.yaml'
-require_text .github/workflows/release.yml \
-  "release_version=\"${github_expression_prefix}{GITHUB_REF_NAME#v}\""
-require_text .github/workflows/release.yml 'dist/remnanode.env.example'
-require_text .github/workflows/release.yml \
-  "REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${github_expression_prefix}{release_version}"
-require_text .github/workflows/container.yml 'outputs: type=cacheonly'
-require_text .github/workflows/container.yml 'push: false'
-require_text .github/workflows/container.yml 'workflow_dispatch:'
-require_text .github/workflows/container.yml 'branches: [main]'
-require_text .github/workflows/container.yml 'branches: [main, dev]'
-require_text .github/workflows/container.yml '      - ".env.example"'
-require_text .github/workflows/container.yml '      - "compose.yaml"'
-if [ "$(grep -Fc '      - "deploy/compose.single-file.yaml"' .github/workflows/container.yml)" -ne 1 ]; then
-  echo "container pull-request filter must track the production single-file Compose" >&2
-  exit 1
-fi
-if [ "$(grep -Fc '      - "scripts/promote-image-tag.sh"' .github/workflows/container.yml)" -ne 1 ]; then
-  echo "container pull-request filter must track its image promotion helper" >&2
-  exit 1
-fi
-require_text .github/workflows/container.yml "cancel-in-progress: \${{ github.event_name != 'workflow_dispatch' }}"
-require_text .github/workflows/container.yml "if: github.event_name == 'pull_request'"
-require_text .github/workflows/container.yml "if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')"
-require_text .github/workflows/container.yml "if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'"
-require_text .github/workflows/container.yml 'Reject non-main candidate dispatch'
-require_text .github/workflows/container.yml 'candidate publishing is only allowed from refs/heads/main'
-require_text .github/workflows/container.yml 'Build and publish untagged main image'
-require_text .github/workflows/container.yml 'Read project version'
-require_text .github/workflows/container.yml \
-  "org.opencontainers.image.version=${github_expression_prefix}{{ steps.project-version.outputs.version }}"
-if grep -Fq "org.opencontainers.image.version=sha-${github_expression_prefix}{{ github.sha }}" \
-  .github/workflows/container.yml; then
-  echo "candidate OCI version must use the project version, not a commit tag alias" >&2
-  exit 1
-fi
-require_text .github/workflows/container.yml 'push-by-digest=true,name-canonical=true,push=true'
-require_text .github/workflows/container.yml 'promote-main:'
-require_text .github/workflows/container.yml 'needs: [publish-main, attest-main]'
-require_text .github/workflows/container.yml 'scripts/promote-image-tag.sh immutable'
-require_text .github/workflows/container.yml 'scripts/promote-image-tag.sh mutable'
-require_text .github/workflows/container.yml \
-  "tag=\"sha-${github_expression_prefix}{GITHUB_SHA}\""
-require_text .github/workflows/container.yml 'id: candidate'
-require_text .github/workflows/container.yml "candidate_ref=\"\${image}:\${tag}\""
-require_text .github/workflows/container.yml 'keeping the immutable candidate'
-require_text .github/workflows/container.yml \
-  "SOURCE_DIGEST: ${github_expression_prefix}{{ steps.candidate.outputs.digest }}"
-if grep -Fq 'candidate-sha-' .github/workflows/container.yml; then
-  echo "container workflow must use one candidate tag namespace" >&2
-  exit 1
-fi
-require_text .github/workflows/container.yml "current main is ${github_expression_prefix}main_head"
-sbom_generator='generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68'
-require_text .github/workflows/container.yml "sbom: ${sbom_generator}"
-require_text .github/workflows/container.yml 'packages: write'
-require_text .github/workflows/container.yml 'attestations: write'
-require_text .github/workflows/container.yml 'provenance: mode=max'
-require_text .github/workflows/container.yml 'push-to-registry: true'
-require_text .github/workflows/container.yml 'attest-main:'
-require_text .github/workflows/container.yml 'needs: publish-main'
-require_text .github/workflows/container.yml \
-  "digest: ${github_expression_prefix}{{ steps.image.outputs.digest }}"
-require_text .github/workflows/container.yml \
-  "SOURCE_DIGEST: ${github_expression_prefix}{{ needs.publish-main.outputs.digest }}"
-require_text .github/workflows/container.yml "subject-digest: ${github_expression_prefix}{{ steps.digest.outputs.digest }}"
-require_text .github/workflows/container.yml 'image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0'
-require_text .github/workflows/container.yml 'image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a'
-for workflow in .github/workflows/container.yml .github/workflows/release.yml; do
-  require_text "$workflow" 'group: registry-publish'
-  require_text "$workflow" 'cancel-in-progress: false'
-done
-require_text scripts/promote-image-tag.sh 'refusing to move immutable tag'
-require_text scripts/promote-image-tag.sh 'could not determine whether immutable tag'
-require_text scripts/promote-image-tag.sh '--prefer-index=false'
-require_text scripts/promote-image-tag.sh \
-  "resolved to ${github_expression_prefix}promoted, expected ${github_expression_prefix}source_digest"
-require_text compose.yaml '/var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750'
-require_text compose.yaml 'max-size: 2m'
-require_text internal/xray/logrotate.go 'maxLogSize       = 4 << 20'
-
-if grep -Fq 'remnanode-logs' compose.yaml; then
-  echo "production compose must keep rw-core logs ephemeral" >&2
-  exit 1
-fi
-
-if grep -Eq 'ghcr\.io/[^[:space:]]+:latest' compose.yaml .env.example; then
-  echo "production container configuration must default to an immutable version" >&2
-  exit 1
-fi
-
-if grep -Eq 'type=raw[^[:space:]]*latest' .github/workflows/container.yml; then
-  echo "candidate workflows must not publish latest" >&2
-  exit 1
-fi
-
-if grep -Fq 'docker/build-push-action@' .github/workflows/release.yml; then
-  echo "release workflow must promote the accepted candidate digest instead of rebuilding it" >&2
-  exit 1
-fi
-
-require_text .github/workflows/release.yml \
-  "candidate_tag=\"${github_expression_prefix}{REGISTRY}/${github_expression_prefix}{IMAGE_NAME}:sha-${github_expression_prefix}{candidate_commit}\""
-require_text .github/workflows/release.yml \
-  "candidate_ref=\"${github_expression_prefix}{image}@${github_expression_prefix}{candidate_digest}\""
-
-if grep -Eq '^[[:space:]]+needs:[[:space:]]+build[[:space:]]*$' .github/workflows/container.yml; then
-  echo "main image publishing must not repeat the CI build job" >&2
-  exit 1
-fi
-
-while IFS= read -r action_ref; do
-  case "$action_ref" in
-    ./*) continue ;;
-  esac
-  revision="${action_ref##*@}"
-  if ! [[ "$revision" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "GitHub Action is not pinned to a full commit: $action_ref" >&2
-    exit 1
-  fi
-done < <(
-  sed -En \
-    's/^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*([^[:space:]#]+).*$/\2/p' \
-    .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null
-)
 
 packaging_tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$packaging_tmp_dir"' EXIT
 
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  command -v jq >/dev/null 2>&1 || fail "jq is required for Compose contract comparison"
   compose_env="${packaging_tmp_dir}/compose.env"
-  {
-    printf '%s\n' \
-      "REMNANODE_IMAGE=${production_image}" \
-      'NODE_PORT=38329' \
-      'NODE_BIND_ADDR=127.0.0.1' \
-      'SECRET_KEY=packaging-check' \
-      'LOW_MEMORY=1' \
-      'DISABLE_HASHED_SET_CHECK=false' \
-      'BODY_LIMIT_MB=12' \
-      'GOMEMLIMIT=160MiB'
-  } >"$compose_env"
+  printf '%s\n' \
+    "REMNANODE_IMAGE=${production_image}" \
+    'NODE_PORT=38329' \
+    'NODE_BIND_ADDR=127.0.0.1' \
+    'SECRET_KEY=packaging-check' \
+    'LOW_MEMORY=1' \
+    'DISABLE_HASHED_SET_CHECK=false' \
+    'BODY_LIMIT_MB=12' \
+    'GOMEMLIMIT=160MiB' \
+    >"$compose_env"
 
   validate_compose() {
     local services
     services="$(docker compose --env-file "$compose_env" "$@" config --services)"
-    [ "$services" = 'remnanode-lite' ] || {
-      echo "Compose service set is $services, want remnanode-lite" >&2
-      exit 1
-    }
+    [ "$services" = remnanode-lite ] || fail "Compose service set is $services"
     docker compose --env-file "$compose_env" "$@" config --quiet
   }
   validate_compose -f compose.yaml
@@ -337,36 +231,28 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
 
   if env -u SECRET_KEY docker compose --env-file /dev/null \
     -f deploy/compose.single-file.yaml config --quiet >/dev/null 2>&1; then
-    echo "single-file Compose accepted a missing SECRET_KEY" >&2
-    exit 1
+    fail "single-file Compose accepted a missing SECRET_KEY"
   fi
 
   root_service="$(docker compose --env-file "$compose_env" -f compose.yaml \
     config --format json | jq -S '.services["remnanode-lite"]')"
   single_service="$(docker compose --env-file "$compose_env" -f deploy/compose.single-file.yaml \
     config --format json | jq -S '.services["remnanode-lite"]')"
-  [ "$root_service" = "$single_service" ] || {
+  if [ "$root_service" != "$single_service" ]; then
     echo "production Compose templates do not resolve to the same service" >&2
     diff -u <(printf '%s\n' "$root_service") <(printf '%s\n' "$single_service") >&2 || true
     exit 1
-  }
+  fi
 
   release_compose="${packaging_tmp_dir}/release-compose.yaml"
   release_env="${packaging_tmp_dir}/release.env"
-  release_env_asset="${packaging_tmp_dir}/remnanode.env.example"
   printf '%s\n' "$release_single_file" >"$release_compose"
   printf '%s\n' 'SECRET_KEY=packaging-check' >"$release_env"
-  sed \
-    "s|^REMNANODE_IMAGE=.*$|REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${version}|" \
-    .env.example >"$release_env_asset"
-  require_text "$release_env_asset" "REMNANODE_IMAGE=${production_image}"
   release_image="$(env -u REMNANODE_IMAGE docker compose \
     --env-file "$release_env" -f "$release_compose" config --format json \
     | jq -r '.services["remnanode-lite"].image')"
-  [ "$release_image" = "$production_image" ] || {
-    echo "release Compose default image is $release_image, want $production_image" >&2
-    exit 1
-  }
+  [ "$release_image" = "$production_image" ] ||
+    fail "release Compose default image is $release_image, want $production_image"
 else
   echo "docker compose is unavailable; skipped Compose schema validation" >&2
 fi

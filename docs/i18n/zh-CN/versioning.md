@@ -1,208 +1,227 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=594bab41d683fd0963c94d635c102feef579a147ede02dc95f6edf7dbeee58a2 -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=0338d6c36d1c8a74a830d0c94dabda00c6a328e0387c19cd99629f70bd830bb1 -->
 
-# 版本与镜像标签策略
+# 版本与镜像标签
 
-> 这是中文译文；版本规则以[英文原文](../../versioning.md)为准。
+[英文原文](../../versioning.md) · [文档索引](README.md) · [发布流程](release.md)
 
-[返回文档索引](README.md)
+Remnanode Lite 将项目身份与兼容性声明分开。代码可以独立演进，同时继续实现
+已经验证的旧版官方 Node 契约。发布名称和移动镜像通道也彼此独立：精确版本只
+标识一个发布，`preview` 与 `latest` 选择的是发布类别。
 
-Remnanode Lite 同时跟踪四个版本：项目发行版、官方 Node 契约、集成测试使用的 Panel，以及随项目打包的 rw-core。它们并不总是同步变化，因此不能用一个含糊的“当前版本”概括。
-
-本文件是版本命名与镜像标签的规范。具体发布操作见[发布流程](release.md)。
-
-## 四个独立维度
+本文定义这些身份与通道。Release workflow 是发布行为的可执行真相源，
+`scripts/release-metadata.sh` 负责 stable/preview 分类。
 
 | 维度 | 真相源 | 含义 |
 | --- | --- | --- |
-| 项目版本 `Version` | `internal/version/version.go` | 本项目代码、二进制、Release 和精确镜像的身份 |
-| 官方契约 `ContractVersion` | `internal/version/contract.version` 及固定源码证据 | 当前真正实现并向 Panel 报告的官方 Node 行为基线 |
-| Panel 集成目标 | 发布文档和维护者验证 | 完成集成验证时使用的 Panel 版本，不是编译版本 |
-| rw-core 版本 | Dockerfile、安装脚本及发布记录 | 镜像或原生安装实际携带并验证的 core 版本 |
+| 项目 `Version` | `internal/version/version.go` | 本项目源码、二进制、Release 资产和精确容器标签的身份 |
+| 官方 `ContractVersion` | `internal/version/contract.version`、`internal/version/version.go` 与固定契约证据 | 实际实现并向 Panel 报告的官方 Node 行为 |
+| Panel 集成目标 | 维护者发布验证 | 实际集成测试使用的 Panel 版本；不会编译进发布身份 |
+| rw-core 与运行时资产 | `release/runtime-assets.lock.json` | Docker 和 Native Linux 共用的 core、GeoIP、GeoSite、ASN、源码、许可证与校验和输入 |
 
-`Version` 与 `ContractVersion` 必须显式解耦。项目可以提前进入下一条开发线，也可以在已对齐的官方版本上继续改进，而不应因此伪报新的官方契约。
-
-例如，以下组合是合理的：
+例如：
 
 ```text
-Version:         2.8.1-rnl.1
+Version:         2.8.0
 ContractVersion: 2.8.0
 ```
 
-它表示项目已经开始 `2.8.1` 开发线的自主迭代，但当前可证明、可上报的官方 Node 契约仍是 `2.8.0`。只有完成官方 `2.8.1` 的源码固定、契约差分、实现调整和验证后，`ContractVersion` 才能改为 `2.8.1`。
+这表示包含首个 Native Linux 发行方案的稳定项目版本，仍实现官方 Node `2.8.0` 契约。未来的 `rnl.N` 后缀属于本项目，不是官方项目发布的修订号。仅修改 `Version` 不会扩大契约声明。
 
-## 项目版本格式
+修改 `ContractVersion` 必须固定官方源码、审查契约差异、同步实现和测试，并完成兼容性验证。只修改 `Version` 永远不会扩大契约声明。
 
-项目接受两类正式版本标识。
+## 两类正式发布
 
-### 自主迭代版本：`X.Y.Z-rnl.N`
+每个项目版本只能采用以下一种格式。
 
-`rnl.N` 是 Remnanode Lite 自身的迭代编号，不表示“官方版本的第 N 次修订”，也不直接证明与官方 `X.Y.Z` 兼容。
+### 稳定版：`X.Y.Z`
 
-它可以用于：
+纯版本表示已经对齐同号官方契约的稳定版。仓库门禁要求此时 `Version == ContractVersion`。
 
-- 在官方对应版本发布前，提前开发下一条项目版本线；
-- 在某个官方契约基线上继续修复 bug、改善架构或降低资源占用；
-- 发布已验证但包含本项目独立演进内容的稳定构建；
-- 清楚地区分本项目构建与官方同名版本。
+稳定版发布为：
 
-同一个 `X.Y.Z` 命名空间内，`N` 从 1 开始单调递增。已经发布的编号不得复用，已有 tag 和精确镜像标签不得移动。
+- annotated Git tag `vX.Y.Z`；
+- 普通 GitHub Release，并标记为 Latest；
+- 精确 GHCR 标签 `X.Y.Z`；
+- 移动 GHCR 稳定通道 `latest`。
 
-项目版本的前三段表示项目所处的开发或发行线，不自动等于 `ContractVersion`。发布说明必须单独记录实际契约基线。
+GitHub Release 也会标记为 Latest。因此，纯版本既是不可变的同版本对齐点，也是成功
+发布后由稳定通道选中的版本。
 
-### 官方对齐版本：`X.Y.Z`
+### 预览版：`X.Y.Z-rnl.N`
 
-不带 `rnl.N` 的纯版本只用于正式完成官方同版本行为对齐的发布。创建该版本前必须满足：
+`rnl.N` 是 Remnanode Lite 的项目预览版，可用于提前开发下一版本，也可在不改变官方契约的情况下改进架构、发行和资源行为。
 
-- `ContractVersion` 已更新为同一个 `X.Y.Z`；
-- 官方源码版本与提交已经固定；
-- 契约差分和代码实现已经完成；
-- 要求的自动化门禁与真实环境验证已经通过；
-- 发布文档明确记录 Panel、rw-core、架构和已知限制。
+预览版发布为：
 
-纯 `X.Y.Z` 是一个不可变的对齐里程碑，而不是可被后续修复反复覆盖的浮动标签。之后仍可继续发布 `X.Y.Z-rnl.N` 作为本项目的独立完善版本。
+- annotated Git tag `vX.Y.Z-rnl.N`；
+- GitHub Prerelease；
+- 精确 GHCR 标签 `X.Y.Z-rnl.N`；
+- 移动 GHCR 预览通道 `preview`。
 
-## 时间顺序示例
+预览版绝不会更新 `latest`，也不会成为 GitHub Latest Release。即使完整自动化门禁通过，
+它仍然是预览版，只有发布纯稳定版本后才会形成稳定里程碑。
 
-下面只说明命名关系，不表示这些版本已经发布：
+同一 `X.Y.Z` 线中，`N` 从 1 开始单调递增；已经发布的编号和精确标签不得复用。数字前缀表示项目开发线，不等于已经实现同号官方契约。
 
-```text
-2.8.1-rnl.1  提前进入项目 2.8.1 开发线，契约仍可能是 2.8.0
-2.8.1-rnl.2  继续实现或修复
-2.8.1        已完成官方 Node 2.8.1 的正式行为对齐
-2.8.1-rnl.3  在该契约基础上继续本项目的独立完善
-2.8.1-rnl.9  后续验证稳定构建，latest 可以指向它
-2.8.2-rnl.1  开始下一条项目开发线，契约按实际完成情况上报
-```
+## 当前版本线
 
-`rnl.N` 在语义化版本中属于预发布标识，因此 `2.8.1-rnl.9` 的 SemVer 优先级低于纯 `2.8.1`，即使它在时间上发布得更晚。本项目不会依赖 SemVer 自动排序决定“最新稳定版”；GitHub Release 展示和 GHCR `latest` 必须由发布流程显式选择。
-
-## Git tag 与容器标签
-
-Git 的正式发布 tag 带 `v` 前缀，容器版本标签不带：
-
-```text
-Git tag:       v2.8.1-rnl.9
-Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.1-rnl.9
-```
-
-按项目政策，这两种 tag 都不可重写，但它们标识的对象不同：
-
-- 正式 Git tag 指向发布时当前的 `main` HEAD。
-- 精确容器 tag 指向已为同一个提交构建并完成 attestation 的 manifest digest。
-
-Release workflow 不会重建容器。它解析不可变的 `sha-<commit>` 候选，校验 manifest
-和 attestation，再晋升这个精确 digest。
-
-## 镜像渠道
-
-| 标签 | 可变性 | 来源 | 适用场景 |
+| 版本 | 契约 | 类型 | 状态 |
 | --- | --- | --- | --- |
-| `sha-<40位提交>` | 首次发布后拒绝指向不同值 | `main` 的具体 commit 和已证明 manifest digest | 候选验证、精确复现和问题定位 |
-| `edge` | 可变 | 最新的 `main` 容器构建 | 观察主线，不作为稳定性承诺 |
-| `X.Y.Z-rnl.N` | 按政策不移动 | 对应自主迭代 Release | 固定部署已验证的项目版本 |
-| `X.Y.Z` | 按政策不移动 | 对应官方对齐 Release | 固定部署已验证的官方对齐里程碑 |
-| `latest` | 可变 | 最近一次完整成功的正式 Release | 希望主动跟随稳定版本的节点 |
-| `name@sha256:...` | 内容寻址 | Registry manifest digest | 最严格的生产固定与供应链核验 |
+| `2.8.0` | `2.8.0` | 稳定版 | 当前稳定版，包含首个自包含 Native Linux bundle |
 
-从 `main` 手动运行容器 workflow 时仍使用同一个 `sha-<commit>` 身份。已经存在的标签不得被另一个 manifest digest 覆盖。
+SemVer 会把 `X.Y.Z-rnl.N` 预览版排在对应 `X.Y.Z` 稳定版之前。不要依靠 SemVer 排序判断发布顺序或最新通道；workflow 根据标签语法明确选择 `preview` 或 `latest`。
 
-### `latest` 的准确含义
+发布预检还会把稳定版本与已有稳定 Git tag 比较，拒绝更低的版本，避免合法的 tag
+语法或契约检查通过后仍意外让 `latest` 回退。
 
-`latest` 表示“本项目当前推荐的、已经完成相应验证的稳定构建”。它可以指向纯 `X.Y.Z`，也可以指向后续的 `X.Y.Z-rnl.N`。
+## Git 与容器标签
 
-因此：
+```text
+Git tag:       v2.8.0
+Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.0
+```
 
-- `latest` 不等于“与官方最新版本完全一致”；
-- `latest` 不指向 `edge`，也不应由普通 `main` push 更新；
-- 较旧版本的补发或重跑不得让 `latest` 倒退；
-- 只有正式发布流程可以移动 `latest`；成功完成全部门禁的正式 tag，在满足 `main` HEAD 等晋升保护条件时，才有资格成为新的 `latest`；
-- 移动 `latest` 不会自动替换正在运行的容器。
+Git tag 带 `v`，容器标签不带。两者都是不可移动的发布身份，但标识的是不同对象：
 
-创建正式 tag 就表示维护者选择该版本进入稳定通道。尚不准备成为 `latest` 的构建不应伪装成正式 Release，应继续留在 `sha-*` 候选通道。
+- annotated Git tag 标识从 `main` 接受的源码提交；
+- 精确容器标签标识该提交已经构建并完成证明的多架构 manifest。
 
-使用 `latest` 的服务器仍需主动执行：
+Release workflow 不重新构建镜像，而是验证当前 `main` 的 `sha-<commit>` 候选，
+再把同一 digest 赋予精确版本标签。仓库规则应禁止更新和删除 `v*`；workflow 还会
+在建立 draft、发布 Release 和推进通道前重新解析远端 annotated tag，任何 tag 漂移
+都会失败关闭。
+
+registry tag 本质上仍是名称。要求最强固定时使用：
+
+```text
+ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>
+```
+
+## 容器引用
+
+| 引用 | 可变性 | 含义 | 用途 |
+| --- | --- | --- | --- |
+| `sha-<40-character-commit>` | 按政策不可变 | 一个 `main` 提交构建并完成 attestation 的候选 | 发布验证、复现和诊断 |
+| `edge` | 移动 | 最新合格 `main` 候选 | 仅用于主线观察 |
+| `X.Y.Z-rnl.N` | 按政策不可变 | 一个已发布预览版 | 受控预览部署与回滚 |
+| `preview` | 移动 | 最近晋升的预览版 | 主动跟随预览通道 |
+| `X.Y.Z` | 按政策不可变 | 一个已发布稳定版 | 推荐生产部署与回滚 |
+| `latest` | 移动 | 最近晋升的稳定版 | 主动跟随稳定通道 |
+| `name@sha256:...` | 内容寻址 | 一个 registry manifest digest | 最严格的部署与验证固定 |
+
+普通 `main` push 只能更新候选和 `edge`，不能更新 `preview` 或 `latest`。只有对应
+Release 发布后，Release workflow 才能晋升这些通道。
+
+### 稳定与预览通道永不重叠
+
+两条移动通道有意保持分离：
+
+- `latest` 只解析到纯 `X.Y.Z` 稳定版；
+- `preview` 只解析到 `X.Y.Z-rnl.N` 预发布版；
+- 预览版不能推进、替换或修复 `latest`；
+- 稳定版不能推进 `preview`。
+
+移动通道不会自动更新运行容器。只有显式 `docker compose pull` 并 recreate 才会运行新镜像。
+
+## 如何选择 Docker 引用
+
+生产通常使用精确稳定版：
+
+```text
+ghcr.io/luxiaba/remnanode-lite:2.8.0
+```
+
+需要最强固定时，记录并部署其 manifest digest：
+
+```text
+ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>
+```
+
+接受预览状态时才使用精确预览版：
+
+```text
+ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
+```
+
+`preview` 适合短期评估；fleet 测试仍优先精确 tag 或 digest，因为它不会在节点之间移动。
+保留上一个精确引用用于回滚。
+
+`latest` 是主动选择的稳定更新通道，不是回滚身份。即使跟随它，也要先阅读 Release、
+记录解析后的 digest，再显式更新：
 
 ```bash
 docker compose pull
 docker compose up -d --no-build --force-recreate
 ```
 
-## 部署时如何选择
+回滚永远使用记录的精确版本或 digest，而不是移动通道的历史含义。
 
-### 生产固定版本
+使用 `sha-<commit>` 验证可能成为 Release 的候选，不要用 `edge` 做发布验收，因为另一个
+`main` 构建可能在测试期间移动它。
 
-推荐使用精确项目版本或 manifest digest：
+## Native 只接受精确版本
 
-```text
-ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>
+Native bundle 把 archive 名称、`SHA256SUMS`、manifest、嵌入版本和源码 revision 作为同一个发行身份校验，因此不能跟随移动通道：
+
+```bash
+sudo sh install.sh --version 2.8.0
+sudo rnlctl upgrade --to <exact-version>
 ```
 
-它们便于审核变更、批量灰度和快速回滚。精确版本适合大多数节点，digest 适合需要防止 Registry tag 被意外移动的环境。
+`latest`、`preview`、`edge` 和 `sha-*` 都不是合法 Native 版本参数。
 
-### 自动跟随稳定版
+## 什么才算已发布
 
-可以使用：
+源码版本字符串、`main` 候选或单独的 Git tag 都不能单独构成完整发布。
 
-```text
-ghcr.io/luxiaba/remnanode-lite:latest
-```
+预览版发布必须同时具备：
 
-这适合愿意在每次更新前阅读 Release notes、主动拉取并验证的节点。`latest` 是更新渠道，不是回滚依据；回滚时必须使用之前记录的精确版本或 digest。
+1. 指向接受的 `main` 提交的 annotated `vX.Y.Z-rnl.N` tag；
+2. 已发布且资产验证完成的 GitHub Prerelease；
+3. 与候选 digest 相同的精确 GHCR 标签；
+4. 同一 digest 成功晋升到 `preview`。
 
-### 候选验证
+稳定版对应普通 `vX.Y.Z` tag、正式 GitHub Release、精确 `X.Y.Z` 镜像、GitHub Latest 和 GHCR `latest`。
 
-验证从 `sha-<40位提交>` 开始。测试前先把 tag 解析为 manifest digest，并从同一个 commit 获取部署文件；验证和后续晋升始终固定这个 digest。不要把 `edge` 当作发布候选，下一次 `main` 构建就可能移动它。
+两类发布使用相同的代码、兼容性、资产、来源证明和 attestation 门禁；区别只是发布状态
+和通道，不是预览版的构建路径更弱。
 
-## 发布与稳定性的关系
+在把计划中的版本或资产 URL 告知使用者前，应检查 Git tag、GitHub Release 和精确 GHCR 标签
+确实已经存在。
 
-修改 `Version`、合入 `main` 或成功构建候选镜像，都不等于已经发布正式版本。一次正式发布至少包含：
+## 跟进官方版本
 
-1. 版本、契约和依赖元数据一致；
-2. 当前 `main` 候选通过规定的代码检查，以及维护者使用真实 Panel 和真实流量完成验证；
-3. 创建发布后按政策不可移动的 Git tag；
-4. GitHub Release 和二进制资产成功生成，候选 digest 被晋升为精确 GHCR 版本；
-5. 候选镜像摘要和 attestation 可以按源码提交验证；
-6. 发布元数据记录真实兼容范围与已知风险；
-7. 发布 workflow 自动把同一 digest 晋升为 `latest`，并把对应 GitHub Release 标记为 Latest。
+定时 workflow 只会在发现官方新版本时创建 Issue，不会自动修改契约、源码、项目版本或镜像标签。
+同步新契约需要：固定官方版本和不可变提交；审计 route、schema、error、side effect 和插件
+依赖；更新契约证据与测试；对齐 Go 实现；用目标 Panel、rw-core 和 Linux 环境验证；最后才
+修改 `ContractVersion`。
 
-仓库里的版本字符串可能只是开发目标。要判断版本是否已经发布，请检查对应的 Git tag、GitHub Release 和 GHCR 精确标签。当前源码写的是 `2.8.0`，但这行字符串本身不代表已经发布。
+项目版本应独立选择。对齐完成前可以先发布新的 `X.Y.Z-rnl.N`，但二进制必须继续报告实际
+实现的旧契约；只有项目版本和契约版本相同，才能使用纯稳定版本。
 
-## 官方版本同步
+## 版本输出与发布元数据
 
-官方 Node 发布新版本后，自动化只负责发现变化并创建同步 Issue，不直接修改 `ContractVersion`、代码或镜像标签。同步流程为：
-
-1. 固定官方版本和不可变 commit。
-2. 审计路由、schema、错误、副作用和插件依赖变化。
-3. 更新版本化契约证据与测试。
-4. 调整 Go 实现并完成代码回归。
-5. 使用目标 Panel、rw-core 和 Linux 环境执行验证。
-6. 根据实际结果更新 `ContractVersion`。
-7. 选择纯官方对齐版本或合适的 `rnl.N` 项目版本发布。
-
-任何“提前开发”的项目版本都不能跳过第 2 至第 6 步后直接上报尚未实现的契约版本。
-
-## 版本输出与发布记录
-
-二进制版本输出同时展示项目版本和契约版本：
+Node 和 `rnlctl` 都会报告项目版本与契约版本：
 
 ```text
 remnanode-lite <Version> (contract <ContractVersion>)
+rnlctl <Version> (contract <ContractVersion>)
 ```
 
-仓库的变更日志和发布元数据应明确说明：
+发布记录还应标明：
 
-- 项目版本与 Git tag；
-- 发布提交与镜像 manifest digest；
-- ContractVersion 及官方源码 commit；
-- 验证时使用的 Panel 版本；
-- 打包的 rw-core 版本与资产摘要；
-- `amd64`、`arm64` 支持状态；
-- 资源验证范围；
-- 已知差异和回滚方式；
-- 镜像 manifest digest 与验证命令。
+- 发布类别和晋升的通道；
+- 项目版本、Git tag 和源码提交；
+- 官方契约版本与固定源码提交；
+- 已接受的容器 manifest digest 及其 attestation；
+- 维护者验收使用的 Panel 和运行环境范围；
+- 固定的 rw-core 与运行时资产版本；
+- `amd64` 与 `arm64` 的发布状态；
+- 已知差异、风险和回滚引用；
+- Native bundle 校验和与资产 attestation。
 
-GitHub 会根据合并的变更自动生成 Release notes。本项目不在仓库中维护单独的逐版本
-Release note 文件，也不提交宿主清单、smoke JSON、日志或其它运行数据。
+GitHub 会根据合并变更自动生成 Release notes。宿主清单、Panel 详情、日志、secret 和其他
+运行时观察结果不是 Release 资产，也不得提交到仓库。
 
-`NODE_CONTRACT_VERSION` 只用于受控调试或紧急兼容测试。它不会改变实际行为、源码证据、二进制身份或 Release 声明，也不能用来宣称代码尚未实现的兼容性。
+`NODE_CONTRACT_VERSION` 仅用于受控诊断和紧急兼容性测试，不会改变实现行为、固定证据、
+二进制身份或发布声明。

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=ec24387c466658ae424639e42a3441bb49cec1b1e155b51ee53903610b023a98 -->
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=2435f4665fdba01e9fd1d9552b863cec276da99d0902d73ea6714bc7dbf91215 -->
 # 512 MiB 资源预算与工程基准
 
 > 这是中文译文；资源数字和边界以[英文原文](../../../development/resource-budget.md)为准。
@@ -84,7 +84,7 @@ OpenRC 还会通过 supervisor 写入 `openrc.log` 和 `openrc.err.log`，每 10
 
 systemd journal 每 30 秒最多接收 200 条服务日志，但字节用量和长期增长仍由宿主机 journald 配额决定。后续扩展验证应在 `2 GB` 整机磁盘上测量日志故障风暴和长期增长；上述阈值不能代替该结果。
 
-安装和升级把大资产放在仅 root 可访问的 `/var/lib/remnanode-installer`，不使用可能映射到内存的 `/tmp`。五个变更入口都持有 `/run/lock/remnanode-installer.lock`。嵌套安装器会复用并验证同一个打开的文件描述，`RNL_TMP_ROOT` 不影响锁路径，也没有退出路径会删除锁 inode。
+安装和升级把大资产放在仅 root 可访问的 `/var/lib/remnanode-lite-installer`，不使用可能映射到内存的 `/tmp`。五个变更入口都持有 `/run/remnanode-lite-installer/operation.lock`。嵌套安装器会复用并验证同一个打开的文件描述，锁路径不由环境变量覆盖，也没有退出路径会删除锁 inode。
 
 修改包、文件或服务的同步子进程会继承这把锁。即使父安装器意外退出，其他变更也会等当前操作结束。下载、归档检查、Node/rw-core 自检、状态查询和 OpenRC 启动链则会先关闭自己的锁描述符，避免短命工具或常驻 supervisor 在安装器完成后继续持锁。
 
@@ -96,7 +96,7 @@ upgrade 调用 rw-core 安装器时，外层事务是唯一的备份所有者，
 
 生产 `node.env` 必须是普通的非符号链接文件。Go 在设置内存软上限前最多读取 `1 MiB`，并接受最多 `4096` 行和 `256` 个赋值。单行上限也是 `1 MiB`，因此可以迁移旧版最多 `256 KiB` 的内联 Secret。
 
-`node.env` 与 `SECRET_KEY_FILE` 都只打开一次，并使用 `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`。同一个文件描述符依次经过 `fstat -> 有界读取 -> fstat`，避免检查后打开的竞态和 FIFO 阻塞。systemd 与 OpenRC 都使用固定的 `REMNANODE_ENV=/etc/remnanode/node.env` 和 `/usr/bin/env -i` 启动，只保留 `PATH/HOME/USER/LOGNAME`。`GOMEMLIMIT` 和 contract/core 版本覆盖值由同一个 Go 配置解析器校验并应用；Secret 和未知配置值不会进入 Node 或 rw-core 环境。
+`node.env` 与 `SECRET_KEY_FILE` 都只打开一次，并使用 `O_NOFOLLOW|O_NONBLOCK|O_CLOEXEC`。同一个文件描述符依次经过 `fstat -> 有界读取 -> fstat`，避免检查后打开的竞态和 FIFO 阻塞。systemd 与 OpenRC 都使用固定的 `REMNANODE_ENV=/etc/remnanode-lite/node.env` 和 `/usr/bin/env -i` 启动，只保留 `PATH/HOME/USER/LOGNAME`。`GOMEMLIMIT` 和 contract/core 版本覆盖值由同一个 Go 配置解析器校验并应用；Secret 和未知配置值不会进入 Node 或 rw-core 环境。
 
 ## 保护策略
 

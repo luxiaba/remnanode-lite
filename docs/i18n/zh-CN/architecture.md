@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d14398316f857d2ee475ae8b391bd0240b0c0eef01fbad4dae9a0bdb3822ad73 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=3b7c301a777aabe5446730ace4b0e66cf51d480f088d6646ffd752dd18aab886 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -128,7 +128,7 @@ cmd/remnanode-lite
 
 1. 解析运行配置。
    - `REMNANODE_ENV` 显式指定路径时优先。
-   - 否则优先已有的 `/etc/remnanode/node.env`，最后回退 `.env`。
+   - 否则优先已有的 `/etc/remnanode-lite/node.env`，最后回退 `.env`。
    - 配置文件值先加载，已知且非空的进程环境变量再覆盖它们。
 2. 创建公开 `/node` server 的不可变请求体预算；经过配置解析的 contract/core 版本值保留在 `Config`，不写回进程环境。
 3. 应用 Go 内存软上限。显式 `GOMEMLIMIT` 优先于 `LOW_MEMORY=1` 的 `180 MiB` 默认值。
@@ -243,8 +243,8 @@ Manager 为每次 Handler/Stats 操作创建短生命周期 gRPC client，调用
 
 | 通道 | 默认标识 | 所有者与协议 | 用途 | 安全边界 |
 | --- | --- | --- | --- | --- |
-| 文件系统 Unix Socket | `/run/remnanode/internal.sock` | Node 提供 HTTP，rw-core 作为客户端 | 拉取 pending config；投递 Torrent webhook | 文件 mode `0600`、稳定文件检查、内部 token |
-| Linux abstract Unix Socket | `@remnanode-xtls-<16hex>` | rw-core 提供 gRPC，Node 作为客户端 | Handler 与 Stats RPC、readiness Ping | 同一 network namespace、随机名称、无内部 TLS |
+| 文件系统 Unix Socket | `/run/remnanode-lite/internal.sock` | Node 提供 HTTP，rw-core 作为客户端 | 拉取 pending config；投递 Torrent webhook | 文件 mode `0600`、稳定文件检查、内部 token |
+| Linux abstract Unix Socket | `@remnanode-lite-xtls-<16hex>` | rw-core 提供 gRPC，Node 作为客户端 | Handler 与 Stats RPC、readiness Ping | 同一 network namespace、随机名称、无内部 TLS |
 
 ### 6.1 文件系统 Unix HTTP
 
