@@ -1,0 +1,87 @@
+name: reconcile-channel
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published immutable vX.Y.Z or vX.Y.Z-rnl.N release
+        required: true
+        type: string
+
+concurrency:
+  group: registry-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  reconcile:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      attestations: read
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Classify the published release
+        id: metadata
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: go run ./cmd/release-tool metadata --tag "$RELEASE_TAG" >>"$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          version: v0.35.0
+          driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify the immutable release and image identity
+        id: image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+        run: bash scripts/verify-release-image.sh "$RELEASE_TAG" "$VERSION" "$PRERELEASE" >>"$GITHUB_OUTPUT"
+
+      - name: Require the current owner of the channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
+        run: bash scripts/require-channel-owner.sh "$RELEASE_TAG" "$PRERELEASE"
+
+      - name: Restore the moving channel
+        env:
+          CHANNEL: ${{ steps.metadata.outputs.channel }}
+          SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: bash scripts/promote-image-tag.sh mutable "$IMAGE" "$SOURCE_DIGEST" "$CHANNEL"
+
+  reject-invalid-ref:
+    if: github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: |
+          echo "channel reconciliation may only be dispatched from main" >&2
+          exit 1

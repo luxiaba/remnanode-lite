@@ -159,8 +159,8 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | Path | Responsibility |
 | --- | --- |
 | `.github/workflows/ci.yml` | Required Go, repository, Native bootstrap/lifecycle, and Linux network-management CI gate |
-| `.github/workflows/container.yml` | Multi-architecture image build, attestation, and the immutable `sha-<40-character-main-commit>` candidate |
-| `.github/workflows/release.yml` | Draft-first Release assets, Native bundles and attestations, exact image tag, and stable/preview channel promotion |
+| `.github/workflows/container.yml` | Candidate workflow: multi-architecture image build, attestation, and the immutable `sha-<40-character-main-commit>` candidate |
+| `.github/workflows/release.yml` | Draft-first publication of accepted Native assets, exact image tag, and stable/preview channel promotion |
 | `.github/workflows/contract-sync.yml`, `.github/workflows/security.yml` | Official-version monitoring and scheduled security checks |
 | `scripts/check*.sh` | Stable Go, repository, supply-chain, and complete-gate entry points |
 | `scripts/build-native-bundle.sh` | Reproducible `amd64`/`arm64` Native bundle build around `release-tool` |
@@ -206,15 +206,16 @@ git diff
 
 Scale the test scope with the risk of the change. The complete repository check belongs after a coherent batch or before opening a pull request, not after every small edit.
 
-Before tagging a release, merge `dev` into `main`, wait for the immutable
+Before publishing a release, merge `dev` into `main`, wait for the immutable
 `sha-<40-character-main-commit>` image, and verify that exact candidate with a
 real Panel and real proxy traffic. This is a maintainer decision, not a source
 artifact: do not commit host inventories, container details, logs, or smoke
-records. The tag must point to the current `main` HEAD; the release workflow
-then verifies the candidate image and its attestation, builds and attests the
-Native assets, and promotes the same digest to the exact version. Plain
-`X.Y.Z` releases advance `latest`; `X.Y.Z-rnl.N` prereleases advance `preview`
-and never change GitHub or GHCR `latest`.
+records. Dispatch the release workflow from the current `main` commit with the
+exact source version. It verifies the candidate image, Native assets, and their
+attestations, creates and verifies a draft Release, publishes its tag, then
+promotes the same digest to the exact version. Plain `X.Y.Z` releases advance `latest`;
+`X.Y.Z-rnl.N` prereleases advance `preview` and never change GitHub or GHCR
+`latest`.
 
 ## Common Change Paths
 
@@ -227,7 +228,7 @@ and never change GitHub or GHCR `latest`.
 | Plugin or nftables | `internal/plugin`, `internal/connections`, `internal/netadmin` | Lifecycle lease precedes the plugin operation gate; Linux integration tests are required |
 | Configuration, Secret, or authentication | `internal/config`, `internal/secret`, `internal/auth`, `internal/httpserver` | Bound inputs, preserve safe file handling, and keep Secrets out of logs |
 | Linux system capability | `*_linux.go` and corresponding `*_stub.go` | Non-Linux builds must compile; Linux behavior must be tested on Linux |
-| Docker image | `Dockerfile`, `compose*.yaml`, `.dockerignore`, container workflow | Pinned asset digests, multiple architectures, resource limits, and ephemeral logs |
+| Docker image | `Dockerfile`, `compose*.yaml`, `.dockerignore`, candidate workflow | Pinned asset digests, multiple architectures, resource limits, and ephemeral logs |
 | Native install, upgrade, rollback, repair, or uninstall | `internal/rnlctl`, `cmd/rnlctl`, `release/native/install.sh`, `deploy/` | Exact bundle identity, durable journal, atomic generation selection, service intent, permissions, and recovery |
 | Runtime asset or Native bundle format | `release/runtime-assets.lock.json`, `cmd/release-tool`, `scripts/build-native-bundle.sh` | Docker/Native parity, deterministic archive, architecture checks, manifest/SBOM integrity, source and license provenance |
 | Project version | `internal/version`, installers, Compose, release workflow | Do not recouple the project version to the contract version |

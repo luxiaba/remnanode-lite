@@ -44,14 +44,4 @@ elif [ "${REQUIRE_GOVULNCHECK:-0}" = "1" ]; then
   exit 1
 fi
 
-if [ "${REQUIRE_TAG_AT_HEAD:-0}" = "1" ]; then
-  [ "$(git cat-file -t "refs/tags/${release_tag}" 2>/dev/null || true)" = tag ] || {
-    echo "$release_tag must be an annotated tag" >&2
-    exit 1
-  }
-  [ "$(git rev-list -n 1 "$release_tag")" = "$(git rev-parse HEAD)" ] || {
-    echo "$release_tag does not point at HEAD" >&2
-    exit 1
-  }
-fi
 echo "release gate passed for $release_tag"

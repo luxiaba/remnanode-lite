@@ -10,7 +10,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 - Changes to state, locks, goroutines, cancellation, or lifecycle behavior require race testing.
 - Changes to officially observable behavior require the pinned-source contract tests.
 - Only Linux tests can support claims about capabilities, netlink, nftables, process groups, or cgroups.
-- Before tagging, verify the immutable `sha-<40-character-main-commit>` candidate with a real Panel and real proxy traffic under the production limits. This is a manual release decision; runtime observations are not committed to the repository.
+- Before dispatching a release, verify the immutable `sha-<40-character-main-commit>` candidate with a real Panel and real proxy traffic under the production limits. This is a manual release decision; runtime observations are not committed to the repository.
 - The exact whole-host 512 MiB target, native installation paths, arm64 runtime, large-user load, long soak, and fault injection remain useful follow-up checks. Unit tests must not be presented as substitutes for an environment they do not exercise.
 - Test data must not contain real Secrets, JWTs, certificates, private keys, node IPs, hostnames, or raw responses.
 
@@ -29,7 +29,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Linux network management | Two network-namespace integration tests | Linux/root |
 | Low-memory budget | `scripts/test-low-memory.sh --rw-core ...` | Docker/real core |
 | Official-versus-candidate behavior | `go run ./cmd/contract-probe ...` | Isolated test environment |
-| Formal release | `bash scripts/release-check.sh` | Current tagged `main` commit only |
+| Formal release | `bash scripts/release-check.sh` | Current release-candidate `main` commit only |
 
 ## Go Tests
 
@@ -191,7 +191,7 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` combines the Go gate, repository gate, offline Native bootstrap tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. The release workflow requires the scanner explicitly.
+`check.sh` combines the Go gate, repository gate, offline Native bootstrap tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. The required repository CI job sets it, so a release can only consume a candidate whose CI ran the scanner.
 
 A successful `check.sh` run does not prove production behavior. It does not run the candidate image with a real Panel and real traffic, nor does it exercise every supported architecture, init system, host size, load, or fault path.
 
@@ -337,23 +337,23 @@ REQUIRE_GOVULNCHECK=1 \
 
 This script is the final source preflight. It expects a clean worktree, a
 project version matching `RELEASE_TAG`, a dated `CHANGELOG.md` entry, the pinned
-official source, and the complete repository checks. In the tag workflow it
-also requires an annotated tag at `HEAD`.
+official source, and the complete repository checks. It runs before the
+release workflow creates a draft Release and later publishes its tag.
 
-The container released for that tag is not rebuilt. Every `main` commit first
-publishes `sha-<40-character-commit>`. Before creating the tag, the maintainer
-manually confirms that this exact candidate starts cleanly, connects to a real
+The container released for that version is not rebuilt. Every `main` commit
+first publishes `sha-<40-character-commit>`. Before dispatching the release
+workflow, the maintainer manually confirms that this exact candidate starts cleanly, connects to a real
 Panel, and carries real proxy traffic under the production container limits.
 Do not add host details, logs, container identifiers, or runtime JSON to the
 repository.
 
-The tag must point to the current `main` HEAD. The release workflow resolves
-its `sha-*` candidate, requires exactly the runnable `linux/amd64` and
-`linux/arm64` manifests with their BuildKit attestations, verifies the GitHub
-attestation against the tagged commit, builds and attests both Native bundles,
-and promotes that same digest to the exact version without rebuilding. A plain
-`X.Y.Z` tag is stable and advances `latest`; an `X.Y.Z-rnl.N` tag is a GitHub
-prerelease and advances `preview` only.
+The workflow requires the dispatch commit to remain the current `main` HEAD.
+It resolves that commit's `sha-*` candidate, requires the runnable
+`linux/amd64` and `linux/arm64` manifests with their BuildKit attestations,
+verifies the GitHub attestations for the prebuilt Native assets, creates and
+verifies a draft Release, publishes its tag, and promotes the same digest to
+the exact version without rebuilding. A plain `X.Y.Z` Release is stable and advances `latest`; an
+`X.Y.Z-rnl.N` Release is a GitHub prerelease and advances `preview` only.
 
 See the [versioning policy](../versioning.md) for tag, version, and channel semantics, and the [release process](../release.md) for candidate verification and publication steps.
 
@@ -393,11 +393,11 @@ The required gate in `.github/workflows/ci.yml` aggregates four parallel jobs:
 | `netadmin` | Both Linux namespace integration tests |
 | `gate` | Requires every job above to report success |
 
-The container workflow remains path-filtered for pull requests, so it does not
+The candidate workflow remains path-filtered for pull requests, so it does not
 run on every PR. Every push to `main`, however, builds and attests the manifest
-and publishes the immutable `sha-<40-character-commit>` candidate. The
-tag-triggered release workflow resolves that candidate, verifies its shape and
-attestation, and promotes the same digest. A path-filtered “not run” is not a
+and publishes the immutable `sha-<40-character-commit>` candidate. The manual
+release workflow resolves that candidate, verifies its shape and attestation,
+and promotes the same digest. A path-filtered “not run” is not a
 failure, and an optional container job must not become a required check on pull
 requests where it cannot appear.
 

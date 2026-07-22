@@ -163,36 +163,42 @@ if grep -Eq 'ghcr\.io/[^[:space:]]+:latest' compose.yaml .env.example; then
 fi
 
 container_workflow=.github/workflows/container.yml
-require_text "$container_workflow" '      - "release/runtime-assets.lock.json"'
-require_text "$container_workflow" 'Build linux/amd64 and linux/arm64 images without publishing'
+require_text "$container_workflow" '      - "release/**"'
+require_text "$container_workflow" 'Build both production platforms'
 require_text "$container_workflow" 'platforms: linux/amd64,linux/arm64'
 require_text "$container_workflow" 'outputs: type=cacheonly'
 require_text "$container_workflow" 'push: false'
 require_text "$container_workflow" 'push-by-digest=true,name-canonical=true,push=true'
 require_text "$container_workflow" 'provenance: mode=max'
-require_text "$container_workflow" 'attest-main:'
+require_text "$container_workflow" 'Attest the image index'
 require_text "$container_workflow" 'push-to-registry: true'
 require_text "$container_workflow" 'scripts/promote-image-tag.sh immutable'
-require_text "$container_workflow" 'scripts/promote-image-tag.sh mutable'
-require_text "$container_workflow" "[ \"\$candidate_digest\" = \"\$SOURCE_DIGEST\" ]"
+require_text "$container_workflow" 'scripts/promote-candidate-edge.sh'
+require_text "$container_workflow" 'verify-candidate-image.sh --allow-missing'
+require_text "$container_workflow" 'steps.accepted.outputs.digest'
 if grep -Eq 'type=raw[^[:space:]]*latest' "$container_workflow"; then
   fail "candidate workflow must not publish latest"
 fi
 
 release_workflow=.github/workflows/release.yml
-require_text "$release_workflow" 'Verify main candidate image'
+require_text "$release_workflow" 'Verify image identity and provenance'
 require_text "$release_workflow" 'remnanode-lite.env.example'
-require_text "$release_workflow" \
-  "candidate_tag=\"${literal_dollar}{REGISTRY}/${literal_dollar}{IMAGE_NAME}:sha-${literal_dollar}{candidate_commit}\""
+require_text "$release_workflow" 'scripts/verify-candidate-image.sh'
+require_text "$release_workflow" 'scripts/release-state.sh'
 require_text "$release_workflow" 'scripts/promote-image-tag.sh immutable'
 require_text "$release_workflow" 'scripts/promote-image-tag.sh mutable'
-require_text "$release_workflow" 'scripts/verify-release-tag.sh'
-require_text "$release_workflow" 'scripts/verify-release-latest.sh'
-require_text "$release_workflow" 'Reconfirm the published Release and exact image'
-require_text "$release_workflow" 'Promote the published release channel without rebuilding'
+require_text "$release_workflow" 'scripts/verify-draft-release.sh'
+require_text "$release_workflow" 'scripts/verify-published-release.sh'
+require_text "$release_workflow" 'Verify the immutable Release and every asset'
+require_text "$release_workflow" 'Promote the published channel without rebuilding'
 if grep -Fq 'docker/build-push-action@' "$release_workflow"; then
   fail "release workflow must promote the accepted candidate digest instead of rebuilding"
 fi
+require_text scripts/verify-candidate-image.sh \
+  "candidate=\"${literal_dollar}{IMAGE}:sha-${literal_dollar}{GITHUB_SHA}\""
+require_text scripts/verify-draft-release.sh 'verify-release-tag.sh --require-missing'
+require_text scripts/verify-published-release.sh 'scripts/verify-release-tag.sh'
+require_text scripts/verify-published-release.sh 'scripts/verify-release-latest.sh'
 
 release_single_file="$(sed \
   "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${version}|" \

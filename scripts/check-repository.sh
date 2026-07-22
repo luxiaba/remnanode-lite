@@ -41,8 +41,19 @@ actionlint
 bash scripts/check-version-test.sh
 bash scripts/verify-release-tag-test.sh
 bash scripts/verify-release-latest-test.sh
+bash scripts/verify-candidate-image-test.sh
+bash scripts/verify-release-image-test.sh
+bash scripts/find-workflow-run-test.sh
+bash scripts/release-state-test.sh
 bash scripts/test-docker-packaging.sh
 bash scripts/check-supply-chain.sh
+
+if command -v govulncheck >/dev/null 2>&1; then
+  govulncheck ./...
+elif [ "${REQUIRE_GOVULNCHECK:-0}" = "1" ]; then
+  echo "govulncheck is required but not installed" >&2
+  exit 1
+fi
 
 if [ -n "${CHECK_ARTIFACT_DIR:-}" ]; then
   artifact_dir="$CHECK_ARTIFACT_DIR"

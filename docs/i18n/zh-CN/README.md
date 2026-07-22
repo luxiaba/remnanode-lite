@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=1f30cfeb382f0e94a02fbfe921f36c0c144907b994f8d9a54ab21136206fc8e4 -->
+<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=503490e28364b35e72c1225d79ffde8ed5621fee281bd38e79480736a5cd3723 -->
 
 # Remnanode Lite 文档中心
 
@@ -45,7 +45,7 @@
 1. 先阅读[版本与镜像标签策略](versioning.md)，不要把 `Version` 与 `ContractVersion` 绑定。
 2. 查看[改造路线](development/roadmap.md)与当前兼容契约。
 3. 在 `dev` 准备版本、[英文变更日志](../../../CHANGELOG.md)、文档和测试，再将它们提升到 `main`。
-4. 按[发布流程](release.md)使用真实 Panel 和真实流量验证 `sha-<commit>` 候选，然后创建 annotated tag。运行观测不写入仓库。
+4. 按[发布流程](release.md)使用真实 Panel 和真实流量验证 `sha-<commit>` 候选，然后从 `main` 发起 Release workflow。运行观测不写入仓库。
 5. 只有 GitHub Release、发布资产和 GHCR 精确版本标签都存在时，版本才算正式发布。
 
 ## 完整导航

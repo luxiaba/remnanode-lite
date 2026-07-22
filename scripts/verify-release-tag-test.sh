@@ -16,6 +16,14 @@ set -euo pipefail
 [ "$1" = api ]
 case "$2" in
   */git/ref/tags/*)
+    if [ "${TEST_REF_ERROR:-}" = true ]; then
+      echo 'gh: internal server error (HTTP 500)' >&2
+      exit 1
+    fi
+    if [ "${TEST_REF_MISSING:-}" = true ]; then
+      echo 'gh: Not Found (HTTP 404)' >&2
+      exit 1
+    fi
     printf '{"object":{"type":"%s","sha":"%s"}}\n' \
       "${TEST_REF_TYPE:-tag}" "${TEST_TAG_OBJECT:-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}"
     ;;
@@ -38,11 +46,26 @@ run_check() {
 expected=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 run_check v2.8.0-rnl.1 "$expected" >/dev/null || fail "valid annotated tag was rejected"
 
-if TEST_REF_TYPE=commit run_check v2.8.0 "$expected" >/dev/null 2>&1; then
-  fail "lightweight tag was accepted"
+TEST_REF_TYPE=commit TEST_TAG_OBJECT="$expected" \
+  run_check v2.8.0 "$expected" >/dev/null || fail "valid lightweight tag was rejected"
+TEST_REF_MISSING=true run_check --allow-missing v2.8.0 "$expected" >/dev/null ||
+  fail "an absent pre-publication tag was rejected"
+TEST_REF_MISSING=true run_check --require-missing v2.8.0 "$expected" >/dev/null ||
+  fail "an absent required-missing tag was rejected"
+if TEST_REF_MISSING=true run_check v2.8.0 "$expected" >/dev/null 2>&1; then
+  fail "an absent published tag was accepted"
+fi
+if run_check --require-missing v2.8.0 "$expected" >/dev/null 2>&1; then
+  fail "an existing pre-publication tag was accepted"
+fi
+if TEST_REF_ERROR=true run_check --allow-missing v2.8.0 "$expected" >/dev/null 2>&1; then
+  fail "a non-404 tag lookup failure was accepted as absent"
 fi
 if TEST_TARGET_TYPE=tree run_check v2.8.0 "$expected" >/dev/null 2>&1; then
   fail "tag pointing to a non-commit object was accepted"
+fi
+if TEST_REF_TYPE=blob run_check v2.8.0 "$expected" >/dev/null 2>&1; then
+  fail "unsupported ref object was accepted"
 fi
 if TEST_TARGET_COMMIT=cccccccccccccccccccccccccccccccccccccccc \
   run_check v2.8.0 "$expected" >/dev/null 2>&1; then

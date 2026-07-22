@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=9887c72a241cea014b9199760b2be4ab27a37641e2d82743c65d49e27cd570e3 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=893054e3441b58c5291b704f8566a6e2addc0665b78c662a849e4a0e0b0b1928 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -30,7 +30,7 @@
 5. 所有并发、队列、请求体和缓存都必须有明确上限。
 6. Node 只管理自己启动的 rw-core 进程、内部 socket 和 nftables 私有表，不接管整机防火墙。按 IP 执行 socket destroy 可能影响宿主 network namespace，属于必须明确记录的副作用。
 7. `dev` 是稳定开发与集成分支，主题分支通过 PR 和 CI 进入；`main` 是发布分支，只从 `dev` 接收已通过代码门禁的候选。
-8. `main` 的每个提交都生成一个不可变的 `sha-<40位提交>` 容器候选。维护者用真实 Panel 和真实流量验证候选后，正式 tag 才能指向当前 `main` HEAD。
+8. `main` 的每个提交都生成一个不可变的 `sha-<40位提交>` 容器候选。维护者完成验收后，release workflow 会校验 draft Release，在当前 `main` HEAD 公开其 tag，并在不重建的前提下晋升精确候选。
 
 ## 兼容边界
 
@@ -57,13 +57,13 @@
 
 2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们记录资源优化结果，为后续改动提供稳定对比，不代表所有未来构建。
 
-干净的稳定版 `2.8.0` 是官方契约基线，并包含首个自包含 Native bundle。它的 tag 会发布
+干净的稳定版 `2.8.0` 是官方契约基线，并包含首个自包含 Native bundle。它的 Release 会发布
 精确的 Docker 与 Native 资产，并推进 GHCR `latest` 通道。运行观测不写入源码仓库，
 Release notes 由 GitHub 自动生成。
 
 ## 当前重点
 
-- **当前**：在精确候选镜像和 Native bundle 通过发布 workflow 后，发布干净的稳定版
+- **当前**：在精确候选镜像和 Native bundle 完成维护者验收并通过 release workflow 后，发布干净的稳定版
   `2.8.0`。
 - **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码并审查契约
   差异，再决定项目版本线。
@@ -149,10 +149,8 @@ Release notes 由 GitHub 自动生成。
 
 - 通过 `go test`、race、vet、静态检查、脚本检查和多架构构建。
 - 为每个 `main` 提交发布一个不可变的 `sha-<40位提交>` 镜像，并包含 `linux/amd64`、`linux/arm64` runnable manifest 与对应 attestation。
-- 打 tag 前，在生产容器限制下使用真实 Panel 和真实代理流量验证候选；宿主详情、日志和运行记录不写入仓库。
-- 正式 tag 必须指向当前 `main` HEAD。校验候选 manifest 和源码 attestation，
-  构建并证明 Native bundle，再在不重建容器的情况下把同一 digest 晋升为精确版本。
-  纯稳定版 tag 更新 `latest`，`rnl.N` tag 只更新 `preview`。
+- 发起 release 前，在生产容器限制下使用真实 Panel 和真实代理流量验证候选；宿主详情、日志和运行记录不写入仓库。
+- release 发起提交必须是当前 `main` HEAD。校验候选 manifest 和源码 attestation，复用并证明已构建的 Native bundle，再在不重建容器的情况下把同一 digest 晋升为精确版本。纯稳定版推进 `latest`，`rnl.N` 预发布版只推进 `preview`。
 - 将生命周期、进程组清理、安装器、50,000 用户和回滚结果保留为代码测试或带日期的工程基线。
 - 更新兼容文档和带日期的根 `CHANGELOG.md`，Release notes 由 GitHub 自动生成。
 
@@ -173,6 +171,6 @@ Release notes 由 GitHub 自动生成。
 - 日常变更先进入 `dev`；发布候选通过 PR 从 `dev` 提升到 `main`。
 - commit 只包含一个可说明、可验证的变化，不混入无关格式化。
 - 提交前必须运行与改动风险匹配的测试；失败不得合入 `dev` 或 `main`。
-- 等待 `main` 的 `sha-*` 候选并用真实 Panel 和真实流量验证后再打 tag；不要提交运行测试数据。
+- 等待 `main` 的 `sha-*` 候选并用真实 Panel 和真实流量验证后再发起 release workflow；不要提交运行测试数据。
 - 正式 tag 使用 `vX.Y.Z` 或 `vX.Y.Z-rnl.N` 并与项目 `Version` 完全一致；已发布精确 tag 不得覆盖。
 - 仓库不配置代码上游 remote；外部实现只作为协议或行为验证材料。

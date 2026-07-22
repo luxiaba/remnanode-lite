@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=33d3705483d51b902bbdb65504f599b2d7ae7260c9ce08e6d2cb9a875a4aad06 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=bfbb3c2f41987e82aab80c8b83349a4e99a2c243fe4218e9618cc552fddcfe0d -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > 这是中文译文；涉及契约细节时，请以[英文原文](../../../development/contract-2.8.0.md)为准。
@@ -174,7 +174,7 @@ Native 项目资产位于 `/usr/local/lib/remnanode-lite` 的 generation 中；D
 
 `v2.8.0` 候选必须使用生产 Compose 模板在原生 `x86_64`/`amd64` 上验证不可变的 `sha-<main-commit>` 镜像，确认版本输出、真实 Panel 2.8.1 连接和真实代理流量。该人工判断不作为运行数据提交到仓库。容器仍必须限制为 448 MiB 内存、不得获得额外容器 swap、1 CPU 和 256 PIDs。
 
-annotated tag 必须指向当前 `main` HEAD。Release workflow 会解析该提交的 `sha-*` 候选，校验两个可运行 Linux manifest、对应的 BuildKit attestation manifest 和 GitHub 源码 attestation，再在不重建镜像的情况下把同一 digest 晋升为 `2.8.0` 与 `latest`。Release notes 由 GitHub 自动生成。
+Release workflow 只从当前 `main` HEAD 运行。它会解析该提交的 `sha-*` 候选，校验两个可运行 Linux manifest 和 attestation，验证已构建的 Native bundle，创建并校验 draft Release，公开其 tag，再在不重建镜像的情况下把同一 digest 晋升为 `2.8.0` 与 `latest`。Release notes 由 GitHub 自动生成。
 
 原生 `arm64` 运行、systemd/OpenRC 安装、50,000 用户负载复测、长时间 soak 和故障注入仍是有价值的后续验证。没有实际运行时不得描述为已经通过。
 

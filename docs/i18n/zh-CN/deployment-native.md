@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=fb885b51d8c29e4e508f0831c35acf0bc49255d1ef9083b40a26febaf496b77d -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=dba090d727b843193d91bac9991d8d69f4c1d5702258022ef6421191c38936df -->
 
 # 原生 Linux 部署
 
@@ -6,11 +6,11 @@
 
 [返回文档索引](README.md) · [配置参考](configuration.md) · [运维手册](operations.md) · [版本策略](versioning.md)
 
-原生部署直接由宿主机的 systemd 或 OpenRC 运行 `remnanode-lite`，适合无法安装 Docker，或不适合承担 Docker Engine daemon 与容器运行时开销的小型服务器。Native 并不表示没有后台服务：`remnanode-lite` 仍由 systemd 或 OpenRC 守护。Docker Compose 仍是大多数节点的默认方式。自包含的 Native 生命周期 bundle 作为带精确版本号的 GitHub Release 发布；稳定版 `2.8.0` 包含首个 bundle。
+原生部署直接由宿主机的 systemd 或 OpenRC 运行 `remnanode-lite`，适合无法安装 Docker，或不适合承担 Docker Engine daemon 与容器运行时开销的小型服务器。Native 并不表示没有后台服务：`remnanode-lite` 仍由 systemd 或 OpenRC 守护。Docker Compose 仍是大多数节点的默认方式。自包含的 Native 生命周期 bundle 会作为带精确版本号的 GitHub Release 资产发布。
 
 每个已发布的 bundle 都包含 Node、`rnlctl`、rw-core、GeoIP、GeoSite、ASN 数据、服务定义、许可证与 SPDX SBOM，并用 manifest 记录每个文件的摘要。安装器会先校验归档摘要，再校验 bundle 内容，之后才修改主机。
 
-`2.8.0` bundle 实现官方 Node `2.8.0` 契约。Native 安装和升级只接受包含 Native 生命周期 bundle 的 Release 的精确版本，例如 `2.8.0`；`latest`、`preview`、`edge` 和 `sha-*` 等移动名称不能用于 Native。
+Native 安装和升级只接受包含 Native 生命周期资产的 Release 的精确版本。只有同时提供 `install.sh`、`SHA256SUMS` 和对应主机架构归档的 Release 才可用于 Native；`latest`、`preview`、`edge` 和 `sha-*` 等移动名称不能用于 Native。
 
 ## 支持范围
 
@@ -54,10 +54,10 @@ sudo apt-get install -y ca-certificates curl nftables iproute2
 
 ## 安装精确版本
 
-从同一个 GitHub Release 下载 installer 和摘要清单，先验证 installer，再执行安装：
+先在 GitHub Releases 页面选择一个已经发布的版本，再从该精确 Release 下载 installer 和摘要清单，先验证 installer，再执行安装。源码版本和候选镜像都不是可下载的 Native bundle：
 
 ```bash
-VERSION=2.8.0
+VERSION="<published-version>" # 例如：X.Y.Z 或 X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
@@ -123,7 +123,7 @@ grep -E '  (install\.sh|remnanode-lite_.*_linux_(amd64|arm64)\.tar\.gz)$' \
 
 ```bash
 sudo sh ./install.sh \
-  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
+  --bundle "./remnanode-lite_${VERSION}_linux_amd64.tar.gz" \
   --port 38329
 ```
 
@@ -204,19 +204,20 @@ systemd 的 Node 输出进入 journald；OpenRC 使用 `/var/log/remnanode-lite/
 
 ## 升级与回滚
 
-升级只能选择精确版本：
+升级只能选择已经发布的精确版本：
 
 ```bash
-sudo rnlctl upgrade --to 2.8.0-rnl.2
+VERSION="<published-version>"
+sudo rnlctl upgrade --to "$VERSION"
 ```
 
 在线升级从对应 GitHub Release 下载归档和摘要，验证全部文件后创建新 generation；离线升级可传入已验证归档：
 
 ```bash
 sudo rnlctl upgrade \
-  --bundle ./remnanode-lite_2.8.0-rnl.2_linux_amd64.tar.gz \
+  --bundle "./remnanode-lite_${VERSION}_linux_amd64.tar.gz" \
   --sha256 '<64-character-sha256>' \
-  --expected-version 2.8.0-rnl.2
+  --expected-version "$VERSION"
 ```
 
 升级保留服务之前的启用/运行状态，并在活动服务恢复后等待内部 health。只保留 current 和 previous 两个 generation；不要直接覆盖 `/usr/local/bin/remnanode-lite`。

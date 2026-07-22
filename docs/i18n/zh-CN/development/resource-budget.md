@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=2435f4665fdba01e9fd1d9552b863cec276da99d0902d73ea6714bc7dbf91215 -->
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=582e5070d7205cf174d908889aa6f507454764db27e43819cf3376b8cc7600ea -->
 # 512 MiB 资源预算与工程基准
 
 > 这是中文译文；资源数字和边界以[英文原文](../../../development/resource-budget.md)为准。
@@ -11,7 +11,7 @@
 
 生产目标是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。标准容器为宿主预留空间，把 Node 与 rw-core 合计限制为 `448 MiB` 内存、`448 MiB` 内存与 swap 合计上限、`1 CPU` 和 `256` 个 PID。内存与 swap 合计上限等于内存上限，因此即使宿主有 swap，容器也没有额外 swap 配额。
 
-打 tag 前，维护者会在这些限制下使用真实 Panel 和真实代理流量验证不可变的 `sha-<main-commit>` 镜像。该人工发布判断不以运行数据文件的形式存入仓库。带日期的 M6 工程门禁使用相同的核心 cgroup 限制完成了可复现的资源测试：
+发起 release 前，维护者会在这些限制下使用真实 Panel 和真实代理流量验证不可变的 `sha-<main-commit>` 镜像。该人工发布判断不以运行数据文件的形式存入仓库。带日期的 M6 工程门禁使用相同的核心 cgroup 限制完成了可复现的资源测试：
 
 - `448 MiB` hard memory limit，为宿主机内核与基础服务保留至少 `64 MiB`。
 - `1 CPU`、`256` 个 PID、禁用 swap 与外部网络。

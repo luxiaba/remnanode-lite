@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=33d2d84f23a8f410def14dd3c7dd963f1fca036baf88865b569b4214f742e962 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=2a51b5a4198c0792967943da93346ef116b2d1c53f804b92fbe42237938d35e9 -->
 <div align="center">
 
 # Remnanode Lite
@@ -10,7 +10,7 @@
 **英文 [README.md](README.md) 是权威版本，本页是中文说明。**
 
 [![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
-[![Container](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
+[![Candidate](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
 [![Security](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml/badge.svg)](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml)
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
@@ -19,7 +19,7 @@
 
 </div>
 
-Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收 Remnawave Panel 下发的配置，管理 rw-core 进程、用户和插件规则，并上报系统与流量统计。Docker 镜像已经包含 rw-core 及其运行数据。
+Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收 Remnawave Panel 下发的配置，管理 rw-core 进程、用户和插件规则，并上报系统与流量统计。Docker 镜像和已发布的 Native bundle 都包含该 Release 选定的 rw-core 及运行数据。
 
 项目维护的部署配置面向**整机 512 MiB 内存、1 vCPU、2 GB 磁盘**的小型服务器，并提供 `linux/amd64` 和 `linux/arm64` 镜像。
 
@@ -52,13 +52,13 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 
 开始前需要准备 Docker Engine 和 Compose v2，并在 Remnawave Panel 中创建好节点，拿到该节点的完整 Secret Key。节点端口必须能被 Panel 访问。下面的命令默认在 root shell 中执行，其他情况请按需使用 `sudo`。
 
-从一个精确的稳定 Release 下载 Compose 文件和环境变量模板：
+先在 GitHub Releases 页面选择一个已经发布的版本，再从该精确 Release 下载 Compose 文件和环境变量模板。源码中的版本号和候选镜像都不是可下载的 Release：
 
 ```bash
 mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
 
-VERSION=2.8.0
+VERSION="<published-version>" # 例如：X.Y.Z 或 X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 curl -fL \
@@ -109,10 +109,10 @@ docker compose logs --tail=100 remnanode-lite
 
 当机器无法安装 Docker Engine，或不适合承担 Docker daemon 与容器运行时的开销时，使用 Native bundle。Native 并不表示没有后台服务：`remnanode-lite` 会直接由 systemd 或 OpenRC 运行。以 systemd 的 Rocky Linux 9 为主目标；Rocky Linux 8 和 Debian 12 兼容。OpenRC 为实验性路径，需要可用的 cgroup v2。
 
-Native 安装永远不跟随移动通道。从同一个精确 GitHub Release 下载 `install.sh` 与 `SHA256SUMS`，校验安装器，并明确指定版本：
+Native 安装永远不跟随移动通道。先在 GitHub Releases 页面选择一个已经发布的版本，再从同一个精确 Release 下载 `install.sh` 与 `SHA256SUMS`，校验安装器，并明确指定版本：
 
 ```bash
-VERSION=2.8.0
+VERSION="<published-version>" # 例如：X.Y.Z 或 X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
@@ -130,7 +130,7 @@ sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
 
-`2.8.0` Native bundle 实现 `2.8.0` 契约。批量上线前请阅读 [Native Linux 部署指南](docs/i18n/zh-CN/deployment-native.md)，其中包含前置依赖、无人值守与离线安装、精确版本升级、回滚、修复和卸载。
+Native bundle 与其对应 Release 使用相同的契约。批量上线前请阅读 [Native Linux 部署指南](docs/i18n/zh-CN/deployment-native.md)，其中包含前置依赖、无人值守与离线安装、精确版本升级、回滚、修复和卸载。
 
 ## Docker Compose 环境变量
 
@@ -201,7 +201,7 @@ docker compose up -d --no-build --force-recreate
 
 | 项目 | 当前基线 |
 | --- | --- |
-| Native Linux bundle | `2.8.0` |
+| Native Linux bundle | 已发布的精确 Release |
 | Node 契约 | `2.8.0` |
 | rw-core | `v26.6.27` |
 | 平台 | `linux/amd64`、`linux/arm64` |
@@ -247,7 +247,9 @@ go mod download
 go test -count=1 ./...
 mkdir -p bin
 go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
+go build -trimpath -o bin/rnlctl ./cmd/rnlctl
 ./bin/remnanode-lite version
+./bin/rnlctl version
 ```
 
 Linux 网络集成、真实 rw-core 和 Panel 兼容属于不同的测试层。修改这些部分前，请先阅读 [开发指南](docs/i18n/zh-CN/development/README.md)。

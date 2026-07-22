@@ -191,9 +191,9 @@ There is no container runtime state or Xray configuration volume to migrate; the
 
 ## Release candidates
 
-For every `main` commit, the `container` workflow builds `linux/amd64` and `linux/arm64` images, publishes a multi-architecture manifest, and records build provenance. Once those steps pass, it publishes the `sha-<commit>` tag and updates `edge` if that commit is still the head of `main`. These checks identify how an image was built; they do not prove that it runs correctly.
+For every `main` commit, the `candidate` workflow (`container.yml`) builds `linux/amd64` and `linux/arm64` images, publishes a multi-architecture manifest, and records build provenance. Once those steps pass, it publishes the `sha-<commit>` tag and updates `edge` if that commit is still the head of `main`. These checks identify how an image was built; they do not prove that it runs correctly.
 
-Before creating a version tag, a maintainer runs the digest-pinned candidate with the canonical Compose file, confirms that it becomes healthy, connects to a real Panel, starts rw-core, and carries representative proxy traffic. The container limits remain `448 MiB / 1 CPU / no additional container swap / 256 PIDs`, even when the host is larger.
+Before dispatching a version release, a maintainer runs the digest-pinned candidate with the canonical Compose file, confirms that it becomes healthy, connects to a real Panel, starts rw-core, and carries representative proxy traffic. The container limits remain `448 MiB / 1 CPU / no additional container swap / 256 PIDs`, even when the host is larger.
 
 This is an operational confirmation, not repository content. Do not commit host inventory, container identifiers, logs, Secrets, or smoke output. A candidate has no GitHub Release assets and is not a formal Release; its build attestation describes the build chain, not runtime behavior.
 

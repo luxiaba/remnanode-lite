@@ -10,31 +10,49 @@ fail() {
   exit 1
 }
 
-assert_metadata() {
-  local tag=$1 expected=$2 actual
-  actual="$(bash "$ROOT_DIR/scripts/release-metadata.sh" "$tag")" ||
-    fail "release metadata rejected valid tag $tag"
-  [ "$actual" = "$expected" ] ||
-    fail "unexpected metadata for $tag: ${actual//$'\n'/, }"
-}
-
-assert_invalid_metadata() {
-  local tag=$1
-  if bash "$ROOT_DIR/scripts/release-metadata.sh" "$tag" >/dev/null 2>&1; then
-    fail "release metadata accepted invalid tag $tag"
-  fi
-}
-
 make_fixture() {
   local version=$1 contract=$2 fixture tag
   shift 2
   fixture="$(mktemp -d "$temporary_directory/fixture.XXXXXX")"
   mkdir -p \
+    "$fixture/bin" \
     "$fixture/scripts" \
     "$fixture/internal/version" \
     "$fixture/internal/contract"
   cp "$ROOT_DIR/scripts/check-version.sh" "$fixture/scripts/check-version.sh"
-  cp "$ROOT_DIR/scripts/release-metadata.sh" "$fixture/scripts/release-metadata.sh"
+  cat >"$fixture/bin/go" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+[ "$1" = run ]
+[ "$2" = ./cmd/release-tool ]
+[ "$3" = metadata ]
+[ "$4" = --tag ]
+tag=$5
+if [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$ ]]; then
+  :
+else
+  exit 1
+fi
+case "$tag" in
+  *-rnl.*)
+    channel=preview
+    prerelease=true
+    make_latest=false
+    ;;
+  *)
+    channel=latest
+    prerelease=false
+    make_latest=true
+    ;;
+esac
+printf 'version=%s\n' "${tag#v}"
+printf 'tag=%s\n' "$tag"
+printf 'channel=%s\n' "$channel"
+printf 'prerelease=%s\n' "$prerelease"
+printf 'make_latest=%s\n' "$make_latest"
+EOF
+  chmod 0755 "$fixture/bin/go"
 
   cat >"$fixture/internal/version/version.go" <<EOF
 package version
@@ -81,7 +99,7 @@ assert_version_passes() {
   shift 5
   [ "$#" -eq "$tag_count" ] || fail "invalid test definition: $name"
   fixture="$(make_fixture "$version" "$contract" "$@")"
-  if ! output="$(cd "$fixture" && RELEASE_TAG="$release_tag" \
+  if ! output="$(cd "$fixture" && PATH="$fixture/bin:$PATH" RELEASE_TAG="$release_tag" \
     bash scripts/check-version.sh 2>&1)"; then
     fail "$name unexpectedly failed: $output"
   fi
@@ -93,31 +111,13 @@ assert_version_fails() {
   shift 6
   [ "$#" -eq "$tag_count" ] || fail "invalid test definition: $name"
   fixture="$(make_fixture "$version" "$contract" "$@")"
-  if output="$(cd "$fixture" && RELEASE_TAG="$release_tag" \
+  if output="$(cd "$fixture" && PATH="$fixture/bin:$PATH" RELEASE_TAG="$release_tag" \
     bash scripts/check-version.sh 2>&1)"; then
     fail "$name unexpectedly passed"
   fi
   [[ "$output" == *"$expected"* ]] ||
     fail "$name failed for the wrong reason: $output"
 }
-
-assert_metadata v2.8.0 $'version=2.8.0\nchannel=latest\nprerelease=false\nmake_latest=true'
-assert_metadata v2.8.1-rnl.9 \
-  $'version=2.8.1-rnl.9\nchannel=preview\nprerelease=true\nmake_latest=false'
-assert_metadata v999999999999999999999.0.0-rnl.999999999999999999999 \
-  $'version=999999999999999999999.0.0-rnl.999999999999999999999\nchannel=preview\nprerelease=true\nmake_latest=false'
-for invalid_tag in \
-  2.8.0 \
-  v02.8.0 \
-  v2.08.0 \
-  v2.8.00 \
-  v2.8 \
-  v2.8.0-rnl.0 \
-  v2.8.0-rnl.01 \
-  v2.8.0-rnl.1-extra \
-  v2.8.0-rc.1; do
-  assert_invalid_metadata "$invalid_tag"
-done
 
 # Stable releases compare each component numerically and ignore preview tags.
 assert_version_passes \

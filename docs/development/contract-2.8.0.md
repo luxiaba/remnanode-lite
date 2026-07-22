@@ -180,11 +180,11 @@ and real proxy traffic. This operational confirmation stays outside the source
 repository. The container remains bounded to 448 MiB memory, no additional
 container swap, 1 CPU, and 256 PIDs.
 
-Every annotated release tag must point to the current `main` HEAD. The release
-workflow resolves that commit's `sha-*` candidate, verifies its two runnable
-Linux manifests and attestations, builds and verifies both Native bundles, and
-promotes the same digest without rebuilding. A plain stable version advances
-`latest`; an `rnl.N` prerelease advances `preview` only.
+The release workflow runs only from the current `main` HEAD. It resolves that
+commit's `sha-*` candidate, verifies its two runnable Linux manifests and
+attestations, verifies the prebuilt Native bundles, creates and verifies a
+draft Release, publishes its tag, and promotes the same digest without rebuilding. A plain stable version
+advances `latest`; an `rnl.N` prerelease advances `preview` only.
 
 Additional Native `arm64` runtime coverage, distribution-specific systemd and
 OpenRC installation, repeated 50,000-user load, long soak, and fault injection

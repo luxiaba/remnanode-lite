@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=10f5ed4b7ca86851705a9d50f207dac342fc580934f0a3aa2ad52af8a0d3e359 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=11126ba2d954bcd90e79052fcbb550ab2cd8a591ded657a979a7b1f94efddbf5 -->
 
 # 贡献指南
 
@@ -284,14 +284,14 @@ Review 重点依次是正确性与契约、状态/并发、资源边界、安全
 正式 tag、`latest` 和 Release 资产都由维护者按[版本策略](versioning.md)与
 [发布流程](release.md)统一处理。
 
-每个 `main` 提交都会生成不可变的 `sha-<commit>` 候选镜像。打正式 tag 前，维护者应
+每个 `main` 提交都会生成不可变的 `sha-<commit>` 候选镜像。发起正式 release 前，维护者应
 确认这个候选能够正常启动，在仓库维护的 Compose 限制下连接真实 Panel 并承载真实
 代理流量。这些运行检查在仓库外完成；不要提交宿主清单、日志、Secret、smoke JSON
 或其它生产数据。
 
-候选确认可发布后，在当前 `main` HEAD 创建 annotated 版本 tag。Release workflow
-会校验候选 manifest 与 build attestation，把同一个 digest 晋升为精确版本和 `latest`，
-并让 GitHub 自动生成 Release notes。`edge` 和 `sha-*` 都不是正式版本。
+候选确认可发布后，从当前 `main` HEAD 以精确源码版本发起 release workflow。它会校验
+候选 manifest、已构建的 Native 资产及其 attestation，创建并校验 draft Release，公开
+其 tag，再把同一个 digest 晋升为精确版本和 `latest`。`edge` 和 `sha-*` 都不是正式版本。
 
 ## 许可证
 

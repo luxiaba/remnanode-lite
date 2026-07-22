@@ -1,8 +1,4 @@
-name: container
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: luxiaba/remnanode-lite
+name: candidate
 
 on:
   workflow_dispatch:
@@ -13,31 +9,34 @@ on:
     paths:
       - ".github/workflows/container.yml"
       - ".dockerignore"
-      - ".env.example"
       - "Dockerfile"
-      - "compose.yaml"
-      - "deploy/compose.single-file.yaml"
+      - "compose*.yaml"
+      - ".env.example"
+      - "deploy/**"
       - "go.mod"
       - "go.sum"
       - "cmd/**"
       - "internal/**"
-      - "release/runtime-assets.lock.json"
-      - "scripts/promote-image-tag.sh"
+      - "release/**"
+      - "scripts/**"
 
 concurrency:
-  group: container-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  group: candidate-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
 jobs:
-  build:
+  container-check:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -51,7 +50,7 @@ jobs:
           version: v0.35.0
           driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
 
-      - name: Build linux/amd64 and linux/arm64 images without publishing
+      - name: Build both production platforms
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -63,20 +62,23 @@ jobs:
           cache-from: type=gha,scope=container-ci
           cache-to: type=gha,mode=max,scope=container-ci
 
-  publish-main:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+  image:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 50
     concurrency:
       group: registry-publish
       cancel-in-progress: false
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     outputs:
-      digest: ${{ steps.image.outputs.digest }}
+      digest: ${{ steps.accepted.outputs.digest }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -92,92 +94,124 @@ jobs:
 
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read project version
-        id: project-version
-        run: |
-          set -euo pipefail
-          version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
-          printf '%s\n' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-rnl\.[1-9][0-9]*)?$' || {
-            echo "invalid project version: $version" >&2
-            exit 1
-          }
-          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
 
-      - name: Build and publish untagged main image
-        id: image
+      - name: Resolve source release metadata
+        id: version
+        run: go run ./cmd/release-tool metadata >>"$GITHUB_OUTPUT"
+
+      - name: Inspect the immutable candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-candidate-image.sh --allow-missing >>"$GITHUB_OUTPUT"
+
+      - name: Build immutable image content
+        id: build
+        if: steps.candidate.outputs.state == 'absent'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
           pull: true
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           labels: |
             org.opencontainers.image.title=Remnanode Lite
             org.opencontainers.image.description=Low-memory Remnawave Node compatible implementation
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.project-version.outputs.version }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.licenses=AGPL-3.0-only
           cache-from: type=gha,scope=container-main
           cache-to: type=gha,mode=max,scope=container-main
           provenance: mode=max
           sbom: generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68
 
-  reject-invalid-dispatch:
-    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-    steps:
-      - name: Reject non-main candidate dispatch
-        run: |
-          echo "candidate publishing is only allowed from refs/heads/main" >&2
-          exit 1
+      - name: Attest the image index
+        if: steps.candidate.outputs.state == 'absent'
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
 
-  attest-main:
-    needs: publish-main
+      - name: Publish the immutable candidate reference
+        if: steps.candidate.outputs.state == 'absent'
+        env:
+          SOURCE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: bash scripts/promote-image-tag.sh immutable "$IMAGE" "$SOURCE_DIGEST" "sha-$GITHUB_SHA"
+
+      - name: Verify the accepted immutable candidate
+        id: accepted
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-candidate-image.sh >>"$GITHUB_OUTPUT"
+
+  native:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: read
-      packages: write
       id-token: write
       attestations: write
       artifact-metadata: write
     steps:
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Validate main manifest digest
-        id: digest
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve release metadata
+        id: metadata
+        run: go run ./cmd/release-tool metadata >>"$GITHUB_OUTPUT"
+
+      - name: Verify release source metadata
         env:
-          SOURCE_DIGEST: ${{ needs.publish-main.outputs.digest }}
-        run: |
-          set -euo pipefail
-          printf '%s\n' "$SOURCE_DIGEST" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
-            echo "main image did not return a manifest digest: $SOURCE_DIGEST" >&2
-            exit 1
-          }
-          printf 'digest=%s\n' "$SOURCE_DIGEST" >> "$GITHUB_OUTPUT"
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+        run: bash scripts/check-release-metadata.sh "$RELEASE_TAG"
 
-      - name: Attest main image
+      - name: Build deterministic Native bundles
+        run: bash scripts/build-native-bundle.sh dist/native amd64 arm64
+
+      - name: Assemble release assets
+        run: go run ./cmd/release-tool assemble --native-dir dist/native --out-dir dist/release
+
+      - name: Verify release assets
+        run: go run ./cmd/release-tool verify-package --directory dist/release --source-revision "$GITHUB_SHA"
+
+      - name: Smoke test Native bundles
+        run: bash scripts/test-native-release-bundles.sh dist/release "${{ steps.metadata.outputs.version }}"
+
+      - name: Attest every release asset
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.digest.outputs.digest }}
-          push-to-registry: true
+          subject-path: dist/release/*
 
-  promote-main:
-    needs: [publish-main, attest-main]
+      - name: Preserve the release candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-assets-${{ github.sha }}
+          path: dist/release/*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 30
+
+  promote-edge:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [image, native]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
@@ -187,9 +221,8 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
@@ -199,48 +232,18 @@ jobs:
 
       - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish immutable candidate tag
-        id: candidate
-        env:
-          SOURCE_DIGEST: ${{ needs.publish-main.outputs.digest }}
-        run: |
-          set -euo pipefail
-          image="${REGISTRY}/${IMAGE_NAME}"
-          tag="sha-${GITHUB_SHA}"
-          candidate_ref="${image}:${tag}"
-          candidate_digest="$(docker buildx imagetools inspect \
-            --format '{{.Manifest.Digest}}' "$candidate_ref" 2>/dev/null | tr -d '\r\n' || true)"
-          if [ -n "$candidate_digest" ]; then
-            printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
-              echo "$candidate_ref returned an invalid digest: $candidate_digest" >&2
-              exit 1
-            }
-            [ "$candidate_digest" = "$SOURCE_DIGEST" ] || {
-              echo "$candidate_ref already exists at $candidate_digest, expected $SOURCE_DIGEST" >&2
-              exit 1
-            }
-            echo "$candidate_ref already exists at the expected digest $candidate_digest"
-          else
-            bash scripts/promote-image-tag.sh immutable "$image" "$SOURCE_DIGEST" "$tag"
-            candidate_digest="$SOURCE_DIGEST"
-          fi
-          printf 'digest=%s\n' "$candidate_digest" >> "$GITHUB_OUTPUT"
+      - name: Advance edge only after the complete candidate succeeds
+        run: bash scripts/promote-candidate-edge.sh "$IMAGE" "${{ needs.image.outputs.digest }}" "$GITHUB_SHA"
 
-      - name: Promote current main image to edge
-        if: github.event_name == 'push'
-        env:
-          SOURCE_DIGEST: ${{ steps.candidate.outputs.digest }}
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
-          main_head="$(git rev-parse origin/main)"
-          if [ "$GITHUB_SHA" != "$main_head" ]; then
-            echo "skip edge promotion for stale main commit $GITHUB_SHA; current main is $main_head"
-            exit 0
-          fi
-          bash scripts/promote-image-tag.sh mutable \
-            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" edge
+  reject-invalid-dispatch:
+    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - run: |
+          echo "candidate builds may only be dispatched from main" >&2
+          exit 1
