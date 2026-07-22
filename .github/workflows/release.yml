@@ -1,8 +1,6 @@
 name: release
 
 env:
-  ASN_SOURCE_URL: https://github.com/ipverse/as-ip-blocks/archive/56d021c7536afb15317155e45b57e7b5c87a4700.tar.gz
-  ASN_SOURCE_SHA256: fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa978a33b674a58ec
   REGISTRY: ghcr.io
   IMAGE_NAME: luxiaba/remnanode-lite
 
@@ -10,6 +8,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published vX.Y.Z[-rnl.N] tag whose GHCR channel should be reconciled
+        required: true
+        type: string
 
 concurrency:
   group: release
@@ -19,16 +23,23 @@ permissions:
   contents: read
 
 jobs:
-  release:
+  prepare-release:
+    if: github.event_name == 'push'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: write
       packages: read
-      attestations: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     outputs:
-      candidate_commit: ${{ steps.accepted-image.outputs.commit }}
       candidate_digest: ${{ steps.accepted-image.outputs.digest }}
+      channel: ${{ steps.release-metadata.outputs.channel }}
+      make_latest: ${{ steps.release-metadata.outputs.make_latest }}
+      prerelease: ${{ steps.release-metadata.outputs.prerelease }}
+      release_id: ${{ steps.draft-release.outputs.id }}
+      version: ${{ steps.release-metadata.outputs.version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -44,6 +55,11 @@ jobs:
             echo "release commit $GITHUB_SHA is not current origin/main head $main_head" >&2
             exit 1
           fi
+
+      - name: Verify the remote annotated tag is unchanged
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-tag.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -67,6 +83,10 @@ jobs:
           REMNANODE_OFFICIAL_SOURCE: ${{ github.workspace }}/.official-source
         run: bash scripts/release-check.sh
 
+      - name: Classify release
+        id: release-metadata
+        run: bash scripts/release-metadata.sh "$GITHUB_REF_NAME" >>"$GITHUB_OUTPUT"
+
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
           version: v0.35.0
@@ -86,9 +106,21 @@ jobs:
           set -euo pipefail
           candidate_commit="$GITHUB_SHA"
           candidate_tag="${REGISTRY}/${IMAGE_NAME}:sha-${candidate_commit}"
-          candidate_digest="$(docker buildx imagetools inspect \
-            --format '{{.Manifest.Digest}}' "$candidate_tag" | tr -d '\r\n')"
-          printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          candidate_digest=
+          for attempt in $(seq 1 30); do
+            candidate_digest="$(docker buildx imagetools inspect \
+              --format '{{.Manifest.Digest}}' "$candidate_tag" 2>/dev/null \
+              | tr -d '\r\n' || true)"
+            if printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+              break
+            fi
+            echo "waiting for attested main candidate $candidate_tag ($attempt/30)"
+            sleep 20
+          done
+          printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
+            echo "attested main candidate did not become available: $candidate_tag" >&2
+            exit 1
+          }
 
           image="${REGISTRY}/${IMAGE_NAME}"
           candidate_ref="${image}@${candidate_digest}"
@@ -135,19 +167,30 @@ jobs:
               and (([$attestations[].annotations["vnd.docker.reference.digest"]] | sort)
                 == ([$runnable[].digest] | sort))
           ' >/dev/null <<<"$index_json"; then
-            echo "$candidate_ref does not contain exactly two runnable linux/amd64 and linux/arm64 manifests with one BuildKit attestation manifest per runnable digest" >&2
+            echo "$candidate_ref does not contain exactly two runnable platform manifests with their attestations" >&2
             jq '{schemaVersion, mediaType, manifests}' <<<"$index_json" >&2
             exit 1
           fi
 
-          gh attestation verify "oci://${image}@${candidate_digest}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/container.yml@refs/heads/main" \
-            --source-digest "$candidate_commit" \
-            --deny-self-hosted-runners
+          attestation_verified=false
+          for attempt in $(seq 1 12); do
+            if gh attestation verify "oci://${image}@${candidate_digest}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/container.yml@refs/heads/main" \
+              --source-digest "$candidate_commit" \
+              --deny-self-hosted-runners; then
+              attestation_verified=true
+              break
+            fi
+            echo "waiting for candidate attestation visibility ($attempt/12)"
+            sleep 10
+          done
+          [ "$attestation_verified" = true ] || {
+            echo "candidate attestation did not become verifiable" >&2
+            exit 1
+          }
 
-          printf 'commit=%s\n' "$candidate_commit" >> "$GITHUB_OUTPUT"
-          printf 'digest=%s\n' "$candidate_digest" >> "$GITHUB_OUTPUT"
+          printf 'digest=%s\n' "$candidate_digest" >>"$GITHUB_OUTPUT"
 
       - name: Network administration integration in isolated namespaces
         run: |
@@ -158,100 +201,233 @@ jobs:
           sudo env "PATH=$PATH" REMNANODE_SOCKET_KILL_INTEGRATION=1 \
             go test ./internal/netadmin -run '^TestKillSocketsInNetworkNamespace$' -count=1 -v
 
-      - name: Build release archives
-        shell: bash
+      - name: Build and verify release assets
+        env:
+          RELEASE_VERSION: ${{ steps.release-metadata.outputs.version }}
         run: |
           set -euo pipefail
-          mkdir -p dist
-          mkdir -p dist/binaries
-          bash scripts/build-release-binaries.sh dist/binaries
+          mkdir -p dist/native
+          bash scripts/build-native-bundle.sh dist/native amd64 arm64
 
-          host_arch="$(uname -m)"
+          contract_version="$(tr -d ' \n\r' < internal/version/contract.version)"
           for arch in amd64 arm64; do
-            out_dir="$(mktemp -d)"
-            install -m 0755 "dist/binaries/remnanode-lite_linux_${arch}" "${out_dir}/remnanode-lite"
-
-            # amd64 runner cannot execute arm64 binaries (Exec format error)
-            case "${arch}:${host_arch}" in
-              amd64:x86_64|arm64:aarch64|arm64:arm64)
-                "${out_dir}/remnanode-lite" version
-                ;;
-              *)
-                file "${out_dir}/remnanode-lite"
-                ;;
-            esac
-
-            printf '%s\n' \
-              "remnanode-lite ${GITHUB_REF_NAME} linux/${arch}" \
-              "" \
-              "Extract and install to /usr/local/bin/remnanode-lite" \
-              > "${out_dir}/README.txt"
-
-            mkdir -p "${out_dir}/support/deploy" "${out_dir}/support/scripts"
-            install -m 0644 deploy/remnawave-node.service "${out_dir}/support/deploy/"
-            install -m 0755 deploy/remnawave-node.openrc "${out_dir}/support/deploy/"
-            install -m 0644 scripts/install-env-helpers.sh "${out_dir}/support/scripts/"
-            install -m 0755 \
-              scripts/install-xray.sh \
-              scripts/upgrade.sh \
-              scripts/uninstall.sh \
-              "${out_dir}/support/scripts/"
-
-            tar -C "${out_dir}" -czf "dist/remnanode-lite_linux_${arch}.tar.gz" \
-              remnanode-lite README.txt support
-            rm -rf "${out_dir}"
+            source="dist/native/remnanode-lite_${RELEASE_VERSION}_linux_${arch}.tar.gz"
+            archive="dist/remnanode-lite_${RELEASE_VERSION}_linux_${arch}.tar.gz"
+            mv "$source" "$archive"
+            go run ./cmd/release-tool verify \
+              --lock release/runtime-assets.lock.json \
+              --archive "$archive" \
+              --arch "$arch" \
+              --version "$RELEASE_VERSION" \
+              --contract-version "$contract_version" \
+              --source-revision "$GITHUB_SHA"
           done
-          rm -rf dist/binaries
+          rmdir dist/native
 
+          install -m 0755 release/native/install.sh dist/install.sh
           install -m 0644 compose.yaml dist/compose.yaml
-          install -m 0644 deploy/compose.single-file.yaml dist/docker-compose.single-file.yaml
-          release_version="${GITHUB_REF_NAME#v}"
-          sed -i \
-            "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${release_version}|" \
-            dist/docker-compose.single-file.yaml
-          install -m 0644 .env.example dist/remnanode.env.example
-          sed -i \
-            "s|^REMNANODE_IMAGE=.*$|REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${release_version}|" \
-            dist/remnanode.env.example
+          sed \
+            "s|ghcr.io/luxiaba/remnanode-lite:latest|ghcr.io/luxiaba/remnanode-lite:${RELEASE_VERSION}|" \
+            deploy/compose.single-file.yaml >dist/docker-compose.single-file.yaml
+          sed \
+            "s|^REMNANODE_IMAGE=.*$|REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${RELEASE_VERSION}|" \
+            .env.example >dist/remnanode.env.example
 
-          curl --fail --location --silent --show-error \
-            --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
-            "${ASN_SOURCE_URL}" -o /tmp/as-ip-blocks.tar.gz
-          printf '%s  %s\n' "${ASN_SOURCE_SHA256}" /tmp/as-ip-blocks.tar.gz | sha256sum --check --strict
-          go run ./cmd/asn-builder \
-            -format ipverse-tar-gz \
-            -in /tmp/as-ip-blocks.tar.gz \
-            -out dist/asn-prefixes.bin
-          rm -f /tmp/as-ip-blocks.tar.gz
+          (
+            cd dist
+            sha256sum \
+              install.sh \
+              "remnanode-lite_${RELEASE_VERSION}_linux_amd64.tar.gz" \
+              "remnanode-lite_${RELEASE_VERSION}_linux_arm64.tar.gz" \
+              compose.yaml \
+              docker-compose.single-file.yaml \
+              remnanode.env.example \
+              >SHA256SUMS
+            sha256sum --check --strict SHA256SUMS
+          )
 
-          cd dist
-          sha256sum \
-            remnanode-lite_linux_amd64.tar.gz \
-            remnanode-lite_linux_arm64.tar.gz \
-            asn-prefixes.bin \
-            compose.yaml \
-            docker-compose.single-file.yaml \
-            remnanode.env.example \
-            > SHA256SUMS
-
-      - uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+      - name: Attest every release asset
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
+          subject-path: dist/*
+
+      - name: Verify release asset provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for asset in dist/*; do
+            [ -f "$asset" ] || continue
+            gh attestation verify \
+              "$asset" \
+              --repo "$GITHUB_REPOSITORY" \
+              --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@refs/tags/${GITHUB_REF_NAME}" \
+              --source-digest "$GITHUB_SHA" \
+              --deny-self-hosted-runners
+          done
+
+      - name: Reject an already-published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          releases="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" | jq -sc \
+            --arg tag "$GITHUB_REF_NAME" '[.[][] | select(.tag_name == $tag)]')"
+          count="$(jq 'length' <<<"$releases")"
+          if [ "$count" -gt 1 ]; then
+            echo "multiple releases exist for $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+          if [ "$count" -eq 1 ]; then
+            [ "$(jq -r '.[0].draft' <<<"$releases")" = true ] || {
+              echo "$GITHUB_REF_NAME is already published and cannot be replaced" >&2
+              exit 1
+            }
+          fi
+
+      - name: Reconfirm the remote tag before creating the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-tag.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
+      - name: Create draft release and upload every asset
+        id: draft-release
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          draft: true
+          prerelease: ${{ steps.release-metadata.outputs.prerelease }}
+          make_latest: false
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          make_latest: false
-          overwrite_files: false
-          prerelease: false
+          overwrite_files: true
           files: |
-            dist/remnanode-lite_linux_amd64.tar.gz
-            dist/remnanode-lite_linux_arm64.tar.gz
-            dist/asn-prefixes.bin
+            dist/install.sh
+            dist/remnanode-lite_${{ steps.release-metadata.outputs.version }}_linux_amd64.tar.gz
+            dist/remnanode-lite_${{ steps.release-metadata.outputs.version }}_linux_arm64.tar.gz
             dist/compose.yaml
             dist/docker-compose.single-file.yaml
             dist/remnanode.env.example
             dist/SHA256SUMS
 
+      - name: Verify the complete draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.draft-release.outputs.id }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$RELEASE_ID" | grep -Eq '^[1-9][0-9]*$'
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          [ "$(jq -r .draft <<<"$release")" = true ]
+          [ "$(jq -r .tag_name <<<"$release")" = "$GITHUB_REF_NAME" ]
+          expected="$(
+            for asset in dist/*; do
+              [ -f "$asset" ] || continue
+              digest="$(sha256sum "$asset" | awk '{print $1}')"
+              size="$(wc -c <"$asset" | tr -d ' ')"
+              printf '%s sha256:%s %s\n' "${asset##*/}" "$digest" "$size"
+            done | sort
+          )"
+          actual="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?per_page=100" \
+            --jq '.[] | [.name, .digest, (.size | tostring)] | join(" ")' | sort)"
+          if [ "$actual" != "$expected" ]; then
+            echo "draft release asset names, sizes, or digests do not match the build" >&2
+            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") >&2 || true
+            exit 1
+          fi
+
   publish-container:
-    needs: release
+    needs: prepare-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: registry-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        with:
+          version: v0.35.0
+          driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
+
+      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the exact release image tag
+        env:
+          SOURCE_DIGEST: ${{ needs.prepare-release.outputs.candidate_digest }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          bash scripts/promote-image-tag.sh immutable \
+            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" "$VERSION"
+
+  finalize-release:
+    needs: [prepare-release, publish-container]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Verify the remote tag before publishing the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/verify-release-tag.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+
+      - name: Publish the verified draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAKE_LATEST: ${{ needs.prepare-release.outputs.make_latest }}
+          PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          [ "$(jq -r .tag_name <<<"$release")" = "$GITHUB_REF_NAME" ]
+
+          if [ "$(jq -r .draft <<<"$release")" = true ]; then
+            published="$(gh api --method PATCH \
+              "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+              -F draft=false \
+              -F prerelease="$PRERELEASE" \
+              -f make_latest="$MAKE_LATEST")"
+          else
+            published="$release"
+          fi
+          [ "$(jq -r .draft <<<"$published")" = false ]
+          [ "$(jq -r .prerelease <<<"$published")" = "$PRERELEASE" ]
+
+          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+          if [ "$MAKE_LATEST" = true ]; then
+            [ "$latest_tag" = "$GITHUB_REF_NAME" ] || {
+              echo "latest release is ${latest_tag:-<none>}, expected $GITHUB_REF_NAME" >&2
+              exit 1
+            }
+          else
+            [ "$latest_tag" != "$GITHUB_REF_NAME" ] || {
+              echo "preview release must not become GitHub latest" >&2
+              exit 1
+            }
+          fi
+
+  promote-channel:
+    needs: [prepare-release, publish-container, finalize-release]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
@@ -260,8 +436,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      digest: ${{ steps.release-image.outputs.digest }}
+      attestations: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -278,42 +453,64 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish accepted candidate as the exact release version
-        id: release-image
+      - name: Reconfirm the published Release and exact image
         env:
-          SOURCE_DIGEST: ${{ needs.release.outputs.candidate_digest }}
+          EXPECTED_PRERELEASE: ${{ needs.prepare-release.outputs.prerelease }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_DIGEST: ${{ needs.prepare-release.outputs.candidate_digest }}
+          VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          bash scripts/promote-image-tag.sh immutable \
-            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" "$version"
-          printf 'digest=%s\n' "$SOURCE_DIGEST" >> "$GITHUB_OUTPUT"
+          bash scripts/verify-release-tag.sh "$RELEASE_TAG" "$GITHUB_SHA"
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          [ "$(jq -r .draft <<<"$release")" = false ]
+          [ "$(jq -r .prerelease <<<"$release")" = "$EXPECTED_PRERELEASE" ]
+          image="${REGISTRY}/${IMAGE_NAME}"
+          exact_digest="$(docker buildx imagetools inspect \
+            --format '{{.Manifest.Digest}}' "${image}:${VERSION}" | tr -d '\r\n')"
+          [ "$exact_digest" = "$SOURCE_DIGEST" ] || {
+            echo "exact release image resolves to $exact_digest, expected $SOURCE_DIGEST" >&2
+            exit 1
+          }
+          gh attestation verify "oci://${image}@${SOURCE_DIGEST}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/container.yml@refs/heads/main" \
+            --source-digest "$GITHUB_SHA" \
+            --deny-self-hosted-runners
 
-  promote-latest:
-    needs: publish-container
+      - name: Promote the published release channel without rebuilding
+        env:
+          CHANNEL: ${{ needs.prepare-release.outputs.channel }}
+          SOURCE_DIGEST: ${{ needs.prepare-release.outputs.candidate_digest }}
+        run: |
+          set -euo pipefail
+          bash scripts/promote-image-tag.sh mutable \
+            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" "$CHANNEL"
+
+  reconcile-channel:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:
       group: registry-publish
       cancel-in-progress: false
     permissions:
-      contents: write
+      contents: read
       packages: write
+      attestations: read
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
+          ref: refs/heads/main
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Revalidate main head before latest promotion
-        run: |
-          set -euo pipefail
-          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
-          main_head="$(git rev-parse origin/main)"
-          if [ "$GITHUB_SHA" != "$main_head" ]; then
-            echo "refusing to move latest from stale release $GITHUB_SHA; current main is $main_head" >&2
-            exit 1
-          fi
+      - name: Classify published release
+        id: release-metadata
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: bash scripts/release-metadata.sh "$RELEASE_TAG" >>"$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
         with:
@@ -326,21 +523,76 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Promote attested image to GHCR latest
+      - name: Verify published release and exact image
+        id: release-image
         env:
-          SOURCE_DIGEST: ${{ needs.publish-container.outputs.digest }}
-        run: |
-          set -euo pipefail
-          bash scripts/promote-image-tag.sh mutable \
-            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" latest
-
-      - name: Mark GitHub release as latest
-        env:
+          EXPECTED_PRERELEASE: ${{ steps.release-metadata.outputs.prerelease }}
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          VERSION: ${{ steps.release-metadata.outputs.version }}
         run: |
           set -euo pipefail
-          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq .id)"
-          printf '%s\n' "$release_id" | grep -Eq '^[1-9][0-9]*$'
-          gh api --method PATCH \
-            "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
-            -f make_latest=true >/dev/null
+          bash scripts/verify-release-tag.sh "$RELEASE_TAG" "$(git rev-list -n 1 "$RELEASE_TAG")"
+          release_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          [ "$(jq -r .draft <<<"$release")" = false ]
+          [ "$(jq -r .prerelease <<<"$release")" = "$EXPECTED_PRERELEASE" ]
+
+          image="${REGISTRY}/${IMAGE_NAME}"
+          exact_digest="$(docker buildx imagetools inspect \
+            --format '{{.Manifest.Digest}}' "${image}:${VERSION}" | tr -d '\r\n')"
+          candidate_digest="$(docker buildx imagetools inspect \
+            --format '{{.Manifest.Digest}}' "${image}:sha-${release_commit}" | tr -d '\r\n')"
+          printf '%s\n' "$exact_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'
+          [ "$exact_digest" = "$candidate_digest" ] || {
+            echo "exact release image does not match its accepted main candidate" >&2
+            exit 1
+          }
+          gh attestation verify "oci://${image}@${exact_digest}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/container.yml@refs/heads/main" \
+            --source-digest "$release_commit" \
+            --deny-self-hosted-runners
+
+          if [ "$EXPECTED_PRERELEASE" = true ]; then
+            newest_preview="$(gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/releases?per_page=100" | jq -sr '
+              [ .[][]
+                | select(.draft == false and .prerelease == true)
+                | select(.tag_name | test("^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-rnl\\.[1-9][0-9]*$"))
+              ]
+              | sort_by([(.published_at // .created_at // ""), (.id // 0)])
+              | last
+              | .tag_name // empty
+            ')"
+            [ "$newest_preview" = "$RELEASE_TAG" ] || {
+              echo "refusing to reconcile $RELEASE_TAG; newest published preview is ${newest_preview:-<none>}" >&2
+              exit 1
+            }
+          fi
+
+          printf 'digest=%s\n' "$exact_digest" >>"$GITHUB_OUTPUT"
+
+      - name: Reconcile the published release channel
+        env:
+          CHANNEL: ${{ steps.release-metadata.outputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+          MAKE_LATEST: ${{ steps.release-metadata.outputs.make_latest }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_DIGEST: ${{ steps.release-image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+          if [ "$MAKE_LATEST" = true ]; then
+            [ "$latest_tag" = "$RELEASE_TAG" ] || {
+              echo "GitHub latest is ${latest_tag:-<none>}, expected $RELEASE_TAG" >&2
+              exit 1
+            }
+          else
+            [ "$latest_tag" != "$RELEASE_TAG" ] || {
+              echo "preview release must not be GitHub latest" >&2
+              exit 1
+            }
+          fi
+          bash scripts/promote-image-tag.sh mutable \
+            "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" "$CHANNEL"
