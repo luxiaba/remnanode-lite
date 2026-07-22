@@ -221,11 +221,16 @@ release scripts change:
 ```bash
 mkdir -p dist/native
 bash scripts/build-native-bundle.sh dist/native amd64 arm64
+version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
+bash scripts/test-native-release-bundle.sh "dist/native/remnanode-lite_${version}_linux_amd64.tar.gz" amd64
+bash scripts/test-native-release-bundle.sh "dist/native/remnanode-lite_${version}_linux_arm64.tar.gz" arm64
 ```
 
 The build requires the exact Go toolchain and the pinned runtime asset cache.
-Use `RNL_OFFLINE_BUILD=1` only with a complete cache. A macOS test result does
-not replace the Linux CI bootstrap job or a real systemd/OpenRC check when
+Use `RNL_OFFLINE_BUILD=1` only with a complete cache. The bundle smoke test
+opens the generated archive with real `rnlctl` lifecycle code, installs it into
+a temporary test root with a restrictive `umask`, and keeps the service-manager
+boundary fake. It does not replace a real systemd/OpenRC check when
 service-manager behavior changed.
 
 ## Linux Network-Management Integration Tests

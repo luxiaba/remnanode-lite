@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -186,6 +187,64 @@ func (h lifecycleHarness) install(t *testing.T, prepareOnly bool) Result {
 		t.Fatalf("Install() error = %v", err)
 	}
 	return result
+}
+
+func TestExternalNativeBundleInstallSmoke(t *testing.T) {
+	archive := os.Getenv("REMNANODE_NATIVE_BUNDLE_SMOKE")
+	if archive == "" {
+		t.Skip("set REMNANODE_NATIVE_BUNDLE_SMOKE to a release bundle archive")
+	}
+	architecture := os.Getenv("REMNANODE_NATIVE_BUNDLE_ARCH")
+	if architecture == "" {
+		architecture = "amd64"
+	}
+	archive, err := filepath.Abs(archive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest, _, err := digestFile(archive, maxBundleArchive)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	t.Setenv("TMPDIR", root)
+	paths := PathsAt(filepath.Join(root, "host"))
+	host := newFakeHostController()
+	engine := NewEngine(EngineOptions{
+		Paths: paths, Host: host, Architecture: architecture,
+		RequireRoot: func() bool { return true },
+	})
+	secret := writeTestSecret(t, filepath.Join(root, "secret.key"))
+
+	restoreUmask := syscall.Umask(0o077)
+	t.Cleanup(func() { syscall.Umask(restoreUmask) })
+
+	result, err := engine.Install(context.Background(), InstallRequest{
+		Bundle: BundleInput{Archive: archive, SHA256: digest},
+		Port:   38329, SecretFile: secret, PrepareOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("Install(external bundle) error = %v", err)
+	}
+	if !result.Changed || !result.PreparedOnly || result.Version == "" || result.Generation == "" {
+		t.Fatalf("Install(external bundle) result = %#v", result)
+	}
+	if err := validatePreparedConfiguration(paths); err != nil {
+		t.Fatalf("prepared configuration is invalid: %v", err)
+	}
+	status, err := engine.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !status.Installed || !status.Prepared || !status.Healthy || status.Version != result.Version {
+		t.Fatalf("Status() = %#v", status)
+	}
+	generationRoot := filepath.Join(paths.Generations, result.Generation)
+	assertMode(t, filepath.Join(generationRoot, "LICENSE"), 0o644)
+	assertMode(t, filepath.Join(generationRoot, "bin", "rnlctl"), 0o755)
+	assertMode(t, paths.EnvironmentFile, 0o640)
+	assertMode(t, paths.SecretFile, 0o640)
 }
 
 func TestEngineInstallStatusAndDoctor(t *testing.T) {

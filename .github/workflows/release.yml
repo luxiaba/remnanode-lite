@@ -233,6 +233,7 @@ jobs:
               --version "$RELEASE_VERSION" \
               --contract-version "$contract_version" \
               --source-revision "$GITHUB_SHA"
+            bash scripts/test-native-release-bundle.sh "$archive" "$arch"
           done
           rmdir dist/native
 
