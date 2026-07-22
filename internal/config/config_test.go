@@ -32,11 +32,14 @@ func TestLoadDotEnvWithDefaults(t *testing.T) {
 	if cfg.NodePort != 3000 {
 		t.Fatalf("unexpected NODE_PORT: %d", cfg.NodePort)
 	}
-	if cfg.XrayBin != defaultXrayBin || cfg.GeoDir != defaultGeoDir {
+	if cfg.XrayBin != DefaultXrayBinPath || cfg.GeoDir != DefaultGeoDir {
 		t.Fatalf("unexpected defaults: %#v", cfg)
 	}
-	if cfg.LogDir != defaultLogDir {
-		t.Fatalf("unexpected default LOG_DIR: %s (want %s)", cfg.LogDir, defaultLogDir)
+	if cfg.LogDir != DefaultLogDir {
+		t.Fatalf("unexpected default LOG_DIR: %s (want %s)", cfg.LogDir, DefaultLogDir)
+	}
+	if cfg.ASNDBPath != DefaultASNDBPath {
+		t.Fatalf("unexpected default ASN_DB_PATH: %s (want %s)", cfg.ASNDBPath, DefaultASNDBPath)
 	}
 	if cfg.InternalSocketPath != DefaultInternalSocketPath || cfg.InternalRESTToken == "" {
 		t.Fatalf("unexpected internal defaults: %#v", cfg)

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/luxiaba/remnanode-lite/internal/version"
 )
 
 func TestProbeValidSuccess(t *testing.T) {
@@ -18,6 +20,9 @@ func TestProbeValidSuccess(t *testing.T) {
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
 			t.Errorf("Authorization = %q", got)
+		}
+		if got := r.Header.Get("User-Agent"); got != "remnanode-contract-probe/"+version.Version {
+			t.Errorf("User-Agent = %q", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprint(w, `{"response":{"isAlive":true,"xrayInternalStatusCached":true,"xrayVersion":"1.0.0","nodeVersion":"2.8.0"}}`)

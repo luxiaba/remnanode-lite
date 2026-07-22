@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 bash scripts/check-go.sh
 bash scripts/check-repository.sh
-bash scripts/test-install-ops.sh
+sh release/native/install_test.sh
 
 if command -v govulncheck >/dev/null 2>&1; then
   govulncheck ./...

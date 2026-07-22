@@ -44,6 +44,56 @@ func TestCheckSecret(t *testing.T) {
 	}
 }
 
+func TestCheckServiceDefinition(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	systemdPath := filepath.Join(dir, "remnanode-lite.service")
+	openRCPath := filepath.Join(dir, "remnanode-lite")
+
+	missing := checkServiceDefinitionAt(systemdPath, openRCPath)
+	if missing.level != "WARN" || missing.title != "service definition" {
+		t.Fatalf("missing service definition = %#v", missing)
+	}
+
+	if err := os.WriteFile(systemdPath, []byte(
+		"AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE\n"+
+			"CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE\n",
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := checkServiceDefinitionAt(systemdPath, openRCPath); got.level != "OK" || got.title != "systemd unit" {
+		t.Fatalf("systemd service definition = %#v", got)
+	}
+
+	if err := os.Remove(systemdPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(openRCPath, []byte(
+		"capabilities=\"^cap_net_admin,^cap_net_bind_service\"\nno_new_privs=yes\n",
+	), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := checkServiceDefinitionAt(systemdPath, openRCPath); got.level != "OK" || got.title != "OpenRC service" {
+		t.Fatalf("OpenRC service definition = %#v", got)
+	}
+
+	for name, content := range map[string]string{
+		"missing NET_ADMIN":        "capabilities=\"^cap_net_bind_service\"\nno_new_privs=yes\n",
+		"missing NET_BIND_SERVICE": "capabilities=\"^cap_net_admin\"\nno_new_privs=yes\n",
+		"missing no_new_privs":     "capabilities=\"^cap_net_admin,^cap_net_bind_service\"\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(openRCPath, []byte(content), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if got := checkServiceDefinitionAt(systemdPath, openRCPath); got.level != "WARN" || got.title != "OpenRC service" {
+				t.Fatalf("OpenRC service definition = %#v", got)
+			}
+		})
+	}
+}
+
 func TestCheckASNDatabaseUsesRuntimeReader(t *testing.T) {
 	t.Parallel()
 

@@ -317,6 +317,40 @@ func TestGetConfigRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestHealthEndpointTracksPublicReadiness(t *testing.T) {
+	ready := false
+	server := &Server{Provider: staticProvider{}, Ready: func() bool { return ready }}
+
+	request := httptest.NewRequest(http.MethodGet, "/internal/health", nil)
+	response := httptest.NewRecorder()
+	server.handleHealth(response, request)
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("not-ready status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+
+	ready = true
+	response = httptest.NewRecorder()
+	server.handleHealth(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("ready status = %d, want %d", response.Code, http.StatusOK)
+	}
+
+	response = httptest.NewRecorder()
+	server.handleHealth(response, httptest.NewRequest(http.MethodPost, "/internal/health", nil))
+	if response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("method status = %d, want %d", response.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestHealthEndpointWithoutReadinessGateIsNotReady(t *testing.T) {
+	server := &Server{Provider: staticProvider{}}
+	response := httptest.NewRecorder()
+	server.handleHealth(response, httptest.NewRequest(http.MethodGet, "/internal/health", nil))
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("nil gate status = %d, want %d", response.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func TestGetConfigReturnsEmptyObjectWhenMissing(t *testing.T) {
 	server := &Server{Token: "good", Provider: staticProvider{}}
 	request := httptest.NewRequest(http.MethodGet, "/internal/get-config?token=good", nil)

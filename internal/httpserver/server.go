@@ -179,6 +179,19 @@ func withNodeRequestBodyLimit(budget *bodylimit.Budget, next http.Handler) http.
 }
 
 func (s *Server) ListenAndServeTLS(ctx context.Context) error {
+	return s.listenAndServeTLS(ctx, nil)
+}
+
+// ListenAndServeTLSReady behaves like ListenAndServeTLS and invokes onListen
+// after the public TCP listener has been bound, but before serving requests.
+// The callback is useful for a private readiness probe: binding the socket is
+// a stronger signal than merely starting the goroutine, while keeping the
+// normal serving API unchanged for callers that do not need it.
+func (s *Server) ListenAndServeTLSReady(ctx context.Context, onListen func()) error {
+	return s.listenAndServeTLS(ctx, onListen)
+}
+
+func (s *Server) listenAndServeTLS(ctx context.Context, onListen func()) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -188,6 +201,9 @@ func (s *Server) ListenAndServeTLS(ctx context.Context) error {
 		return err
 	}
 	limited := netutil.LimitListener(listener, s.maxConnections)
+	if onListen != nil {
+		onListen()
+	}
 	err = s.httpServer.ServeTLS(limited, "", "")
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

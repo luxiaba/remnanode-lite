@@ -18,12 +18,13 @@ import (
 )
 
 const (
-	DefaultEnvPath            = "/etc/remnanode/node.env"
-	DefaultInternalSocketPath = "/run/remnanode/internal.sock"
-	defaultXrayBin            = "/usr/local/lib/remnanode/rw-core"
-	defaultGeoDir             = "/usr/local/share/remnanode/xray"
-	defaultLogDir             = "/var/log/remnanode"
-	defaultASNDBPath          = "/usr/local/share/remnanode/asn/asn-prefixes.bin"
+	DefaultEnvPath            = "/etc/remnanode-lite/node.env"
+	DefaultSecretPath         = "/etc/remnanode-lite/secret.key"
+	DefaultInternalSocketPath = "/run/remnanode-lite/internal.sock"
+	DefaultXrayBinPath        = "/usr/local/lib/remnanode-lite/current/lib/rw-core"
+	DefaultGeoDir             = "/usr/local/lib/remnanode-lite/current/share/xray"
+	DefaultLogDir             = "/var/log/remnanode-lite"
+	DefaultASNDBPath          = "/usr/local/lib/remnanode-lite/current/share/asn/asn-prefixes.bin"
 	maxDotEnvBytes            = 1 << 20
 	maxDotEnvLines            = 4096
 	maxDotEnvAssignments      = 256
@@ -155,12 +156,12 @@ func Load(dotenvPath string) (Config, error) {
 		NodePort:              nodePort,
 		BindAddr:              strings.TrimSpace(values["NODE_BIND_ADDR"]),
 		SecretKey:             secretKey,
-		XrayBin:               optionalString(values, "XRAY_BIN", defaultXrayBin),
-		GeoDir:                optionalString(values, "GEO_DIR", defaultGeoDir),
-		LogDir:                optionalString(values, "LOG_DIR", defaultLogDir),
+		XrayBin:               optionalString(values, "XRAY_BIN", DefaultXrayBinPath),
+		GeoDir:                optionalString(values, "GEO_DIR", DefaultGeoDir),
+		LogDir:                optionalString(values, "LOG_DIR", DefaultLogDir),
 		InternalSocketPath:    internalSocketPath,
 		InternalRESTToken:     internalRESTToken,
-		ASNDBPath:             optionalString(values, "ASN_DB_PATH", defaultASNDBPath),
+		ASNDBPath:             optionalString(values, "ASN_DB_PATH", DefaultASNDBPath),
 		DisableHashedSetCheck: disableHashedSetCheck,
 		LowMemory:             lowMemory,
 		BodyLimitMB:           bodyLimitMB,

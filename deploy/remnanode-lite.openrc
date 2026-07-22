@@ -1,19 +1,25 @@
 #!/sbin/openrc-run
 # shellcheck shell=sh disable=SC2034,SC3043
+# Native installs place this managed service at /etc/init.d/remnanode-lite.
 
-name="remnawave-node"
+name="remnanode-lite"
 description="Remnanode Lite"
 
 supervisor=supervise-daemon
 command="/usr/bin/env"
-command_args="-i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode USER=remnanode LOGNAME=remnanode REMNANODE_ENV=/etc/remnanode/node.env /usr/local/bin/remnanode-lite"
+# The installer owns /usr/local/bin/remnanode-lite as a root-owned stable
+# symlink into the atomically selected runtime generation.
+command_args="-i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode-lite USER=remnanode LOGNAME=remnanode REMNANODE_ENV=/etc/remnanode-lite/node.env /usr/local/bin/remnanode-lite"
 command_user="remnanode:remnanode"
-directory="/var/lib/remnanode"
-# supervise-daemon manages this file as root. Keep it outside the
-# service-writable runtime directory so the daemon cannot replace it.
-pidfile="/run/remnawave-node-supervise.pid"
-output_log="/var/log/remnanode/openrc.log"
-error_log="/var/log/remnanode/openrc.err.log"
+directory="/var/lib/remnanode-lite"
+# The supervisor creates this PID file before dropping to remnanode. Keep it
+# outside the service-writable runtime directory so the daemon cannot replace
+# it. output_log/error_log are intentionally created later as remnanode.
+pidfile="/run/remnanode-lite-supervise.pid"
+output_log="/var/log/remnanode-lite/openrc.log"
+error_log="/var/log/remnanode-lite/openrc.err.log"
+# The two ambient/inheritable capabilities survive both execs and reach
+# rw-core. no_new_privs prevents later executables from gaining anything else.
 capabilities="^cap_net_admin,^cap_net_bind_service"
 no_new_privs=yes
 umask=0077
@@ -22,8 +28,8 @@ respawn_delay=5
 respawn_max=5
 respawn_period=60
 retry="TERM/30/KILL/5"
-# OpenRC 0.62.6 resolves the cleanup path inconsistently for names already
-# prefixed with openrc. cleanup_resource_cgroup owns this exact cgroup instead.
+# OpenRC 0.62.6 creates openrc.<service> on cgroup v2, but its generic cleanup
+# probe still checks an unprefixed path. Own and verify the exact cgroup here.
 rc_cgroup_cleanup=NO
 rc_cgroup_settings="
 memory.max 469762048
@@ -38,13 +44,13 @@ depend() {
 }
 
 start_pre() {
-	[ -f /etc/remnanode/node.env ] && [ ! -L /etc/remnanode/node.env ] \
-		&& [ -r /etc/remnanode/node.env ] \
+	[ -f /etc/remnanode-lite/node.env ] && [ ! -L /etc/remnanode-lite/node.env ] \
+		&& [ -r /etc/remnanode-lite/node.env ] \
 		|| { eerror "node.env must be a readable regular non-symlink file"; return 1; }
 	[ -x /usr/bin/env ] || { eerror "missing executable /usr/bin/env"; return 1; }
 	[ -x /usr/local/bin/remnanode-lite ] || { eerror "missing executable /usr/local/bin/remnanode-lite"; return 1; }
 	checkpath -d -o remnanode:remnanode -m 0750 \
-		/var/log/remnanode /var/lib/remnanode /run/remnanode || return 1
+		/var/log/remnanode-lite /var/lib/remnanode-lite /run/remnanode-lite || return 1
 	verify_resource_cgroup
 }
 
@@ -54,12 +60,12 @@ stop_post() {
 
 cgroup_limit_error() {
 	eerror "$1"
-	eerror "production requires writable cgroup v2 limits"
+	eerror "production requires writable cgroup v2 limits and cgroup.kill"
 	return 1
 }
 
 verify_resource_cgroup() {
-	local base group actual candidate setting file expected procs member found=0 stale=""
+	local base group actual candidate setting file expected procs events kill_file member found=0 stale=""
 	base="${1:-}"
 	if [ -z "$base" ]; then
 		for candidate in /sys/fs/cgroup /sys/fs/cgroup/unified; do
@@ -70,7 +76,7 @@ verify_resource_cgroup() {
 		done
 	fi
 	[ -n "$base" ] || { cgroup_limit_error "cgroup v2 is unavailable"; return $?; }
-	group="${base}/openrc.${RC_SVCNAME:-remnawave-node}"
+	group="${base}/openrc.${RC_SVCNAME:-remnanode-lite}"
 	[ -d "$group" ] || { cgroup_limit_error "OpenRC did not create ${group}"; return $?; }
 
 	for setting in \
@@ -89,7 +95,12 @@ verify_resource_cgroup() {
 	done
 
 	procs="${group}/cgroup.procs"
+	events="${group}/cgroup.events"
+	kill_file="${group}/cgroup.kill"
 	[ -r "$procs" ] || { cgroup_limit_error "missing cgroup membership file ${procs}"; return $?; }
+	[ -r "$events" ] || { cgroup_limit_error "missing cgroup state file ${events}"; return $?; }
+	[ -w "$kill_file" ] || { cgroup_limit_error "missing writable ${kill_file}"; return $?; }
+	[ -w "${base}/cgroup.procs" ] || { cgroup_limit_error "cannot migrate service cleanup to ${base}/cgroup.procs"; return $?; }
 	while IFS= read -r member; do
 		if [ "$member" = "$$" ]; then
 			found=1
@@ -125,7 +136,7 @@ cleanup_resource_cgroup() {
 		done
 	fi
 	[ -n "$base" ] || return 0
-	group="${base}/openrc.${RC_SVCNAME:-remnawave-node}"
+	group="${base}/openrc.${RC_SVCNAME:-remnanode-lite}"
 	[ ! -L "$group" ] || { eerror "refusing symlink service cgroup ${group}"; return 1; }
 	[ -d "$group" ] || return 0
 	procs="${group}/cgroup.procs"

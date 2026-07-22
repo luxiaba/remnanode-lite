@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/luxiaba/remnanode-lite/internal/version"
 )
 
 const DefaultProbeResponseLimit int64 = 4 << 20
@@ -103,7 +105,7 @@ func (p Prober) Probe(ctx context.Context, target ProbeTarget, route RouteContra
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Accept-Encoding", "identity")
 	request.Header.Set("Authorization", "Bearer "+p.BearerToken)
-	request.Header.Set("User-Agent", "remnanode-contract-probe/2.8.0")
+	request.Header.Set("User-Agent", "remnanode-contract-probe/"+version.Version)
 	if len(route.ValidRequest) != 0 {
 		request.Header.Set("Content-Type", "application/json")
 	}

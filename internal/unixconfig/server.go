@@ -43,10 +43,15 @@ type WebhookProcessor interface {
 }
 
 type Server struct {
-	Path       string
-	Token      string
-	Provider   Provider
-	Webhook    WebhookProcessor
+	Path     string
+	Token    string
+	Provider Provider
+	Webhook  WebhookProcessor
+	// Ready reports whether the public HTTPS listener has successfully bound.
+	// The private health endpoint stays unavailable until this gate opens. A
+	// nil function deliberately means "not ready" so callers cannot
+	// accidentally advertise a partially initialised node.
+	Ready      func() bool
 	httpServer *http.Server
 }
 
@@ -95,6 +100,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	listener = netutil.LimitListener(listener, maxUnixConnections)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/internal/health", s.handleHealth)
 	mux.HandleFunc("/internal/get-config", s.handleGetConfig)
 	mux.HandleFunc("/internal/webhook", s.handleWebhook)
 	s.httpServer = &http.Server{
@@ -128,6 +134,24 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 		return nil
 	}
 	return err
+}
+
+// handleHealth is intentionally served only on the owner-protected Unix
+// socket. It exposes no configuration or process details; a successful
+// response means the node's internal listener is accepting requests and the
+// public HTTPS listener has already bound successfully.
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if s.Ready == nil || !s.Ready() {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
 }
 
 type unixSocketDirectoryLock struct {

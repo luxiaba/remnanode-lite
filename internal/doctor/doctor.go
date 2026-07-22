@@ -17,8 +17,10 @@ import (
 	"github.com/luxiaba/remnanode-lite/internal/version"
 )
 
-const defaultEnvPath = "/etc/remnanode/node.env"
-const defaultUnitPath = "/etc/systemd/system/remnawave-node.service"
+const (
+	defaultSystemdUnitPath = "/usr/local/lib/systemd/system/remnanode-lite.service"
+	defaultOpenRCUnitPath  = "/etc/init.d/remnanode-lite"
+)
 
 type result struct {
 	level   string
@@ -29,7 +31,7 @@ type result struct {
 
 // Run performs deployment health checks and returns exit code 0 (ok) or 1 (errors).
 func Run(args []string) int {
-	envPath := defaultEnvPath
+	envPath := config.DefaultEnvPath
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--env" && i+1 < len(args) {
 			envPath = args[i+1]
@@ -45,7 +47,7 @@ func Run(args []string) int {
 
 	var results []result
 
-	results = append(results, checkSystemdCapNetAdmin())
+	results = append(results, checkServiceDefinition())
 	results = append(results, checkCapNetAdmin())
 
 	cfg, cfgErr := loadConfig(envPath)
@@ -108,29 +110,49 @@ func checkCapNetAdmin() result {
 		level:   "WARN",
 		title:   "CAP_NET_ADMIN",
 		detail:  "not available to the current process (nftables and NETLINK_SOCK_DIAG socket destruction are unavailable)",
-		fixHint: "Start with systemd: confirm that the unit contains AmbientCapabilities=CAP_NET_ADMIN, then run systemctl daemon-reload && systemctl restart remnawave-node",
+		fixHint: "Run diagnostics in the service context, or repair and restart remnanode-lite",
 	}
 }
 
-func checkSystemdCapNetAdmin() result {
-	data, err := os.ReadFile(defaultUnitPath)
-	if err != nil {
+func checkServiceDefinition() result {
+	return checkServiceDefinitionAt(defaultSystemdUnitPath, defaultOpenRCUnitPath)
+}
+
+func checkServiceDefinitionAt(systemdPath, openRCPath string) result {
+	if data, err := os.ReadFile(systemdPath); err == nil {
+		content := string(data)
+		if strings.Contains(content, "AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE") &&
+			strings.Contains(content, "CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE") {
+			return result{level: "OK", title: "systemd unit", detail: "the required NET_ADMIN and NET_BIND_SERVICE capabilities are configured"}
+		}
 		return result{
 			level:   "WARN",
 			title:   "systemd unit",
-			detail:  defaultUnitPath + " not found",
-			fixHint: "Run install-node.sh or upgrade.sh to install the provided unit",
+			detail:  "the required NET_ADMIN or NET_BIND_SERVICE capability is missing",
+			fixHint: "Run sudo rnlctl repair, then restart remnanode-lite.service",
 		}
 	}
-	content := string(data)
-	if strings.Contains(content, "AmbientCapabilities=CAP_NET_ADMIN") {
-		return result{level: "OK", title: "systemd unit", detail: "AmbientCapabilities=CAP_NET_ADMIN is configured"}
+
+	if data, err := os.ReadFile(openRCPath); err == nil {
+		content := string(data)
+		if strings.Contains(content, "cap_net_admin") &&
+			strings.Contains(content, "cap_net_bind_service") &&
+			strings.Contains(content, "no_new_privs=yes") {
+			return result{level: "OK", title: "OpenRC service", detail: "the required NET_ADMIN and NET_BIND_SERVICE capabilities and no_new_privs are configured"}
+		}
+		return result{
+			level:   "WARN",
+			title:   "OpenRC service",
+			detail:  "the required NET_ADMIN or NET_BIND_SERVICE capability or no_new_privs is missing",
+			fixHint: "Run rnlctl repair, then restart the remnanode-lite service",
+		}
 	}
+
 	return result{
 		level:   "WARN",
-		title:   "systemd unit",
-		detail:  "AmbientCapabilities=CAP_NET_ADMIN is missing",
-		fixHint: "sudo curl -fsSL https://raw.githubusercontent.com/luxiaba/remnanode-lite/v" + version.Version + "/deploy/remnawave-node.service -o " + defaultUnitPath + " && sudo systemctl daemon-reload && sudo systemctl restart remnawave-node",
+		title:   "service definition",
+		detail:  systemdPath + " and " + openRCPath + " were not found",
+		fixHint: "Install or repair the Native deployment with the matching release bundle",
 	}
 }
 
@@ -146,13 +168,13 @@ func checkSecret(cfg config.Config) []result {
 		level:   "ERROR",
 		title:   "Secret Key",
 		detail:  detail,
-		fixHint: "Write the complete key supplied by the Panel to /etc/remnanode/secret.key, then restart the remnawave-node service",
+		fixHint: "Write the complete key supplied by the Panel to " + config.DefaultSecretPath + ", then restart remnanode-lite",
 	}}
 }
 
 func checkXrayBinary(bin string) []result {
 	if bin == "" {
-		bin = "/usr/local/lib/remnanode/rw-core"
+		bin = config.DefaultXrayBinPath
 	}
 	info, err := os.Stat(bin)
 	if err != nil {
@@ -160,7 +182,7 @@ func checkXrayBinary(bin string) []result {
 			level:   "ERROR",
 			title:   "rw-core",
 			detail:  bin + " does not exist",
-			fixHint: "Run scripts/install-xray.sh or install-node.sh without --skip-xray",
+			fixHint: "Run rnlctl repair to restore the core from the installed release bundle",
 		}}
 	}
 	if info.Mode()&0o111 == 0 {
@@ -187,7 +209,7 @@ func checkXrayBinary(bin string) []result {
 
 func checkGeoFiles(dir string) []result {
 	if dir == "" {
-		dir = "/usr/local/share/remnanode/xray"
+		dir = config.DefaultGeoDir
 	}
 	var missing []string
 	for _, name := range []string{"geoip.dat", "geosite.dat"} {
@@ -212,13 +234,13 @@ func checkGeoFiles(dir string) []result {
 		level:   "WARN",
 		title:   "Geo data",
 		detail:  "missing " + strings.Join(missing, ", "),
-		fixHint: "Run install-xray.sh again or copy the files from an Xray release to " + dir,
+		fixHint: "Run rnlctl repair to restore the data files from the installed release bundle",
 	}}
 }
 
 func checkASNDatabase(path string) []result {
 	if path == "" {
-		path = "/usr/local/share/remnanode/asn/asn-prefixes.bin"
+		path = config.DefaultASNDBPath
 	}
 	database, err := asn.Open(path)
 	if err != nil {
@@ -226,7 +248,7 @@ func checkASNDatabase(path string) []result {
 			level:   "WARN",
 			title:   "ASN database",
 			detail:  fmt.Sprintf("%s cannot be loaded by the runtime: %v (the plugin asList shared list falls back to empty)", path, err),
-			fixHint: "Set ASN_DB_URL and rerun install-xray.sh, or generate the database with cmd/asn-builder and place it at this path",
+			fixHint: "Run rnlctl repair to restore the database from the installed release bundle",
 		}}
 	}
 	available := database.Available()
@@ -242,7 +264,7 @@ func checkASNDatabase(path string) []result {
 			level:   "WARN",
 			title:   "ASN database",
 			detail:  path + " contains no ASN entries (the plugin asList shared list falls back to empty)",
-			fixHint: "Set ASN_DB_URL and rerun install-xray.sh, or generate a replacement with cmd/asn-builder",
+			fixHint: "Run rnlctl repair to restore the database from the installed release bundle",
 		}}
 	}
 	return []result{{level: "OK", title: "ASN database", detail: path + " passed the runtime open check"}}
@@ -252,10 +274,14 @@ func checkCommand(name, purpose string) []result {
 	if path, err := exec.LookPath(name); err == nil {
 		return []result{{level: "OK", title: name, detail: path + " (" + purpose + ")"}}
 	}
+	packages := "Rocky: dnf install iproute; Debian: apt install iproute2"
+	if name == "nft" {
+		packages = "Rocky: dnf install nftables; Debian: apt install nftables"
+	}
 	return []result{{
 		level:   "WARN",
 		title:   name,
 		detail:  "not installed (" + purpose + ")",
-		fixHint: "Debian/Ubuntu: apt install iproute2 " + name,
+		fixHint: packages,
 	}}
 }
