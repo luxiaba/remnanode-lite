@@ -13,7 +13,7 @@ The container has one application supervisor: `remnanode-lite` starts and reaps 
 - a `448 MiB` hard memory limit and no additional swap;
 - `1 CPU` and `256 PIDs`;
 - a read-only root filesystem;
-- tmpfs mounts for `/run/remnanode`, `/tmp`, and `/var/log/remnanode`, capped at `48 MiB` in total;
+- tmpfs mounts for `/run/remnanode-lite`, `/tmp`, and `/var/log/remnanode-lite`, capped at `48 MiB` in total;
 - Docker `json-file` rotation of `2 MiB x 2` for Node logs;
 - no persistent data volume. Recreating the container clears runtime configuration copies and logs, and the Panel sends the Xray configuration again.
 
@@ -166,33 +166,18 @@ A `healthy` container means the Node accepted a connection on its internal Unix 
 
 It is normal for rw-core to be offline immediately after a Node restart. The Node does not restore an old Panel configuration from disk. A later Panel health cycle calls `/node/xray/start` again. Complete verification in the Panel and test representative proxy traffic.
 
-## Migrate from the official or legacy container
+## Migrate from the official container
 
-The `NODE_PORT` and complete `SECRET_KEY` used by the official `remnawave/node` image remain valid. They belong to the external Panel-to-Node contract, not to the official image's Node.js and s6 internals. The same procedure applies to an older Remnanode Lite template whose service and container were named `remnanode`. Do not run `remnanode` and `remnanode-lite` together: host networking would make them compete for the Node API and proxy inbound ports.
+The `NODE_PORT` and complete `SECRET_KEY` used by the official `remnawave/node` image remain valid. They belong to the external Panel-to-Node contract, not to the official image's Node.js and s6 internals. Do not run the old and new Nodes together: host networking would make them compete for the Node API and proxy inbound ports.
 
 New examples use `/opt/remnanode-lite` to keep the deployment directory distinct from the official container. An existing custom directory does not need to move; run every Compose command from the directory that actually contains that deployment's Compose file and optional `.env`.
 
 1. Back up the existing Compose file and record the exact official image version as the rollback target.
 2. While the old Compose definition is still available, stop it with `docker compose down`. Then replace the service definition with the complete single-file template from this page. Preserve host networking, both capabilities, resource limits, the read-only root filesystem, tmpfs mounts, and log limits.
 3. Reuse the original `NODE_PORT` and Secret through the explicit `environment` mapping, and pin the image to a real project version, `sha-*` candidate, or digest.
-4. Run `down --remove-orphans` for the new Compose project. If a container named `remnanode` still exists because it belonged to another Compose project, inspect it, confirm that it is the old Node, and remove it explicitly before starting the replacement.
 
 ```bash
 cd /opt/remnanode-lite
-docker compose down --remove-orphans
-docker container inspect remnanode \
-  --format 'name={{.Name}} image={{.Config.Image}}' 2>/dev/null || true
-```
-
-If the inspection prints a container, verify that its name and image identify the old Node. Only after that manual check, remove it with this separate command:
-
-```bash
-docker rm -f remnanode
-```
-
-Once `remnanode` is absent, start and verify the replacement:
-
-```bash
 docker compose config --quiet
 docker compose pull
 docker compose up -d --no-build --force-recreate
@@ -200,7 +185,7 @@ docker compose ps
 docker compose logs --tail=100 remnanode-lite
 ```
 
-5. Confirm that the node returns online in the Panel, rw-core starts, and representative proxy traffic works. This implementation writes rw-core logs to `/var/log/remnanode/xray.out.log` and `/var/log/remnanode/xray.err.log`, not the official container's `/var/log/xray/current`.
+4. Confirm that the node returns online in the Panel, rw-core starts, and representative proxy traffic works. This implementation writes rw-core logs to `/var/log/remnanode-lite/xray.out.log` and `/var/log/remnanode-lite/xray.err.log`, not the official container's `/var/log/xray/current`.
 
 There is no container runtime state or Xray configuration volume to migrate; the Panel sends the configuration again. To roll back, first bring down `remnanode-lite`, then restore the backed-up Compose file and exact official image. Never leave both container names running. Keep the backup until the new container has completed its observation period.
 
@@ -286,11 +271,11 @@ VERSION=X.Y.Z-rnl.N # or X.Y.Z
 BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 curl -fLO "${BASE_URL}/compose.yaml"
-curl -fLO "${BASE_URL}/remnanode.env.example"
+curl -fLO "${BASE_URL}/remnanode-lite.env.example"
 curl -fLO "${BASE_URL}/SHA256SUMS"
-grep -E ' (compose.yaml|remnanode.env.example)$' SHA256SUMS \
+grep -E ' (compose.yaml|remnanode-lite.env.example)$' SHA256SUMS \
   | sha256sum --check --strict
-mv remnanode.env.example .env
+mv remnanode-lite.env.example .env
 chmod 600 .env
 ```
 
@@ -330,11 +315,12 @@ Follow Node process logs:
 docker compose logs -f remnanode-lite
 ```
 
-Follow rw-core logs:
+Follow rw-core logs. `LOG_DIR` is supplied by the exact image, so this command
+also remains correct while operating an earlier release:
 
 ```bash
-docker exec -it remnanode-lite tail -n 50 -F /var/log/remnanode/xray.out.log
-docker exec -it remnanode-lite tail -n 50 -F /var/log/remnanode/xray.err.log
+docker exec -it remnanode-lite sh -c \
+  'tail -n 50 -F "$LOG_DIR/xray.out.log" "$LOG_DIR/xray.err.log"'
 ```
 
 Each rw-core stream rotates at `4 MiB` and retains one `.1` file inside the `28 MiB` tmpfs; recreating the container clears it. Docker limits Node `json-file` logs to approximately `2 MiB x 2`. The project does not require persistent logs. Any long-term collection must fit within the host's own disk budget.

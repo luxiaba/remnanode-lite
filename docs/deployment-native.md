@@ -2,15 +2,14 @@
 
 [Documentation home](README.md) | [Configuration](configuration.md) | [Operations](operations.md) | [Versioning](versioning.md)
 
-Native deployment runs Remnanode Lite directly under the host service manager. It is useful on small servers where Docker is unavailable or its daemon overhead is undesirable. Docker Compose remains the default path for most installations; the Native bundle is a fully supported release artifact, not a source-build shortcut.
+Native deployment runs Remnanode Lite directly under the host service manager. It is useful on small servers where Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not remove the need for a background service: `remnanode-lite` runs under systemd or OpenRC. Docker Compose remains the default path for most installations. Self-contained Native lifecycle bundles are distributed as exactly tagged GitHub Releases; the stable `2.8.0` Release includes the first bundle.
 
-Each Native bundle contains the Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, service definitions, license notices, an SPDX SBOM, and a manifest that records every file digest. The installer verifies the outer archive checksum and the bundle manifest before changing the host.
+Each published Native bundle contains the Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, service definitions, license notices, an SPDX SBOM, and a manifest that records every file digest. The installer verifies the outer archive checksum and the bundle manifest before changing the host.
 
-The first release with this self-contained Native lifecycle is planned as
-`2.8.0-rnl.1`; it is not published yet. It implements the official Node
-`2.8.0` contract. Native installation and upgrade always use an exact version
-such as `2.8.0-rnl.1` or `2.8.0`; moving names such as `latest`, `preview`, and
-`edge` are not accepted.
+The `2.8.0` bundle implements the official Node `2.8.0` contract. Native
+installation and upgrade always use an exact version from a Release that
+contains a Native lifecycle bundle, such as `2.8.0`; moving names such as
+`latest`, `preview`, and `edge` are not accepted.
 
 ## Supported hosts
 
@@ -22,7 +21,7 @@ such as `2.8.0-rnl.1` or `2.8.0`; moving names such as `latest`, `preview`, and
 | Other current systemd distributions | systemd | Expected to work; test before fleet rollout |
 | OpenRC with writable cgroup v2 controllers | OpenRC | Experimental |
 
-Release bundles are available for Linux `amd64` and `arm64`. The maintained resource profile limits the service to `448 MiB RAM`, no additional service swap, `1 CPU`, and `256 tasks`, leaving room for the host on a `512 MiB / 1 vCPU / 2 GB` machine.
+Native lifecycle bundles are built for Linux `amd64` and `arm64`. The maintained resource profile limits the service to `448 MiB RAM`, no additional service swap, `1 CPU`, and `256 tasks`, leaving room for the host on a `512 MiB / 1 vCPU / 2 GB` machine.
 
 OpenRC support is intentionally narrower. It requires `supervise-daemon`, `checkpath`, `rc-update`, cgroup v2, writable memory/CPU/PID controllers, and `cgroup.kill`. The service refuses to start when those limits cannot be applied. Treat OpenRC as an evaluation path until it has been tested on the exact distribution and boot environment you plan to run.
 
@@ -34,7 +33,7 @@ Run the installer as root on Linux. Before an active installation, the host need
 
 - systemd, or the experimental OpenRC environment described above;
 - `nft` from nftables and `ss` from iproute2;
-- `useradd` and `groupadd` when the dedicated `remnanode` account does not already exist;
+- `useradd` and `groupadd` when the dedicated `remnanode-lite` account does not already exist;
 - a trusted CA store and either `curl` or `wget` for an online install;
 - GNU tar and gzip to unpack a release bundle;
 - the Node port open from the Panel, plus any proxy inbound ports sent by the Panel.
@@ -55,11 +54,10 @@ Keep the system clock synchronized. mTLS and JWT authentication can fail when th
 ## Install an exact release
 
 Set the version explicitly, then download the installer and checksum list from
-the same published GitHub Release. The example uses the planned
-`2.8.0-rnl.1`; run it only after that prerelease is available:
+the same published GitHub Release. The example uses the stable `2.8.0` bundle:
 
 ```bash
-VERSION=2.8.0-rnl.1
+VERSION=2.8.0
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
@@ -135,7 +133,7 @@ On the target host:
 
 ```bash
 sudo sh ./install.sh \
-  --bundle ./remnanode-lite_2.8.0-rnl.1_linux_amd64.tar.gz \
+  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
   --port 38329
 ```
 
@@ -172,7 +170,7 @@ An extracted bundle can install itself with `sudo ./install.sh`, but an archive 
 
 `rnlctl` is a separate root-owned regular file, not a symlink into the active generation. This keeps the repair tool available while generation links are being inspected or replaced.
 
-The service runs as the non-login `remnanode` user and group. The installer records whether it created each account object; `uninstall --purge` removes only objects it owns and refuses to remove an identity that has changed.
+The service runs as the non-login `remnanode-lite` user and group. The installer records whether it created each account object; `uninstall --purge` removes only objects it owns and refuses to remove an identity that has changed.
 
 The service name is `remnanode-lite` on both managers:
 
@@ -284,9 +282,9 @@ Repair restores the committed generation, service definitions, links, ownership,
 
 ```bash
 sudo rnlctl repair \
-  --bundle ./remnanode-lite_2.8.0-rnl.1_linux_amd64.tar.gz \
+  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
   --sha256 '<64-character-sha256>' \
-  --expected-version 2.8.0-rnl.1
+  --expected-version 2.8.0
 ```
 
 The supplied bundle must match an installed generation identity. After repair, run `status --json`, check logs, confirm the Panel connection, and test traffic.
@@ -303,7 +301,7 @@ secret_tmp="$(mktemp)"
 printf '%s\n' 'PASTE_THE_NEW_COMPLETE_SECRET_KEY' >"$secret_tmp"
 remnanode-lite validate-secret <"$secret_tmp"
 
-sudo install -o root -g remnanode -m 0640 \
+sudo install -o root -g remnanode-lite -m 0640 \
   "$secret_tmp" /etc/remnanode-lite/secret.key.new
 sudo mv -f /etc/remnanode-lite/secret.key.new /etc/remnanode-lite/secret.key
 rm -f "$secret_tmp"
@@ -329,11 +327,11 @@ To remove managed configuration and installer metadata as well, use the explicit
 sudo rnlctl uninstall --purge --yes
 ```
 
-Purge removes the `remnanode` user or group only when lifecycle state proves that this installer created it and its identity is unchanged. It does not remove nftables packages, iproute2, CA certificates, host firewall policy, sysctl settings, or unrelated Xray installations.
+Purge removes the `remnanode-lite` user or group only when lifecycle state proves that this installer created it and its identity is unchanged. It does not remove nftables packages, iproute2, CA certificates, host firewall policy, sysctl settings, or unrelated Xray installations.
 
 ## Security notes
 
-- Keep `/etc/remnanode-lite` owned by `root:remnanode` with directory mode `0750`; `node.env` and `secret.key` use `0640`.
+- Keep `/etc/remnanode-lite` owned by `root:remnanode-lite` with directory mode `0750`; `node.env` and `secret.key` use `0640`.
 - Do not put a non-empty `SECRET_KEY` in `node.env`. Native lifecycle management requires `SECRET_KEY_FILE=/etc/remnanode-lite/secret.key`.
 - The service receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. Do not replace the unit with a root service to avoid fixing a capability error.
 - Restrict the Node API port to Panel addresses when your network permits it. Open proxy inbound ports according to the Panel configuration.

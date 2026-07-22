@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/configuration.md; source-sha256=c10bfdd11b2d9262241435318d1656395c7155502694405cdacbe96046101df6 -->
+<!-- translation: locale=ru; source=docs/configuration.md; source-sha256=8413f3e87bdafa768f4e28d360fb369e781b1689cd197bf31e57ac759bf08693 -->
 
 # Справочник конфигурации
 
@@ -74,7 +74,7 @@ SECRET_KEY=
 SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 ```
 
-После проверки installer пишет файл как `root:remnanode 0640`. При установке или активации используйте `--secret-file`; не передавайте само значение аргументом.
+После проверки installer пишет файл как `root:remnanode-lite 0640`. При установке или активации используйте `--secret-file`; не передавайте само значение аргументом.
 
 ## Переменные Compose
 
@@ -91,15 +91,17 @@ SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 
 Приоритет: shell, затем `.env`, затем `${NAME:-fallback}` в YAML. Для проверки без печати развёрнутого Secret выполните `docker compose config --quiet`.
 
-Следующие пути являются внутренним ABI Docker-образа и намеренно отличаются от Native:
+Следующие пути находятся во внутренней файловой системе Docker-образа. Они используют то же имя проекта, что и Native, но не являются путями хоста:
 
 ```text
-XRAY_BIN=/usr/local/lib/remnanode/rw-core
-GEO_DIR=/usr/local/share/remnanode/xray
-ASN_DB_PATH=/usr/local/share/remnanode/asn/asn-prefixes.bin
-LOG_DIR=/var/log/remnanode
-INTERNAL_SOCKET_PATH=/run/remnanode/internal.sock
+XRAY_BIN=/usr/local/lib/remnanode-lite/rw-core
+GEO_DIR=/usr/local/share/remnanode-lite/xray
+ASN_DB_PATH=/usr/local/share/remnanode-lite/asn/asn-prefixes.bin
+LOG_DIR=/var/log/remnanode-lite
+INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 ```
+
+Они принадлежат опубликованному образу и не конфликтуют с Native-layout хоста. Поддерживаемые tmpfs Compose и команды журналов уже соответствуют им; при override сохраняйте это соответствие.
 
 ## Native `node.env`
 

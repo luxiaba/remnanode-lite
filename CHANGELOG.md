@@ -4,13 +4,11 @@
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and focuses on changes that matter to users and operators. GitHub Releases provide the full diff for each published version.
 
-## [2.8.0-rnl.1] - 2026-07-22
+## [2.8.0] - 2026-07-22
 
-This prerelease keeps the official Node contract at `2.8.0` and introduces the
-self-contained Native Linux distribution. It will publish as a GitHub
-prerelease, an exact `2.8.0-rnl.1` image and bundle set, and the moving GHCR
-`preview` channel. It does not replace the stable `2.8.0` Release or advance
-GHCR/GitHub `latest`.
+This stable release implements the official Node `2.8.0` contract and adds the
+self-contained Native Linux distribution. It publishes exact `2.8.0` images
+and bundles and advances the stable GHCR and GitHub `latest` channels.
 
 ### Added
 
@@ -64,7 +62,7 @@ GHCR/GitHub `latest`.
   installer created and refuses deletion when an identity no longer matches
   the recorded account.
 
-## [2.8.0] - 2026-07-21
+## Pre-release implementation history
 
 This entry covers the first independent release line of
 `luxiaba/remnanode-lite`. It implements the official Node 2.8.0 contract.
@@ -106,7 +104,7 @@ Operational test data is intentionally not stored in the source repository.
 - Strip the Panel Secret, Secret-file path, Node configuration path, and caller-supplied internal token from the rw-core child environment. Only required resource paths and a controlled internal webhook token are reintroduced; that token is random by default for each start.
 - Require JWT headers and claims to contain exactly one complete JSON value. A correctly signed token with a second trailing JSON value is rejected.
 - Require TLS 1.3 or newer externally and disable HTTP/2. Invalid JWTs, unknown routes, and unsupported methods destroy the connection in line with the official behavior.
-- Run native systemd and OpenRC services as the dedicated `remnanode` user with only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. The systemd unit also applies capability bounding, sandboxing, 448 MiB/no-swap/1 CPU, and 256-task limits.
+- Run native systemd and OpenRC services as the dedicated `remnanode-lite` user with only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. The systemd unit also applies capability bounding, sandboxing, 448 MiB/no-swap/1 CPU, and 256-task limits.
 - Verify SHA-256, structure, and version before writing Release archives, rw-core, custom core, or ASN assets. The audited digest for the pinned rw-core version cannot be overridden, and GitHub Actions are pinned to complete commit SHAs.
 - Start systemd and OpenRC from an empty environment. Go reads `node.env` and the Secret through the same bounded file descriptor with `O_NOFOLLOW|O_NONBLOCK`; symlinks, FIFOs, devices, oversized files, and files changed during reading fail before startup.
 - Reject unsafe ownership, permissions, symlinks, and hard links in managed paths. Log helpers, rw-core, geo files, and ASN data use same-directory staging and atomic replacement; the outer upgrade transaction backs up and verifies service-file changes.

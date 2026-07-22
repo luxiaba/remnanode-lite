@@ -16,7 +16,7 @@
 
 </div>
 
-Remnanode Lite runs a Remnawave-compatible Node on Linux. It receives configuration from Remnawave Panel, supervises rw-core, manages users and plugin rules, and reports system and traffic statistics. Docker images and Native Linux bundles both include the exact rw-core and runtime data selected for that release.
+Remnanode Lite runs a Remnawave-compatible Node on Linux. It receives configuration from Remnawave Panel, supervises rw-core, manages users and plugin rules, and reports system and traffic statistics. Each Docker image includes the exact rw-core and runtime data selected for that release; published Native lifecycle bundles use the same release-selected assets.
 
 The maintained deployment profile is designed for a server with **512 MiB RAM, 1 vCPU, and 2 GB of disk**. Images are available for both `linux/amd64` and `linux/arm64`.
 
@@ -31,24 +31,39 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 - Includes the same maintained low-memory profile for container and Native services on 512 MiB servers.
 - Supports live user updates, statistics, connection management, and the official plugin rule formats.
 - Publishes multi-architecture images to GHCR with SBOM, provenance, and build attestations.
-- Publishes verified `amd64` and `arm64` Native bundles with transactional install, upgrade, rollback, and repair through `rnlctl`.
+- Native Linux support provides transactional install, upgrade, rollback, and repair through `rnlctl`.
 - Uses one Compose file for Docker deployment. No source tree or persistent data volume is required, and `.env` remains optional.
+
+## Choose a deployment mode
+
+| | Docker Compose | Native Linux |
+| --- | --- | --- |
+| Choose it when | Docker Engine with Compose v2 is already available. This is the default path. | Docker cannot be installed, or its daemon and container-runtime overhead are not appropriate for the host. |
+| Installation | Download the Release Compose asset and set the Panel Secret in `.env` or an intentional inline mapping. | Download one exact Release, verify `install.sh`, and run the installer as root. |
+| Update and rollback | Select an exact image tag or digest, then pull and recreate the container; restore the previous image reference to roll back. | Use `rnlctl upgrade --to VERSION` and `rnlctl rollback`; one verified previous generation is retained. |
+| Host service | Requires the Docker Engine daemon and its container runtime. | Does not require the Docker Engine daemon or a container runtime, but `remnanode-lite` still runs as a systemd or OpenRC background service. |
+| Version reference | Exact tag or manifest digest is recommended; moving `latest` and `preview` are opt-in channels. | Exact `X.Y.Z` or `X.Y.Z-rnl.N` Releases only; moving image channels are never resolved. |
+
+Both paths use host networking and require `NET_ADMIN`. Do not run them beside another Node that uses the same Panel or proxy ports.
 
 ## Docker quick start
 
 You need Docker Engine with Compose v2, a Node created in Remnawave Panel, and the complete Secret Key for that Node. The port must be reachable from the Panel. Commands below assume a root shell; use `sudo` where needed.
 
-Download the Compose file and environment template from the latest stable Release:
+Download the Compose file and environment template from one exact stable Release:
 
 ```bash
 mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
 
+VERSION=2.8.0
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
 curl -fL \
-  https://github.com/luxiaba/remnanode-lite/releases/latest/download/docker-compose.single-file.yaml \
+  "${BASE}/docker-compose.single-file.yaml" \
   -o docker-compose.yaml
 curl -fL \
-  https://github.com/luxiaba/remnanode-lite/releases/latest/download/remnanode.env.example \
+  "${BASE}/remnanode-lite.env.example" \
   -o .env
 
 chmod 600 docker-compose.yaml .env
@@ -90,15 +105,14 @@ The official container's `NODE_PORT` and `SECRET_KEY` can be reused when migrati
 
 ## Native Linux
 
-Use the Native bundle when Docker is unavailable or too expensive for the host. Rocky Linux 9 with systemd is the primary target; Rocky Linux 8 and Debian 12 are compatible. OpenRC support is experimental and requires a working cgroup v2 setup.
+Use the Native bundle when Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not mean that the Node has no background service: `remnanode-lite` runs directly under systemd or OpenRC. Rocky Linux 9 with systemd is the primary target; Rocky Linux 8 and Debian 12 are compatible. OpenRC support is experimental and requires a working cgroup v2 setup.
 
-Native installs never follow a moving channel. The first Native release is
-planned as `2.8.0-rnl.1` and is not published yet. Once that exact GitHub
-prerelease is available, download `install.sh` and `SHA256SUMS`, verify the
-installer, and name the release explicitly:
+Native installs never follow a moving channel. Download `install.sh` and
+`SHA256SUMS` from the same exact GitHub Release, verify the installer, and name
+the release explicitly:
 
 ```bash
-VERSION=2.8.0-rnl.1
+VERSION=2.8.0
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
@@ -116,11 +130,10 @@ sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
 
-The first planned release using this Native lifecycle is `2.8.0-rnl.1`,
-implementing contract `2.8.0`. It will be a GitHub prerelease and will not move
-the stable `latest` channel. Read the [Native Linux guide](docs/deployment-native.md)
-before fleet rollout; it covers prerequisites, unattended and offline
-installation, exact-version upgrades, rollback, repair, and uninstall.
+The `2.8.0` Native bundle implements contract `2.8.0`. Read the [Native Linux
+guide](docs/deployment-native.md) before fleet rollout; it covers prerequisites,
+unattended and offline installation, exact-version upgrades, rollback, repair,
+and uninstall.
 
 ## Docker Compose environment variables
 
@@ -154,9 +167,8 @@ docker compose logs --tail=100 -f remnanode-lite
 Follow rw-core output and errors:
 
 ```bash
-docker exec -it remnanode-lite tail -n 50 -F \
-  /var/log/remnanode/xray.out.log \
-  /var/log/remnanode/xray.err.log
+docker exec -it remnanode-lite sh -c \
+  'tail -n 50 -F "$LOG_DIR/xray.out.log" "$LOG_DIR/xray.err.log"'
 ```
 
 Check the running version:
@@ -193,7 +205,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 
 | Item | Current baseline |
 | --- | --- |
-| Next Native preview (planned) | `2.8.0-rnl.1` |
+| Native Linux bundle | `2.8.0` |
 | Node contract | `2.8.0` |
 | rw-core | `v26.6.27` |
 | Platforms | `linux/amd64`, `linux/arm64` |

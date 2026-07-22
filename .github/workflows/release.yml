@@ -107,15 +107,27 @@ jobs:
           candidate_commit="$GITHUB_SHA"
           candidate_tag="${REGISTRY}/${IMAGE_NAME}:sha-${candidate_commit}"
           candidate_digest=
+          inspect_error="$(mktemp)"
+          trap 'rm -f "$inspect_error"' EXIT
           for attempt in $(seq 1 30); do
-            candidate_digest="$(docker buildx imagetools inspect \
-              --format '{{.Manifest.Digest}}' "$candidate_tag" 2>/dev/null \
-              | tr -d '\r\n' || true)"
-            if printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
-              break
+            if candidate_digest="$(docker buildx imagetools inspect \
+              --format '{{.Manifest.Digest}}' "$candidate_tag" \
+              2>"$inspect_error" | tr -d '\r\n')"; then
+              if printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+                break
+              fi
+              echo "candidate lookup returned an invalid digest for $candidate_tag: ${candidate_digest:-<empty>}" >&2
+              exit 1
             fi
-            echo "waiting for attested main candidate $candidate_tag ($attempt/30)"
-            sleep 20
+            if ! grep -Eqi 'not found|manifest unknown|name unknown|404' "$inspect_error"; then
+              cat "$inspect_error" >&2
+              echo "could not inspect main candidate $candidate_tag" >&2
+              exit 1
+            fi
+            if [ "$attempt" -lt 30 ]; then
+              echo "waiting for attested main candidate $candidate_tag ($attempt/30)"
+              sleep 20
+            fi
           done
           printf '%s\n' "$candidate_digest" | grep -Eq '^sha256:[0-9a-f]{64}$' || {
             echo "attested main candidate did not become available: $candidate_tag" >&2
@@ -231,7 +243,7 @@ jobs:
             deploy/compose.single-file.yaml >dist/docker-compose.single-file.yaml
           sed \
             "s|^REMNANODE_IMAGE=.*$|REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${RELEASE_VERSION}|" \
-            .env.example >dist/remnanode.env.example
+            .env.example >dist/remnanode-lite.env.example
 
           (
             cd dist
@@ -241,7 +253,7 @@ jobs:
               "remnanode-lite_${RELEASE_VERSION}_linux_arm64.tar.gz" \
               compose.yaml \
               docker-compose.single-file.yaml \
-              remnanode.env.example \
+              remnanode-lite.env.example \
               >SHA256SUMS
             sha256sum --check --strict SHA256SUMS
           )
@@ -308,7 +320,7 @@ jobs:
             dist/remnanode-lite_${{ steps.release-metadata.outputs.version }}_linux_arm64.tar.gz
             dist/compose.yaml
             dist/docker-compose.single-file.yaml
-            dist/remnanode.env.example
+            dist/remnanode-lite.env.example
             dist/SHA256SUMS
 
       - name: Verify the complete draft
@@ -413,18 +425,7 @@ jobs:
           [ "$(jq -r .draft <<<"$published")" = false ]
           [ "$(jq -r .prerelease <<<"$published")" = "$PRERELEASE" ]
 
-          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
-          if [ "$MAKE_LATEST" = true ]; then
-            [ "$latest_tag" = "$GITHUB_REF_NAME" ] || {
-              echo "latest release is ${latest_tag:-<none>}, expected $GITHUB_REF_NAME" >&2
-              exit 1
-            }
-          else
-            [ "$latest_tag" != "$GITHUB_REF_NAME" ] || {
-              echo "preview release must not become GitHub latest" >&2
-              exit 1
-            }
-          fi
+          bash scripts/verify-release-latest.sh "$GITHUB_REF_NAME" "$MAKE_LATEST"
 
   promote-channel:
     needs: [prepare-release, publish-container, finalize-release]
@@ -582,17 +583,6 @@ jobs:
           SOURCE_DIGEST: ${{ steps.release-image.outputs.digest }}
         run: |
           set -euo pipefail
-          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
-          if [ "$MAKE_LATEST" = true ]; then
-            [ "$latest_tag" = "$RELEASE_TAG" ] || {
-              echo "GitHub latest is ${latest_tag:-<none>}, expected $RELEASE_TAG" >&2
-              exit 1
-            }
-          else
-            [ "$latest_tag" != "$RELEASE_TAG" ] || {
-              echo "preview release must not be GitHub latest" >&2
-              exit 1
-            }
-          fi
+          bash scripts/verify-release-latest.sh "$RELEASE_TAG" "$MAKE_LATEST"
           bash scripts/promote-image-tag.sh mutable \
             "${REGISTRY}/${IMAGE_NAME}" "$SOURCE_DIGEST" "$CHANNEL"

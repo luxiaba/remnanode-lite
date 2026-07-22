@@ -16,7 +16,10 @@ import (
 	"time"
 )
 
-const maxHostCommandOutput = 64 << 10
+const (
+	maxHostCommandOutput = 64 << 10
+	managedAccountName   = "remnanode-lite"
+)
 
 type CommandExecutor interface {
 	Run(context.Context, string, ...string) ([]byte, error)
@@ -98,18 +101,18 @@ func (host *LinuxHost) Preflight(_ context.Context, activating bool, paths Paths
 			return fmt.Errorf("OpenRC experimental support requires cgroup v2")
 		}
 	}
-	if account, err := user.Lookup("remnanode"); err == nil {
+	if account, err := user.Lookup(managedAccountName); err == nil {
 		if _, identityErr := validateManagedAccount(account, paths.ApplicationState, false, false); identityErr != nil {
 			return identityErr
 		}
 	} else {
 		if _, unknown := err.(user.UnknownUserError); !unknown {
-			return fmt.Errorf("look up remnanode account: %w", err)
+			return fmt.Errorf("look up %s account: %w", managedAccountName, err)
 		}
 		commands := []string{"useradd", "userdel"}
-		if _, groupErr := user.LookupGroup("remnanode"); groupErr != nil {
+		if _, groupErr := user.LookupGroup(managedAccountName); groupErr != nil {
 			if _, unknownGroup := groupErr.(user.UnknownGroupError); !unknownGroup {
-				return fmt.Errorf("look up remnanode group: %w", groupErr)
+				return fmt.Errorf("look up %s group: %w", managedAccountName, groupErr)
 			}
 			commands = append(commands, "groupadd", "groupdel")
 		}
@@ -194,7 +197,7 @@ func (host *LinuxHost) RemoveAccount(ctx context.Context, expected ManagedAccoun
 	if !expected.UserCreated && !expected.GroupCreated {
 		return nil
 	}
-	account, err := user.Lookup("remnanode")
+	account, err := user.Lookup(managedAccountName)
 	if err != nil {
 		if _, unknown := err.(user.UnknownUserError); unknown {
 			return nil
@@ -206,25 +209,25 @@ func (host *LinuxHost) RemoveAccount(ctx context.Context, expected ManagedAccoun
 		return err
 	}
 	if actual.UID != expected.UID || actual.GID != expected.GID || actual.Shell != expected.Shell {
-		return fmt.Errorf("refusing to remove remnanode account because its identity changed")
+		return fmt.Errorf("refusing to remove %s account because its identity changed", managedAccountName)
 	}
 	userdel, err := host.requireExecutable("userdel")
 	if err != nil {
 		return err
 	}
 	if expected.UserCreated {
-		if _, err := host.executor.Run(ctx, userdel, "remnanode"); err != nil {
-			return fmt.Errorf("remove remnanode account: %w", err)
+		if _, err := host.executor.Run(ctx, userdel, managedAccountName); err != nil {
+			return fmt.Errorf("remove %s account: %w", managedAccountName, err)
 		}
 	}
-	group, err := user.LookupGroup("remnanode")
+	group, err := user.LookupGroup(managedAccountName)
 	if expected.GroupCreated && err == nil && group.Gid == expected.GID {
 		groupdel, findErr := host.requireExecutable("groupdel")
 		if findErr != nil {
 			return findErr
 		}
-		if _, deleteErr := host.executor.Run(ctx, groupdel, "remnanode"); deleteErr != nil {
-			return fmt.Errorf("remove remnanode group: %w", deleteErr)
+		if _, deleteErr := host.executor.Run(ctx, groupdel, managedAccountName); deleteErr != nil {
+			return fmt.Errorf("remove %s group: %w", managedAccountName, deleteErr)
 		}
 	}
 	return nil
@@ -234,7 +237,7 @@ func (host *LinuxHost) PreflightRemoveAccount(_ context.Context, expected Manage
 	if !expected.UserCreated && !expected.GroupCreated {
 		return nil
 	}
-	account, err := user.Lookup("remnanode")
+	account, err := user.Lookup(managedAccountName)
 	if err != nil {
 		if _, unknown := err.(user.UnknownUserError); unknown {
 			return nil
@@ -246,7 +249,7 @@ func (host *LinuxHost) PreflightRemoveAccount(_ context.Context, expected Manage
 		return err
 	}
 	if actual.UID != expected.UID || actual.GID != expected.GID || actual.Shell != expected.Shell {
-		return fmt.Errorf("refusing to remove remnanode account because its identity changed")
+		return fmt.Errorf("refusing to remove %s account because its identity changed", managedAccountName)
 	}
 	var commands []string
 	if expected.UserCreated {
@@ -426,17 +429,17 @@ func (host *LinuxHost) WaitHealthy(ctx context.Context, binary, socketPath strin
 }
 
 func (host *LinuxHost) ApplyOwnership(_ context.Context, paths Paths) error {
-	account, err := user.Lookup("remnanode")
+	account, err := user.Lookup(managedAccountName)
 	if err != nil {
-		return fmt.Errorf("look up remnanode account: %w", err)
+		return fmt.Errorf("look up %s account: %w", managedAccountName, err)
 	}
 	uid, err := strconv.Atoi(account.Uid)
 	if err != nil {
-		return fmt.Errorf("parse remnanode uid: %w", err)
+		return fmt.Errorf("parse %s uid: %w", managedAccountName, err)
 	}
 	gid, err := strconv.Atoi(account.Gid)
 	if err != nil {
-		return fmt.Errorf("parse remnanode gid: %w", err)
+		return fmt.Errorf("parse %s gid: %w", managedAccountName, err)
 	}
 	for _, directory := range []string{paths.ApplicationState, paths.LogDirectory, paths.RuntimeDirectory} {
 		if err := os.Chown(directory, uid, gid); err != nil {
@@ -475,22 +478,22 @@ func (host *LinuxHost) ApplyOwnership(_ context.Context, paths Paths) error {
 }
 
 func (host *LinuxHost) ensureAccount(ctx context.Context, home string) (ManagedAccount, error) {
-	if account, err := user.Lookup("remnanode"); err == nil {
+	if account, err := user.Lookup(managedAccountName); err == nil {
 		return validateManagedAccount(account, home, false, false)
 	} else if _, unknown := err.(user.UnknownUserError); !unknown {
-		return ManagedAccount{}, fmt.Errorf("look up remnanode account: %w", err)
+		return ManagedAccount{}, fmt.Errorf("look up %s account: %w", managedAccountName, err)
 	}
 	groupadd, err := host.requireExecutable("groupadd")
 	if err != nil {
 		return ManagedAccount{}, err
 	}
 	groupCreated := false
-	if _, lookupErr := user.LookupGroup("remnanode"); lookupErr != nil {
+	if _, lookupErr := user.LookupGroup(managedAccountName); lookupErr != nil {
 		if _, unknown := lookupErr.(user.UnknownGroupError); !unknown {
-			return ManagedAccount{}, fmt.Errorf("look up remnanode group: %w", lookupErr)
+			return ManagedAccount{}, fmt.Errorf("look up %s group: %w", managedAccountName, lookupErr)
 		}
-		if _, err := host.executor.Run(ctx, groupadd, "--system", "remnanode"); err != nil {
-			return ManagedAccount{}, fmt.Errorf("create remnanode group: %w", err)
+		if _, err := host.executor.Run(ctx, groupadd, "--system", managedAccountName); err != nil {
+			return ManagedAccount{}, fmt.Errorf("create %s group: %w", managedAccountName, err)
 		}
 		groupCreated = true
 	}
@@ -502,16 +505,16 @@ func (host *LinuxHost) ensureAccount(ctx context.Context, home string) (ManagedA
 	if !host.pathExists(shell) && host.pathExists("/sbin/nologin") {
 		shell = "/sbin/nologin"
 	}
-	if _, err := host.executor.Run(ctx, useradd, "--system", "--gid", "remnanode", "--home-dir", home, "--no-create-home", "--shell", shell, "remnanode"); err != nil {
+	if _, err := host.executor.Run(ctx, useradd, "--system", "--gid", managedAccountName, "--home-dir", home, "--no-create-home", "--shell", shell, managedAccountName); err != nil {
 		return ManagedAccount{}, errors.Join(
-			fmt.Errorf("create remnanode account: %w", err),
+			fmt.Errorf("create %s account: %w", managedAccountName, err),
 			host.cleanupCreatedAccount(ctx, false, groupCreated),
 		)
 	}
-	account, err := user.Lookup("remnanode")
+	account, err := user.Lookup(managedAccountName)
 	if err != nil {
 		return ManagedAccount{}, errors.Join(
-			fmt.Errorf("look up newly created remnanode account: %w", err),
+			fmt.Errorf("look up newly created %s account: %w", managedAccountName, err),
 			host.cleanupCreatedAccount(ctx, true, groupCreated),
 		)
 	}
@@ -528,16 +531,16 @@ func (host *LinuxHost) cleanupCreatedAccount(ctx context.Context, userCreated, g
 		userdel, err := host.requireExecutable("userdel")
 		if err != nil {
 			errs = append(errs, err)
-		} else if _, err := host.executor.Run(ctx, userdel, "remnanode"); err != nil {
-			errs = append(errs, fmt.Errorf("roll back remnanode account: %w", err))
+		} else if _, err := host.executor.Run(ctx, userdel, managedAccountName); err != nil {
+			errs = append(errs, fmt.Errorf("roll back %s account: %w", managedAccountName, err))
 		}
 	}
 	if groupCreated {
 		groupdel, err := host.requireExecutable("groupdel")
 		if err != nil {
 			errs = append(errs, err)
-		} else if _, err := host.executor.Run(ctx, groupdel, "remnanode"); err != nil {
-			errs = append(errs, fmt.Errorf("roll back remnanode group: %w", err))
+		} else if _, err := host.executor.Run(ctx, groupdel, managedAccountName); err != nil {
+			errs = append(errs, fmt.Errorf("roll back %s group: %w", managedAccountName, err))
 		}
 	}
 	return errors.Join(errs...)
@@ -545,20 +548,20 @@ func (host *LinuxHost) cleanupCreatedAccount(ctx context.Context, userCreated, g
 
 func validateManagedAccount(account *user.User, expectedHome string, userCreated, groupCreated bool) (ManagedAccount, error) {
 	if account.Uid == "0" || account.Uid == "" || account.Gid == "" {
-		return ManagedAccount{}, fmt.Errorf("remnanode must be a non-root system account")
+		return ManagedAccount{}, fmt.Errorf("%s must be a non-root system account", managedAccountName)
 	}
 	if account.HomeDir != expectedHome {
-		return ManagedAccount{}, fmt.Errorf("remnanode home is %q, want %q", account.HomeDir, expectedHome)
+		return ManagedAccount{}, fmt.Errorf("%s home is %q, want %q", managedAccountName, account.HomeDir, expectedHome)
 	}
-	if filepath.Base(account.Username) != "remnanode" {
-		return ManagedAccount{}, fmt.Errorf("unexpected remnanode account name %q", account.Username)
+	if filepath.Base(account.Username) != managedAccountName {
+		return ManagedAccount{}, fmt.Errorf("unexpected %s account name %q", managedAccountName, account.Username)
 	}
-	group, err := user.LookupGroup("remnanode")
+	group, err := user.LookupGroup(managedAccountName)
 	if err != nil {
-		return ManagedAccount{}, fmt.Errorf("look up remnanode group: %w", err)
+		return ManagedAccount{}, fmt.Errorf("look up %s group: %w", managedAccountName, err)
 	}
 	if group.Gid != account.Gid {
-		return ManagedAccount{}, fmt.Errorf("remnanode primary gid %s does not match remnanode group gid %s", account.Gid, group.Gid)
+		return ManagedAccount{}, fmt.Errorf("%s primary gid %s does not match %s group gid %s", managedAccountName, account.Gid, managedAccountName, group.Gid)
 	}
 	shell := account.HomeDir
 	// os/user does not expose the login shell on every platform. Read the
@@ -566,14 +569,14 @@ func validateManagedAccount(account *user.User, expectedHome string, userCreated
 	if raw, err := os.ReadFile("/etc/passwd"); err == nil {
 		for _, line := range strings.Split(string(raw), "\n") {
 			fields := strings.Split(line, ":")
-			if len(fields) == 7 && fields[0] == "remnanode" {
+			if len(fields) == 7 && fields[0] == managedAccountName {
 				shell = fields[6]
 				break
 			}
 		}
 	}
 	if filepath.Base(shell) != "nologin" {
-		return ManagedAccount{}, fmt.Errorf("remnanode login shell %q is not nologin", shell)
+		return ManagedAccount{}, fmt.Errorf("%s login shell %q is not nologin", managedAccountName, shell)
 	}
 	return ManagedAccount{UserCreated: userCreated, GroupCreated: groupCreated, UID: account.Uid, GID: account.Gid, Home: account.HomeDir, Shell: shell}, nil
 }

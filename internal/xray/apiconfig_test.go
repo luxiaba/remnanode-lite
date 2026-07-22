@@ -195,7 +195,7 @@ func TestPrepareRuntimeConfigRejectsUnsupportedJSONValue(t *testing.T) {
 	prepared, err := prepareRuntimeConfig(
 		map[string]any{"unsupported": make(chan struct{})},
 		ConfigHash{},
-		"remnanode-xtls-test",
+		"remnanode-lite-xtls-test",
 		TorrentBlockerOptions{},
 	)
 	if err == nil {
@@ -233,7 +233,7 @@ func TestPrepareRuntimeConfigRejectsOversizedJSON(t *testing.T) {
 	prepared, err := prepareRuntimeConfig(
 		map[string]any{"oversized": strings.Repeat("x", maxPreparedRuntimeConfigBytes)},
 		ConfigHash{},
-		"remnanode-xtls-test",
+		"remnanode-lite-xtls-test",
 		TorrentBlockerOptions{},
 	)
 	if err == nil {
@@ -257,7 +257,7 @@ func TestGenerateAPIConfigDedupesAPIRoutingRule(t *testing.T) {
 				map[string]any{"outboundTag": "direct"},
 			},
 		},
-	}, "remnanode-xtls-test", TorrentBlockerOptions{})
+	}, "remnanode-lite-xtls-test", TorrentBlockerOptions{})
 
 	routing := config["routing"].(map[string]any)
 	apiRules := 0
@@ -283,7 +283,7 @@ func TestGenerateAPIConfigTorrentBlocker(t *testing.T) {
 				map[string]any{"ruleTag": "custom", "domain": []any{"example.com"}},
 			},
 		},
-	}, "remnanode-xtls-test", TorrentBlockerOptions{
+	}, "remnanode-lite-xtls-test", TorrentBlockerOptions{
 		Enabled:         true,
 		IncludeRuleTags: []string{"custom"},
 		SocketPath:      "/run/test.sock",

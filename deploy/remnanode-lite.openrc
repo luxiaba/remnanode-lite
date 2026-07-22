@@ -9,12 +9,12 @@ supervisor=supervise-daemon
 command="/usr/bin/env"
 # The installer owns /usr/local/bin/remnanode-lite as a root-owned stable
 # symlink into the atomically selected runtime generation.
-command_args="-i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode-lite USER=remnanode LOGNAME=remnanode REMNANODE_ENV=/etc/remnanode-lite/node.env /usr/local/bin/remnanode-lite"
-command_user="remnanode:remnanode"
+command_args="-i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode-lite USER=remnanode-lite LOGNAME=remnanode-lite REMNANODE_ENV=/etc/remnanode-lite/node.env /usr/local/bin/remnanode-lite"
+command_user="remnanode-lite:remnanode-lite"
 directory="/var/lib/remnanode-lite"
-# The supervisor creates this PID file before dropping to remnanode. Keep it
+# The supervisor creates this PID file before dropping to remnanode-lite. Keep it
 # outside the service-writable runtime directory so the daemon cannot replace
-# it. output_log/error_log are intentionally created later as remnanode.
+# it. output_log/error_log are intentionally created later as remnanode-lite.
 pidfile="/run/remnanode-lite-supervise.pid"
 output_log="/var/log/remnanode-lite/openrc.log"
 error_log="/var/log/remnanode-lite/openrc.err.log"
@@ -49,7 +49,7 @@ start_pre() {
 		|| { eerror "node.env must be a readable regular non-symlink file"; return 1; }
 	[ -x /usr/bin/env ] || { eerror "missing executable /usr/bin/env"; return 1; }
 	[ -x /usr/local/bin/remnanode-lite ] || { eerror "missing executable /usr/local/bin/remnanode-lite"; return 1; }
-	checkpath -d -o remnanode:remnanode -m 0750 \
+	checkpath -d -o remnanode-lite:remnanode-lite -m 0750 \
 		/var/log/remnanode-lite /var/lib/remnanode-lite /run/remnanode-lite || return 1
 	verify_resource_cgroup
 }

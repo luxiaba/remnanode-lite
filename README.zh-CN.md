@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=914fee170eb1fc2f21f4ed82499a00ed544ac3a1a803daefae93c117c1df0b99 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=33d2d84f23a8f410def14dd3c7dd963f1fca036baf88865b569b4214f742e962 -->
 <div align="center">
 
 # Remnanode Lite
@@ -15,7 +15,7 @@
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
-[Docker 快速部署](#docker-快速部署) · [配置](docs/i18n/zh-CN/configuration.md) · [运维](docs/i18n/zh-CN/operations.md) · [完整文档](docs/i18n/zh-CN/README.md)
+[Docker 快速部署](#docker-快速部署) · [原生 Linux](#原生-linux) · [配置](docs/i18n/zh-CN/configuration.md) · [运维](docs/i18n/zh-CN/operations.md) · [完整文档](docs/i18n/zh-CN/README.md)
 
 </div>
 
@@ -33,23 +33,39 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 - 提供面向 512 MiB 服务器维护的低内存 Compose 配置。
 - 支持用户热更新、统计、连接管理和官方插件规则格式。
 - 提供 amd64/arm64 GHCR 镜像，并附带 SBOM、构建来源和证明。
+- Native Linux 的安装、升级、回滚和修复由 `rnlctl` 统一处理。
 - 只用一个 Compose 文件即可部署，不需要源码或持久化数据卷，`.env` 仍为可选项。
+
+## 选择部署方式
+
+| | Docker Compose | 原生 Linux |
+| --- | --- | --- |
+| 适用场景 | 已经具备 Docker Engine 与 Compose v2；这是默认方案。 | 无法安装 Docker，或机器不适合承担 Docker daemon 与容器运行时的常驻开销。 |
+| 安装入口 | 下载 Release 附带的 Compose 文件，在 `.env` 或明确的内联 mapping 中填写 Panel Secret。 | 下载并校验一个精确 Release 的 `install.sh`，以 root 运行安装器。 |
+| 更新与回滚 | 选择精确镜像 tag 或 digest，pull 后重建；切回原镜像引用即可回滚。 | 使用 `rnlctl upgrade --to VERSION` 和 `rnlctl rollback`；系统保留一个经过校验的 previous generation。 |
+| 宿主服务 | 需要 Docker Engine daemon 及其容器运行时。 | 不需要 Docker Engine daemon 或容器运行时，但 `remnanode-lite` 仍会作为 systemd 或 OpenRC 后台服务运行。 |
+| 版本选择 | 推荐精确 tag 或 manifest digest；`latest` 与 `preview` 是主动选择的移动通道。 | 只接受精确 `X.Y.Z` 或 `X.Y.Z-rnl.N` Release，不会解析移动镜像通道。 |
+
+两种方式都使用 host networking 并需要 `NET_ADMIN`。不要与使用相同 Panel 或代理端口的其他 Node 同时运行。
 
 ## Docker 快速部署
 
 开始前需要准备 Docker Engine 和 Compose v2，并在 Remnawave Panel 中创建好节点，拿到该节点的完整 Secret Key。节点端口必须能被 Panel 访问。下面的命令默认在 root shell 中执行，其他情况请按需使用 `sudo`。
 
-下载最新稳定版本附带的 Compose 文件和环境变量模板：
+从一个精确的稳定 Release 下载 Compose 文件和环境变量模板：
 
 ```bash
 mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
 
+VERSION=2.8.0
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
 curl -fL \
-  https://github.com/luxiaba/remnanode-lite/releases/latest/download/docker-compose.single-file.yaml \
+  "${BASE}/docker-compose.single-file.yaml" \
   -o docker-compose.yaml
 curl -fL \
-  https://github.com/luxiaba/remnanode-lite/releases/latest/download/remnanode.env.example \
+  "${BASE}/remnanode-lite.env.example" \
   -o .env
 
 chmod 600 docker-compose.yaml .env
@@ -89,6 +105,33 @@ docker compose logs --tail=100 remnanode-lite
 
 从官方容器迁移时，原来的 `NODE_PORT` 和 `SECRET_KEY` 可以直接沿用；启动新容器前，请先停止旧容器。迁移、指定版本、digest 固定和回滚方法见 [Docker 部署指南](docs/i18n/zh-CN/deployment-docker.md)。
 
+## 原生 Linux
+
+当机器无法安装 Docker Engine，或不适合承担 Docker daemon 与容器运行时的开销时，使用 Native bundle。Native 并不表示没有后台服务：`remnanode-lite` 会直接由 systemd 或 OpenRC 运行。以 systemd 的 Rocky Linux 9 为主目标；Rocky Linux 8 和 Debian 12 兼容。OpenRC 为实验性路径，需要可用的 cgroup v2。
+
+Native 安装永远不跟随移动通道。从同一个精确 GitHub Release 下载 `install.sh` 与 `SHA256SUMS`，校验安装器，并明确指定版本：
+
+```bash
+VERSION=2.8.0
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+
+curl -fLO "${BASE}/install.sh"
+curl -fLO "${BASE}/SHA256SUMS"
+grep '  install.sh$' SHA256SUMS | sha256sum --check --strict -
+
+sudo sh ./install.sh --version "$VERSION" --port 38329
+```
+
+没有已安装的 Secret 时，安装器会安全地在终端中读取 Panel Secret。它会校验并安装一个完整 generation：Node、`rnlctl`、rw-core、GeoIP、GeoSite、ASN 数据和服务定义。启动后执行：
+
+```bash
+sudo rnlctl status --json
+sudo rnlctl doctor
+sudo rnlctl logs node --lines 100
+```
+
+`2.8.0` Native bundle 实现 `2.8.0` 契约。批量上线前请阅读 [Native Linux 部署指南](docs/i18n/zh-CN/deployment-native.md)，其中包含前置依赖、无人值守与离线安装、精确版本升级、回滚、修复和卸载。
+
 ## Docker Compose 环境变量
 
 绝大多数节点只需要设置 `NODE_PORT` 和 `SECRET_KEY`。受维护的 Compose 文件只插值以下 8 个变量：
@@ -121,9 +164,8 @@ docker compose logs --tail=100 -f remnanode-lite
 查看 rw-core 输出和错误日志：
 
 ```bash
-docker exec -it remnanode-lite tail -n 50 -F \
-  /var/log/remnanode/xray.out.log \
-  /var/log/remnanode/xray.err.log
+docker exec -it remnanode-lite sh -c \
+  'tail -n 50 -F "$LOG_DIR/xray.out.log" "$LOG_DIR/xray.err.log"'
 ```
 
 查看当前运行版本：
@@ -149,6 +191,7 @@ docker compose up -d --no-build --force-recreate
 | `X.Y.Z` | 与对应官方 Node 契约对齐的稳定版本，推荐用于生产和回滚。 |
 | `X.Y.Z-rnl.N` | Remnanode Lite 自己的迭代版本，可用于提前开发或继续完善已有对齐版本。 |
 | `latest` | 最近一次完整发布的稳定版本。它会移动，不能作为回滚依据。 |
+| `preview` | 最近一次被提升的 `rnl.N` 预发布版本；不会推动 `latest`。 |
 | `sha-<commit>` | 从某个 `main` 提交构建的不可变镜像，用于正式发布前验证候选。 |
 | `edge` | 当前 `main` 的滚动镜像，只适合短期测试。 |
 
@@ -158,6 +201,7 @@ docker compose up -d --no-build --force-recreate
 
 | 项目 | 当前基线 |
 | --- | --- |
+| Native Linux bundle | `2.8.0` |
 | Node 契约 | `2.8.0` |
 | rw-core | `v26.6.27` |
 | 平台 | `linux/amd64`、`linux/arm64` |

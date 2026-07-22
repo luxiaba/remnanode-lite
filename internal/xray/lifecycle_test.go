@@ -84,9 +84,9 @@ func TestRWCoreEnvironmentStripsNodeSecrets(t *testing.T) {
 	environment := rwCoreEnvironment([]string{
 		"PATH=/usr/bin",
 		"SECRET_KEY=panel-secret",
-		"SECRET_KEY_FILE=/etc/remnanode/secret.key",
+		"SECRET_KEY_FILE=/etc/remnanode-lite/secret.key",
 		"INTERNAL_REST_TOKEN=caller-token",
-		"REMNANODE_ENV=/etc/remnanode/node.env",
+		"REMNANODE_ENV=/etc/remnanode-lite/node.env",
 		"XRAY_LOCATION_ASSET=/old/assets",
 		unixconfig.InternalTokenEnvVar + "=old-token",
 		"GOMEMLIMIT=180MiB",

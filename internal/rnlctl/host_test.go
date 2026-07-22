@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -236,13 +238,13 @@ func TestLinuxHostCleansUpPartiallyCreatedAccount(t *testing.T) {
 	}{
 		{
 			name: "group created before useradd failure", groupCreated: true,
-			want: []executorCall{{name: "/usr/sbin/groupdel", args: []string{"remnanode"}}},
+			want: []executorCall{{name: "/usr/sbin/groupdel", args: []string{managedAccountName}}},
 		},
 		{
 			name: "user created before lookup failure", userCreated: true, groupCreated: true,
 			want: []executorCall{
-				{name: "/usr/sbin/userdel", args: []string{"remnanode"}},
-				{name: "/usr/sbin/groupdel", args: []string{"remnanode"}},
+				{name: "/usr/sbin/userdel", args: []string{managedAccountName}},
+				{name: "/usr/sbin/groupdel", args: []string{managedAccountName}},
 			},
 		},
 		{name: "preexisting account surface"},
@@ -277,11 +279,66 @@ func TestLinuxHostReportsAccountCleanupFailures(t *testing.T) {
 		}),
 	})
 	err := host.cleanupCreatedAccount(context.Background(), true, true)
-	if err == nil || !strings.Contains(err.Error(), "roll back remnanode account") || !strings.Contains(err.Error(), "roll back remnanode group") {
+	if err == nil || !strings.Contains(err.Error(), "roll back "+managedAccountName+" account") || !strings.Contains(err.Error(), "roll back "+managedAccountName+" group") {
 		t.Fatalf("cleanupCreatedAccount() error = %v", err)
 	}
 	if len(executor.calls) != 2 {
 		t.Fatalf("cleanup commands = %#v", executor.calls)
+	}
+}
+
+func TestNativeServiceTemplatesUseManagedAccount(t *testing.T) {
+	tests := []struct {
+		name     string
+		file     string
+		required []string
+	}{
+		{
+			name: "systemd",
+			file: "remnanode-lite.service",
+			required: []string{
+				"User=" + managedAccountName,
+				"Group=" + managedAccountName,
+				"USER=" + managedAccountName,
+				"LOGNAME=" + managedAccountName,
+			},
+		},
+		{
+			name: "openrc",
+			file: "remnanode-lite.openrc",
+			required: []string{
+				"command_user=\"" + managedAccountName + ":" + managedAccountName + "\"",
+				"USER=" + managedAccountName,
+				"LOGNAME=" + managedAccountName,
+				"checkpath -d -o " + managedAccountName + ":" + managedAccountName,
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			contents, err := os.ReadFile(filepath.Join("..", "..", "deploy", test.file))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, required := range test.required {
+				if !strings.Contains(string(contents), required) {
+					t.Fatalf("%s does not contain %q", test.file, required)
+				}
+			}
+			for _, stale := range []string{
+				"User=remnanode\n",
+				"Group=remnanode\n",
+				"USER=remnanode ",
+				"LOGNAME=remnanode ",
+				`command_user="remnanode:remnanode"`,
+				"checkpath -d -o remnanode:remnanode",
+			} {
+				if strings.Contains(string(contents), stale) {
+					t.Fatalf("%s still contains stale account field %q", test.file, stale)
+				}
+			}
+		})
 	}
 }
 

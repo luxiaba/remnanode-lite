@@ -10,8 +10,8 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=remnanode
-Group=remnanode
+User=remnanode-lite
+Group=remnanode-lite
 UMask=0077
 # remnanode-lite parses node.env itself as a bounded data file. Do not have
 # systemd export the entire file: this prevents a legacy inline SECRET_KEY or
@@ -19,7 +19,7 @@ UMask=0077
 # The installer owns /usr/local/bin/remnanode-lite as a root-owned stable
 # symlink into the atomically selected runtime generation.
 WorkingDirectory=/var/lib/remnanode-lite
-ExecStart=/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode-lite USER=remnanode LOGNAME=remnanode REMNANODE_ENV=/etc/remnanode-lite/node.env /usr/local/bin/remnanode-lite
+ExecStart=/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/var/lib/remnanode-lite USER=remnanode-lite LOGNAME=remnanode-lite REMNANODE_ENV=/etc/remnanode-lite/node.env /usr/local/bin/remnanode-lite
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30

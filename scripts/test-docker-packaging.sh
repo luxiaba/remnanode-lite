@@ -50,6 +50,7 @@ require_text Dockerfile 'COPY --from=assets --chmod=0755 /assets/lib/rw-core'
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geoip.dat'
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat'
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/asn/asn-prefixes.bin'
+require_text Dockerfile 'COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite'
 for license_file in CC-BY-SA-4.0 CC0-1.0 GPL-3.0-only MPL-2.0; do
   require_text Dockerfile "COPY --from=assets --chmod=0644 /assets/licenses/${license_file}.txt /usr/share/doc/remnanode-lite/licenses/${license_file}.txt"
 done
@@ -57,7 +58,28 @@ require_text Dockerfile 'COPY --chmod=0644 LICENSE /usr/share/doc/remnanode-lite
 require_text Dockerfile 'COPY --chmod=0644 release/bundle/THIRD_PARTY_NOTICES.md /usr/share/doc/remnanode-lite/THIRD_PARTY_NOTICES.md'
 require_text Dockerfile 'COPY --chmod=0644 release/bundle/SOURCE-OFFER.md /usr/share/doc/remnanode-lite/SOURCE-OFFER.md'
 require_text Dockerfile 'COPY --chmod=0644 release/runtime-assets.lock.json /usr/share/doc/remnanode-lite/runtime-assets.lock.json'
+for required in \
+  'XRAY_BIN=/usr/local/lib/remnanode-lite/rw-core' \
+  'GEO_DIR=/usr/local/share/remnanode-lite/xray' \
+  'ASN_DB_PATH=/usr/local/share/remnanode-lite/asn/asn-prefixes.bin' \
+  'LOG_DIR=/var/log/remnanode-lite' \
+  'INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock'; do
+  require_text Dockerfile "$required"
+done
 require_text Dockerfile 'ENTRYPOINT ["/usr/local/bin/remnanode-lite"]'
+for stale_runtime_reference in \
+  '/usr/local/lib/remnanode/rw-core' \
+  '/usr/local/share/remnanode/xray' \
+  '/usr/local/share/remnanode/asn' \
+  '/run/remnanode/internal.sock' \
+  '/var/log/remnanode/' \
+  'remnanode.env.example' \
+  'container-entrypoint.sh'; do
+  if grep -Fq "$stale_runtime_reference" \
+    Dockerfile compose.yaml deploy/compose.single-file.yaml .github/workflows/release.yml; then
+    fail "packaging still contains legacy runtime reference: $stale_runtime_reference"
+  fi
+done
 for stale_pin in \
   'ARG XRAY_CORE_VERSION=' \
   'ARG XRAY_AMD64_SHA256=' \
@@ -104,7 +126,8 @@ for required in \
   'pids_limit: 256' \
   'read_only: true' \
   '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]' \
-  '/var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750' \
+  '/run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700' \
+  '/var/log/remnanode-lite:rw,noexec,nosuid,nodev,size=28m,mode=0750' \
   'max-size: 2m'; do
   require_text compose.yaml "$required"
 done
@@ -121,7 +144,9 @@ for required in \
   'network_mode: host' \
   'init: true' \
   'read_only: true' \
-  'mem_limit: 448m'; do
+  'mem_limit: 448m' \
+  '/run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700' \
+  '/var/log/remnanode-lite:rw,noexec,nosuid,nodev,size=28m,mode=0750'; do
   require_text deploy/compose.single-file.yaml "$required"
 done
 if grep -Eq '^[[:space:]]*-[[:space:]]*SECRET_KEY=' deploy/compose.single-file.yaml; then
@@ -156,11 +181,13 @@ fi
 
 release_workflow=.github/workflows/release.yml
 require_text "$release_workflow" 'Verify main candidate image'
+require_text "$release_workflow" 'remnanode-lite.env.example'
 require_text "$release_workflow" \
   "candidate_tag=\"${literal_dollar}{REGISTRY}/${literal_dollar}{IMAGE_NAME}:sha-${literal_dollar}{candidate_commit}\""
 require_text "$release_workflow" 'scripts/promote-image-tag.sh immutable'
 require_text "$release_workflow" 'scripts/promote-image-tag.sh mutable'
 require_text "$release_workflow" 'scripts/verify-release-tag.sh'
+require_text "$release_workflow" 'scripts/verify-release-latest.sh'
 require_text "$release_workflow" 'Reconfirm the published Release and exact image'
 require_text "$release_workflow" 'Promote the published release channel without rebuilding'
 if grep -Fq 'docker/build-push-action@' "$release_workflow"; then

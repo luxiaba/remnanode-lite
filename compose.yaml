@@ -2,7 +2,7 @@ name: remnanode-lite
 
 services:
   remnanode-lite:
-    image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1}"
+    image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:2.8.0}"
     container_name: remnanode-lite
     hostname: remnanode-lite
     init: true
@@ -27,9 +27,9 @@ services:
       - no-new-privileges:true
     read_only: true
     tmpfs:
-      - /run/remnanode:rw,noexec,nosuid,nodev,size=4m,mode=0700
+      - /run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700
       - /tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777
-      - /var/log/remnanode:rw,noexec,nosuid,nodev,size=28m,mode=0750
+      - /var/log/remnanode-lite:rw,noexec,nosuid,nodev,size=28m,mode=0750
 
     mem_limit: 448m
     memswap_limit: 448m

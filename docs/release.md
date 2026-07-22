@@ -52,10 +52,9 @@ manual stability flag.
 is always preview, even if it is newer in calendar time or has passed every
 automated gate. It must never update `latest`.
 
-The existing `v2.8.0` release remains an immutable stable release and is not
-rewritten. The first planned release from the self-contained Native Linux
-bundle pipeline is `v2.8.0-rnl.1`. It is a preview implementing the official
-Node `2.8.0` contract, so when published it will move `preview`, not `latest`.
+The current `v2.8.0` stable release implements the official Node `2.8.0`
+contract and includes the first self-contained Native Linux bundle. It moves
+the `latest` channel when published.
 
 Project `Version` and official `ContractVersion` are separate identities. A
 plain stable `X.Y.Z` requires the contract version to match. A preview may use
@@ -252,9 +251,7 @@ git show --no-patch "$TAG"
 git push origin "$TAG"
 ```
 
-When publishing the first Native preview, `VERSION` is `2.8.0-rnl.1` and `TAG`
-is `v2.8.0-rnl.1`. Do not recreate, move, or otherwise alter the existing
-`v2.8.0` tag.
+For the current stable release, `VERSION` is `2.8.0` and `TAG` is `v2.8.0`.
 
 Pushing the tag starts the release workflow. Keep `main` frozen until its
 initial source-identity check succeeds. Exact tags must then remain immutable;
@@ -301,7 +298,7 @@ releases:
 | `remnanode-lite_<version>_linux_arm64.tar.gz` | Self-contained Native Linux bundle for arm64 |
 | `compose.yaml` | Repository Compose deployment file |
 | `docker-compose.single-file.yaml` | Single-file Compose template pinned to the exact release image |
-| `remnanode.env.example` | Environment template pinned to the exact release image |
+| `remnanode-lite.env.example` | Environment template pinned to the exact release image |
 | `SHA256SUMS` | Checksums for every other uploaded release asset |
 
 Each Native archive contains one complete generation, including:
@@ -358,7 +355,9 @@ The verified draft is published with one of two states:
 - `X.Y.Z` becomes a full GitHub Release with `make_latest=true`.
 
 The workflow verifies the published state. In particular, a preview must not
-resolve through GitHub's Latest Release endpoint.
+resolve through GitHub's Latest Release endpoint. GitHub returns `404` from
+that endpoint until a full release exists; the workflow accepts that response
+only for a preview. A stable release must become GitHub Latest.
 
 ### 9.5 Promote the GHCR Channel
 
@@ -375,14 +374,14 @@ new manifest reference to the exact accepted digest.
 Set the exact release identity:
 
 ```bash
-VERSION=2.8.0-rnl.1
+VERSION=2.8.0
 TAG="v${VERSION}"
 C="$(git rev-list -n 1 "$TAG")"
-CHANNEL=preview
+CHANNEL=latest
 IMAGE=ghcr.io/luxiaba/remnanode-lite
 ```
 
-For a stable release, use its plain version and `CHANNEL=latest`.
+For a preview release, use its exact `X.Y.Z-rnl.N` version and `CHANNEL=preview`.
 
 Check GitHub's published state:
 
@@ -462,7 +461,7 @@ Manual dispatch is a reconciliation path, not a second release path:
 ```bash
 gh workflow run release.yml \
   --repo luxiaba/remnanode-lite \
-  -f release_tag=v2.8.0-rnl.1
+  -f release_tag=v2.8.0
 ```
 
 Reconciliation checks that:

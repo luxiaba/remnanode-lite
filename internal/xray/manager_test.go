@@ -31,7 +31,7 @@ func TestGenerateAPIConfigInjectsRemnawaveAPI(t *testing.T) {
 		"routing": map[string]any{
 			"rules": []any{map[string]any{"outboundTag": "direct"}},
 		},
-	}, "remnanode-xtls-test", TorrentBlockerOptions{})
+	}, "remnanode-lite-xtls-test", TorrentBlockerOptions{})
 
 	inbounds, ok := config["inbounds"].([]any)
 	if !ok || len(inbounds) != 2 {
@@ -41,7 +41,7 @@ func TestGenerateAPIConfigInjectsRemnawaveAPI(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected API inbound type: %#v", inbounds[0])
 	}
-	if apiInbound["tag"] != apiInboundTag || apiInbound["listen"] != "@remnanode-xtls-test" || apiInbound["protocol"] != "tunnel" {
+	if apiInbound["tag"] != apiInboundTag || apiInbound["listen"] != "@remnanode-lite-xtls-test" || apiInbound["protocol"] != "tunnel" {
 		t.Fatalf("unexpected API inbound: %#v", apiInbound)
 	}
 	if _, ok := config["stats"].(map[string]any); !ok {

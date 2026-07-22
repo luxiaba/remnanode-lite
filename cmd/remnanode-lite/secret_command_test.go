@@ -148,8 +148,8 @@ func (errorWriter) Write([]byte) (int, error) {
 }
 
 func TestRuntimeEnvPathHonorsFixedLauncherPath(t *testing.T) {
-	t.Setenv("REMNANODE_ENV", "/etc/remnanode/node.env")
-	if got := runtimeEnvPath(); got != "/etc/remnanode/node.env" {
+	t.Setenv("REMNANODE_ENV", "/etc/remnanode-lite/node.env")
+	if got := runtimeEnvPath(); got != "/etc/remnanode-lite/node.env" {
 		t.Fatalf("runtimeEnvPath() = %q", got)
 	}
 }

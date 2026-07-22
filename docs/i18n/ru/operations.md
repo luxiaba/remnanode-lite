@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/operations.md; source-sha256=f03602e2e244d99b290147dcf772200e2b61349c488094934abe70a55fcb3c50 -->
+<!-- translation: locale=ru; source=docs/operations.md; source-sha256=5016f5e4ec1b7e7e3197d194941dea06af2efa3b719be96dbe6e3aa17aeb2e68 -->
 
 # Эксплуатация и диагностика
 
@@ -68,9 +68,7 @@ Docker использует приватные контейнерные пути
 
 ```bash
 docker exec -it remnanode-lite \
-  tail -n 50 -F /var/log/remnanode/xray.out.log
-docker exec -it remnanode-lite \
-  tail -n 50 -F /var/log/remnanode/xray.err.log
+  sh -c 'tail -n 50 -F "$LOG_DIR/xray.out.log" "$LOG_DIR/xray.err.log"'
 ```
 
 Native:
@@ -154,7 +152,7 @@ Repair использует проверенный cache и никогда не 
 
 ## Изменение конфигурации
 
-После изменения Docker `.env` или Compose mapping проверьте модель и recreate контейнер. Для Native сохраняйте `/etc/remnanode-lite/node.env` и `secret.key` как `root:remnanode`, недоступные для записи службе:
+После изменения Docker `.env` или Compose mapping проверьте модель и recreate контейнер. Для Native сохраняйте `/etc/remnanode-lite/node.env` и `secret.key` как `root:remnanode-lite`, недоступные для записи службе:
 
 ```bash
 sudo rnlctl doctor

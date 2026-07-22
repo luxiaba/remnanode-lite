@@ -58,7 +58,7 @@ service:
 - The current container starts as root, drops every other capability, enables
   `no-new-privileges`, and uses a read-only root filesystem. Host networking and
   `NET_ADMIN` nevertheless remain an explicit host trust boundary.
-- Native services run as the non-login `remnanode` user with only
+- Native services run as the non-login `remnanode-lite` user with only
   `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd applies a capability
   bounding set and sandboxing; experimental OpenRC support applies and verifies
   its resource cgroup before startup.
@@ -77,7 +77,7 @@ them.
 ## Secret Handling
 
 For Native systemd and OpenRC deployments, store the Secret in
-`/etc/remnanode-lite/secret.key` with owner and mode `root:remnanode 0640`. The Go
+`/etc/remnanode-lite/secret.key` with owner and mode `root:remnanode-lite 0640`. The Go
 process reads configuration and secret files through bounded, no-symlink file
 paths; it does not export the complete `node.env` as the service environment.
 

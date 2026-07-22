@@ -74,18 +74,18 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends ca-certificates nftables; \
     rm -rf /var/lib/apt/lists/*; \
     install -d -m 0755 \
-      /usr/local/lib/remnanode \
-      /usr/local/share/remnanode/xray \
-      /usr/local/share/remnanode/asn \
+      /usr/local/lib/remnanode-lite \
+      /usr/local/share/remnanode-lite/xray \
+      /usr/local/share/remnanode-lite/asn \
       /usr/share/doc/remnanode-lite/licenses \
-      /run/remnanode \
-      /var/log/remnanode
+      /run/remnanode-lite \
+      /var/log/remnanode-lite
 
 COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite
-COPY --from=assets --chmod=0755 /assets/lib/rw-core /usr/local/lib/remnanode/rw-core
-COPY --from=assets --chmod=0644 /assets/share/xray/geoip.dat /usr/local/share/remnanode/xray/geoip.dat
-COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat /usr/local/share/remnanode/xray/geosite.dat
-COPY --from=assets --chmod=0644 /assets/share/asn/asn-prefixes.bin /usr/local/share/remnanode/asn/asn-prefixes.bin
+COPY --from=assets --chmod=0755 /assets/lib/rw-core /usr/local/lib/remnanode-lite/rw-core
+COPY --from=assets --chmod=0644 /assets/share/xray/geoip.dat /usr/local/share/remnanode-lite/xray/geoip.dat
+COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat /usr/local/share/remnanode-lite/xray/geosite.dat
+COPY --from=assets --chmod=0644 /assets/share/asn/asn-prefixes.bin /usr/local/share/remnanode-lite/asn/asn-prefixes.bin
 COPY --from=assets --chmod=0644 /assets/licenses/CC-BY-SA-4.0.txt /usr/share/doc/remnanode-lite/licenses/CC-BY-SA-4.0.txt
 COPY --from=assets --chmod=0644 /assets/licenses/CC0-1.0.txt /usr/share/doc/remnanode-lite/licenses/CC0-1.0.txt
 COPY --from=assets --chmod=0644 /assets/licenses/GPL-3.0-only.txt /usr/share/doc/remnanode-lite/licenses/GPL-3.0-only.txt
@@ -99,11 +99,11 @@ COPY --chmod=0644 release/bundle/THIRD_PARTY_NOTICES.md /usr/share/doc/remnanode
 COPY --chmod=0644 release/bundle/SOURCE-OFFER.md /usr/share/doc/remnanode-lite/SOURCE-OFFER.md
 COPY --chmod=0644 release/runtime-assets.lock.json /usr/share/doc/remnanode-lite/runtime-assets.lock.json
 
-ENV XRAY_BIN=/usr/local/lib/remnanode/rw-core \
-    GEO_DIR=/usr/local/share/remnanode/xray \
-    ASN_DB_PATH=/usr/local/share/remnanode/asn/asn-prefixes.bin \
-    LOG_DIR=/var/log/remnanode \
-    INTERNAL_SOCKET_PATH=/run/remnanode/internal.sock
+ENV XRAY_BIN=/usr/local/lib/remnanode-lite/rw-core \
+    GEO_DIR=/usr/local/share/remnanode-lite/xray \
+    ASN_DB_PATH=/usr/local/share/remnanode-lite/asn/asn-prefixes.bin \
+    LOG_DIR=/var/log/remnanode-lite \
+    INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 
 EXPOSE 2222
 STOPSIGNAL SIGTERM

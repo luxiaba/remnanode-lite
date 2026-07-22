@@ -206,7 +206,7 @@ func generateXrayRPCSocketName() (string, error) {
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
-	return "remnanode-xtls-" + hex.EncodeToString(buf), nil
+	return "remnanode-lite-xtls-" + hex.EncodeToString(buf), nil
 }
 
 func (m *Manager) torrentBlockerOptions() TorrentBlockerOptions {

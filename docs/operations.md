@@ -91,10 +91,7 @@ Docker uses container-private paths:
 
 ```bash
 docker exec -it remnanode-lite \
-  tail -n 50 -F /var/log/remnanode/xray.out.log
-
-docker exec -it remnanode-lite \
-  tail -n 50 -F /var/log/remnanode/xray.err.log
+  sh -c 'tail -n 50 -F "$LOG_DIR/xray.out.log" "$LOG_DIR/xray.err.log"'
 ```
 
 Native deployment uses `rnlctl`:
@@ -212,7 +209,7 @@ docker compose config --quiet
 docker compose up -d --no-build --force-recreate
 ```
 
-For Native Linux, keep `/etc/remnanode-lite/node.env` and `secret.key` owned by `root:remnanode` and not writable by the service. Validate before restarting:
+For Native Linux, keep `/etc/remnanode-lite/node.env` and `secret.key` owned by `root:remnanode-lite` and not writable by the service. Validate before restarting:
 
 ```bash
 sudo rnlctl doctor

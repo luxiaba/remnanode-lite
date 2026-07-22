@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=537ceb6d5ee75178d7d68eb114849d7a656d0efc51c5dcac090f9b15b064ae28 -->
+<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=0338d6c36d1c8a74a830d0c94dabda00c6a328e0387c19cd99629f70bd830bb1 -->
 
 # Версии и теги образов
 
@@ -22,11 +22,11 @@ release workflow; `scripts/release-metadata.sh` классифицирует sta
 Например:
 
 ```text
-Version:         2.8.0-rnl.1
+Version:         2.8.0
 ContractVersion: 2.8.0
 ```
 
-Это первый preview проекта с полноценным Native Linux bundle при сохранении проверенного контракта официального Node `2.8.0`. Суффикс `rnl.1` принадлежит этому проекту и не является ревизией официального выпуска. Одно изменение `Version` не расширяет заявленный контракт.
+Это стабильный выпуск проекта с первым полноценным Native Linux bundle при сохранении проверенного контракта официального Node `2.8.0`. Будущий суффикс `rnl.N` принадлежит этому проекту и не является ревизией официального выпуска. Одно изменение `Version` не расширяет заявленный контракт.
 
 Изменение `ContractVersion` требует закреплённого официального исходного кода, рассмотренного
 contract delta, соответствующих изменений реализации и тестов и завершённой проверки
@@ -55,10 +55,9 @@ Preview публикуется как annotated tag `vX.Y.Z-rnl.N`, GitHub Prere
 
 | Версия | Контракт | Класс | Статус |
 | --- | --- | --- | --- |
-| `2.8.0` | `2.8.0` | Stable | Уже опубликован; существующие tag и история не меняются |
-| `2.8.0-rnl.1` | `2.8.0` | Preview | Планируемый первый self-contained Native Linux bundle |
+| `2.8.0` | `2.8.0` | Stable | Текущий стабильный выпуск с первым self-contained Native Linux bundle |
 
-SemVer ставит `2.8.0-rnl.1` ниже `2.8.0`, даже если preview выпущен позже по календарю. Порядок SemVer не выбирает канал: workflow явно классифицирует tag как `preview` или `latest`.
+SemVer ставит preview `X.Y.Z-rnl.N` ниже соответствующей stable-версии `X.Y.Z`. Порядок SemVer не выбирает канал: workflow явно классифицирует tag как `preview` или `latest`.
 
 Release preflight также сравнивает stable-версию с уже существующими stable Git tags и отклоняет
 более низкую версию. Это предотвращает случайный откат `latest`, даже если синтаксис tag и контракт
@@ -67,8 +66,8 @@ Release preflight также сравнивает stable-версию с уже 
 ## Git tag и image tag
 
 ```text
-Git tag:       v2.8.0-rnl.1
-Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
+Git tag:       v2.8.0
+Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.0
 ```
 
 Git tag содержит префикс `v`, image tag — нет. Оба являются неизменяемыми
@@ -134,7 +133,7 @@ ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>
 Preview используйте только осознанно:
 
 ```text
-ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
+ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
 ```
 
 `preview` удобен для краткой проверки, но для fleet лучше exact preview tag или digest: он не
@@ -159,8 +158,8 @@ docker compose up -d --no-build --force-recreate
 Native bundle связывает имя архива, `SHA256SUMS`, manifest, встроенную версию и source revision. Поэтому installer и `rnlctl` не принимают движущиеся каналы:
 
 ```bash
-sudo sh install.sh --version 2.8.0-rnl.1
-sudo rnlctl upgrade --to 2.8.0-rnl.2
+sudo sh install.sh --version 2.8.0
+sudo rnlctl upgrade --to <exact-version>
 ```
 
 `latest`, `preview`, `edge` и `sha-*` не являются допустимыми Native version inputs.

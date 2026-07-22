@@ -251,8 +251,8 @@ The code has two Unix channels with different purposes and security boundaries. 
 
 | Channel | Default identifier | Owner and protocol | Purpose | Security boundary |
 | --- | --- | --- | --- | --- |
-| Filesystem Unix socket | `/run/remnanode/internal.sock` | Node serves HTTP; rw-core is the client | Retrieve pending configuration; deliver Torrent webhooks | File mode `0600`, stable-file checks, internal token |
-| Linux abstract Unix socket | `@remnanode-xtls-<16hex>` | rw-core serves gRPC; Node is the client | Handler and Stats RPCs; readiness Ping | Same network namespace, random name, no internal TLS |
+| Filesystem Unix socket | `/run/remnanode-lite/internal.sock` | Node serves HTTP; rw-core is the client | Retrieve pending configuration; deliver Torrent webhooks | File mode `0600`, stable-file checks, internal token |
+| Linux abstract Unix socket | `@remnanode-lite-xtls-<16hex>` | rw-core serves gRPC; Node is the client | Handler and Stats RPCs; readiness Ping | Same network namespace, random name, no internal TLS |
 
 ### 6.1 Filesystem Unix HTTP
 

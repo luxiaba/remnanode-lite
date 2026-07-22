@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=2949093a897171d5e768035cd15b73546aab21454af9570ab3ac752d263e9cb2 -->
+<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=fb885b51d8c29e4e508f0831c35acf0bc49255d1ef9083b40a26febaf496b77d -->
 
 # Нативное развёртывание Linux
 
@@ -6,11 +6,11 @@
 
 [Индекс документации](README.md) · [Конфигурация](configuration.md) · [Эксплуатация](operations.md) · [Версионирование](versioning.md)
 
-Нативный вариант запускает `remnanode-lite` непосредственно через systemd или OpenRC. Он подходит для небольших хостов без Docker или когда не хочется держать Docker daemon. Для большинства узлов Docker Compose остаётся вариантом по умолчанию; Native bundle является полноценным артефактом выпуска, а не обходным путём сборки из исходников.
+Нативный вариант запускает `remnanode-lite` непосредственно через systemd или OpenRC. Он подходит для небольших хостов, где Docker нельзя установить или где постоянные расходы Docker Engine daemon и container runtime не подходят. Native не означает отсутствие фоновой службы: `remnanode-lite` всё равно работает под systemd или OpenRC. Для большинства узлов Docker Compose остаётся вариантом по умолчанию. Самодостаточные Native lifecycle bundle распространяются как GitHub Releases с точным тегом; стабильный `2.8.0` содержит первый bundle.
 
-Каждый bundle содержит Node, `rnlctl`, rw-core, GeoIP, GeoSite, данные ASN, определения служб, лицензии и SPDX SBOM. Manifest фиксирует digest каждого файла. Установщик сначала проверяет digest внешнего архива и только затем изменяет хост.
+Каждый опубликованный bundle содержит Node, `rnlctl`, rw-core, GeoIP, GeoSite, данные ASN, определения служб, лицензии и SPDX SBOM. Manifest фиксирует digest каждого файла. Установщик сначала проверяет digest внешнего архива и только затем изменяет хост.
 
-Первый полный Native-выпуск запланирован как `2.8.0-rnl.1` и пока не опубликован; он реализует контракт официального Node `2.8.0`. Установка и обновление принимают только точную версию (`2.8.0-rnl.1` или `2.8.0`). Имена движущихся каналов `latest`, `preview`, `edge` и `sha-*` для Native недопустимы.
+Bundle `2.8.0` реализует контракт официального Node `2.8.0`. Установка и обновление принимают только точную версию Release, содержащего Native lifecycle bundle, например `2.8.0`. Имена движущихся каналов `latest`, `preview`, `edge` и `sha-*` для Native недопустимы.
 
 ## Поддерживаемые хосты
 
@@ -22,13 +22,13 @@
 | Другие актуальные дистрибутивы с systemd | systemd | Должны работать, но сначала проверьте конкретный образ |
 | OpenRC с доступными контроллерами cgroup v2 | OpenRC | Экспериментально |
 
-Архивы выпускаются для Linux `amd64` и `arm64`. Служба ограничена `448 MiB RAM`, без дополнительного swap, `1 CPU` и `256 tasks`, чтобы оставить запас на хосте `512 MiB / 1 vCPU / 2 GB`. OpenRC дополнительно требует `supervise-daemon`, `checkpath`, `rc-update`, cgroup v2, доступные для записи контроллеры memory/CPU/PID и `cgroup.kill`; при отсутствии этих условий запуск блокируется.
+Native lifecycle bundle собираются для Linux `amd64` и `arm64`. Служба ограничена `448 MiB RAM`, без дополнительного swap, `1 CPU` и `256 tasks`, чтобы оставить запас на хосте `512 MiB / 1 vCPU / 2 GB`. OpenRC дополнительно требует `supervise-daemon`, `checkpath`, `rc-update`, cgroup v2, доступные для записи контроллеры memory/CPU/PID и `cgroup.kill`; при отсутствии этих условий запуск блокируется.
 
 Установщик не меняет репозитории пакетов, sysctl, firewall, SELinux или синхронизацию времени. Это ответственность администратора хоста.
 
 ## Предварительные требования
 
-Запускайте установщик от root. Для онлайн-установки нужны systemd (либо описанная экспериментальная среда OpenRC), `nft` из nftables, `ss` из iproute2, доверенное хранилище CA, `curl` или `wget`, GNU tar и gzip. Порт Node должен быть доступен Panel, а входящие proxy-порты — соответствовать конфигурации Panel.
+Запускайте установщик от root. Для онлайн-установки нужны systemd (либо описанная экспериментальная среда OpenRC), `nft` из nftables, `ss` из iproute2, `useradd` и `groupadd`, если выделенная учётная запись `remnanode-lite` ещё не существует, доверенное хранилище CA, `curl` или `wget`, GNU tar и gzip. Порт Node должен быть доступен Panel, а входящие proxy-порты — соответствовать конфигурации Panel.
 
 Rocky Linux 8/9:
 
@@ -50,7 +50,7 @@ sudo apt-get install -y ca-certificates curl nftables iproute2
 Скачайте installer и список digest из одного GitHub Release, проверьте installer, затем запустите его:
 
 ```bash
-VERSION=2.8.0-rnl.1  # запускайте после публикации preview
+VERSION=2.8.0
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
@@ -111,7 +111,7 @@ SHA256SUMS
 grep -E '  (install\.sh|remnanode-lite_.*_linux_(amd64|arm64)\.tar\.gz)$' \
   SHA256SUMS | sha256sum --check --strict -
 sudo sh ./install.sh \
-  --bundle ./remnanode-lite_2.8.0-rnl.1_linux_amd64.tar.gz \
+  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
   --port 38329
 ```
 
@@ -146,7 +146,7 @@ sudo sh ./install.sh \
 
 Installer предпочитает безопасный явно заданный `TMPDIR`. Иначе используется `/var/lib/remnanode-lite-installer/tmp`, а если его нельзя подготовить — `/var/tmp`. Workspace каждой операции имеет режим `0700` и удаляется при выходе. Это не даёт большому архиву попасть в `/tmp`, который на хосте 512 MiB может быть tmpfs.
 
-`rnlctl` — отдельный обычный файл, принадлежащий root, а не ссылка в текущий generation. Поэтому инструмент восстановления остаётся доступным при проверке ссылок. Служба работает от непривилегированного пользователя и группы `remnanode`; `uninstall --purge` удаляет только созданные этим установщиком и не изменённые identity.
+`rnlctl` — отдельный обычный файл, принадлежащий root, а не ссылка в текущий generation. Поэтому инструмент восстановления остаётся доступным при проверке ссылок. Служба работает от непривилегированного пользователя и группы `remnanode-lite`; `uninstall --purge` удаляет только созданные этим установщиком и не изменённые identity.
 
 Имена служб: `remnanode-lite.service` для systemd и `remnanode-lite` для OpenRC:
 
@@ -228,14 +228,14 @@ sudo rnlctl repair
 
 ## Порт и Secret
 
-`/etc/remnanode-lite/node.env` — файл данных, а не shell-скрипт. Secret хранится в `/etc/remnanode-lite/secret.key` с владельцем `root:remnanode` и режимом `0640`. Для ротации создайте root-only временный файл, проверьте его и замените атомарно:
+`/etc/remnanode-lite/node.env` — файл данных, а не shell-скрипт. Secret хранится в `/etc/remnanode-lite/secret.key` с владельцем `root:remnanode-lite` и режимом `0640`. Для ротации создайте root-only временный файл, проверьте его и замените атомарно:
 
 ```bash
 umask 077
 secret_tmp="$(mktemp)"
 printf '%s\n' 'PASTE_THE_NEW_COMPLETE_SECRET_KEY' >"$secret_tmp"
 remnanode-lite validate-secret <"$secret_tmp"
-sudo install -o root -g remnanode -m 0640 \
+sudo install -o root -g remnanode-lite -m 0640 \
   "$secret_tmp" /etc/remnanode-lite/secret.key.new
 sudo mv -f /etc/remnanode-lite/secret.key.new /etc/remnanode-lite/secret.key
 rm -f "$secret_tmp"
@@ -262,7 +262,7 @@ Purge не удаляет системные пакеты, правила firewa
 
 ## Безопасность
 
-- Каталог `/etc/remnanode-lite` должен иметь `root:remnanode 0750`, файлы конфигурации и Secret — `0640`.
+- Каталог `/etc/remnanode-lite` должен иметь `root:remnanode-lite 0750`, файлы конфигурации и Secret — `0640`.
 - В Native `node.env` не записывайте непустой `SECRET_KEY`; используйте `SECRET_KEY_FILE`.
 - Службе нужны только `CAP_NET_ADMIN` и `CAP_NET_BIND_SERVICE`; не запускайте её от root для обхода ошибки capability.
 - Перед массовым обновлением сохраните предыдущую точную версию и проверьте Panel и реальный трафик.

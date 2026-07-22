@@ -51,30 +51,28 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M6 512 MiB resource work | Complete |
 | M7 System integration and supply chain | Complete |
 | M8 Release preparation | Complete |
-| M9 Self-contained Native distribution | In progress |
+| M9 Self-contained Native distribution | Ready for publication |
 
 The M6 50,000-user measurement from 2026-07-15 and the M7
 init/distribution snapshots from 2026-07-19 remain useful engineering
 baselines. They document the resource work and give later changes a stable
 comparison point; they are not claims about every future build.
 
-The stable `2.8.0` Release remains the official-contract baseline. The current
-work prepares `2.8.0-rnl.1`, the first self-contained Native preview for that
-same `2.8.0` contract. Its tag will publish a GitHub prerelease, exact Docker
-and Native assets, and the GHCR `preview` channel without changing stable
-`latest`. Runtime observations stay outside the source repository, and GitHub
-generates the Release notes.
+The clean stable `2.8.0` release is the official-contract baseline and includes
+the first self-contained Native bundle. Its tag publishes exact Docker and
+Native assets and advances the GHCR `latest` channel. Runtime observations stay
+outside the source repository, and GitHub generates the Release notes.
 
 ## Current focus
 
-- **Now:** Finish and publish the `2.8.0-rnl.1` Native preview, then verify its
-  exact bundle and container digest on the target Linux hosts.
+- **Now:** Publish the clean stable `2.8.0` release after its exact candidate
+  image and Native bundles have passed the release workflow.
 - **Next:** Evaluate the next official release detected by automation. Pin its
   source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements and do not block
-the planned Native preview:
+the `2.8.0` stable release:
 
 - More whole-host 512 MiB, arm64 runtime, native-install, large-user, soak, and fault-injection coverage can be added when it answers a concrete risk.
 - The Native journal cannot recover a host power loss that leaves an abnormal
@@ -178,7 +176,7 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
   cgroup v2 path.
 - Exercise exact install, prepare/activate, upgrade, rollback, repair,
   uninstall, tamper refusal, account isolation, and interrupted-operation
-  recovery before publishing `2.8.0-rnl.1`.
+  recovery before publishing `2.8.0`.
 
 ## Development and release rules
 

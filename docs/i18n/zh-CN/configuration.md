@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=c10bfdd11b2d9262241435318d1656395c7155502694405cdacbe96046101df6 -->
+<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=8413f3e87bdafa768f4e28d360fb369e781b1689cd197bf31e57ac759bf08693 -->
 
 # 配置参考
 
@@ -74,7 +74,7 @@ SECRET_KEY=
 SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 ```
 
-安装器验证后以 `root:remnanode 0640` 写入 Secret。安装或激活时使用 `--secret-file`，不要把 Secret 作为命令行参数。
+安装器验证后以 `root:remnanode-lite 0640` 写入 Secret。安装或激活时使用 `--secret-file`，不要把 Secret 作为命令行参数。
 
 ## Compose 插值变量
 
@@ -93,15 +93,17 @@ SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 
 插值优先级是 shell 环境、`.env`、YAML 中的 `${NAME:-fallback}`。运行 `docker compose config --quiet` 可校验模板而不打印展开后的 Secret。
 
-Docker 镜像中的以下路径是容器私有 ABI，不能与 Native 路径混用：
+Docker 镜像中的以下路径位于容器私有文件系统中。它们与 Native 路径使用相同的项目名称，但并不属于宿主机布局：
 
 ```text
-XRAY_BIN=/usr/local/lib/remnanode/rw-core
-GEO_DIR=/usr/local/share/remnanode/xray
-ASN_DB_PATH=/usr/local/share/remnanode/asn/asn-prefixes.bin
-LOG_DIR=/var/log/remnanode
-INTERNAL_SOCKET_PATH=/run/remnanode/internal.sock
+XRAY_BIN=/usr/local/lib/remnanode-lite/rw-core
+GEO_DIR=/usr/local/share/remnanode-lite/xray
+ASN_DB_PATH=/usr/local/share/remnanode-lite/asn/asn-prefixes.bin
+LOG_DIR=/var/log/remnanode-lite
+INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 ```
+
+这些路径只属于发布镜像，不会与 Native 宿主机目录冲突。维护的 Compose tmpfs 与日志命令已经与之对应；如有覆盖，必须保持一致。
 
 ## Native `node.env`
 

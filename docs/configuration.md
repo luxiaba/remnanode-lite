@@ -80,7 +80,7 @@ SECRET_KEY=
 SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 ```
 
-The installer writes `/etc/remnanode-lite/secret.key` as `root:remnanode 0640` after validating it. Use `--secret-file` during install or activation; do not pass the Secret itself as an argument.
+The installer writes `/etc/remnanode-lite/secret.key` as `root:remnanode-lite 0640` after validating it. Use `--secret-file` during install or activation; do not pass the Secret itself as an argument.
 
 To rotate it safely, follow [Change the port or Secret](deployment-native.md#change-the-port-or-secret).
 
@@ -101,17 +101,18 @@ The production Compose files interpolate these values:
 
 Precedence for Compose interpolation is shell environment, then `.env`, then the `${NAME:-fallback}` in YAML. A blank value also selects the `:-` fallback. Run `docker compose config --quiet` to validate syntax without printing the expanded Secret.
 
-The image deliberately uses these container-private paths:
+The image uses these container-private paths. They carry the same project name
+as the Native layout, but are still inside the image filesystem:
 
 ```text
-XRAY_BIN=/usr/local/lib/remnanode/rw-core
-GEO_DIR=/usr/local/share/remnanode/xray
-ASN_DB_PATH=/usr/local/share/remnanode/asn/asn-prefixes.bin
-LOG_DIR=/var/log/remnanode
-INTERNAL_SOCKET_PATH=/run/remnanode/internal.sock
+XRAY_BIN=/usr/local/lib/remnanode-lite/rw-core
+GEO_DIR=/usr/local/share/remnanode-lite/xray
+ASN_DB_PATH=/usr/local/share/remnanode-lite/asn/asn-prefixes.bin
+LOG_DIR=/var/log/remnanode-lite
+INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 ```
 
-They are internal to the published image and do not conflict with the Native host layout. Do not mechanically rename them in Compose tmpfs mounts or log commands.
+They are internal to the published image and do not conflict with the Native host layout. The maintained Compose tmpfs mounts and log commands already match them; keep overrides consistent with the image.
 
 ## Native `node.env`
 
@@ -148,7 +149,7 @@ docker compose up -d --no-build --force-recreate
 
 ### Native Linux
 
-Edit `/etc/remnanode-lite/node.env` as root, keep ownership `root:remnanode` and mode `0640`, then validate and restart:
+Edit `/etc/remnanode-lite/node.env` as root, keep ownership `root:remnanode-lite` and mode `0640`, then validate and restart:
 
 ```bash
 sudo rnlctl doctor

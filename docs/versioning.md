@@ -25,13 +25,13 @@ classification.
 `Version` and `ContractVersion` move independently. For example:
 
 ```text
-Version:         2.8.0-rnl.1
+Version:         2.8.0
 ContractVersion: 2.8.0
 ```
 
-This identifies the first Remnanode Lite preview that includes the new Native
-Linux distribution while retaining the verified official Node `2.8.0`
-contract. The `rnl.1` suffix describes this project's release; it is not a
+This identifies the stable Remnanode Lite release that includes the first
+Native Linux distribution while retaining the verified official Node `2.8.0`
+contract. A future `rnl.N` suffix describes this project's release; it is not a
 revision published by the official project.
 
 Changing `ContractVersion` requires pinned official source, a reviewed contract
@@ -86,21 +86,20 @@ contract has already been implemented.
 
 | Release | Contract | Class | Status |
 | --- | --- | --- | --- |
-| `2.8.0` | `2.8.0` | Stable | Existing published release; its tag and history remain unchanged |
-| `2.8.0-rnl.1` | `2.8.0` | Preview | Planned first release from the self-contained Native Linux bundle pipeline |
+| `2.8.0` | `2.8.0` | Stable | Current stable release, including the first self-contained Native Linux bundle |
 
-Semantic Versioning orders `2.8.0-rnl.1` before `2.8.0`, even when the preview
-is published later in calendar time. Do not infer publication order or channel
-selection from SemVer sorting. The release workflow assigns `preview` or
-`latest` explicitly from the tag format.
+Semantic Versioning orders an `X.Y.Z-rnl.N` preview before its `X.Y.Z` stable
+counterpart. Do not infer publication order or channel selection from SemVer
+sorting. The release workflow assigns `preview` or `latest` explicitly from the
+tag format.
 
 ## Git Tags and Exact Image Tags
 
 Formal Git tags include a `v` prefix. Container tags do not:
 
 ```text
-Git tag:       v2.8.0-rnl.1
-Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
+Git tag:       v2.8.0
+Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.0
 ```
 
 Both are immutable release identities, but they identify different objects:
@@ -167,7 +166,7 @@ ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>
 Use an exact preview only when the preview status and changes are acceptable:
 
 ```text
-ghcr.io/luxiaba/remnanode-lite:2.8.0-rnl.1
+ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
 ```
 
 `preview` is convenient for short-lived evaluation, but an exact preview tag or
@@ -194,13 +193,13 @@ They deliberately do not follow moving channels. The bootstrap installer
 accepts an exact version such as:
 
 ```bash
-sudo sh install.sh --version 2.8.0-rnl.1
+sudo sh install.sh --version 2.8.0
 ```
 
 The administration CLI follows the same rule for an online upgrade:
 
 ```bash
-sudo rnlctl upgrade --to 2.8.0-rnl.2
+sudo rnlctl upgrade --to <exact-version>
 ```
 
 `latest`, `preview`, `edge`, and `sha-*` are not valid Native version inputs.

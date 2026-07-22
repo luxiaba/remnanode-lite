@@ -269,7 +269,7 @@ func (engine *Engine) checkManagedPermissions(state persistentState) error {
 		if engine.paths.LibraryRoot == ProductionPaths().LibraryRoot {
 			stat, ok := info.Sys().(*syscall.Stat_t)
 			if !ok || stat.Uid != 0 || uint64(stat.Gid) != expectedGID {
-				return fmt.Errorf("%s must be owned by root:remnanode", path)
+				return fmt.Errorf("%s must be owned by root:%s", path, managedAccountName)
 			}
 		}
 	}

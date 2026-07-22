@@ -40,6 +40,7 @@ sh -n deploy/remnanode-lite.openrc
 actionlint
 bash scripts/check-version-test.sh
 bash scripts/verify-release-tag-test.sh
+bash scripts/verify-release-latest-test.sh
 bash scripts/test-docker-packaging.sh
 bash scripts/check-supply-chain.sh
 

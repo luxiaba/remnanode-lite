@@ -112,9 +112,9 @@ The real-rw-core `v26.6.27` gate at 1 CPU, 448 MiB, and no swap covers a 1k-user
 
 The public server requires TLS 1.3 or later and disables Go's automatic HTTP/2 negotiation to preserve the official connection-handling model. An invalid JWT, unknown route, or wrong HTTP method closes the underlying connection instead of returning an enumerable 401/404/405 body. Request headers are limited to 64 KiB. Real TLS client tests cover normal connection reuse and connection closure after authentication or unknown-request failures.
 
-systemd and OpenRC run under the dedicated `remnanode:remnanode` account. Configuration is `root:remnanode 0640`; state and log directories are `remnanode:remnanode 0750`. The service receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd also narrows the bounding set to those capabilities and enables `NoNewPrivileges`, read-only system paths, namespace/syscall/address-family restrictions, `448 MiB` memory, zero swap, 1 CPU, and 256 tasks. Alpine 3.22 measurements for `supervise-daemon` showed `CapInh/Prm/Eff/Amb=0x1400` and `NoNewPrivs=1`; an `nft` child launched by the service could create the private table.
+systemd and OpenRC run under the dedicated `remnanode-lite:remnanode-lite` account. Configuration is `root:remnanode-lite 0640`; state and log directories are `remnanode-lite:remnanode-lite 0750`. The service receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd also narrows the bounding set to those capabilities and enables `NoNewPrivileges`, read-only system paths, namespace/syscall/address-family restrictions, `448 MiB` memory, zero swap, 1 CPU, and 256 tasks. Alpine 3.22 measurements for `supervise-daemon` showed `CapInh/Prm/Eff/Amb=0x1400` and `NoNewPrivs=1`; an `nft` child launched by the service could create the private table.
 
-Native project assets live in verified generations under `/usr/local/lib/remnanode-lite`; Docker uses private image paths under `/usr/local/lib/remnanode` and `/usr/local/share/remnanode`. Neither deployment takes ownership of generic system Xray paths. One release bundle contains Node, `rnlctl`, rw-core, geo data, ASN data, notices, and service material. The outer archive, strict manifest, architecture, versions, and every payload digest are verified before installation.
+Native project assets live in verified generations under `/usr/local/lib/remnanode-lite`; Docker uses container-private image paths under the same project name. Neither deployment takes ownership of generic system Xray paths. One release bundle contains Node, `rnlctl`, rw-core, geo data, ASN data, notices, and service material. The outer archive, strict manifest, architecture, versions, and every payload digest are verified before installation.
 
 Native upgrade creates a complete generation, atomically selects it, restores the previous enabled/running service state, validates the binary version, and waits for the private healthcheck before commit. Failure restores the committed generation; one previous generation remains available for explicit rollback. Full-uninstall tests also verify that unrelated processes, pre-existing account objects, and generic Xray files remain untouched.
 
@@ -173,7 +173,7 @@ The table summarizes only core constraints. Executable schemas in `internal/cont
 
 The previously recorded TLS/socket and system supply-chain differences are closed. There is currently no known static P1/P2 difference in the `/node` contract.
 
-The `v2.8.0` candidate was verified as the immutable
+A `v2.8.0` candidate must be verified as the immutable
 `sha-<40-character-main-commit>` image with the production Compose template on
 native `x86_64`/`amd64`, including its version, a real Panel 2.8.1 connection,
 and real proxy traffic. This operational confirmation stays outside the source
@@ -184,7 +184,7 @@ Every annotated release tag must point to the current `main` HEAD. The release
 workflow resolves that commit's `sha-*` candidate, verifies its two runnable
 Linux manifests and attestations, builds and verifies both Native bundles, and
 promotes the same digest without rebuilding. A plain stable version advances
-`latest`; an `rnl.N` prerelease such as `2.8.0-rnl.1` advances `preview` only.
+`latest`; an `rnl.N` prerelease advances `preview` only.
 
 Additional Native `arm64` runtime coverage, distribution-specific systemd and
 OpenRC installation, repeated 50,000-user load, long soak, and fault injection
