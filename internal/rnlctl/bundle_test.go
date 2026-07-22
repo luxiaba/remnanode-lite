@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -119,6 +120,48 @@ func TestCachedBundleSourceCannotChangeBeforeGenerationCopy(t *testing.T) {
 	if installed.Identity != bundle.Identity {
 		t.Fatalf("generation identity = %s, want %s", installed.Identity, bundle.Identity)
 	}
+}
+
+func TestOpenBundleArchivePreservesManifestModesUnderRestrictiveUmask(t *testing.T) {
+	root := writeTestBundle(t, filepath.Join(t.TempDir(), "bundle"), "2.8.0-rnl.1")
+	archive := writeTestBundleArchive(t, root)
+	digest, _, err := digestFile(archive, maxBundleArchive)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	restore := syscall.Umask(0o077)
+	t.Cleanup(func() { syscall.Umask(restore) })
+
+	bundle, err := openBundle(BundleInput{Archive: archive, SHA256: digest}, "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bundle.Close()
+	assertMode(t, filepath.Join(bundle.Root, "LICENSE"), 0o644)
+	assertMode(t, filepath.Join(bundle.Root, "bin", "rnlctl"), 0o755)
+}
+
+func TestCopyBundleToGenerationPreservesManifestModesUnderRestrictiveUmask(t *testing.T) {
+	root := writeTestBundle(t, filepath.Join(t.TempDir(), "bundle"), "2.8.0-rnl.1")
+	bundle, err := openBundle(BundleInput{Root: root}, "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer bundle.Close()
+
+	restore := syscall.Umask(0o077)
+	t.Cleanup(func() { syscall.Umask(restore) })
+
+	generationRoot, _, err := copyBundleToGeneration(bundle, filepath.Join(t.TempDir(), "generations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateBundleRoot(generationRoot, "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	assertMode(t, filepath.Join(generationRoot, "LICENSE"), 0o644)
+	assertMode(t, filepath.Join(generationRoot, "bin", "rnlctl"), 0o755)
 }
 
 func TestOpenBundleRejectsExpectedVersionMismatch(t *testing.T) {

@@ -576,6 +576,10 @@ func extractBundleArchive(archivePath, destination string) (string, error) {
 			if err != nil {
 				return "", err
 			}
+			if err := output.Chmod(mode); err != nil {
+				_ = output.Close()
+				return "", err
+			}
 			written, copyErr := io.CopyN(output, archive, header.Size)
 			syncErr := output.Sync()
 			closeErr := output.Close()
@@ -665,6 +669,10 @@ func copyBundleFile(sourceRoot, destinationRoot, relative string, mode fs.FileMo
 	}
 	file, err := os.OpenFile(destination, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 	if err != nil {
+		return err
+	}
+	if err := file.Chmod(mode); err != nil {
+		_ = file.Close()
 		return err
 	}
 	_, writeErr := file.Write(data)
