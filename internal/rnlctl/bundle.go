@@ -79,6 +79,7 @@ type manifestGeoRuntime struct {
 	Version          string           `json:"version"`
 	Commit           string           `json:"commit"`
 	SourceURL        string           `json:"sourceURL"`
+	SourceArtifact   manifestArtifact `json:"sourceArtifact"`
 	Artifact         manifestArtifact `json:"artifact"`
 	License          string           `json:"license"`
 	LicenseRationale string           `json:"licenseRationale,omitempty"`
@@ -317,6 +318,9 @@ func validateRuntimeAssets(assets manifestRuntimeAssets) error {
 	for name, geo := range map[string]manifestGeoRuntime{"geoIP": assets.GeoIP, "geoSite": assets.GeoSite} {
 		if geo.Version == "" || !gitRevisionRE.MatchString(geo.Commit) || geo.SourceURL == "" || geo.License == "" {
 			return fmt.Errorf("invalid %s provenance", name)
+		}
+		if err := validateManifestArtifact(geo.SourceArtifact); err != nil {
+			return fmt.Errorf("%s source artifact: %w", name, err)
 		}
 		if err := validateManifestArtifact(geo.Artifact); err != nil {
 			return fmt.Errorf("%s artifact: %w", name, err)

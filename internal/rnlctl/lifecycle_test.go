@@ -1078,8 +1078,8 @@ func writeTestBundle(t *testing.T, root, version string) string {
 		RuntimeAssetLockSHA256: digestBytes(files["runtime-assets.lock.json"]),
 		RuntimeAssets: manifestRuntimeAssets{
 			Xray:    manifestXrayRuntime{Version: "test", Commit: revision, SourceURL: "https://example.invalid/xray", Archive: artifact, Core: payload},
-			GeoIP:   manifestGeoRuntime{Version: "test", Commit: revision, SourceURL: "https://example.invalid/geoip", Artifact: artifact, License: "MIT"},
-			GeoSite: manifestGeoRuntime{Version: "test", Commit: revision, SourceURL: "https://example.invalid/geosite", Artifact: artifact, License: "MIT"},
+			GeoIP:   manifestGeoRuntime{Version: "test", Commit: revision, SourceURL: "https://example.invalid/geoip", SourceArtifact: artifact, Artifact: artifact, License: "MIT"},
+			GeoSite: manifestGeoRuntime{Version: "test", Commit: revision, SourceURL: "https://example.invalid/geosite", SourceArtifact: artifact, Artifact: artifact, License: "MIT"},
 			ASN:     manifestASNRuntime{Commit: revision, Source: artifact, Output: payload},
 		},
 		Files: manifestFiles,
