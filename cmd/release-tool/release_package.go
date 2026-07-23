@@ -456,8 +456,8 @@ func verifyReleaseSnapshot(snapshotPath, directory, tag, commit string, draft, p
 	expected := make(map[string]struct {
 		digest string
 		size   int64
-	}, len(releaseAssetNames(strings.TrimPrefix(tag, "v"))))
-	for _, name := range releaseAssetNames(strings.TrimPrefix(tag, "v")) {
+	}, len(releaseAssetNames(tag)))
+	for _, name := range releaseAssetNames(tag) {
 		digest, size, digestErr := fileDigestAndSize(filepath.Join(directory, name))
 		if digestErr != nil {
 			return fmt.Errorf("inspect local release asset %s: %w", name, digestErr)
@@ -581,10 +581,10 @@ func runVerifyReleaseIndex(args []string, stdout, stderr io.Writer) error {
 	if flags.NArg() != 0 {
 		return fmt.Errorf("verify-release-index does not accept positional arguments")
 	}
-	if *path == "" || *tag == "" || *image == "" || !strings.HasPrefix(*tag, "v") {
+	if *path == "" || *tag == "" || *image == "" {
 		return fmt.Errorf("verify-release-index requires file, tag, and image")
 	}
-	version := strings.TrimPrefix(*tag, "v")
+	version := *tag
 	if err := validateProjectVersion(version); err != nil {
 		return fmt.Errorf("invalid release tag %q", *tag)
 	}
@@ -634,7 +634,7 @@ func runVerifyRelease(args []string, stdout, stderr io.Writer) error {
 	if *snapshot == "" || *directory == "" || *tag == "" || !gitCommitPattern.MatchString(*commit) {
 		return fmt.Errorf("verify-release requires snapshot, directory, valid tag, and commit")
 	}
-	if err := validateProjectVersion(strings.TrimPrefix(*tag, "v")); err != nil || !strings.HasPrefix(*tag, "v") {
+	if err := validateProjectVersion(*tag); err != nil {
 		return fmt.Errorf("invalid release tag %q", *tag)
 	}
 	immutable, err := parseReleaseImmutability(*immutableValue)

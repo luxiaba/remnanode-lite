@@ -23,7 +23,7 @@ official_source="${REMNANODE_OFFICIAL_SOURCE:-}"
 go run ./cmd/contract-source-check -source "$official_source"
 
 version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
-release_tag="${RELEASE_TAG:-v${version}}"
+release_tag="${RELEASE_TAG:-${version}}"
 RELEASE_TAG="$release_tag" bash scripts/check-version.sh
 
 grep -Eq "^## \[${version//./\\.}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md || {

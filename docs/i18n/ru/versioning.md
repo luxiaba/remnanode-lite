@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=11a0d577a7fe9ec624cde68d3359f201c15e995d08cd8f935e0ceed2685c1d62 -->
+<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=d4b26b248b395c36314c449fd2e4757dcfe4549af2a31c96fb8994e387b1eb88 -->
 
 # Версии и теги образов
 
@@ -38,7 +38,7 @@ ContractVersion: 2.8.0
 
 После публикации stable имеет:
 
-- Git tag `vX.Y.Z`, созданный при публикации draft GitHub Release;
+- Git tag `X.Y.Z`, созданный при публикации draft GitHub Release;
 - обычный GitHub Release;
 - точный GHCR tag `X.Y.Z`;
 - движущийся канал GHCR `latest`.
@@ -51,7 +51,7 @@ GitHub также помечает такой Release как Latest. Это не
 
 После публикации preview имеет:
 
-- Git tag `vX.Y.Z-rnl.N`, созданный при публикации draft GitHub Release;
+- Git tag `X.Y.Z-rnl.N`, созданный при публикации draft GitHub Release;
 - GitHub Prerelease;
 - точный GHCR tag `X.Y.Z-rnl.N`;
 - движущийся канал GHCR `preview`.
@@ -70,10 +70,10 @@ SemVer ставит `X.Y.Z-rnl.N` ниже соответствующей `X.Y.Z
 
 ## Git tag и точный image tag
 
-Формальный Git tag содержит префикс `v`, container tag — нет:
+Формальный Git tag использует точную версию проекта, как и точный container tag:
 
 ```text
-Git tag:       vX.Y.Z
+Git tag:       X.Y.Z
 Container tag: ghcr.io/luxiaba/remnanode-lite:X.Y.Z
 ```
 
@@ -84,7 +84,7 @@ Container tag: ghcr.io/luxiaba/remnanode-lite:X.Y.Z
 
 Release workflow не пересобирает контейнер. Он проверяет `sha-<commit>` candidate, созданный из `main`, и присваивает тому же manifest digest точный release tag.
 
-Не создавайте и не отправляйте `v*` tags с рабочей станции. Создание draft само по себе не создаёт tag; tag появляется на принятом commit `main` при публикации draft. GitHub Release immutability затем блокирует tag и assets. Tag ruleset должен разрешать это действие Releases API. Для ещё не опубликованной версии workflow откажется использовать уже существующий tag.
+Не создавайте и не отправляйте release tags с рабочей станции. Создание draft само по себе не создаёт tag; точный version tag появляется на принятом commit `main` при публикации draft. GitHub Release immutability затем блокирует tag и assets. Ruleset для tags может запрещать обновления и удаления, но должен разрешать создание новых tags через `GITHUB_TOKEN`: стандартный GitHub Actions token не является actor в bypass list. Для ещё не опубликованной версии workflow откажется использовать уже существующий tag.
 
 Registry tags — имена, а не адреса содержимого. Для самой строгой фиксации используйте:
 
@@ -158,12 +158,12 @@ sudo rnlctl upgrade --to <exact-version>
 
 Опубликованный preview одновременно имеет:
 
-1. `vX.Y.Z-rnl.N` tag, созданный при публикации draft Release на принятом commit `main`;
+1. `X.Y.Z-rnl.N` tag, созданный при публикации draft Release на принятом commit `main`;
 2. опубликованный GitHub Prerelease с проверенными assets, включая attestированный `release-index.json`;
 3. точный GHCR tag `X.Y.Z-rnl.N`, совпадающий с digest из этого index;
 4. успешное продвижение этого digest в `preview`.
 
-Stable имеет обычный `vX.Y.Z`, полный GitHub Release, точный image `X.Y.Z`, GitHub Latest и продвижение в `latest`.
+Stable имеет обычный `X.Y.Z`, полный GitHub Release, точный image `X.Y.Z`, GitHub Latest и продвижение в `latest`.
 
 Оба класса используют одинаковые code, compatibility, asset, provenance и attestation gates. Различается статус Release и канал, а не строгость пути сборки.
 

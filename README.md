@@ -59,7 +59,7 @@ mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
 
 VERSION="<published-version>" # for example: X.Y.Z or X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fL \
   "${BASE}/docker-compose.single-file.yaml" \
@@ -115,7 +115,7 @@ exact Release, verify the installer, and name the release explicitly:
 
 ```bash
 VERSION="<published-version>" # for example: X.Y.Z or X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
 curl -fLO "${BASE}/SHA256SUMS"

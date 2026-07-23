@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=e061849d865643e23fedff443f6cd4042385b7fae53160b1da065d25e78e7f06 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=89f255a56acd9499c51b87341b648d6f68f6a4365fc0416c6ba88292e064d232 -->
 
 # Docker Compose 部署
 
@@ -62,7 +62,7 @@ Compose 使用 `network_mode: host`，不要添加 `ports:`。容器持有 `NET_
 
 ```bash
 VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
@@ -272,7 +272,7 @@ docker compose logs --tail=100 remnanode-lite
 
 ```bash
 VERSION=X.Y.Z-rnl.N # 或 X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE_URL}/compose.yaml"
 curl -fLO "${BASE_URL}/remnanode-lite.env.example"

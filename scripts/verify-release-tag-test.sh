@@ -44,34 +44,34 @@ run_check() {
 }
 
 expected=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
-run_check v2.8.0-rnl.1 "$expected" >/dev/null || fail "valid annotated tag was rejected"
+run_check 2.8.0-rnl.1 "$expected" >/dev/null || fail "valid annotated tag was rejected"
 
 TEST_REF_TYPE=commit TEST_TAG_OBJECT="$expected" \
-  run_check v2.8.0 "$expected" >/dev/null || fail "valid lightweight tag was rejected"
-TEST_REF_MISSING=true run_check --allow-missing v2.8.0 "$expected" >/dev/null ||
+  run_check 2.8.0 "$expected" >/dev/null || fail "valid lightweight tag was rejected"
+TEST_REF_MISSING=true run_check --allow-missing 2.8.0 "$expected" >/dev/null ||
   fail "an absent pre-publication tag was rejected"
-TEST_REF_MISSING=true run_check --require-missing v2.8.0 "$expected" >/dev/null ||
+TEST_REF_MISSING=true run_check --require-missing 2.8.0 "$expected" >/dev/null ||
   fail "an absent required-missing tag was rejected"
-if TEST_REF_MISSING=true run_check v2.8.0 "$expected" >/dev/null 2>&1; then
+if TEST_REF_MISSING=true run_check 2.8.0 "$expected" >/dev/null 2>&1; then
   fail "an absent published tag was accepted"
 fi
-if run_check --require-missing v2.8.0 "$expected" >/dev/null 2>&1; then
+if run_check --require-missing 2.8.0 "$expected" >/dev/null 2>&1; then
   fail "an existing pre-publication tag was accepted"
 fi
-if TEST_REF_ERROR=true run_check --allow-missing v2.8.0 "$expected" >/dev/null 2>&1; then
+if TEST_REF_ERROR=true run_check --allow-missing 2.8.0 "$expected" >/dev/null 2>&1; then
   fail "a non-404 tag lookup failure was accepted as absent"
 fi
-if TEST_TARGET_TYPE=tree run_check v2.8.0 "$expected" >/dev/null 2>&1; then
+if TEST_TARGET_TYPE=tree run_check 2.8.0 "$expected" >/dev/null 2>&1; then
   fail "tag pointing to a non-commit object was accepted"
 fi
-if TEST_REF_TYPE=blob run_check v2.8.0 "$expected" >/dev/null 2>&1; then
+if TEST_REF_TYPE=blob run_check 2.8.0 "$expected" >/dev/null 2>&1; then
   fail "unsupported ref object was accepted"
 fi
 if TEST_TARGET_COMMIT=cccccccccccccccccccccccccccccccccccccccc \
-  run_check v2.8.0 "$expected" >/dev/null 2>&1; then
+  run_check 2.8.0 "$expected" >/dev/null 2>&1; then
   fail "moved tag was accepted"
 fi
-if run_check v02.8.0 "$expected" >/dev/null 2>&1; then
+if run_check 02.8.0 "$expected" >/dev/null 2>&1; then
   fail "invalid version tag was accepted"
 fi
 

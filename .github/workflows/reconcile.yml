@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Published immutable vX.Y.Z or vX.Y.Z-rnl.N release
+        description: Published immutable X.Y.Z or X.Y.Z-rnl.N release
         required: true
         type: string
 

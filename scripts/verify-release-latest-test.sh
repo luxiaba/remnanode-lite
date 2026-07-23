@@ -68,29 +68,29 @@ assert_failure() {
 }
 
 assert_success \
-  'stable release is GitHub latest' 200 '{"tag_name":"v2.8.0"}' 0 v2.8.0 true
-output="$(run_check 404 '{"message":"Not Found"}' 0 v2.8.0 true --allow-non-owner)" ||
+  'stable release is GitHub latest' 200 '{"tag_name":"2.8.0"}' 0 2.8.0 true
+output="$(run_check 404 '{"message":"Not Found"}' 0 2.8.0 true --allow-non-owner)" ||
   fail 'first stable release did not claim an empty latest pointer in recovery mode'
 [ "$output" = 'owner=true' ] ||
   fail "empty latest recovery owner output was $output"
 assert_success \
-  'preview remains below an existing stable latest' 200 '{"tag_name":"v2.8.0"}' 0 v2.8.1-rnl.1 false
+  'preview remains below an existing stable latest' 200 '{"tag_name":"2.8.0"}' 0 2.8.1-rnl.1 false
 assert_success \
-  'first preview has no stable latest yet' 404 '{"message":"Not Found"}' 0 v2.8.0-rnl.1 false
+  'first preview has no stable latest yet' 404 '{"message":"Not Found"}' 0 2.8.0-rnl.1 false
 assert_failure \
-  'stable release cannot accept no latest' 'expected v2.8.0' \
-  404 '{"message":"Not Found"}' 0 v2.8.0 true
+  'stable release cannot accept no latest' 'expected 2.8.0' \
+  404 '{"message":"Not Found"}' 0 2.8.0 true
 assert_failure \
   'preview cannot become GitHub latest' 'preview release must not be GitHub latest' \
-  200 '{"tag_name":"v2.8.0-rnl.1"}' 0 v2.8.0-rnl.1 false
+  200 '{"tag_name":"2.8.0-rnl.1"}' 0 2.8.0-rnl.1 false
 assert_failure \
   'authorization errors fail closed' 'HTTP 401' \
-  401 '{"message":"Bad credentials"}' 0 v2.8.0 true
+  401 '{"message":"Bad credentials"}' 0 2.8.0 true
 assert_failure \
   'transport errors fail closed' 'could not query GitHub latest release' \
-  000 '{}' 7 v2.8.0 true
+  000 '{}' 7 2.8.0 true
 assert_failure \
   'malformed successful response fails closed' 'response has no tag_name' \
-  200 '{}' 0 v2.8.0 true
+  200 '{}' 0 2.8.0 true
 
 echo 'release latest verification tests passed'

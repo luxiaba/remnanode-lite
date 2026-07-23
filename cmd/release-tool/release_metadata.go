@@ -30,7 +30,7 @@ func classifyReleaseVersion(version string) (releaseMetadata, error) {
 	}
 	metadata := releaseMetadata{
 		Version: version,
-		Tag:     "v" + version,
+		Tag:     version,
 	}
 	if strings.Contains(version, "-rnl.") {
 		metadata.Channel = "preview"
@@ -59,10 +59,7 @@ func runMetadata(args []string, stdout, stderr io.Writer) error {
 	var metadata releaseMetadata
 	var err error
 	if *requestedTag != "" {
-		if !strings.HasPrefix(*requestedTag, "v") {
-			return fmt.Errorf("invalid release tag %q", *requestedTag)
-		}
-		metadata, err = classifyReleaseVersion(strings.TrimPrefix(*requestedTag, "v"))
+		metadata, err = classifyReleaseVersion(*requestedTag)
 	} else {
 		version := projectversion.Version
 		if *requestedVersion != "" && *requestedVersion != version {

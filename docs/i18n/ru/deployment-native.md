@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=dba090d727b843193d91bac9991d8d69f4c1d5702258022ef6421191c38936df -->
+<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=c648b5d3133768c9880d5ba8d5932a4b115c5055c0bd31f9bdf77ddcdb955803 -->
 
 # Нативное развёртывание Linux
 
@@ -51,7 +51,7 @@ sudo apt-get install -y ca-certificates curl nftables iproute2
 
 ```bash
 VERSION="<published-version>" # например: X.Y.Z или X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
 trap 'rm -rf "$workdir"' EXIT

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=dba090d727b843193d91bac9991d8d69f4c1d5702258022ef6421191c38936df -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=c648b5d3133768c9880d5ba8d5932a4b115c5055c0bd31f9bdf77ddcdb955803 -->
 
 # 原生 Linux 部署
 
@@ -58,7 +58,7 @@ sudo apt-get install -y ca-certificates curl nftables iproute2
 
 ```bash
 VERSION="<published-version>" # 例如：X.Y.Z 或 X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
 trap 'rm -rf "$workdir"' EXIT
@@ -70,7 +70,7 @@ grep '  install.sh$' SHA256SUMS | sha256sum --check --strict -
 sudo sh ./install.sh --version "$VERSION" --port 38329
 ```
 
-把 `38329` 换成 Panel 为该 Node 配置的端口。如果主机上没有有效 Secret，安装器会在终端中无回显地读取它，并在写入系统前请求确认。在线 installer 只下载当前架构对应的精确 `v${VERSION}` 归档，不会跟随 GitHub Latest 或容器移动通道。
+把 `38329` 换成 Panel 为该 Node 配置的端口。如果主机上没有有效 Secret，安装器会在终端中无回显地读取它，并在写入系统前请求确认。在线 installer 只下载当前架构对应的精确 `${VERSION}` 归档，不会跟随 GitHub Latest 或容器移动通道。
 
 ### 自动化安装
 

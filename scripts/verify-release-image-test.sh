@@ -86,7 +86,7 @@ case "$3" in
     done
     [ "${TEST_RELEASE_INDEX_STATE:-valid}" = valid ] || exit 1
     [[ "$file" == */release-index.json ]]
-    [ "$tag" = v2.8.0 ]
+    [ "$tag" = 2.8.0 ]
     [ "$image" = "$IMAGE" ]
     [ "$source_revision" = "$TEST_COMMIT" ]
     printf 'source_revision=%s\nindex_digest=%s\n' "$TEST_COMMIT" "$TEST_RELEASE_INDEX_DIGEST"
@@ -106,18 +106,18 @@ case "$1" in
       */releases\?per_page=100)
         case "${TEST_RELEASE_STATE:-published}" in
           published)
-            printf '[{"id":42,"tag_name":"v2.8.0","target_commitish":"%s","draft":false,"prerelease":false,"immutable":true}]\n' "$TEST_COMMIT"
+            printf '[{"id":42,"tag_name":"2.8.0","target_commitish":"%s","draft":false,"prerelease":false,"immutable":true}]\n' "$TEST_COMMIT"
             ;;
           draft)
-            printf '[{"id":42,"tag_name":"v2.8.0","target_commitish":"%s","draft":true,"prerelease":false,"immutable":false}]\n' "$TEST_COMMIT"
+            printf '[{"id":42,"tag_name":"2.8.0","target_commitish":"%s","draft":true,"prerelease":false,"immutable":false}]\n' "$TEST_COMMIT"
             ;;
           mutable)
-            printf '[{"id":42,"tag_name":"v2.8.0","target_commitish":"%s","draft":false,"prerelease":false,"immutable":false}]\n' "$TEST_COMMIT"
+            printf '[{"id":42,"tag_name":"2.8.0","target_commitish":"%s","draft":false,"prerelease":false,"immutable":false}]\n' "$TEST_COMMIT"
             ;;
           *) exit 2 ;;
         esac
         ;;
-      */git/ref/tags/v2.8.0)
+      */git/ref/tags/2.8.0)
         printf '{"object":{"type":"commit","sha":"%s"}}\n' "$TEST_COMMIT"
         ;;
       *) exit 2 ;;
@@ -126,18 +126,18 @@ case "$1" in
   release)
     case "$2" in
       verify)
-        [ "$3" = v2.8.0 ]
+        [ "$3" = 2.8.0 ]
         [ "$4" = --repo ]
         [ "$5" = "$GITHUB_REPOSITORY" ]
         ;;
       verify-asset)
-        [ "$3" = v2.8.0 ]
+        [ "$3" = 2.8.0 ]
         [[ "$4" == */release-index.json ]]
         [ "$5" = --repo ]
         [ "$6" = "$GITHUB_REPOSITORY" ]
         ;;
       download)
-        [ "$3" = v2.8.0 ]
+        [ "$3" = 2.8.0 ]
         directory=""
         pattern=""
         while [ "$#" -gt 0 ]; do
@@ -199,7 +199,7 @@ run_check() {
     TEST_COMMIT="$commit" \
     TEST_DIGEST="$digest" \
     TEST_RELEASE_INDEX_DIGEST="${TEST_RELEASE_INDEX_DIGEST:-$digest}" \
-    bash "$root_dir/scripts/verify-release-image.sh" v2.8.0 2.8.0 false
+    bash "$root_dir/scripts/verify-release-image.sh" 2.8.0 2.8.0 false
 }
 
 output="$(run_check 2>"$test_dir/published.log")"

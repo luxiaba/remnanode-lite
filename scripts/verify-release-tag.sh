@@ -14,7 +14,7 @@ case "${1:-}" in
 esac
 
 if [ "$#" -ne 2 ]; then
-  echo "usage: verify-release-tag.sh [--allow-missing|--require-missing] vX.Y.Z[-rnl.N] COMMIT" >&2
+  echo "usage: verify-release-tag.sh [--allow-missing|--require-missing] X.Y.Z[-rnl.N] COMMIT" >&2
   exit 2
 fi
 
@@ -24,7 +24,7 @@ expected_commit="$2"
 : "${GH_TOKEN:?GH_TOKEN is required}"
 
 printf '%s\n' "$tag" | grep -Eq \
-  '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$' || {
+  '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$' || {
   echo "invalid release tag: $tag" >&2
   exit 2
 }

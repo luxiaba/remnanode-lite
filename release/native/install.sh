@@ -492,7 +492,7 @@ else
 	[ -n "$version" ] \
 		|| usage_error "choose an exact --version or provide --bundle PATH"
 	asset_name=remnanode-lite_${version}_linux_${architecture}.tar.gz
-	release_url=$REPOSITORY_URL/releases/download/v${version}
+	release_url=$REPOSITORY_URL/releases/download/${version}
 	checksum_path=$temporary_directory/SHA256SUMS
 	bundle_path=$temporary_directory/$asset_name
 	printf 'Downloading Remnanode Lite %s for linux/%s...\n' "$version" "$architecture"

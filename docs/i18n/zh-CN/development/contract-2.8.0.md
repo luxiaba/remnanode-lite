@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=b9d007488ef9e9e84c82738d38281dc5178deaac607af1c7d26f446c637066a0 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=5d8454c2e82b23117e96d3f8823b0a7825ceb4ff30f47603aba66cc64aa85145 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > 这是中文译文；涉及契约细节时，请以[英文原文](../../../development/contract-2.8.0.md)为准。
@@ -172,7 +172,7 @@ Native 项目资产位于 `/usr/local/lib/remnanode-lite` 的 generation 中；D
 
 此前记录的 TLS/socket 与系统供应链偏差已经关闭。当前没有已知的静态 `/node` 契约 P1/P2。
 
-`v2.8.0` 候选必须使用生产 Compose 模板在原生 `x86_64`/`amd64` 上验证不可变的 `sha-<main-commit>` 镜像，确认版本输出、真实 Panel 2.8.1 连接和真实代理流量。该人工判断不作为运行数据提交到仓库。容器仍必须限制为 448 MiB 内存、不得获得额外容器 swap、1 CPU 和 256 PIDs。
+`2.8.0` 候选必须使用生产 Compose 模板在原生 `x86_64`/`amd64` 上验证不可变的 `sha-<main-commit>` 镜像，确认版本输出、真实 Panel 2.8.1 连接和真实代理流量。该人工判断不作为运行数据提交到仓库。容器仍必须限制为 448 MiB 内存、不得获得额外容器 swap、1 CPU 和 256 PIDs。
 
 Release workflow 只从当前 `main` HEAD 运行。它会解析该提交的 `sha-*` 候选，校验两个可运行 Linux manifest、各平台 SBOM 和 attestation，验证已构建的 Native bundle 及其已 attestation 的 `release-index.json` digest 绑定，创建并校验 draft Release，在公开前晋升同一 digest，再在不重建镜像的情况下确认 immutable Release 与精确标签。纯稳定版随后推进 `latest`。Release notes 由 GitHub 自动生成。
 

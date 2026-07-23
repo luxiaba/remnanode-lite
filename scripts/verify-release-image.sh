@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if [ "$#" -ne 3 ]; then
-  echo "usage: $0 <vX.Y.Z[-rnl.N]-tag> <X.Y.Z[-rnl.N]-version> <true|false-prerelease>" >&2
+  echo "usage: $0 <X.Y.Z[-rnl.N]-tag> <X.Y.Z[-rnl.N]-version> <true|false-prerelease>" >&2
   exit 2
 fi
 
@@ -14,7 +14,7 @@ prerelease=$3
 : "${IMAGE:?IMAGE is required}"
 : "${RUNNER_TEMP:?RUNNER_TEMP is required}"
 
-[ "$release_tag" = "v$version" ] || {
+[ "$release_tag" = "$version" ] || {
   echo "release tag $release_tag does not match version $version" >&2
   exit 2
 }

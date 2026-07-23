@@ -39,7 +39,7 @@ case "$1:$2" in
     [ "$count" -lt "${TEST_IMMUTABLE_AFTER:-1}" ] || immutable=true
     printf '{"draft":false,"immutable":%s}\n' "$immutable"
     ;;
-  api:repos/*/git/ref/tags/v2.8.0)
+  api:repos/*/git/ref/tags/2.8.0)
     count=0
     [ ! -f "$TEST_TAG_COUNT" ] || count="$(cat "$TEST_TAG_COUNT")"
     count=$((count + 1))
@@ -83,9 +83,9 @@ count=0
 [ ! -f "$TEST_LATEST_COUNT" ] || count="$(cat "$TEST_LATEST_COUNT")"
 count=$((count + 1))
 printf '%s\n' "$count" >"$TEST_LATEST_COUNT"
-tag=v2.8.0
+tag=2.8.0
 if [ "$count" -lt "${TEST_LATEST_AFTER:-1}" ]; then
-  tag=v0.0.1
+  tag=0.0.1
 fi
 printf '{"tag_name":"%s"}\n' "$tag" >"$response_file"
 printf '200'
@@ -119,7 +119,7 @@ run_check() {
     TEST_COMMIT="$commit" \
     "$@" \
     /bin/bash "$root_dir/scripts/verify-published-release.sh" \
-      42 v2.8.0 "$commit" false true "$test_dir/assets"
+      42 2.8.0 "$commit" false true "$test_dir/assets"
 }
 
 if run_check identity TEST_IDENTITY_ERROR=true >"$test_dir/identity.out" 2>&1; then
@@ -159,7 +159,7 @@ run_check latest \
   fail "the final Release snapshot was not reverified with each Latest retry"
 [ "$(wc -l <"$test_dir/latest.sleep.log" | tr -d ' ')" -eq 2 ] ||
   fail "GitHub Latest propagation did not wait exactly between failed attempts"
-grep -Fq 'GitHub latest is v0.0.1' "$test_dir/latest.out" ||
+grep -Fq 'GitHub latest is 0.0.1' "$test_dir/latest.out" ||
   fail "an eventual GitHub Latest error was hidden"
 
 run_check tag \

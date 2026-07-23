@@ -8,7 +8,7 @@ if [ "${1:-}" = --allow-non-owner ]; then
 fi
 
 if [ "$#" -ne 2 ]; then
-  echo "usage: $0 [--allow-non-owner] <vX.Y.Z[-rnl.N]-tag> <true|false-prerelease>" >&2
+  echo "usage: $0 [--allow-non-owner] <X.Y.Z[-rnl.N]-tag> <true|false-prerelease>" >&2
   exit 2
 fi
 
@@ -26,7 +26,7 @@ case "$prerelease" in
       [
         .[]
         | select(.isPrerelease)
-        | select(.tagName | test("^v[0-9]+\\.[0-9]+\\.[0-9]+-rnl\\.[1-9][0-9]*$"))
+        | select(.tagName | test("^[0-9]+\\.[0-9]+\\.[0-9]+-rnl\\.[1-9][0-9]*$"))
       ]
       | first
       | .tagName // empty

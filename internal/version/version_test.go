@@ -47,10 +47,9 @@ func TestStringIncludesBothVersions(t *testing.T) {
 }
 
 func TestReleaseAssetURLValidatesInputs(t *testing.T) {
-	for _, tag := range []string{"v2.8.0", "v9.8.7-rnl.3"} {
+	for _, tag := range []string{"2.8.0", "9.8.7-rnl.3"} {
 		got, err := ReleaseAssetURL(tag, "arm64")
-		version := strings.TrimPrefix(tag, "v")
-		if err != nil || !strings.HasSuffix(got, "/"+tag+"/remnanode-lite_"+version+"_linux_arm64.tar.gz") {
+		if err != nil || !strings.HasSuffix(got, "/"+tag+"/remnanode-lite_"+tag+"_linux_arm64.tar.gz") {
 			t.Fatalf("ReleaseAssetURL(%q) = %q, %v", tag, got, err)
 		}
 	}
@@ -59,9 +58,10 @@ func TestReleaseAssetURLValidatesInputs(t *testing.T) {
 		arch string
 	}{
 		{tag: "../main", arch: "amd64"},
-		{tag: "v2.8.0-rnl.0", arch: "amd64"},
-		{tag: "v2.8.0", arch: "../amd64"},
-		{tag: "v2.8.0", arch: "386"},
+		{tag: "2.8.0-rnl.0", arch: "amd64"},
+		{tag: "v2.8.0", arch: "amd64"},
+		{tag: "2.8.0", arch: "../amd64"},
+		{tag: "2.8.0", arch: "386"},
 	} {
 		if _, err := ReleaseAssetURL(test.tag, test.arch); err == nil {
 			t.Fatalf("ReleaseAssetURL(%q, %q) succeeded", test.tag, test.arch)
@@ -70,8 +70,8 @@ func TestReleaseAssetURLValidatesInputs(t *testing.T) {
 }
 
 func TestInstallScriptURLValidatesInputs(t *testing.T) {
-	got, err := InstallScriptURL("v2.8.0", "install.sh")
-	if err != nil || !strings.HasSuffix(got, "/v2.8.0/install.sh") {
+	got, err := InstallScriptURL("2.8.0", "install.sh")
+	if err != nil || !strings.HasSuffix(got, "/2.8.0/install.sh") {
 		t.Fatalf("InstallScriptURL() = %q, %v", got, err)
 	}
 	for _, test := range []struct {
@@ -79,8 +79,9 @@ func TestInstallScriptURLValidatesInputs(t *testing.T) {
 		script string
 	}{
 		{tag: "main", script: "install.sh"},
-		{tag: "v2.8.0", script: "../install.sh"},
-		{tag: "v2.8.0", script: "arbitrary.sh"},
+		{tag: "v2.8.0", script: "install.sh"},
+		{tag: "2.8.0", script: "../install.sh"},
+		{tag: "2.8.0", script: "arbitrary.sh"},
 	} {
 		if _, err := InstallScriptURL(test.tag, test.script); err == nil {
 			t.Fatalf("InstallScriptURL(%q, %q) succeeded", test.tag, test.script)

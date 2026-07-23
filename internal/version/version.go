@@ -16,7 +16,7 @@ var ContractVersion = "2.8.0"
 
 const releaseRepo = "luxiaba/remnanode-lite"
 
-var releaseTagPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(?:-rnl\.[1-9][0-9]*)?$`)
+var releaseTagPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(?:-rnl\.[1-9][0-9]*)?$`)
 
 // ResolveContractVersion returns the immutable nodeVersion for one daemon
 // instance. The composition root resolves configuration once at startup.
@@ -40,7 +40,7 @@ func ReleaseAssetURL(tag, arch string) (string, error) {
 	}
 	return fmt.Sprintf(
 		"https://github.com/%s/releases/download/%s/remnanode-lite_%s_linux_%s.tar.gz",
-		releaseRepo, tag, strings.TrimPrefix(tag, "v"), arch,
+		releaseRepo, tag, tag, arch,
 	), nil
 }
 
