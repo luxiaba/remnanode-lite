@@ -16,7 +16,8 @@ runtime observations as versioned source artifacts. The current process builds
 one immutable `sha-<40-character-commit>` candidate for every `main` commit.
 After the maintainer verifies that candidate with a real Panel and real traffic,
 the current release workflow verifies a draft Release, publishes its tag on
-`main`, promotes the same digest to the exact version and `latest`, and
+`main`, confirms the Release is immutable, promotes the same digest to the
+exact version and `latest`, and
 publishes GitHub-generated Release notes. Use the current release
 guide for publication policy; this archive records only the historical plan.
 

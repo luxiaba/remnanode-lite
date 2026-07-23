@@ -160,7 +160,8 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | --- | --- |
 | `.github/workflows/ci.yml` | Required Go, repository, Native bootstrap/lifecycle, and Linux network-management CI gate |
 | `.github/workflows/container.yml` | Candidate workflow: multi-architecture image build, attestation, and the immutable `sha-<40-character-main-commit>` candidate |
-| `.github/workflows/release.yml` | Draft-first publication of accepted Native assets, exact image tag, and stable/preview channel promotion |
+| `.github/workflows/release.yml` | Draft-first publication that verifies an immutable Release before exact and moving image promotion |
+| `.github/workflows/reconcile.yml` | Idempotent recovery of an exact image tag and its eligible `latest` or `preview` channel from a published Release |
 | `.github/workflows/contract-sync.yml`, `.github/workflows/security.yml` | Official-version monitoring and scheduled security checks |
 | `scripts/check*.sh` | Stable Go, repository, supply-chain, and complete-gate entry points |
 | `scripts/build-native-bundle.sh` | Reproducible `amd64`/`arm64` Native bundle build around `release-tool` |
@@ -213,9 +214,11 @@ artifact: do not commit host inventories, container details, logs, or smoke
 records. Dispatch the release workflow from the current `main` commit with the
 exact source version. It verifies the candidate image, Native assets, and their
 attestations, creates and verifies a draft Release, publishes its tag, then
-promotes the same digest to the exact version. Plain `X.Y.Z` releases advance `latest`;
+requires the Release to become immutable before promoting the same digest to
+the exact version. Plain `X.Y.Z` releases advance `latest`;
 `X.Y.Z-rnl.N` prereleases advance `preview` and never change GitHub or GHCR
-`latest`.
+`latest`. If registry promotion fails after publication, `reconcile-release`
+recovers the exact tag and eligible channel without rebuilding.
 
 ## Common Change Paths
 

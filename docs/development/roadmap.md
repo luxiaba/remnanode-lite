@@ -28,7 +28,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 5. Every concurrency limit, queue, request body, and cache must have an explicit bound.
 6. The Node owns only its rw-core process, internal sockets, and private nftables table; it does not own the host firewall policy. Destroying sockets by IP can affect the host network namespace and is treated as an explicit, documented side effect.
 7. `dev` is the stable development and integration branch. Topic branches enter it through PR and CI. `main` is the release branch and accepts only candidates that have passed the code gate on `dev`.
-8. Every `main` commit gets one immutable `sha-<40-character-commit>` container candidate. After maintainer acceptance, the release workflow verifies a draft Release, publishes its tag at the current `main` HEAD, and promotes the exact candidate without rebuilding.
+8. Every `main` commit gets one immutable `sha-<40-character-commit>` container candidate. After maintainer acceptance, the release workflow verifies a draft Release, publishes and locks it at the current `main` HEAD, then promotes the exact candidate without rebuilding.
 
 ## Compatibility boundary
 

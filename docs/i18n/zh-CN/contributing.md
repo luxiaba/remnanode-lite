@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=11126ba2d954bcd90e79052fcbb550ab2cd8a591ded657a979a7b1f94efddbf5 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=f9f05fffbf82075c95bf39b806fdf427a56e05a9883bdda6fda2efef9caecb37 -->
 
 # 贡献指南
 
@@ -291,7 +291,8 @@ Review 重点依次是正确性与契约、状态/并发、资源边界、安全
 
 候选确认可发布后，从当前 `main` HEAD 以精确源码版本发起 release workflow。它会校验
 候选 manifest、已构建的 Native 资产及其 attestation，创建并校验 draft Release，公开
-其 tag，再把同一个 digest 晋升为精确版本和 `latest`。`edge` 和 `sha-*` 都不是正式版本。
+并确认 immutable 后，再把同一个 digest 晋升为精确版本。纯 `X.Y.Z` 稳定版推进
+`latest`，`X.Y.Z-rnl.N` 预发布版只推进 `preview`。`edge` 和 `sha-*` 都不是正式版本。
 
 ## 许可证
 

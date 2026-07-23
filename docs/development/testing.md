@@ -171,6 +171,7 @@ The script runs:
 - actionlint.
 - Docker/Compose packaging-policy checks.
 - Supply-chain checks for download sources, pinned digests, Action SHAs, and installer bootstrap.
+- One `govulncheck ./...` scan when the tool is available or required.
 - Cross-builds of Linux `amd64` and `arm64` binaries with the exact Go toolchain.
 
 When Docker Compose is available, the packaging test also validates the Compose schema. If it is unavailable, the script prints an explicit skip while continuing the other static policy checks. Do not ignore that skip when claiming Compose validation.
@@ -191,7 +192,12 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` combines the Go gate, repository gate, offline Native bootstrap tests, and govulncheck. If `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, it skips the vulnerability scan. The required repository CI job sets it, so a release can only consume a candidate whose CI ran the scanner.
+`check.sh` combines the Go gate, repository gate, and offline Native bootstrap
+tests. `check-repository.sh` owns the single vulnerability-scan invocation, so
+the complete and release gates do not run the same scan again. If
+`REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, the
+repository gate skips it. Required CI sets the flag, so a release can only
+consume a candidate whose CI ran the scanner.
 
 A successful `check.sh` run does not prove production behavior. It does not run the candidate image with a real Panel and real traffic, nor does it exercise every supported architecture, init system, host size, load, or fault path.
 
@@ -349,11 +355,16 @@ repository.
 
 The workflow requires the dispatch commit to remain the current `main` HEAD.
 It resolves that commit's `sha-*` candidate, requires the runnable
-`linux/amd64` and `linux/arm64` manifests with their BuildKit attestations,
+`linux/amd64` and `linux/arm64` manifests, validates each platform's SPDX SBOM
+and BuildKit attestations,
 verifies the GitHub attestations for the prebuilt Native assets, creates and
-verifies a draft Release, publishes its tag, and promotes the same digest to
-the exact version without rebuilding. A plain `X.Y.Z` Release is stable and advances `latest`; an
+verifies a draft Release, publishes and verifies the immutable Release, and
+promotes the same digest to the exact version without rebuilding. A plain
+`X.Y.Z` Release is stable and advances `latest`; an
 `X.Y.Z-rnl.N` Release is a GitHub prerelease and advances `preview` only.
+If publication succeeds but registry promotion does not, `reconcile-release`
+revalidates the published Release and source candidate before restoring the
+exact tag and eligible channel.
 
 See the [versioning policy](../versioning.md) for tag, version, and channel semantics, and the [release process](../release.md) for candidate verification and publication steps.
 
@@ -397,7 +408,8 @@ The candidate workflow remains path-filtered for pull requests, so it does not
 run on every PR. Every push to `main`, however, builds and attests the manifest
 and publishes the immutable `sha-<40-character-commit>` candidate. The manual
 release workflow resolves that candidate, verifies its shape and attestation,
-and promotes the same digest. A path-filtered “not run” is not a
+including both per-platform SPDX SBOMs, and promotes the same digest only after
+the GitHub Release is immutable. A path-filtered “not run” is not a
 failure, and an optional container job must not become a required check on pull
 requests where it cannot appear.
 

@@ -29,9 +29,9 @@ dev -> pull request -> main
                          |
               draft Release + verified assets
                          |
-                   exact image tag
-                         |
         publish: create v<version> + lock Release
+                         |
+                   exact image tag
                          |
                latest or preview channel
 ```
@@ -170,14 +170,16 @@ The workflow performs these operations in order:
 5. Creates or updates a draft GitHub Release without creating the Git tag.
 6. Compares every uploaded draft asset with the local digest and size, and
    requires the unpublished `v<version>` tag to remain absent.
-7. Gives the accepted image digest its immutable exact version tag. No image
-   build occurs here.
-8. Reconfirms that the accepted commit is still the remote `main` HEAD and
+7. Reconfirms that the accepted commit is still the remote `main` HEAD and
    that no `v<version>` tag appeared during draft verification.
-9. Publishes the draft with the correct stable or prerelease status. This is
+8. Publishes the draft with the correct stable or prerelease status. This is
    the step that creates the `v<version>` tag.
-10. Requires GitHub release immutability and verifies the tag target, release
-   attestation, and every local asset against it.
+9. Requires GitHub release immutability and verifies the tag target, release
+   attestation, and every local asset against it. Identity and asset errors fail
+   immediately; only immutable-state and attestation propagation are retried.
+10. Gives the accepted image digest its immutable exact version tag. No image
+    build occurs here, and an existing exact tag is accepted only when its
+    digest is identical.
 11. Moves the same image digest to `latest` for a stable release or `preview`
     for a prerelease.
 
@@ -227,13 +229,16 @@ late.
 | --- | --- | --- |
 | Source, CI, candidate, package, or provenance verification | No Release created | Fix the cause or wait for the required workflow, then run release again |
 | Draft creation or asset upload | A draft may exist; the release tag does not exist | Re-run the same version only while `main` still points to the accepted commit; the workflow updates and re-verifies the draft |
-| Exact image promotion | Verified draft exists; exact tag may already be correct | Re-run; immutable promotion accepts an existing tag only when the digest matches |
-| Publication or post-publication verification | Release and tag may already be public | Re-run the same workflow once. It recognizes an immutable published Release, skips mutation, and verifies the published result again. Never delete or rewrite it to hide a defect |
-| `latest` or `preview` promotion | Immutable Release and exact image are valid | Run `reconcile-channel` for that published tag |
+| Publication | A draft may remain, or the Release and tag may already be public | Inspect the Release first. If it is still a draft and `main` is unchanged, rerun `release`. If it is public, never delete or rewrite it; continue with `reconcile-release` |
+| Immutable-state or Release-attestation verification | The Release and tag are public; the exact image may still be absent | Rerun `release` while its commit is still `main`, otherwise run `reconcile-release` after GitHub finishes propagation |
+| Exact image or `latest`/`preview` promotion | The immutable Release is public; registry publication is incomplete | Run `reconcile-release` for the published tag. Matching exact tags are no-ops; conflicting digests fail closed and require investigation |
 
-The reconciliation workflow accepts only an immutable published Release. It
-refuses to move `latest` away from GitHub's current stable Latest Release and
-refuses to move `preview` to an older prerelease.
+The `reconcile-release` workflow derives the source commit from an immutable
+published Release, verifies its `sha-<commit>` candidate and provenance, then
+creates or confirms the exact image tag before considering the moving channel.
+It refuses to move `latest` away from GitHub's current stable Latest Release and
+refuses to move `preview` to an older prerelease. It never rebuilds an image and
+never overwrites a conflicting exact tag.
 
 A draft is tied to its accepted commit. If `main` advances before the draft is
 published, the workflow intentionally refuses to resume it. Delete only that

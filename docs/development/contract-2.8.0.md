@@ -183,7 +183,8 @@ container swap, 1 CPU, and 256 PIDs.
 The release workflow runs only from the current `main` HEAD. It resolves that
 commit's `sha-*` candidate, verifies its two runnable Linux manifests and
 attestations, verifies the prebuilt Native bundles, creates and verifies a
-draft Release, publishes its tag, and promotes the same digest without rebuilding. A plain stable version
+draft Release, publishes and verifies the immutable Release, and promotes the
+same digest without rebuilding. A plain stable version
 advances `latest`; an `rnl.N` prerelease advances `preview` only.
 
 Additional Native `arm64` runtime coverage, distribution-specific systemd and

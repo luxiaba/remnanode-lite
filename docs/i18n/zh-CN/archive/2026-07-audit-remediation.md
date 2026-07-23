@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=01399e82b44f39aac83f79f2ced0aa0bc7700dbafabeb880add3165eb218f97c -->
+<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=5baa832bbbe33b6609f672a885c931453ccde4355f95415a4239853de0481f8a -->
 # 2026-07 静态审计整改记录（归档）
 
 > 这是中文译文；涉及历史记录和规则时，请以[英文原文](../../../archive/2026-07-audit-remediation.md)为准。
@@ -7,7 +7,7 @@
 
 这里记录的是 2026 年 7 月为首个独立版本线完成的静态审计和整改工作，仅供回顾，不是当前待办或新维护者指南。审计早于仓库历史重置，原基线 commit 已不存在于当前 Git 历史。仍需追踪的事实可以在代码和测试、[2.8.0 契约基线](../development/contract-2.8.0.md)、[资源预算](../development/resource-budget.md)和当前[发布流程](../release.md)中找到。
 
-下文的 M8 计划原本要求原生和双运行时测试、50,000 用户测试及 24 小时 soak。仓库后来不再把这些运行观测作为版本化源码资料。当前流程为每个 `main` 提交构建一个不可变的 `sha-<40位提交>` 候选；维护者用真实 Panel 和流量确认候选后，当前 release workflow 会校验 draft Release，在 `main` 公开其 tag、校验已接受资产、把同一 digest 晋升为精确版本与 `latest`，并公开 GitHub 自动生成的 Release notes。当前发布规则以发布手册为准；本文只记录历史计划。
+下文的 M8 计划原本要求原生和双运行时测试、50,000 用户测试及 24 小时 soak。仓库后来不再把这些运行观测作为版本化源码资料。当前流程为每个 `main` 提交构建一个不可变的 `sha-<40位提交>` 候选；维护者用真实 Panel 和流量确认候选后，当前 release workflow 会校验 draft Release，在 `main` 公开并确认 immutable、校验已接受资产、把同一 digest 晋升为精确版本与 `latest`，并公开 GitHub 自动生成的 Release notes。当前发布规则以发布手册为准；本文只记录历史计划。
 
 本记录形成时，M0-M7 整改已经完成，M8 规划了候选的真实 Panel/Linux、资源、恢复和
 长期运行测试。掉电或 installer/supervisor 被强制终止后的自动恢复不在范围内；操作人员

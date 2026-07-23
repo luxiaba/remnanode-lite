@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=893054e3441b58c5291b704f8566a6e2addc0665b78c662a849e4a0e0b0b1928 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=038e84cb39143a279d9bb897880e9e08c198a929a214f285e23a83ae2aecc08f -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -30,7 +30,7 @@
 5. 所有并发、队列、请求体和缓存都必须有明确上限。
 6. Node 只管理自己启动的 rw-core 进程、内部 socket 和 nftables 私有表，不接管整机防火墙。按 IP 执行 socket destroy 可能影响宿主 network namespace，属于必须明确记录的副作用。
 7. `dev` 是稳定开发与集成分支，主题分支通过 PR 和 CI 进入；`main` 是发布分支，只从 `dev` 接收已通过代码门禁的候选。
-8. `main` 的每个提交都生成一个不可变的 `sha-<40位提交>` 容器候选。维护者完成验收后，release workflow 会校验 draft Release，在当前 `main` HEAD 公开其 tag，并在不重建的前提下晋升精确候选。
+8. `main` 的每个提交都生成一个不可变的 `sha-<40位提交>` 容器候选。维护者完成验收后，release workflow 会校验 draft Release，在当前 `main` HEAD 公开并锁定 Release，再在不重建的前提下晋升精确候选。
 
 ## 兼容边界
 

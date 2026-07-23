@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=93c964fdc96c132a3d026be0dce21f67ed5b46756a5b77ee79a9798860b4bb59 -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=1b218778d79fd102fd6251beae9c5b9e9c258a7264e17c1186db97cd1701bcf4 -->
 
 # 发布 Remnanode Lite
 
@@ -27,9 +27,9 @@ dev -> pull request -> main
                          |
               draft Release + verified assets
                          |
-                   exact image tag
-                         |
         publish: create v<version> + lock Release
+                         |
+                   exact image tag
                          |
                latest or preview channel
 ```
@@ -135,10 +135,10 @@ workflow 会依次完成：
 4. 解析 `sha-<commit>`，校验两个可运行镜像 manifest、各自 attestation manifest 与 GitHub provenance。
 5. 创建或更新 draft GitHub Release，此时不创建 Git tag。
 6. 将每个 draft 资产的名称、digest 和大小与本地资产比对，并要求尚未公开的 `v<version>` tag 仍不存在。
-7. 将已接受镜像 digest 晋升为不可变的精确版本标签，不重新构建镜像。
-8. 再次确认已接受提交仍是远端 `main` HEAD，且 draft 校验期间没有出现 `v<version>` tag。
-9. 以正确的稳定版或预发布状态公开 draft；`v<version>` tag 在这一步创建。
-10. 要求 GitHub Release 为 immutable，并验证 tag 指向、Release attestation 和每个资产。
+7. 再次确认已接受提交仍是远端 `main` HEAD，且 draft 校验期间没有出现 `v<version>` tag。
+8. 以正确的稳定版或预发布状态公开 draft；`v<version>` tag 在这一步创建。
+9. 要求 GitHub Release 为 immutable，并验证 tag 指向、Release attestation 和每个资产。身份与资产错误会立即失败，只有 immutable 状态和 attestation 的传播会有限重试。
+10. 将已接受镜像 digest 晋升为不可变的精确版本标签，不重新构建镜像；已有精确标签只有在 digest 完全一致时才会被接受。
 11. 稳定版把同一 digest 推进到 `latest`，预发布版则推进到 `preview`。
 
 只有发布 Release 或 registry 标签的 job 拥有写权限；候选验证保持只读。
@@ -183,11 +183,11 @@ docker buildx imagetools inspect \
 | --- | --- | --- |
 | 源码、CI、候选、包或 provenance 校验 | 尚未创建 Release | 修复原因或等待必要 workflow 成功，再运行 release |
 | 创建 draft 或上传资产 | 可能已有 draft；release tag 尚不存在 | 仅当 `main` 仍指向已接受提交时才用同一版本重试；workflow 会更新并重新校验 draft |
-| 精确镜像标签晋升 | 已有已验证 draft；精确标签可能已经正确 | 重试；不可变晋升只接受 digest 一致的已有标签 |
-| 公开或公开后校验 | Release 和 tag 可能已经公开 | 用同一版本重跑一次；workflow 会识别已公开的 immutable Release，跳过修改步骤并重新验证结果。不要删除或重写它 |
-| `latest` 或 `preview` 晋升 | immutable Release 和精确镜像均有效 | 对该发布 tag 运行 `reconcile-channel` |
+| 公开 Release | 可能仍保留 draft，也可能 Release 和 tag 已经公开 | 先查看 Release 状态。仍是 draft 且 `main` 未变化时重跑 `release`；已经公开时绝不能删除或改写，改用 `reconcile-release` 继续 |
+| immutable 状态或 Release attestation 校验 | Release 和 tag 已公开，精确镜像可能仍不存在 | 该提交仍是 `main` 时可重跑 `release`；否则等待 GitHub 完成传播后运行 `reconcile-release` |
+| 精确镜像或 `latest`/`preview` 晋升 | immutable Release 已公开，但 registry 发布尚未完成 | 对该 tag 运行 `reconcile-release`。digest 一致的精确标签是幂等操作；冲突则直接失败并要求人工调查 |
 
-`reconcile-channel` 只接受已经公开的 immutable Release。它不会把 `latest` 移离 GitHub 当前的稳定 Latest Release，也不会把 `preview` 移到较旧的预发布版。
+`reconcile-release` 会从公开且 immutable 的 Release 推导源码提交，校验其 `sha-<commit>` 候选和 provenance，先创建或确认精确镜像标签，再决定是否恢复移动通道。它不会把 `latest` 移离 GitHub 当前的稳定 Latest Release，也不会把 `preview` 移到较旧的预发布版；不会重新构建镜像，也不会覆盖 digest 冲突的精确标签。
 
 draft 与已接受提交绑定。如果 draft 尚未公开而 `main` 已前进，workflow 会有意拒绝继续执行。只删除该未公开 draft，验收新的 `main` 候选后再重新发起发布。已经公开的 Release 和 tag 绝不能删除、改指向或重新创建。
 

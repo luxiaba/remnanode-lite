@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=8357e8274ce227852d372a3cce81effe7651def54100bc33effe666173637937 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=7071068e39be34bf4bc4a31fe14e51c90ffe3b24d592a3b19feb574f24784b8b -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -180,6 +180,7 @@ bash scripts/check-repository.sh
 - actionlint。
 - Docker/Compose 打包策略检查。
 - 下载源、固定摘要、Action SHA 和 installer bootstrap 等供应链检查。
+- 工具可用或被要求时执行一次 `govulncheck ./...`。
 - 使用精确 Go toolchain 交叉构建 Linux `amd64` 与 `arm64` 二进制。
 
 如果 Docker Compose 可用，打包测试还会执行 Compose schema 校验；如果不可用，脚本会明确输出跳过信息，但其他静态策略仍会运行。如果要声称已经完成 Compose 验证，就不能忽略这条跳过提示。
@@ -198,9 +199,10 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` 组合 Go 门禁、仓库门禁、离线 installer 测试和 govulncheck。若未设置
-`REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，它会跳过漏洞扫描；仓库的必需 CI
-job 会显式设置该开关，因此发布只能使用已经执行扫描器的候选。
+`check.sh` 组合 Go 门禁、仓库门禁和离线 installer 测试。漏洞扫描只由
+`check-repository.sh` 调用一次，完整门禁和 release 门禁不会再次重复扫描。若未设置
+`REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，仓库门禁会跳过漏洞扫描；必需 CI
+会显式设置该开关，因此发布只能使用已经执行扫描器的候选。
 
 `check.sh` 成功并不能证明生产行为。它不会让候选镜像连接真实 Panel、承载真实流量，也不会覆盖所有支持架构、init 系统、宿主规格、负载和故障路径。
 
@@ -336,6 +338,8 @@ REQUIRE_GOVULNCHECK=1 \
 
 `release-check.sh` 用于当前 `main` 的正式发布准备。它要求工作区干净、版本与带日期的 `CHANGELOG.md` 一致、固定官方源码可验证，并运行完整仓库检查。它在 release workflow 创建 draft Release、随后公开其 tag 前运行。运行时验证不由该脚本读取：维护者应在发起 release workflow 前人工确认同一 `sha-<commit>` 候选能够连接真实 Panel、承载真实代理流量且没有意外生命周期或资源故障，不把运行数据提交到仓库。
 
+release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance 和 Native 资产，公开并确认 immutable Release 后才晋升精确镜像与移动通道。若公开成功但 registry 晋升失败，`reconcile-release` 会重新校验 Release 与源码候选，再恢复精确标签和符合条件的通道，不会重新构建。
+
 具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
 [发布流程](../release.md)。
 
@@ -375,7 +379,7 @@ REQUIRE_GOVULNCHECK=1 \
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
 
-并非所有 PR 都会执行 candidate workflow；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。手工发起的 release workflow 会校验该候选的 OCI 结构与 attestation，并把同一镜像摘要晋升为正式标签。不要把只在部分 PR 出现的 candidate job 配成所有 PR 都必须出现的门禁。
+并非所有 PR 都会执行 candidate workflow；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。手工发起的 release workflow 会校验该候选的 OCI 结构、双平台 SPDX SBOM 与 attestation，并只在 GitHub Release 已 immutable 后把同一镜像摘要晋升为正式标签。不要把只在部分 PR 出现的 candidate job 配成所有 PR 都必须出现的门禁。
 
 ## 编写测试
 
