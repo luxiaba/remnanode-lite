@@ -117,10 +117,9 @@ jobs:
     environment: release
     permissions:
       actions: read
+      attestations: read
       contents: write
       packages: write
-    outputs:
-      release_id: ${{ steps.release.outputs.id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -207,12 +206,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Promote the exact image tag
-        env:
-          SOURCE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
-          VERSION: ${{ needs.verify-candidate.outputs.version }}
-        run: bash scripts/promote-image-tag.sh immutable "$IMAGE" "$SOURCE_DIGEST" "$VERSION"
-
       - name: Reconfirm the source and tag before publication
         if: steps.release-state.outputs.state != 'published'
         env:
@@ -237,80 +230,27 @@ jobs:
           --prerelease="$PRERELEASE"
           --latest="$MAKE_LATEST"
 
-  verify-published:
-    needs: [verify-candidate, publish]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      actions: read
-      attestations: read
-      contents: read
-      packages: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-        with:
-          version: v0.35.0
-          driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
-
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Download the published release assets
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: release-assets-${{ github.sha }}
-          path: dist/release
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ needs.verify-candidate.outputs.candidate_run_id }}
-
       - name: Verify the immutable Release and every asset
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ needs.publish.outputs.release_id }}
+          RELEASE_ID: ${{ steps.release.outputs.id }}
           RELEASE_TAG: ${{ needs.verify-candidate.outputs.tag }}
           PRERELEASE: ${{ needs.verify-candidate.outputs.prerelease }}
           MAKE_LATEST: ${{ needs.verify-candidate.outputs.make_latest }}
-          SOURCE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
-          VERSION: ${{ needs.verify-candidate.outputs.version }}
         run: bash scripts/verify-published-release.sh "$RELEASE_ID" "$RELEASE_TAG" "$GITHUB_SHA" "$PRERELEASE" "$MAKE_LATEST" dist/release
 
-  promote-channel:
-    needs: [verify-candidate, verify-published]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    concurrency:
-      group: registry-publish
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - name: Promote the exact image tag
+        env:
+          SOURCE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
+          VERSION: ${{ needs.verify-candidate.outputs.version }}
+        run: bash scripts/promote-image-tag.sh immutable "$IMAGE" "$SOURCE_DIGEST" "$VERSION"
 
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-        with:
-          version: v0.35.0
-          driver-opts: image=moby/buildkit:v0.31.1@sha256:6b59b7df63a8cb9902736f9ddf7fcff8261613d3e7449b8ea8b7537fc399c03a
-
-      - uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4.4.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Require ownership of the moving channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.verify-candidate.outputs.tag }}
+          PRERELEASE: ${{ needs.verify-candidate.outputs.prerelease }}
+        run: bash scripts/require-channel-owner.sh "$RELEASE_TAG" "$PRERELEASE"
 
       - name: Promote the published channel without rebuilding
         env:

@@ -80,7 +80,7 @@ func TestVerifyReleaseSnapshot(t *testing.T) {
 	if err := os.WriteFile(snapshotPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), true, false, false); err != nil {
+	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), true, false, releaseImmutabilityFalse); err != nil {
 		t.Fatalf("verifyReleaseSnapshot(): %v", err)
 	}
 
@@ -89,8 +89,47 @@ func TestVerifyReleaseSnapshot(t *testing.T) {
 	if err := os.WriteFile(snapshotPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), true, false, false); err == nil {
+	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), true, false, releaseImmutabilityFalse); err == nil {
 		t.Fatal("verifyReleaseSnapshot() accepted a mismatched asset digest")
+	}
+}
+
+func TestVerifyReleaseSnapshotAllowsPendingImmutability(t *testing.T) {
+	root, native := releasePackageFixture(t)
+	output := filepath.Join(root, "release-output")
+	if err := assembleReleasePackage(assembleOptions{
+		projectRoot: root, nativeDirectory: native, outputDirectory: output, version: "2.8.0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := githubReleaseSnapshot{
+		TagName: "v2.8.0", TargetCommitish: strings.Repeat("a", 40), Immutable: false,
+	}
+	for _, name := range releaseAssetNames("2.8.0") {
+		digest, size, err := fileDigestAndSize(filepath.Join(output, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		snapshot.Assets = append(snapshot.Assets, struct {
+			Name   string `json:"name"`
+			Digest string `json:"digest"`
+			Size   int64  `json:"size"`
+			State  string `json:"state"`
+		}{Name: name, Digest: "sha256:" + digest, Size: size, State: "uploaded"})
+	}
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotPath := filepath.Join(root, "release.json")
+	if err := os.WriteFile(snapshotPath, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), false, false, releaseImmutabilityAny); err != nil {
+		t.Fatalf("pending immutable state was rejected during identity verification: %v", err)
+	}
+	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), false, false, releaseImmutabilityTrue); err == nil {
+		t.Fatal("pending immutable state satisfied the final immutable check")
 	}
 }
 

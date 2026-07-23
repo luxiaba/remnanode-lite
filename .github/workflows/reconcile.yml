@@ -1,4 +1,4 @@
-name: reconcile-channel
+name: reconcile-release
 
 on:
   workflow_dispatch:
@@ -55,7 +55,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify the immutable release and image identity
+      - name: Verify the immutable Release and its candidate
         id: image
         env:
           GH_TOKEN: ${{ github.token }}
@@ -63,6 +63,12 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
           PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
         run: bash scripts/verify-release-image.sh "$RELEASE_TAG" "$VERSION" "$PRERELEASE" >>"$GITHUB_OUTPUT"
+
+      - name: Restore the immutable exact image tag
+        env:
+          SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+        run: bash scripts/promote-image-tag.sh immutable "$IMAGE" "$SOURCE_DIGEST" "$VERSION"
 
       - name: Require the current owner of the channel
         env:
@@ -83,5 +89,5 @@ jobs:
     timeout-minutes: 5
     steps:
       - run: |
-          echo "channel reconciliation may only be dispatched from main" >&2
+          echo "release reconciliation may only be dispatched from main" >&2
           exit 1

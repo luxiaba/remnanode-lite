@@ -29,12 +29,15 @@ cat >"$test_dir/docker" <<'EOF'
 set -euo pipefail
 
 case "$*" in
+  *'imagetools inspect --format'*'.SBOM'*)
+    printf '%s\n' '{"SPDX":{"SPDXID":"SPDXRef-DOCUMENT","spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","documentNamespace":"https://example.test/sbom","creationInfo":{"creators":["Tool: test"]}}}'
+    ;;
   *'imagetools inspect --format'*)
-    if [[ "$*" == *":2.8.0" ]]; then
-      printf '%s\n' "${TEST_EXACT_DIGEST:-$TEST_DIGEST}"
-    else
-      printf '%s\n' "$TEST_DIGEST"
-    fi
+    [[ "$*" != *":2.8.0" ]] || {
+      echo 'reconciliation inspected the exact tag before restoring it' >&2
+      exit 1
+    }
+    printf '%s\n' "$TEST_DIGEST"
     ;;
   *'imagetools inspect --raw'*) printf '{"schemaVersion":2}\n' ;;
   *) exit 2 ;;
@@ -102,7 +105,9 @@ run_check() {
 }
 
 output="$(run_check 2>"$test_dir/published.log")"
-[ "$output" = "digest=$digest" ] || fail "published Release output was $output"
+expected="commit=$commit
+digest=$digest"
+[ "$output" = "$expected" ] || fail "published Release output was $output"
 
 if TEST_RELEASE_STATE=draft run_check >"$test_dir/draft.out" 2>&1; then
   fail "draft Release was accepted for channel reconciliation"
@@ -115,12 +120,5 @@ if TEST_RELEASE_STATE=mutable run_check >"$test_dir/mutable.out" 2>&1; then
 fi
 grep -Fq 'immutability is disabled' "$test_dir/mutable.out" ||
   fail "mutable Release failed without the expected state error"
-
-wrong_digest="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-if TEST_EXACT_DIGEST="$wrong_digest" run_check >"$test_dir/mismatch.out" 2>&1; then
-  fail "an exact image tag that differs from its candidate was accepted"
-fi
-grep -Fq 'exact image does not match its accepted candidate' "$test_dir/mismatch.out" ||
-  fail "exact image mismatch failed without the expected identity error"
 
 echo 'release image verification tests passed'

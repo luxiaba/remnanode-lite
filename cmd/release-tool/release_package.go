@@ -225,7 +225,24 @@ type githubReleaseSnapshot struct {
 	} `json:"assets"`
 }
 
-func verifyReleaseSnapshot(snapshotPath, directory, tag, commit string, draft, prerelease, immutable bool) error {
+type releaseImmutability string
+
+const (
+	releaseImmutabilityAny   releaseImmutability = "any"
+	releaseImmutabilityFalse releaseImmutability = "false"
+	releaseImmutabilityTrue  releaseImmutability = "true"
+)
+
+func parseReleaseImmutability(value string) (releaseImmutability, error) {
+	switch releaseImmutability(value) {
+	case releaseImmutabilityAny, releaseImmutabilityFalse, releaseImmutabilityTrue:
+		return releaseImmutability(value), nil
+	default:
+		return "", fmt.Errorf("immutable must be true, false, or any")
+	}
+}
+
+func verifyReleaseSnapshot(snapshotPath, directory, tag, commit string, draft, prerelease bool, immutable releaseImmutability) error {
 	data, err := readRegularInput(snapshotPath, maxManifestBytes, false)
 	if err != nil {
 		return fmt.Errorf("read GitHub Release snapshot: %w", err)
@@ -236,8 +253,11 @@ func verifyReleaseSnapshot(snapshotPath, directory, tag, commit string, draft, p
 		return fmt.Errorf("decode GitHub Release snapshot: %w", err)
 	}
 	if snapshot.TagName != tag || snapshot.TargetCommitish != commit || snapshot.Draft != draft ||
-		snapshot.Prerelease != prerelease || snapshot.Immutable != immutable {
+		snapshot.Prerelease != prerelease {
 		return fmt.Errorf("GitHub Release identity or state does not match the requested publication")
+	}
+	if immutable != releaseImmutabilityAny && snapshot.Immutable != (immutable == releaseImmutabilityTrue) {
+		return fmt.Errorf("GitHub Release immutable state is %t, want %s", snapshot.Immutable, immutable)
 	}
 	expected := make(map[string]struct {
 		digest string
@@ -331,7 +351,7 @@ func runVerifyRelease(args []string, stdout, stderr io.Writer) error {
 	commit := flags.String("commit", "", "expected target commit")
 	draft := flags.Bool("draft", false, "expect a draft release")
 	prerelease := flags.Bool("prerelease", false, "expect a prerelease")
-	immutable := flags.Bool("immutable", false, "expect GitHub release immutability")
+	immutableValue := flags.String("immutable", "", "expected GitHub release immutability: true, false, or any")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -344,7 +364,11 @@ func runVerifyRelease(args []string, stdout, stderr io.Writer) error {
 	if err := validateProjectVersion(strings.TrimPrefix(*tag, "v")); err != nil || !strings.HasPrefix(*tag, "v") {
 		return fmt.Errorf("invalid release tag %q", *tag)
 	}
-	if err := verifyReleaseSnapshot(*snapshot, *directory, *tag, *commit, *draft, *prerelease, *immutable); err != nil {
+	immutable, err := parseReleaseImmutability(*immutableValue)
+	if err != nil {
+		return err
+	}
+	if err := verifyReleaseSnapshot(*snapshot, *directory, *tag, *commit, *draft, *prerelease, immutable); err != nil {
 		return err
 	}
 	fmt.Fprintf(stdout, "verified GitHub Release %s and every local asset\n", *tag)

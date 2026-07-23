@@ -43,15 +43,4 @@ candidate_digest="$(sed -n 's/^digest=//p' <<<"$candidate_output")"
   exit 1
 }
 
-exact_digest="$(docker buildx imagetools inspect \
-  --format '{{.Manifest.Digest}}' "${IMAGE}:${version}" | tr -d '\r\n')"
-[[ "$exact_digest" =~ ^sha256:[0-9a-f]{64}$ ]] || {
-  echo "exact image returned an invalid manifest digest: $exact_digest" >&2
-  exit 1
-}
-[ "$exact_digest" = "$candidate_digest" ] || {
-  echo "exact image does not match its accepted candidate" >&2
-  exit 1
-}
-
-printf 'digest=%s\n' "$exact_digest"
+printf 'commit=%s\ndigest=%s\n' "$release_commit" "$candidate_digest"
