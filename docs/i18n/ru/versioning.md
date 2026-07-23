@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=11a0d577a7fe9ec624cde68d3359f201c15e995d08cd8f935e0ceed2685c1d62 -->
+<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=d4b26b248b395c36314c449fd2e4757dcfe4549af2a31c96fb8994e387b1eb88 -->
 
 # Версии и теги образов
 

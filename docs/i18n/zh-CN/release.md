@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=3b5f31cd09fd4355d52c3a8728abe88f64c2cb4321e4185dd2160a9be34d771f -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=1c1ff677242a16c576b98fe7a4d402abc5b135bc1b7e5c8a9942e32e4602cb6f -->
 
 # 发布 Remnanode Lite
 

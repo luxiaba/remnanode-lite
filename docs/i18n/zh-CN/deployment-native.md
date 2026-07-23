@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=dba090d727b843193d91bac9991d8d69f4c1d5702258022ef6421191c38936df -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=c648b5d3133768c9880d5ba8d5932a4b115c5055c0bd31f9bdf77ddcdb955803 -->
 
 # 原生 Linux 部署
 

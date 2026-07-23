@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=d98ea6e03e031efbc4750021b09c1187936efde41bdb735bf1c489b9af6f4938 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=31be017700da61d1140ccd122c8eb5bf1720c63d44c5efe5cd4748395980a9ce -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。

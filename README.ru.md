@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=README.md; source-sha256=2a51b5a4198c0792967943da93346ef116b2d1c53f804b92fbe42237938d35e9 -->
+<!-- translation: locale=ru; source=README.md; source-sha256=18908111338dd91a84e897009e1978ffd93af96f6009ee4b396bd5c4fa56a7bf -->
 <div align="center">
 
 # Remnanode Lite

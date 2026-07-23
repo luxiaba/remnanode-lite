@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=b9d007488ef9e9e84c82738d38281dc5178deaac607af1c7d26f446c637066a0 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=5d8454c2e82b23117e96d3f8823b0a7825ceb4ff30f47603aba66cc64aa85145 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > 这是中文译文；涉及契约细节时，请以[英文原文](../../../development/contract-2.8.0.md)为准。
