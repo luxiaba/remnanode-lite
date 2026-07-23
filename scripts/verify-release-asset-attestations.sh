@@ -27,5 +27,6 @@ for asset in "$directory"/*; do
     --repo "$GITHUB_REPOSITORY" \
     --cert-identity "$identity" \
     --source-digest "$source_commit" \
+    --predicate-type https://slsa.dev/provenance/v1 \
     --deny-self-hosted-runners
 done

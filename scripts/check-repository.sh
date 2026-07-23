@@ -43,6 +43,8 @@ bash scripts/verify-release-tag-test.sh
 bash scripts/verify-release-latest-test.sh
 bash scripts/verify-candidate-image-test.sh
 bash scripts/verify-release-image-test.sh
+bash scripts/verify-published-release-test.sh
+bash scripts/promote-image-tag-test.sh
 bash scripts/find-workflow-run-test.sh
 bash scripts/release-state-test.sh
 bash scripts/test-docker-packaging.sh

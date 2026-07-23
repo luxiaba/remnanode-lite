@@ -17,6 +17,15 @@ case "$*" in
   *'imagetools inspect --raw'*)
     printf '{"schemaVersion":2}\n'
     ;;
+  *'imagetools inspect --format'*'.SBOM'*)
+    case "${TEST_SBOM_STATE:-valid}" in
+      valid)
+        printf '%s\n' '{"SPDX":{"SPDXID":"SPDXRef-DOCUMENT","spdxVersion":"SPDX-2.3","dataLicense":"CC0-1.0","documentNamespace":"https://example.test/sbom","creationInfo":{"creators":["Tool: test"]}}}'
+        ;;
+      invalid) printf '{}\n' ;;
+      *) exit 2 ;;
+    esac
+    ;;
   *'imagetools inspect --format'*)
     case "${TEST_IMAGE_STATE:-present}" in
       present) printf 'sha256:%064d\n' 0 ;;
@@ -39,6 +48,7 @@ EOF
 cat >"$test_dir/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+[[ "$*" == *'--predicate-type https://slsa.dev/provenance/v1'* ]]
 echo 'attestation verification log'
 EOF
 chmod 0755 "$test_dir/docker" "$test_dir/go" "$test_dir/gh"
@@ -70,6 +80,9 @@ if TEST_IMAGE_STATE=error run_check --allow-missing >/dev/null 2>&1; then
 fi
 if TEST_IMAGE_STATE=invalid run_check --allow-missing >/dev/null 2>&1; then
   fail "invalid candidate digest was accepted"
+fi
+if TEST_SBOM_STATE=invalid run_check >/dev/null 2>&1; then
+  fail "candidate without a valid per-platform SPDX SBOM was accepted"
 fi
 
 echo "candidate image verification tests passed"

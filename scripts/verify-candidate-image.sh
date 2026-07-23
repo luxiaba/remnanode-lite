@@ -46,9 +46,29 @@ docker buildx imagetools inspect --raw "${IMAGE}@${digest}" \
 go run ./cmd/release-tool verify-index \
   --manifest "$RUNNER_TEMP/candidate-index.json" \
   --digest "$digest" >&2
+for platform in linux/amd64 linux/arm64; do
+  architecture="${platform#linux/}"
+  sbom="$RUNNER_TEMP/candidate-sbom-${architecture}.json"
+  docker buildx imagetools inspect \
+    --format "{{json (index .SBOM \"${platform}\")}}" \
+    "${IMAGE}@${digest}" >"$sbom"
+  jq -e '
+    .SPDX
+    | type == "object"
+      and (.SPDXID == "SPDXRef-DOCUMENT")
+      and (.spdxVersion | type == "string" and startswith("SPDX-"))
+      and (.dataLicense | type == "string" and length > 0)
+      and (.documentNamespace | type == "string" and length > 0)
+      and (.creationInfo.creators | type == "array" and length > 0)
+  ' "$sbom" >/dev/null || {
+    echo "$candidate has no valid SPDX SBOM for $platform" >&2
+    exit 1
+  }
+done
 gh attestation verify "oci://${IMAGE}@${digest}" \
   --repo "$GITHUB_REPOSITORY" \
   --cert-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/container.yml@refs/heads/main" \
   --source-digest "$GITHUB_SHA" \
+  --predicate-type https://slsa.dev/provenance/v1 \
   --deny-self-hosted-runners >&2
 printf 'state=present\ndigest=%s\n' "$digest"

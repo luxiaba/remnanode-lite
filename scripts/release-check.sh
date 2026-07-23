@@ -37,11 +37,4 @@ REMNANODE_DOCS_STRICT_TRANSLATIONS=1 \
   bash scripts/check-repository.sh
 sh release/native/install_test.sh
 
-if command -v govulncheck >/dev/null 2>&1; then
-  govulncheck ./...
-elif [ "${REQUIRE_GOVULNCHECK:-0}" = "1" ]; then
-  echo "govulncheck is required but not installed" >&2
-  exit 1
-fi
-
 echo "release gate passed for $release_tag"

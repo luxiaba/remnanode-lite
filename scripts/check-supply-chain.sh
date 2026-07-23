@@ -16,6 +16,14 @@ require_text() {
   grep -Fq -- "$text" "$file" || fail "$file is missing: $text"
 }
 
+require_order() {
+  local file=$1 first=$2 second=$3 first_line second_line
+  first_line="$(grep -nF -- "$first" "$file" | head -1 | cut -d: -f1)"
+  second_line="$(grep -nF -- "$second" "$file" | head -1 | cut -d: -f1)"
+  [ -n "$first_line" ] && [ -n "$second_line" ] && [ "$first_line" -lt "$second_line" ] ||
+    fail "$file must place '$first' before '$second'"
+}
+
 version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
 contract_version="$(tr -d ' \n\r' <internal/version/contract.version)"
 [ -n "$version" ] && [ -n "$contract_version" ] || fail "version metadata is incomplete"
@@ -76,6 +84,7 @@ for required in \
   'platforms: linux/amd64,linux/arm64' \
   'push-by-digest=true,name-canonical=true,push=true' \
   'provenance: mode=max' \
+  'sbom: generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68' \
   'push-to-registry: true' \
   'release-tool assemble' \
   'release-tool verify-package' \
@@ -87,6 +96,8 @@ for required in \
   'needs: [image, native]'; do
   require_text "$candidate" "$required"
 done
+require_text scripts/verify-candidate-image.sh 'index .SBOM'
+require_text scripts/verify-candidate-image.sh '--predicate-type https://slsa.dev/provenance/v1'
 if grep -Eq '(^|[^[:alnum:]_-])latest([^[:alnum:]_.-]|$)' "$candidate"; then
   fail "candidate workflow must not publish the stable latest channel"
 fi
@@ -109,6 +120,13 @@ for required in \
   'scripts/promote-image-tag.sh mutable'; do
   require_text "$release" "$required"
 done
+require_order "$release" 'name: Publish the draft Release' 'name: Verify the immutable Release and every asset'
+require_order "$release" 'name: Verify the immutable Release and every asset' 'name: Promote the exact image tag'
+require_order "$release" 'name: Promote the exact image tag' 'name: Promote the published channel without rebuilding'
+publish_line="$(grep -nF 'name: Publish the draft Release' "$release" | cut -d: -f1)"
+if tail -n "+$publish_line" "$release" | grep -Fq 'scripts/require-current-main.sh'; then
+  fail "release workflow must not rebind a published Release to a newer main commit"
+fi
 if grep -Fq 'docker/build-push-action@' "$release" ||
   grep -Fq 'scripts/build-native-bundle.sh' "$release"; then
   fail "release workflow must promote the accepted candidate without rebuilding"
@@ -122,6 +140,8 @@ for script in \
   scripts/verify-candidate-image.sh \
   scripts/verify-release-image.sh \
   scripts/verify-release-image-test.sh \
+  scripts/verify-published-release-test.sh \
+  scripts/promote-image-tag-test.sh \
   scripts/require-channel-owner.sh \
   scripts/release-state.sh \
   scripts/verify-draft-release.sh \
@@ -137,7 +157,8 @@ require_text scripts/verify-candidate-image.sh 'state=present'
 require_text scripts/release-state.sh 'GitHub Release immutability is disabled'
 require_text scripts/verify-draft-release.sh 'release-tool verify-release'
 require_text scripts/verify-draft-release.sh 'verify-release-tag.sh --require-missing'
-require_text scripts/verify-published-release.sh '--immutable=true'
+require_text scripts/verify-published-release.sh '--immutable=any'
+require_text scripts/verify-published-release.sh '.immutable == true'
 require_text scripts/verify-published-release.sh 'scripts/verify-release-tag.sh'
 require_text scripts/verify-published-release.sh 'gh release verify'
 require_text scripts/verify-published-release.sh 'gh release verify-asset'
@@ -148,12 +169,15 @@ require_text scripts/require-channel-owner.sh 'scripts/verify-release-latest.sh'
 
 reconcile=.github/workflows/reconcile.yml
 for required in \
-  'name: reconcile-channel' \
+  'name: reconcile-release' \
   'scripts/verify-release-image.sh' \
+  'scripts/promote-image-tag.sh immutable' \
   'scripts/require-channel-owner.sh' \
   'scripts/promote-image-tag.sh mutable'; do
   require_text "$reconcile" "$required"
 done
+require_order "$reconcile" 'name: Verify the immutable Release and its candidate' 'name: Restore the immutable exact image tag'
+require_order "$reconcile" 'name: Restore the immutable exact image tag' 'name: Restore the moving channel'
 
 require_text scripts/install-ci-checks.sh 'readonly SHELLCHECK_VERSION=0.11.0'
 require_text scripts/install-ci-checks.sh \
