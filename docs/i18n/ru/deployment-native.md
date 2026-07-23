@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=fb885b51d8c29e4e508f0831c35acf0bc49255d1ef9083b40a26febaf496b77d -->
+<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=dba090d727b843193d91bac9991d8d69f4c1d5702258022ef6421191c38936df -->
 
 # Нативное развёртывание Linux
 
@@ -6,11 +6,11 @@
 
 [Индекс документации](README.md) · [Конфигурация](configuration.md) · [Эксплуатация](operations.md) · [Версионирование](versioning.md)
 
-Нативный вариант запускает `remnanode-lite` непосредственно через systemd или OpenRC. Он подходит для небольших хостов, где Docker нельзя установить или где постоянные расходы Docker Engine daemon и container runtime не подходят. Native не означает отсутствие фоновой службы: `remnanode-lite` всё равно работает под systemd или OpenRC. Для большинства узлов Docker Compose остаётся вариантом по умолчанию. Самодостаточные Native lifecycle bundle распространяются как GitHub Releases с точным тегом; стабильный `2.8.0` содержит первый bundle.
+Нативный вариант запускает `remnanode-lite` непосредственно через systemd или OpenRC. Он подходит для небольших хостов, где Docker нельзя установить или где постоянные расходы Docker Engine daemon и container runtime не подходят. Native не означает отсутствие фоновой службы: `remnanode-lite` всё равно работает под systemd или OpenRC. Для большинства узлов Docker Compose остаётся вариантом по умолчанию. Самодостаточные Native lifecycle bundle распространяются как assets GitHub Release с точным тегом.
 
 Каждый опубликованный bundle содержит Node, `rnlctl`, rw-core, GeoIP, GeoSite, данные ASN, определения служб, лицензии и SPDX SBOM. Manifest фиксирует digest каждого файла. Установщик сначала проверяет digest внешнего архива и только затем изменяет хост.
 
-Bundle `2.8.0` реализует контракт официального Node `2.8.0`. Установка и обновление принимают только точную версию Release, содержащего Native lifecycle bundle, например `2.8.0`. Имена движущихся каналов `latest`, `preview`, `edge` и `sha-*` для Native недопустимы.
+Установка и обновление принимают только точную версию Release с Native lifecycle assets. Release пригоден для Native, только если содержит `install.sh`, `SHA256SUMS` и архив для архитектуры хоста. Имена движущихся каналов `latest`, `preview`, `edge` и `sha-*` для Native недопустимы.
 
 ## Поддерживаемые хосты
 
@@ -47,10 +47,10 @@ sudo apt-get install -y ca-certificates curl nftables iproute2
 
 ## Установка точной версии
 
-Скачайте installer и список digest из одного GitHub Release, проверьте installer, затем запустите его:
+Выберите опубликованную версию на странице GitHub Releases, затем скачайте installer и список digest из этого точного Release, проверьте installer и запустите его. Версия исходного кода и образ-кандидат не являются загружаемым Native bundle:
 
 ```bash
-VERSION=2.8.0
+VERSION="<published-version>" # например: X.Y.Z или X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
@@ -111,7 +111,7 @@ SHA256SUMS
 grep -E '  (install\.sh|remnanode-lite_.*_linux_(amd64|arm64)\.tar\.gz)$' \
   SHA256SUMS | sha256sum --check --strict -
 sudo sh ./install.sh \
-  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
+  --bundle "./remnanode-lite_${VERSION}_linux_amd64.tar.gz" \
   --port 38329
 ```
 
@@ -190,19 +190,20 @@ sudo rnlctl logs core-errors --follow
 
 ## Обновление и откат
 
-Онлайн-обновление принимает только точную версию:
+Онлайн-обновление принимает только точную опубликованную версию:
 
 ```bash
-sudo rnlctl upgrade --to 2.8.0-rnl.2
+VERSION="<published-version>"
+sudo rnlctl upgrade --to "$VERSION"
 ```
 
 Для офлайн-обновления используйте проверенный архив:
 
 ```bash
 sudo rnlctl upgrade \
-  --bundle ./remnanode-lite_2.8.0-rnl.2_linux_amd64.tar.gz \
+  --bundle "./remnanode-lite_${VERSION}_linux_amd64.tar.gz" \
   --sha256 '<64-character-sha256>' \
-  --expected-version 2.8.0-rnl.2
+  --expected-version "$VERSION"
 ```
 
 Транзакция сохраняет состояние enabled/running, проверяет все файлы и ждёт внутренний health перед фиксацией. Хранятся только current и previous; не заменяйте бинарный файл прямой записью в `/usr/local/bin/remnanode-lite`.

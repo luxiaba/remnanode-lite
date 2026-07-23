@@ -38,6 +38,7 @@ chmod 0755 "$temporary_directory/curl"
 
 run_check() {
   local status=$1 body=$2 curl_exit=$3 expected_tag=$4 make_latest=$5
+  shift 5
   env \
     PATH="$temporary_directory:$PATH" \
     GITHUB_API_URL=https://api.github.test \
@@ -46,12 +47,13 @@ run_check() {
     TEST_LATEST_STATUS="$status" \
     TEST_LATEST_BODY="$body" \
     TEST_LATEST_CURL_EXIT="$curl_exit" \
-    "$ROOT_DIR/scripts/verify-release-latest.sh" "$expected_tag" "$make_latest"
+    "$ROOT_DIR/scripts/verify-release-latest.sh" "$@" "$expected_tag" "$make_latest"
 }
 
 assert_success() {
   local name=$1 status=$2 body=$3 curl_exit=$4 expected_tag=$5 make_latest=$6 output
-  if ! output="$(run_check "$status" "$body" "$curl_exit" "$expected_tag" "$make_latest" 2>&1)"; then
+  shift 6
+  if ! output="$(run_check "$status" "$body" "$curl_exit" "$expected_tag" "$make_latest" "$@" 2>&1)"; then
     fail "$name unexpectedly failed: $output"
   fi
 }
@@ -67,6 +69,10 @@ assert_failure() {
 
 assert_success \
   'stable release is GitHub latest' 200 '{"tag_name":"v2.8.0"}' 0 v2.8.0 true
+output="$(run_check 404 '{"message":"Not Found"}' 0 v2.8.0 true --allow-non-owner)" ||
+  fail 'first stable release did not claim an empty latest pointer in recovery mode'
+[ "$output" = 'owner=true' ] ||
+  fail "empty latest recovery owner output was $output"
 assert_success \
   'preview remains below an existing stable latest' 200 '{"tag_name":"v2.8.0"}' 0 v2.8.1-rnl.1 false
 assert_success \

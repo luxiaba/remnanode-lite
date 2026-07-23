@@ -2,9 +2,15 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 <expected-vX.Y.Z[-rnl.N]-tag> <true|false>" >&2
+  echo "usage: $0 [--allow-non-owner] <expected-vX.Y.Z[-rnl.N]-tag> <true|false>" >&2
   exit 2
 }
+
+allow_non_owner=false
+if [ "${1:-}" = --allow-non-owner ]; then
+  allow_non_owner=true
+  shift
+fi
 
 [ "$#" -eq 2 ] || usage
 expected_tag="$1"
@@ -13,6 +19,7 @@ case "$make_latest" in
   true|false) ;;
   *) usage ;;
 esac
+[ "$allow_non_owner" = false ] || [ "$make_latest" = true ] || usage
 
 : "${GH_TOKEN:?GH_TOKEN is required}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
@@ -62,10 +69,18 @@ case "$status" in
 esac
 
 if [ "$make_latest" = true ]; then
-  [ "$latest_tag" = "$expected_tag" ] || {
+  if [ "$latest_tag" = "$expected_tag" ]; then
+    [ "$allow_non_owner" = false ] || printf 'owner=true\n'
+  elif [ "$allow_non_owner" = true ] && [ -z "$latest_tag" ]; then
+    # A repository with only prereleases has no GitHub Latest yet. The first
+    # stable Release is the owner that must create that pointer.
+    printf 'owner=true\n'
+  elif [ "$allow_non_owner" = true ]; then
+    printf 'owner=false\n'
+  else
     echo "GitHub latest is ${latest_tag:-<none>}, expected $expected_tag" >&2
     exit 1
-  }
+  fi
 else
   [ "$latest_tag" != "$expected_tag" ] || {
     echo "preview release must not be GitHub latest" >&2

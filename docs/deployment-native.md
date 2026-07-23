@@ -2,14 +2,15 @@
 
 [Documentation home](README.md) | [Configuration](configuration.md) | [Operations](operations.md) | [Versioning](versioning.md)
 
-Native deployment runs Remnanode Lite directly under the host service manager. It is useful on small servers where Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not remove the need for a background service: `remnanode-lite` runs under systemd or OpenRC. Docker Compose remains the default path for most installations. Self-contained Native lifecycle bundles are distributed as exactly tagged GitHub Releases; the stable `2.8.0` Release includes the first bundle.
+Native deployment runs Remnanode Lite directly under the host service manager. It is useful on small servers where Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not remove the need for a background service: `remnanode-lite` runs under systemd or OpenRC. Docker Compose remains the default path for most installations. Self-contained Native lifecycle bundles are distributed as exactly tagged GitHub Release assets.
 
 Each published Native bundle contains the Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, service definitions, license notices, an SPDX SBOM, and a manifest that records every file digest. The installer verifies the outer archive checksum and the bundle manifest before changing the host.
 
-The `2.8.0` bundle implements the official Node `2.8.0` contract. Native
-installation and upgrade always use an exact version from a Release that
-contains a Native lifecycle bundle, such as `2.8.0`; moving names such as
-`latest`, `preview`, and `edge` are not accepted.
+Native installation and upgrade always use an exact version from a Release
+that includes the Native lifecycle assets. A Release is Native-capable only
+when it offers `install.sh`, `SHA256SUMS`, and the archive for the host
+architecture. Moving names such as `latest`, `preview`, and `edge` are not
+accepted.
 
 ## Supported hosts
 
@@ -53,11 +54,12 @@ Keep the system clock synchronized. mTLS and JWT authentication can fail when th
 
 ## Install an exact release
 
-Set the version explicitly, then download the installer and checksum list from
-the same published GitHub Release. The example uses the stable `2.8.0` bundle:
+Choose a version shown on the GitHub Releases page, then download the installer
+and checksum list from that exact published Release. A source version or a
+candidate image is not a downloadable Native bundle:
 
 ```bash
-VERSION=2.8.0
+VERSION="<published-version>" # for example: X.Y.Z or X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
@@ -133,7 +135,7 @@ On the target host:
 
 ```bash
 sudo sh ./install.sh \
-  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
+  --bundle "./remnanode-lite_${VERSION}_linux_amd64.tar.gz" \
   --port 38329
 ```
 
@@ -222,10 +224,11 @@ On systemd, Node output goes to journald. On OpenRC, it goes to `/var/log/remnan
 
 ## Upgrade
 
-Upgrade to one exact release:
+Upgrade to one exact published release:
 
 ```bash
-sudo rnlctl upgrade --to 2.8.0-rnl.2
+VERSION="<published-version>"
+sudo rnlctl upgrade --to "$VERSION"
 ```
 
 `rnlctl` downloads the matching archive and checksum from the exact GitHub Release, validates every bundled file, and builds a new generation. It preserves whether the service was enabled and running before the operation. If the service was active, the transaction stops it, selects the new generation, restores the service state, validates the binary version, and waits for internal health before committing.
@@ -236,9 +239,9 @@ For an offline upgrade, use the verified archive directly:
 
 ```bash
 sudo rnlctl upgrade \
-  --bundle ./remnanode-lite_2.8.0-rnl.2_linux_amd64.tar.gz \
+  --bundle "./remnanode-lite_${VERSION}_linux_amd64.tar.gz" \
   --sha256 '<64-character-sha256>' \
-  --expected-version 2.8.0-rnl.2
+  --expected-version "$VERSION"
 ```
 
 Do not copy a new binary over `/usr/local/bin/remnanode-lite`. That bypasses generation verification, service preparation, rollback, and lifecycle state.
@@ -282,9 +285,9 @@ Repair restores the committed generation, service definitions, links, ownership,
 
 ```bash
 sudo rnlctl repair \
-  --bundle ./remnanode-lite_2.8.0_linux_amd64.tar.gz \
+  --bundle "./remnanode-lite_<installed-version>_linux_amd64.tar.gz" \
   --sha256 '<64-character-sha256>' \
-  --expected-version 2.8.0
+  --expected-version '<installed-version>'
 ```
 
 The supplied bundle must match an installed generation identity. After repair, run `status --json`, check logs, confirm the Panel connection, and test traffic.

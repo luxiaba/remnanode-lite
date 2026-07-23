@@ -159,8 +159,9 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | Path | Responsibility |
 | --- | --- |
 | `.github/workflows/ci.yml` | Required Go, repository, Native bootstrap/lifecycle, and Linux network-management CI gate |
-| `.github/workflows/container.yml` | Multi-architecture image build, attestation, and the immutable `sha-<40-character-main-commit>` candidate |
-| `.github/workflows/release.yml` | Draft-first Release assets, Native bundles and attestations, exact image tag, and stable/preview channel promotion |
+| `.github/workflows/container.yml` | Candidate workflow: multi-architecture image build, attestations, immutable `sha-<40-character-main-commit>` candidate, and the accepted-digest `release-index.json` asset |
+| `.github/workflows/release.yml` | Draft-first publication that verifies the accepted digest binding, promotes the exact image before public Release, verifies immutability, then reconfirms the exact tag before moving a channel |
+| `.github/workflows/reconcile.yml` | Idempotent recovery of an exact image tag and its eligible `latest` or `preview` channel from the attested index in a published Release |
 | `.github/workflows/contract-sync.yml`, `.github/workflows/security.yml` | Official-version monitoring and scheduled security checks |
 | `scripts/check*.sh` | Stable Go, repository, supply-chain, and complete-gate entry points |
 | `scripts/build-native-bundle.sh` | Reproducible `amd64`/`arm64` Native bundle build around `release-tool` |
@@ -206,15 +207,20 @@ git diff
 
 Scale the test scope with the risk of the change. The complete repository check belongs after a coherent batch or before opening a pull request, not after every small edit.
 
-Before tagging a release, merge `dev` into `main`, wait for the immutable
+Before publishing a release, merge `dev` into `main`, wait for the immutable
 `sha-<40-character-main-commit>` image, and verify that exact candidate with a
 real Panel and real proxy traffic. This is a maintainer decision, not a source
 artifact: do not commit host inventories, container details, logs, or smoke
-records. The tag must point to the current `main` HEAD; the release workflow
-then verifies the candidate image and its attestation, builds and attests the
-Native assets, and promotes the same digest to the exact version. Plain
-`X.Y.Z` releases advance `latest`; `X.Y.Z-rnl.N` prereleases advance `preview`
-and never change GitHub or GHCR `latest`.
+records. Dispatch the release workflow from the current `main` commit with the
+exact source version. It verifies the candidate image, Native assets, their
+attestations, and the accepted digest recorded in `release-index.json`, then
+creates and verifies a draft Release. It promotes the exact image before
+making that Release public, verifies the immutable final state, reconfirms the
+exact tag, and advances the appropriate moving channel. Plain `X.Y.Z` releases advance `latest`;
+`X.Y.Z-rnl.N` prereleases advance `preview` and never change GitHub or GHCR
+`latest`. If registry promotion fails after publication, `reconcile-release`
+recovers the exact tag and eligible channel from the immutable Release asset
+without rebuilding.
 
 ## Common Change Paths
 
@@ -227,7 +233,7 @@ and never change GitHub or GHCR `latest`.
 | Plugin or nftables | `internal/plugin`, `internal/connections`, `internal/netadmin` | Lifecycle lease precedes the plugin operation gate; Linux integration tests are required |
 | Configuration, Secret, or authentication | `internal/config`, `internal/secret`, `internal/auth`, `internal/httpserver` | Bound inputs, preserve safe file handling, and keep Secrets out of logs |
 | Linux system capability | `*_linux.go` and corresponding `*_stub.go` | Non-Linux builds must compile; Linux behavior must be tested on Linux |
-| Docker image | `Dockerfile`, `compose*.yaml`, `.dockerignore`, container workflow | Pinned asset digests, multiple architectures, resource limits, and ephemeral logs |
+| Docker image | `Dockerfile`, `compose*.yaml`, `.dockerignore`, candidate workflow | Pinned asset digests, multiple architectures, resource limits, and ephemeral logs |
 | Native install, upgrade, rollback, repair, or uninstall | `internal/rnlctl`, `cmd/rnlctl`, `release/native/install.sh`, `deploy/` | Exact bundle identity, durable journal, atomic generation selection, service intent, permissions, and recovery |
 | Runtime asset or Native bundle format | `release/runtime-assets.lock.json`, `cmd/release-tool`, `scripts/build-native-bundle.sh` | Docker/Native parity, deterministic archive, architecture checks, manifest/SBOM integrity, source and license provenance |
 | Project version | `internal/version`, installers, Compose, release workflow | Do not recouple the project version to the contract version |

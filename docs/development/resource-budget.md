@@ -13,7 +13,7 @@ service/container swap, `1 CPU`, and `256` PIDs/tasks. Equal container memory
 and memory-and-swap limits leave no additional container swap allowance, even
 when the host has swap.
 
-Before tagging, the maintainer verifies the immutable
+Before dispatching a release, the maintainer verifies the immutable
 `sha-<40-character-main-commit>` image with a real Panel and real proxy traffic
 under these limits. That operational check is not stored in this repository.
 The dated M6 engineering gate used the same core cgroup limits for a

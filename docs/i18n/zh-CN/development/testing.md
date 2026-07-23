@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=3da39dbbb8ff0612d55ca78dde6b579b3d0ab79c5515e095f857025f0db5161c -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=72b7f1e959c7c0bcddea863cdf870933d073458762d2a782b6abd2258929ffa8 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -13,7 +13,7 @@
 - 状态、锁、goroutine、取消或生命周期变化必须运行带 `-race` 的测试。
 - 官方可见行为变化必须运行固定源码契约测试。
 - Linux capability、netlink、nftables、进程组和 cgroup 结论只能由 Linux 测试支持。
-- 正式发布前，维护者应使用当前 `main` 的不可变 `sha-<40 位提交>` 候选，在生产限制下连接真实 Panel 并验证真实代理流量。这是人工发布判断，运行观测不提交到仓库。
+- 正式发布前，维护者应使用当前 `main` 的不可变 `sha-<40 位提交>` 候选，在生产限制下连接真实 Panel 并验证真实代理流量。这是人工发布判断；随后从 `main` 发起 release workflow，运行观测不提交到仓库。
 - 精确整机 512 MiB 目标、原生安装路径、`arm64` 运行、大用户量、长时间运行和故障注入仍是有价值的后续检查。单元测试不能替代它们没有覆盖的真实环境。
 - 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应；宿主清单、容器标识、时间戳、日志和 smoke JSON 也不写入仓库。
 
@@ -32,7 +32,7 @@
 | Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
 | 低内存预算 | `scripts/test-low-memory.sh --rw-core ...` | Docker/真实 core |
 | 官方与候选行为比较 | `go run ./cmd/contract-probe ...` | 隔离验收环境 |
-| 正式发布 | `bash scripts/release-check.sh` | 仅用于当前已打 tag 的 `main` 提交 |
+| 正式发布 | `bash scripts/release-check.sh` | 仅用于当前准备发布的 `main` 提交 |
 
 ## Go 测试
 
@@ -180,6 +180,7 @@ bash scripts/check-repository.sh
 - actionlint。
 - Docker/Compose 打包策略检查。
 - 下载源、固定摘要、Action SHA 和 installer bootstrap 等供应链检查。
+- 工具可用或被要求时执行一次 `govulncheck ./...`。
 - 使用精确 Go toolchain 交叉构建 Linux `amd64` 与 `arm64` 二进制。
 
 如果 Docker Compose 可用，打包测试还会执行 Compose schema 校验；如果不可用，脚本会明确输出跳过信息，但其他静态策略仍会运行。如果要声称已经完成 Compose 验证，就不能忽略这条跳过提示。
@@ -198,9 +199,10 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` 组合 Go 门禁、仓库门禁、离线 installer 测试和 govulncheck。若未设置
-`REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，它会跳过漏洞扫描；因此发布前和
-需要报告完整结果时必须显式要求该工具。
+`check.sh` 组合 Go 门禁、仓库门禁和离线 installer 测试。漏洞扫描只由
+`check-repository.sh` 调用一次，完整门禁和 release 门禁不会再次重复扫描。若未设置
+`REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，仓库门禁会跳过漏洞扫描；必需 CI
+会显式设置该开关，因此发布只能使用已经执行扫描器的候选。
 
 `check.sh` 成功并不能证明生产行为。它不会让候选镜像连接真实 Panel、承载真实流量，也不会覆盖所有支持架构、init 系统、宿主规格、负载和故障路径。
 
@@ -334,7 +336,9 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-`release-check.sh` 用于当前 `main` 的正式发布准备。它要求工作区干净、版本与带日期的 `CHANGELOG.md` 一致、固定官方源码可验证，并运行完整仓库检查。运行时验证不由该脚本读取：维护者应在打 tag 前人工确认同一 `sha-<commit>` 候选能够连接真实 Panel、承载真实代理流量且没有意外生命周期或资源故障，不把运行数据提交到仓库。
+`release-check.sh` 用于当前 `main` 的正式发布准备。它要求工作区干净、版本与带日期的 `CHANGELOG.md` 一致、固定官方源码可验证，并运行完整仓库检查。它在 release workflow 创建 draft Release、随后公开其 tag 前运行。运行时验证不由该脚本读取：维护者应在发起 release workflow 前人工确认同一 `sha-<commit>` 候选能够连接真实 Panel、承载真实代理流量且没有意外生命周期或资源故障，不把运行数据提交到仓库。
+
+release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance、Native 资产及其 `release-index.json` digest 绑定；它先创建并校验 draft、晋升精确镜像，再公开并确认 immutable Release，重新确认精确标签后才推进移动通道。若公开成功但 registry 晋升失败，`reconcile-release` 会重新校验 Release 及其已 attestation 的 digest 记录，再恢复精确标签和符合条件的通道，不会重新构建。
 
 具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
 [发布流程](../release.md)。
@@ -375,7 +379,7 @@ REQUIRE_GOVULNCHECK=1 \
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
 
-并非所有 PR 都会执行容器构建；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。由 tag 触发的发布 workflow 会校验该候选的 OCI 结构与 attestation，并把同一镜像摘要晋升为正式标签。不要把只在部分 PR 出现的 container job 配成所有 PR 都必须出现的门禁。
+并非所有 PR 都会执行 candidate workflow；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。手工发起的 release workflow 会校验该候选的 OCI 结构、双平台 SPDX SBOM、attestation 和 Release digest 绑定，在公开前晋升正式标签，再要求 GitHub Release 变为 immutable 并重新确认精确标签。不要把只在部分 PR 出现的 candidate job 配成所有 PR 都必须出现的门禁。
 
 ## 编写测试
 

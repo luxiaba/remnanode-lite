@@ -7,7 +7,7 @@
 [English](README.md) | [简体中文](README.zh-CN.md) | [Русский](README.ru.md)
 
 [![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
-[![Container](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
+[![Candidate](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
 [![Security](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml/badge.svg)](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml)
 [![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
@@ -50,13 +50,15 @@ Both paths use host networking and require `NET_ADMIN`. Do not run them beside a
 
 You need Docker Engine with Compose v2, a Node created in Remnawave Panel, and the complete Secret Key for that Node. The port must be reachable from the Panel. Commands below assume a root shell; use `sudo` where needed.
 
-Download the Compose file and environment template from one exact stable Release:
+Choose a version shown on the GitHub Releases page, then download the Compose
+file and environment template from that exact Release. A source version or a
+candidate image is not a downloadable Release:
 
 ```bash
 mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
 
-VERSION=2.8.0
+VERSION="<published-version>" # for example: X.Y.Z or X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 curl -fL \
@@ -107,12 +109,12 @@ The official container's `NODE_PORT` and `SECRET_KEY` can be reused when migrati
 
 Use the Native bundle when Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not mean that the Node has no background service: `remnanode-lite` runs directly under systemd or OpenRC. Rocky Linux 9 with systemd is the primary target; Rocky Linux 8 and Debian 12 are compatible. OpenRC support is experimental and requires a working cgroup v2 setup.
 
-Native installs never follow a moving channel. Download `install.sh` and
-`SHA256SUMS` from the same exact GitHub Release, verify the installer, and name
-the release explicitly:
+Native installs never follow a moving channel. Choose a version shown on the
+GitHub Releases page, then download `install.sh` and `SHA256SUMS` from that
+exact Release, verify the installer, and name the release explicitly:
 
 ```bash
-VERSION=2.8.0
+VERSION="<published-version>" # for example: X.Y.Z or X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
@@ -130,10 +132,10 @@ sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
 
-The `2.8.0` Native bundle implements contract `2.8.0`. Read the [Native Linux
-guide](docs/deployment-native.md) before fleet rollout; it covers prerequisites,
-unattended and offline installation, exact-version upgrades, rollback, repair,
-and uninstall.
+Native bundles carry the same contract as their matching Release. Read the
+[Native Linux guide](docs/deployment-native.md) before fleet rollout; it covers
+prerequisites, unattended and offline installation, exact-version upgrades,
+rollback, repair, and uninstall.
 
 ## Docker Compose environment variables
 
@@ -205,7 +207,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 
 | Item | Current baseline |
 | --- | --- |
-| Native Linux bundle | `2.8.0` |
+| Native Linux bundles | Exact published Releases |
 | Node contract | `2.8.0` |
 | rw-core | `v26.6.27` |
 | Platforms | `linux/amd64`, `linux/arm64` |

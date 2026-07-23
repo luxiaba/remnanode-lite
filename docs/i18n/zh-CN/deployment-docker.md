@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=364e5775aa8885259306e9a5f4cc34aed891e0143ca0f7b764d0108df4aaa278 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=e061849d865643e23fedff443f6cd4042385b7fae53160b1da065d25e78e7f06 -->
 
 # Docker Compose 部署
 
@@ -33,9 +33,10 @@ ghcr.io/luxiaba/remnanode-lite
 
 | 标签 | 行为 | 使用建议 |
 | --- | --- | --- |
-| `X.Y.Z-rnl.N` | 本项目经过发布验证的独立迭代 | 推荐生产使用，便于准确回滚 |
+| `X.Y.Z-rnl.N` | 已通过发布流程的精确项目预发布版本 | 仅用于受控预览测试和精确回滚 |
 | `X.Y.Z` | 已完成对应官方版本对齐的正式构建 | 推荐生产使用 |
 | `latest` | 最新一个经过发布验证的稳定构建 | 适合主动跟随稳定版，不适合作为回滚标识 |
+| `preview` | 最近一次被提升的 `rnl.N` 预发布版本 | 主动跟随预览通道，不适合作为回滚标识 |
 | `sha-<40位commit>` | 从一个 `main` 提交构建的不可变候选 | 验证发布候选，必要时解析并固定 digest |
 | `edge` | 当前 `main` 的浮动候选 | 仅临时观察 |
 
@@ -194,9 +195,9 @@ docker compose logs --tail=100 remnanode-lite
 
 ## 候选镜像
 
-对于 `main` 的每个提交，`container` workflow 都会构建 `linux/amd64` 和 `linux/arm64` 镜像、发布多架构 manifest，并记录构建来源。全部成功后，它会发布 `sha-<commit>`；如果该提交仍是 `main` 最新提交，还会更新 `edge`。这些检查说明镜像如何构建，但不能证明它运行正常。
+对于 `main` 的每个提交，`candidate` workflow（`container.yml`）都会构建 `linux/amd64` 和 `linux/arm64` 镜像、发布多架构 manifest，并记录构建来源。全部成功后，它会发布 `sha-<commit>`；如果该提交仍是 `main` 最新提交，还会更新 `edge`。这些检查说明镜像如何构建，但不能证明它运行正常。
 
-正式发布前，维护者应使用这个精确候选或其 manifest digest，在仓库维护的 Compose 限制下确认容器正常启动并保持健康、连接真实 Panel、启动 rw-core 且承载真实代理流量，没有意外 OOM、重启或生命周期异常。这是 tag 前的人工发布判断，宿主清单、容器标识、时间戳、日志和 smoke JSON 等运行数据不写入仓库。
+正式发布前，维护者应使用这个精确候选或其 manifest digest，在仓库维护的 Compose 限制下确认容器正常启动并保持健康、连接真实 Panel、启动 rw-core 且承载真实代理流量，没有意外 OOM、重启或生命周期异常。这是在发起版本 release 前的人工判断，宿主清单、容器标识、时间戳、日志和 smoke JSON 等运行数据不写入仓库。
 
 候选镜像没有 GitHub Release 资产，不是正式版本。构建 attestation 用于验证构建来源，不能替代实际运行确认。
 

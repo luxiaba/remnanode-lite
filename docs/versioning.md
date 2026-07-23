@@ -9,9 +9,8 @@ well: an exact version identifies one release, while `preview` and `latest`
 select release classes.
 
 This document defines those identities and channels. The release workflow is
-the executable source of truth for publication, with
-`scripts/release-metadata.sh` providing the stable-versus-preview
-classification.
+the executable source of truth for publication. Its `release-tool metadata`
+command derives the stable-versus-preview class from the source version.
 
 ## Independent Version Dimensions
 
@@ -29,10 +28,11 @@ Version:         2.8.0
 ContractVersion: 2.8.0
 ```
 
-This identifies the stable Remnanode Lite release that includes the first
-Native Linux distribution while retaining the verified official Node `2.8.0`
-contract. A future `rnl.N` suffix describes this project's release; it is not a
-revision published by the official project.
+This is the stable Remnanode Lite release line aligned with the verified
+official Node `2.8.0` contract. Its Native Linux distribution is attached only
+when the corresponding GitHub Release is published. A future `rnl.N` suffix
+describes this project's release; it is not a revision published by the
+official project.
 
 Changing `ContractVersion` requires pinned official source, a reviewed contract
 delta, corresponding implementation and test changes, and completed
@@ -51,7 +51,7 @@ match for this form.
 
 A stable release is published as:
 
-- an annotated Git tag named `vX.Y.Z`;
+- a `vX.Y.Z` Git tag created when the draft GitHub Release is published;
 - a normal, non-prerelease GitHub Release;
 - an exact GHCR tag named `X.Y.Z`; and
 - the source of the moving GHCR `latest` tag.
@@ -68,7 +68,7 @@ behavior while keeping an existing contract baseline.
 
 A preview is published as:
 
-- an annotated Git tag named `vX.Y.Z-rnl.N`;
+- a `vX.Y.Z-rnl.N` Git tag created when the draft GitHub Release is published;
 - a GitHub prerelease;
 - an exact GHCR tag named `X.Y.Z-rnl.N`; and
 - the source of the moving GHCR `preview` tag.
@@ -86,7 +86,7 @@ contract has already been implemented.
 
 | Release | Contract | Class | Status |
 | --- | --- | --- | --- |
-| `2.8.0` | `2.8.0` | Stable | Current stable release, including the first self-contained Native Linux bundle |
+| `2.8.0` | `2.8.0` | Stable | Current contract-aligned release line; Native bundles exist only for published Releases |
 
 Semantic Versioning orders an `X.Y.Z-rnl.N` preview before its `X.Y.Z` stable
 counterpart. Do not infer publication order or channel selection from SemVer
@@ -98,13 +98,13 @@ tag format.
 Formal Git tags include a `v` prefix. Container tags do not:
 
 ```text
-Git tag:       v2.8.0
-Container tag: ghcr.io/luxiaba/remnanode-lite:2.8.0
+Git tag:       vX.Y.Z
+Container tag: ghcr.io/luxiaba/remnanode-lite:X.Y.Z
 ```
 
 Both are immutable release identities, but they identify different objects:
 
-- the annotated Git tag identifies the source commit accepted from `main`; and
+- the GitHub Release tag identifies the source commit accepted from `main`; and
 - the exact container tag identifies the already built and attested
   multi-architecture manifest for that commit.
 
@@ -112,9 +112,11 @@ The release workflow does not rebuild the container. It verifies the
 `sha-<commit>` candidate produced from `main`, then gives that same manifest
 digest the exact release tag.
 
-Repository rules should reject updates and deletion for `v*`. The workflow
-also resolves the remote annotated tag again before draft creation, Release
-publication, and channel promotion; any tag drift fails closed.
+Do not create or push `v*` tags from a workstation. Creating the draft does not
+create a tag; publishing it creates the tag at the accepted `main` commit. With
+GitHub Release immutability enabled, that publication also locks the tag and
+assets. A tag ruleset must allow this Releases API creation. For an unpublished
+version, the workflow refuses an existing tag rather than adopting it.
 
 Registry tags are names, not content addresses. Use
 `ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>` when a deployment must
@@ -154,7 +156,7 @@ explicit Compose operation.
 For normal production deployments, use an exact stable version:
 
 ```text
-ghcr.io/luxiaba/remnanode-lite:2.8.0
+ghcr.io/luxiaba/remnanode-lite:X.Y.Z
 ```
 
 For the strongest pin, record and deploy its manifest digest:
@@ -186,6 +188,12 @@ Use `sha-<commit>` to verify the candidate that may become a release. Do not use
 `edge` for release acceptance because another `main` build can move it during
 testing.
 
+The candidate workflow also records the accepted content address in an
+attested `release-index.json` asset. Publication requires that record to match
+the verified `sha-<commit>` candidate. Once the Release is immutable, recovery
+uses the recorded digest directly instead of assuming a registry tag is a
+durable identity.
+
 ## Native Linux Uses Exact Versions Only
 
 Native installation and upgrade resolve complete, versioned release bundles.
@@ -193,7 +201,7 @@ They deliberately do not follow moving channels. The bootstrap installer
 accepts an exact version such as:
 
 ```bash
-sudo sh install.sh --version 2.8.0
+sudo sh install.sh --version "<published-version>"
 ```
 
 The administration CLI follows the same rule for an online upgrade:
@@ -213,9 +221,11 @@ complete publication.
 
 A published preview has all of the following:
 
-1. an annotated `vX.Y.Z-rnl.N` tag on the accepted `main` commit;
-2. a published GitHub prerelease with verified assets;
-3. an exact `X.Y.Z-rnl.N` GHCR tag matching the accepted candidate digest; and
+1. a `vX.Y.Z-rnl.N` tag created when its draft Release is published on the
+   accepted `main` commit;
+2. a published GitHub prerelease with verified assets, including its attested
+   `release-index.json`;
+3. an exact `X.Y.Z-rnl.N` GHCR tag matching the digest in that index; and
 4. successful promotion of that digest to `preview`.
 
 A published stable release has the corresponding plain `vX.Y.Z` tag, normal
@@ -264,7 +274,8 @@ Release records should also identify:
 - the release class and promoted channel;
 - the project version, Git tag, and source commit;
 - the official contract version and pinned source commit;
-- the accepted container manifest digest and its attestation;
+- the accepted container manifest digest, its attestation, and the
+  `release-index.json` record that binds it to the source revision;
 - the Panel and runtime scope used for maintainer verification;
 - the locked rw-core and runtime asset versions;
 - the `amd64` and `arm64` publication status;

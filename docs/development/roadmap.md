@@ -28,7 +28,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 5. Every concurrency limit, queue, request body, and cache must have an explicit bound.
 6. The Node owns only its rw-core process, internal sockets, and private nftables table; it does not own the host firewall policy. Destroying sockets by IP can affect the host network namespace and is treated as an explicit, documented side effect.
 7. `dev` is the stable development and integration branch. Topic branches enter it through PR and CI. `main` is the release branch and accepts only candidates that have passed the code gate on `dev`.
-8. Every `main` commit gets one immutable `sha-<40-character-commit>` container candidate. A release tag points to the current `main` HEAD only after the maintainer has verified that candidate with a real Panel and real traffic.
+8. Every `main` commit gets one immutable `sha-<40-character-commit>` container candidate and an attested `release-index.json` binding. After maintainer acceptance, the release workflow verifies a draft Release, promotes the recorded exact candidate before publication, publishes and locks it at the current `main` HEAD, then reconfirms that exact tag without rebuilding.
 
 ## Compatibility boundary
 
@@ -59,14 +59,14 @@ baselines. They document the resource work and give later changes a stable
 comparison point; they are not claims about every future build.
 
 The clean stable `2.8.0` release is the official-contract baseline and includes
-the first self-contained Native bundle. Its tag publishes exact Docker and
+the first self-contained Native bundle. Its Release publishes exact Docker and
 Native assets and advances the GHCR `latest` channel. Runtime observations stay
 outside the source repository, and GitHub generates the Release notes.
 
 ## Current focus
 
 - **Now:** Publish the clean stable `2.8.0` release after its exact candidate
-  image and Native bundles have passed the release workflow.
+  image and Native bundles have passed maintainer acceptance and the release workflow.
 - **Next:** Evaluate the next official release detected by automation. Pin its
   source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
@@ -156,10 +156,11 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 
 - Pass Go tests, race tests, vet, static checks, script checks, and multi-platform builds.
 - Publish one immutable `sha-<40-character-commit>` image for every `main` commit, with runnable `linux/amd64` and `linux/arm64` manifests and their attestations.
-- Verify the selected candidate with a real Panel and real proxy traffic under the production container limits before tagging it. Keep host details, logs, and runtime records outside the repository.
-- Require the release tag to point to the current `main` HEAD. Verify the
-  candidate manifest and source attestation, build and attest Native bundles,
-  then promote the same digest to the exact version without rebuilding it.
+- Verify the selected candidate with a real Panel and real proxy traffic under the production container limits before dispatching a release. Keep host details, logs, and runtime records outside the repository.
+- Require the release dispatch commit to be the current `main` HEAD. Verify the
+  candidate manifest and source attestation, reuse and attest the prebuilt Native bundles,
+  bind their Release asset set to the accepted OCI digest, then promote that
+  digest to the exact version without rebuilding it.
   Plain stable tags advance `latest`; `rnl.N` tags advance `preview` only.
 - Keep the existing lifecycle, process-group cleanup, installer, 50,000-user, and rollback results as code-level tests or dated engineering baselines.
 - Update the compatibility documentation and dated root `CHANGELOG.md`; let GitHub generate the Release notes.
@@ -184,6 +185,6 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Daily changes enter `dev` first. Promote a release candidate from `dev` to `main` through a PR.
 - Keep each commit explainable and verifiable; do not mix unrelated formatting.
 - Run tests proportional to the change risk before merging. Failed checks do not enter `dev` or `main`.
-- Wait for the `main` `sha-*` candidate and verify it with a real Panel and real traffic before tagging. Do not commit operational test data.
+- Wait for the `main` `sha-*` candidate and verify it with a real Panel and real traffic before dispatching the release workflow. Do not commit operational test data.
 - Formal tags use `vX.Y.Z` or `vX.Y.Z-rnl.N` and exactly match project `Version`. Never overwrite an exact published tag.
 - Do not configure an upstream code remote. External implementations are protocol and behavioral evidence only.

@@ -15,10 +15,11 @@ The M8 plan below originally required native and dual-runtime testing, a
 runtime observations as versioned source artifacts. The current process builds
 one immutable `sha-<40-character-commit>` candidate for every `main` commit.
 After the maintainer verifies that candidate with a real Panel and real traffic,
-an annotated tag on the current `main` HEAD triggers attestation verification,
-promotion of the same digest to the exact version and `latest`, and automatic
-GitHub Release notes. Use the current release guide for publication policy;
-this archive records only the historical plan.
+the current release workflow binds the accepted digest in an attested Release
+asset, verifies a draft, promotes the exact version before publication, then
+confirms the Release is immutable and advances `latest`. It also publishes
+GitHub-generated Release notes. Use the current release guide for publication
+policy; this archive records only the historical plan.
 
 When this record was written, M0-M7 remediation was complete and M8 covered the
 real Panel/Linux, resource, recovery, and long-running tests planned for the

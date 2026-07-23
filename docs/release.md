@@ -1,129 +1,96 @@
 # Releasing Remnanode Lite
 
-[Documentation home](README.md) | [Versioning and image tags](versioning.md)
+[Documentation index](README.md) | [Versioning and image tags](versioning.md)
 
-This guide is the maintainer procedure for publishing Remnanode Lite. A
-release identifies the reviewed `main` commit selected when the publish
-workflow creates the annotated tag. Its container is the multi-architecture
-candidate already built and attested for that commit; the release workflow
-verifies and retags that digest without rebuilding it.
+Remnanode Lite uses a build-once release flow. A merge to `main` produces the
+container image and Native Linux assets that may later become a Release. The
+release workflow verifies those exact candidates and publishes them; it never
+rebuilds them.
 
-Release assets follow a draft-first path. The workflow builds, verifies,
-attests, uploads, and compares every asset while the GitHub Release is still a
-draft. It publishes the draft only after the exact container tag is available,
-then promotes the same digest to either `preview` or `latest`.
-
-```text
-dev -> pull request -> main -> sha-<commit> candidate
-                                  |
-                                  v
-                        maintainer acceptance
-                                  |
-                                  v
-                     manual publish workflow
-                                  |
-                                  v
-                       annotated v<version> tag
-                                  |
-                                  v
-                 verified assets in a draft Release
-                                  |
-                                  v
-                     exact GHCR version tag
-                                  |
-                                  v
-                       publish GitHub Release
-                                  |
-                   +--------------+--------------+
-                   |                             |
-          X.Y.Z-rnl.N preview                X.Y.Z stable
-          GitHub prerelease                  full Release
-          GHCR preview                       GHCR latest
-```
-
-## 1. Release Types
-
-The tag format determines the release class. The workflow does not accept a
-manual stability flag.
-
-| Project version | Git tag | GitHub status | Exact GHCR tag | Moving GHCR channel | GitHub Latest |
-| --- | --- | --- | --- | --- | --- |
-| `X.Y.Z-rnl.N` | `vX.Y.Z-rnl.N` | Prerelease | `X.Y.Z-rnl.N` | `preview` | Never |
-| `X.Y.Z` | `vX.Y.Z` | Full Release | `X.Y.Z` | `latest` | Yes |
-
-`scripts/release-metadata.sh` performs this classification. An `rnl.N` release
-is always preview, even if it is newer in calendar time or has passed every
-automated gate. It must never update `latest`.
-
-The current `v2.8.0` stable release implements the official Node `2.8.0`
-contract and includes the first self-contained Native Linux bundle. It moves
-the `latest` channel when published.
-
-Project `Version` and official `ContractVersion` are separate identities. A
-plain stable `X.Y.Z` requires the contract version to match. A preview may use
-a different numeric development line, but it must report the contract that the
-code actually implements. See the [versioning policy](versioning.md) for the
-full rules.
-
-The release preflight also compares a stable version with existing stable Git
-tags and rejects a lower version. This prevents an accidental `latest` rollback
-even when the tag syntax and contract are otherwise valid.
-
-## 2. Branches and Workflow Responsibilities
-
-The repository has two long-lived branches:
-
-| Branch | Responsibility |
-| --- | --- |
-| `dev` | Routine integration, regression testing, and release preparation |
-| `main` | Protected release branch and source of immutable container candidates |
-
-Normal work reaches `main` through a reviewed `dev -> main` pull request.
-Direct commits to `main` are not part of the release procedure.
-
-| Workflow | Release responsibility |
-| --- | --- |
-| [`ci`](../.github/workflows/ci.yml) | Go, repository, Native bootstrap, asset-lock, and Linux network-administration checks |
-| [`container`](../.github/workflows/container.yml) | Pull-request image builds and the attested `linux/amd64` plus `linux/arm64` candidate for each `main` commit |
-| [`security`](../.github/workflows/security.yml) | Vulnerability checks |
-| [`contract-sync`](../.github/workflows/contract-sync.yml) | Detects a new official Node release and opens an issue; it never changes the contract automatically |
-| [`release`](../.github/workflows/release.yml) | Creates the annotated tag for manual publication, validates the candidate, creates release assets, publishes the GitHub Release, and promotes the correct channel |
-
-After the container workflow succeeds for `main`, the candidate has two names:
+GitHub Releases are draft-first and immutable after publication. Creating a
+draft does not create its Git tag. Publishing the verified draft creates the
+`v<version>` tag at the accepted `main` commit, then GitHub locks the tag and
+assets and creates a release attestation.
 
 ```text
-ghcr.io/luxiaba/remnanode-lite:sha-<full-40-character-commit>
-ghcr.io/luxiaba/remnanode-lite:edge
+dev -> pull request -> main
+                         |
+                  CI + candidate workflow
+                         |
+          +--------------+----------------+
+          |                               |
+  sha-<commit> image       Native assets + release index
+          |                               |
+          +--------------+----------------+
+                         |
+             maintainer acceptance
+                         |
+                manual release workflow
+                         |
+              draft Release + verified assets
+                         |
+                   exact image tag
+                         |
+        publish: create v<version> + lock Release
+                         |
+               latest or preview channel
 ```
 
-The `sha-*` tag is immutable by project policy and is the only tag used for
-release acceptance. `edge` moves with eligible `main` builds and must not be
-used as release evidence.
+## Release Classes
 
-## 3. Prepare the Version on `dev`
+The version decides the release class. There is no separate stability switch.
 
-Complete code, tests, deployment files, documentation, and translations before
-merging the release candidate to `main`. Do not plan a documentation-only
-commit after runtime acceptance because that would create a different source
-commit and therefore a different candidate.
+| Version | GitHub Release | Exact GHCR tag | Moving channel | GitHub Latest |
+| --- | --- | --- | --- | --- |
+| `X.Y.Z` | Stable | `X.Y.Z` | `latest` | Yes |
+| `X.Y.Z-rnl.N` | Prerelease | `X.Y.Z-rnl.N` | `preview` | No |
 
-At minimum, update and review:
+`rnl.N` is a Remnanode Lite revision. It is independent of the official Node
+version and may represent work ahead of an official release or improvements to
+an existing contract line. See the [versioning policy](versioning.md) for the
+relationship between `Version` and `ContractVersion`.
 
-- `internal/version/version.go` and every repository default that embeds the
-  project version;
-- `internal/version/contract.version`, pinned official source evidence, and
-  contract tests if compatibility changed;
-- `release/runtime-assets.lock.json` and its generated legal or provenance
-  material if a runtime asset changed;
-- Compose defaults and release examples;
-- a dated `CHANGELOG.md` heading in the form
-  `## [VERSION] - YYYY-MM-DD`; and
-- canonical English documentation followed by all maintained translations.
+## Repository Setup
 
-For a preview, choose the next unused `rnl.N` in that `X.Y.Z` line. For a
-stable release, confirm that project and contract versions are identical.
+The publication guarantees rely on both repository files and GitHub settings.
+Keep these settings in place:
 
-Run the repository checks with the pinned official source available:
+- `main` is the protected release branch; normal changes arrive through a pull
+  request from `dev`.
+- The default `GITHUB_TOKEN` permission is read-only. Each job raises only the
+  permissions it needs.
+- Actions are pinned to full commit SHAs. Dependabot maintains those pins on
+  `dev`.
+- The `release` environment accepts deployments from `main` only.
+- **Release immutability** is enabled under **Settings -> General -> Releases**.
+- A tag ruleset must allow the Releases API to create `v*` tags when a draft is
+  published, while denying ordinary users and workstations the ability to
+  create, update, or delete those tags. Configure its bypass policy so only the
+  protected release automation can use that path. GitHub release immutability
+  protects the tag after publication.
+
+Do not create or push release tags from a workstation. The release workflow is
+the only supported publication entry point. For an unpublished version, it
+fails closed if a `v*` tag already exists instead of adopting it.
+
+## 1. Prepare the Version
+
+Complete the code, tests, deployment files, documentation, and changelog on
+`dev`. A release candidate should not need a documentation-only commit after
+runtime acceptance because any new commit creates a different candidate.
+
+Check at least the following:
+
+- `internal/version/version.go` contains the intended project version.
+- `internal/version/contract.version` reflects the contract actually
+  implemented by the code.
+- Stable `X.Y.Z` versions match the contract version; previews may carry an
+  older verified contract.
+- `CHANGELOG.md` contains a dated `## [VERSION] - YYYY-MM-DD` entry.
+- Compose defaults and Native documentation name the same version.
+- Runtime asset changes are pinned in `release/runtime-assets.lock.json`.
+
+Run the complete local gate when the pinned official source is available:
 
 ```bash
 export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned/remnawave-node
@@ -131,442 +98,198 @@ export REQUIRE_GOVULNCHECK=1
 bash scripts/check.sh
 ```
 
-The release workflow repeats the complete gate. A passing local run shortens
-feedback but never replaces CI.
+Local checks shorten feedback. GitHub CI remains the publication record.
 
-An official contract update is a compatibility project, not a version-string
-change. It requires pinned source, a reviewed route and schema delta,
-implementation changes, contract tests, and real Panel verification before
-`ContractVersion` moves.
+## 2. Merge and Wait for Candidates
 
-## 4. Merge and Freeze the Candidate
+Merge the reviewed `dev -> main` pull request. Two workflows must finish for
+the resulting `main` commit:
 
-Merge the `dev -> main` pull request after its required checks pass. The release
-candidate is the resulting remote `main` HEAD:
+- `ci` runs the Go, repository, Native bootstrap, and Linux network tests.
+- `candidate` builds and attests the multi-architecture image, builds and
+  verifies both Native bundles, binds the accepted OCI index digest in
+  `release-index.json`, and stores the complete attested release asset set as a
+  workflow artifact.
 
-```bash
-git fetch origin main
-C="$(git rev-parse origin/main)"
-printf '%s\n' "$C"
+The candidate image is:
+
+```text
+ghcr.io/luxiaba/remnanode-lite:sha-<full-40-character-main-commit>
 ```
 
-Wait for both CI and the `main` container workflow to succeed. Then inspect the
-immutable candidate:
+`edge` may point to the same image, but it is a moving observation channel and
+must not be used as release evidence. Native candidate artifacts are retained
+for 30 days. Re-run the candidate workflow on `main` if they expire. The rerun
+verifies and reuses the existing `sha-<commit>` image instead of rebuilding it,
+then reproduces the Native bundles from the same source and locked inputs.
 
-```bash
-IMAGE=ghcr.io/luxiaba/remnanode-lite
-CANDIDATE="${IMAGE}:sha-${C}"
+`release-index.json` is a small, checksummed Release asset that records the
+accepted version, source commit, GHCR repository, and OCI index digest. It is
+attested with the rest of the candidate package. Recovery uses this immutable
+Release asset rather than treating a registry tag as the historical digest
+record.
 
-docker buildx imagetools inspect "$CANDIDATE"
-CANDIDATE_DIGEST="$(docker buildx imagetools inspect \
-  --format '{{.Manifest.Digest}}' "$CANDIDATE")"
-printf '%s\n' "$CANDIDATE_DIGEST" \
-  | grep -Eq '^sha256:[0-9a-f]{64}$'
-```
+## 3. Perform Maintainer Acceptance
 
-Keep the digest with the release notes used for maintainer review. Keep `main`
-unchanged from the final candidate check until the release workflow accepts
-the pushed tag. If `main` advances first, the new HEAD is a new candidate:
-review the change and repeat the relevant verification instead of tagging the
-older commit. Once the workflow has accepted the tag and source identity,
-later `main` changes do not invalidate that in-progress release.
+Deploy the exact `sha-<commit>` image or its resolved manifest digest. Confirm
+the behavior relevant to the release, including:
 
-## 5. Perform Maintainer Acceptance
-
-Deploy the exact candidate tag or resolved manifest digest. Before release,
-confirm that it:
-
-- starts cleanly under the maintained resource limits;
-- connects to the intended Panel and reports the expected project and contract
+- clean startup and healthy status under the maintained limits;
+- connection to the intended Panel with the expected project and contract
   versions;
-- carries real proxy traffic;
-- performs the release-relevant Node, rw-core, plugin, user, and statistics
-  operations; and
-- shows no unexpected restart, OOM, or lifecycle behavior during the test.
+- real proxy traffic through rw-core;
+- release-relevant user, plugin, statistics, and lifecycle operations; and
+- no unexpected restart, OOM, or shutdown behavior.
 
-For a release that changes Native delivery or lifecycle behavior, also build
-the Native bundle from the same clean candidate commit and test the affected
-systemd or OpenRC path on the intended distribution:
+When Native delivery changed, test the candidate bundle on the affected
+systemd or OpenRC platform as well. State exactly which architecture and
+distribution were exercised; one host does not prove every Linux target.
 
-```bash
-bash scripts/build-native-bundle.sh dist/native amd64 arm64
+Acceptance records are operational data. Do not commit host inventories,
+addresses, Panel details, secrets, logs, container identifiers, or smoke-test
+output.
+
+## 4. Run the Release Workflow
+
+Open **Actions -> release -> Run workflow**, choose `main`, and enter the exact
+source version. For example:
+
+```text
+version: 2.8.0
 ```
 
-The automated workflow cross-builds and structurally verifies both
-architectures. A local or hosted runtime test should state exactly which
-architecture, distribution, service manager, and lifecycle operations were
-exercised. Do not turn a check on one platform into a claim about every Linux
-environment.
-
-Operational acceptance is a maintainer decision, not a versioned repository
-artifact. Never commit host inventories, IP addresses, Panel details,
-container identifiers, logs, smoke-test output, or secrets.
-
-The release workflow verifies the candidate attestation again. Maintainers can
-perform the same check before tagging:
-
-```bash
-gh attestation verify \
-  "oci://${IMAGE}@${CANDIDATE_DIGEST}" \
-  --repo luxiaba/remnanode-lite \
-  --cert-identity \
-    https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
-  --source-digest "$C" \
-  --deny-self-hosted-runners
-```
-
-## 6. Run the Release Preflight and Publish
-
-Publish only the current remote `main` HEAD. Before dispatching the release,
-make sure your local checkout matches the candidate you accepted:
-
-```bash
-git fetch origin main --tags
-git switch main
-git pull --ff-only origin main
-
-test -z "$(git status --porcelain --untracked-files=all)"
-test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-
-VERSION="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' \
-  internal/version/version.go)"
-TAG="v${VERSION}"
-```
-
-Run the release-specific preflight locally when you want one final check before
-the GitHub run:
-
-```bash
-export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned/remnawave-node
-export REQUIRE_GOVULNCHECK=1
-RELEASE_TAG="$TAG" bash scripts/release-check.sh
-```
-
-This requires a clean tree and verifies the version format, contract identity,
-dated changelog entry, strict translation freshness, Native bootstrap,
-repository checks, official source evidence, and vulnerability gate.
-
-Do not create or push the release tag from a workstation. Start the release
-workflow from GitHub Actions and let it create the annotated tag:
+The CLI equivalent is:
 
 ```bash
 gh workflow run release.yml \
   --repo luxiaba/remnanode-lite \
   --ref main \
-  -f operation=publish \
-  -f version="$VERSION"
+  -f version=2.8.0
 ```
 
-For the current stable release, `VERSION` is `2.8.0` and `TAG` is `v2.8.0`.
+The workflow performs these operations in order:
 
-The manual workflow confirms that it is running on `refs/heads/main`, verifies
-that `GITHUB_SHA` is still the remote `main` HEAD, creates the annotated
-`v<version>` tag through the GitHub API, and then continues the same release
-run. The release workflow is not triggered by `v*` tag pushes; a workstation
-tag push is therefore never a supported publication path.
+1. Confirms the requested version matches the source and that the dispatch
+   commit is still the remote `main` HEAD.
+2. Finds successful `ci` and `candidate` runs for that exact commit.
+3. Downloads the previously built Release assets and verifies their canonical
+   file set, checksums, Native bundle manifests, SBOMs, source revision, and
+   attestations.
+4. Resolves `sha-<commit>`, verifies the two runnable image manifests, their
+   attestation manifests, and GitHub provenance, then confirms that its digest
+   is the digest recorded by `release-index.json`.
+5. Creates or updates a draft GitHub Release without creating the Git tag.
+6. Compares every uploaded draft asset with the local digest and size, and
+   requires the unpublished `v<version>` tag to remain absent.
+7. Reconfirms that the accepted commit is still the remote `main` HEAD and
+   that no `v<version>` tag appeared during draft verification.
+8. Gives the accepted image digest its immutable exact version tag. No image
+   build occurs here, and an existing exact tag is accepted only when its
+   digest is identical.
+9. Publishes the draft with the correct stable or prerelease status. This is
+   the step that creates the `v<version>` tag. The exact image is already
+   available before a stable Release can become GitHub Latest.
+10. Requires GitHub release immutability and verifies the tag target, Release
+    attestation, every local asset including `release-index.json`, and the
+    stable Latest pointer when relevant. Identity and asset errors fail
+    immediately; only GitHub publication propagation (immutability, Latest,
+    and attestations) is retried.
+11. Reconfirms that the exact image tag still resolves to the accepted digest,
+    then moves that digest to `latest` for a stable release or `preview` for a
+    prerelease.
 
-Repository settings should protect the published result rather than block the
-release workflow:
+Only the jobs that publish the Release or registry tags receive write access.
+Candidate validation remains read-only.
 
-- Enable immutable releases, so a published GitHub Release and its associated
-  tag cannot be silently changed.
-- Add a `v*` tag ruleset that restricts tag updates and deletions and blocks
-  force pushes.
-- Do not enable tag creation restrictions unless the repository has a deliberate
-  automation bypass that lets the release workflow create `v<version>` tags.
+## 5. Verify the Published Result
 
-Keep `main` frozen until the workflow's initial source-identity check succeeds.
-The workflow re-reads the remote annotated tag before creating the draft,
-publishing the Release, and promoting the channel. If a source defect is
-discovered after the tag exists, correct it on `main` and choose a new version
-rather than moving the tag to another commit.
-
-## 7. What the Release Workflow Verifies
-
-The publish workflow first establishes source and candidate identity:
-
-1. The workflow run must come from `refs/heads/main` for manual publication,
-   and its `GITHUB_SHA` must still be the reviewed `origin/main` HEAD when the
-   workflow performs its initial identity check. After that acceptance,
-   subsequent `main` changes do not invalidate the in-progress release.
-2. The workflow creates or verifies an annotated tag matching `Version`
-   exactly, and every later publication boundary verifies that tag again.
-3. The pinned official source and the complete release gate must pass.
-4. The tag is classified as stable or preview from its syntax.
-5. The `sha-<commit>` candidate must exist and resolve to a valid manifest
-   digest.
-6. The candidate index must contain exactly one runnable `linux/amd64` image,
-   one runnable `linux/arm64` image, and the corresponding attestations.
-7. The OCI attestation must identify the container workflow on `main` and the
-   tagged source commit.
-8. The Linux network-administration integration tests run in isolated
-   namespaces.
-9. The remote tag must remain an annotated tag resolving to the same commit at
-   every external publication boundary.
-
-The release workflow never accepts `edge` as a substitute and never rebuilds
-the container. The exact version and moving channel are additional names for
-the accepted candidate digest.
-
-## 8. Release Assets
-
-The workflow builds and uploads these assets for both stable and preview
-releases:
-
-| Asset | Purpose |
-| --- | --- |
-| `install.sh` | POSIX bootstrap for an exact Native release or local bundle |
-| `remnanode-lite_<version>_linux_amd64.tar.gz` | Self-contained Native Linux bundle for amd64 |
-| `remnanode-lite_<version>_linux_arm64.tar.gz` | Self-contained Native Linux bundle for arm64 |
-| `compose.yaml` | Repository Compose deployment file |
-| `docker-compose.single-file.yaml` | Single-file Compose template pinned to the exact release image |
-| `remnanode-lite.env.example` | Environment template pinned to the exact release image |
-| `SHA256SUMS` | Checksums for every other uploaded release asset |
-
-Each Native archive contains one complete generation, including:
-
-- `remnanode-lite` and `rnlctl` binaries;
-- the locked rw-core binary, GeoIP, GeoSite, and generated ASN database;
-- systemd and OpenRC service material;
-- `release-manifest.json` and `runtime-assets.lock.json`;
-- an SPDX SBOM, third-party notices, licenses, and source offer; and
-- the bundle-local installer.
-
-Runtime assets are part of the bundle. There is no separate ASN database
-release asset and no release-time download from an unpinned moving source.
-Docker and Native bundles are built from the same
-`release/runtime-assets.lock.json`.
-
-`cmd/release-tool` verifies each archive against the expected architecture,
-project version, contract version, source revision, file manifest, asset lock,
-and embedded checksums. The workflow also validates `SHA256SUMS` before upload.
-
-## 9. Draft, Publish, and Promote
-
-Publication happens in a fixed order.
-
-### 9.1 Attest Every Asset
-
-Every file in the release staging directory, including `SHA256SUMS`, receives
-a GitHub artifact attestation tied to the release workflow run and source
-commit. The workflow immediately verifies those attestations before creating
-the draft.
-
-### 9.2 Create and Verify the Draft
-
-The workflow creates a draft GitHub Release with generated notes and the
-correct prerelease flag. If a draft for the same tag and source commit already
-exists, a rerun may replace its assets. A published Release can never be
-replaced this way.
-
-Before continuing, the workflow compares the draft's complete asset list with
-the local build. Every name, SHA-256 digest, and byte size must match. The
-Release remains invisible to normal consumers while this check runs.
-
-### 9.3 Publish the Exact Container Tag
-
-After the draft is complete, the workflow promotes the accepted candidate
-digest to the exact version tag. The immutable promotion helper accepts an
-already existing exact tag only when it resolves to the same digest; it refuses
-to overwrite a different image.
-
-### 9.4 Publish the GitHub Release
-
-The verified draft is published with one of two states:
-
-- `X.Y.Z-rnl.N` becomes a GitHub prerelease with `make_latest=false`;
-- `X.Y.Z` becomes a full GitHub Release with `make_latest=true`.
-
-The workflow verifies the published state. In particular, a preview must not
-resolve through GitHub's Latest Release endpoint. GitHub returns `404` from
-that endpoint until a full release exists; the workflow accepts that response
-only for a preview. A stable release must become GitHub Latest.
-
-### 9.5 Promote the GHCR Channel
-
-Only after the GitHub Release is published does the workflow move a channel:
-
-- preview release: accepted digest -> `preview`;
-- stable release: accepted digest -> `latest`.
-
-The channel promotion does not rebuild or copy platform images. It publishes a
-new manifest reference to the exact accepted digest.
-
-## 10. Verify the Published Release
-
-Set the exact release identity:
+The Release page must show **Immutable**. You can verify it from a recent
+GitHub CLI:
 
 ```bash
-VERSION=2.8.0
-TAG="v${VERSION}"
-C="$(git rev-list -n 1 "$TAG")"
-CHANNEL=latest
-IMAGE=ghcr.io/luxiaba/remnanode-lite
+VERSION="<published-version>"
+gh release verify "v${VERSION}" --repo luxiaba/remnanode-lite
 ```
 
-For a preview release, use its exact `X.Y.Z-rnl.N` version and `CHANNEL=preview`.
+The expected stable references are:
 
-Check GitHub's published state:
+```text
+Git tag:       vX.Y.Z
+GitHub Release vX.Y.Z
+GHCR exact:    ghcr.io/luxiaba/remnanode-lite:X.Y.Z
+GHCR channel:  ghcr.io/luxiaba/remnanode-lite:latest
+```
+
+For a preview, replace the version with `X.Y.Z-rnl.N`; the moving channel is
+`preview`, and GitHub must not mark it Latest.
+
+To confirm that exact and moving tags resolve to the same manifest:
 
 ```bash
-gh api "repos/luxiaba/remnanode-lite/releases/tags/${TAG}" \
-  --jq '{tag_name, draft, prerelease, target_commitish}'
-gh api repos/luxiaba/remnanode-lite/releases/latest --jq .tag_name
+docker buildx imagetools inspect \
+  --format '{{.Manifest.Digest}}' \
+  ghcr.io/luxiaba/remnanode-lite:X.Y.Z
+
+docker buildx imagetools inspect \
+  --format '{{.Manifest.Digest}}' \
+  ghcr.io/luxiaba/remnanode-lite:latest
 ```
 
-The release must not be a draft. `prerelease` must be `true` for `rnl.N` and
-`false` for a plain version. GitHub Latest must equal a new stable tag and must
-not equal a preview tag.
+## Failure and Retry Rules
 
-Download and verify every asset:
+The workflow is deliberately ordered so that irreversible publication happens
+late.
 
-```bash
-work="$(mktemp -d)"
-gh release download "$TAG" --repo luxiaba/remnanode-lite --dir "$work"
-(
-  cd "$work"
-  sha256sum --check --strict SHA256SUMS
-)
-
-for asset in "$work"/*; do
-  gh attestation verify "$asset" \
-    --repo luxiaba/remnanode-lite \
-    --cert-identity \
-      "https://github.com/luxiaba/remnanode-lite/.github/workflows/release.yml@refs/tags/${TAG}" \
-    --source-digest "$C" \
-    --deny-self-hosted-runners
-done
-rm -rf "$work"
-```
-
-Confirm that the candidate, exact tag, and correct channel resolve to one
-manifest digest:
-
-```bash
-CANDIDATE_DIGEST="$(docker buildx imagetools inspect \
-  --format '{{.Manifest.Digest}}' "${IMAGE}:sha-${C}")"
-EXACT_DIGEST="$(docker buildx imagetools inspect \
-  --format '{{.Manifest.Digest}}' "${IMAGE}:${VERSION}")"
-CHANNEL_DIGEST="$(docker buildx imagetools inspect \
-  --format '{{.Manifest.Digest}}' "${IMAGE}:${CHANNEL}")"
-
-test "$CANDIDATE_DIGEST" = "$EXACT_DIGEST"
-test "$EXACT_DIGEST" = "$CHANNEL_DIGEST"
-```
-
-Finally, verify the container attestation against the release commit:
-
-```bash
-gh attestation verify "oci://${IMAGE}@${EXACT_DIGEST}" \
-  --repo luxiaba/remnanode-lite \
-  --cert-identity \
-    https://github.com/luxiaba/remnanode-lite/.github/workflows/container.yml@refs/heads/main \
-  --source-digest "$C" \
-  --deny-self-hosted-runners
-```
-
-## 11. Failure and Recovery
-
-Do not delete or move an exact Git tag or exact image tag to recover a release.
-The safe action depends on how far the workflow progressed.
-
-| Failure point | Expected external state | Recovery |
+| Failure point | External state | Correct response |
 | --- | --- | --- |
-| Tag creation, candidate lookup, or preflight | No draft or release created; the annotated tag may exist if creation succeeded first | Ensure CI and the container workflow succeeded, then rerun `operation=publish` for the same version |
-| Asset build, attestation, or upload | No draft, or a draft tied to the same commit | Rerun the workflow; matching draft assets may be replaced and are checked again |
-| Exact image promotion | Verified draft may exist; exact image may or may not exist | Rerun; immutable promotion accepts the existing tag only if its digest is already correct |
-| GitHub publication | Exact image and draft may exist | Rerun the failed job while the Release is still a draft |
-| GHCR channel promotion | GitHub Release and exact image are already published | Use the release workflow's manual channel reconciliation for that published tag |
-| Defect found after publication | Exact release remains published | Fix `main`, choose a new version, and complete a new release |
+| Source, CI, candidate, package, or provenance verification | No Release created | Fix the cause or wait for the required workflow, then run release again |
+| Draft creation or asset upload | A draft may exist; the release tag does not exist | Re-run the same version only while `main` still points to the accepted commit; the workflow updates and re-verifies the draft |
+| Exact image promotion | A verified draft may exist; the Git release tag does not exist | Re-run the same version only while `main` still points to the accepted commit. A matching exact image tag is a no-op; a conflicting digest fails closed. If publication never occurred and `main` advanced, do not reuse that version for a new candidate; choose a new version. Retention cleanup must never delete a digest that a Release or deployment may reference |
+| Publication or GitHub propagation (immutability, Latest, or Release attestation) | The Release and tag may already be public; the exact image tag already exists | Inspect the Release first. If it is still a draft and `main` is unchanged, rerun `release`. If it is public, never delete or rewrite it; continue with `reconcile-release` after GitHub finishes propagation |
+| `latest` or `preview` promotion | Immutable Release and exact image are valid; a moving channel may be incomplete | Run `reconcile-release` for the published tag. It restores an eligible current channel only; an older Release remains successful after its exact tag is confirmed |
 
-Manual dispatch also provides a reconciliation path for an already published
-Release. Use `operation=reconcile`, not `operation=publish`, when only the
-moving GHCR channel needs repair:
+The `reconcile-release` workflow derives the source commit from an immutable
+published Release, downloads and verifies its attested `release-index.json`,
+then verifies the recorded OCI digest and its provenance before creating or
+confirming the exact image tag. It does not infer a historical digest from a
+`sha-<commit>` registry tag. It restores `latest` or `preview` only when that
+Release still owns its channel; an older Release completes successfully after
+exact-tag recovery. It never rebuilds an image and never overwrites a
+conflicting exact tag.
+
+A draft is tied to its accepted commit. If `main` advances before the draft is
+published, the workflow intentionally refuses to resume it. Delete only that
+unpublished draft, accept the candidate for the new `main` commit, then dispatch
+the release again. Never delete, retarget, or recreate a published Release or
+its tag.
+
+If a published release is wrong, fix the source and publish a new version. Do
+not reuse a tag or replace assets.
+
+## Rollback
+
+Keep the previous exact image tag or digest in deployment records. Rollback is
+an explicit Compose update:
 
 ```bash
-gh workflow run release.yml \
-  --repo luxiaba/remnanode-lite \
-  --ref main \
-  -f operation=reconcile \
-  -f release_tag=v2.8.0
+docker compose pull
+docker compose up -d --no-build --force-recreate
 ```
 
-Reconciliation checks that:
+Native installations retain one verified previous generation and can use
+`rnlctl rollback`. Moving `latest` or `preview` backward is not the rollback
+mechanism.
 
-- the tag is annotated and identifies the published Release;
-- the GitHub prerelease and Latest state match the tag class;
-- the exact image equals the original `sha-<commit>` candidate;
-- the candidate attestation matches the source commit; and
-- the destination channel is `preview` for `rnl.N` or `latest` for a plain
-  version.
+## Maintainer Checklist
 
-It then repairs only that GHCR channel reference. It does not rebuild assets,
-replace a published Release, change an exact image, or repair incorrect GitHub
-release metadata. Correct any GitHub metadata issue first, then run
-reconciliation.
-
-If a workflow fails because the release source itself is wrong, do not keep
-retrying it. Correct the defect on `dev`, merge a new `main` candidate, advance
-the project version, and publish that new identity.
-
-## 12. Deployment Rollback After a Release
-
-Release immutability and deployment rollback are separate concerns. Do not move
-an exact release tag backward or silently replace its assets.
-
-- Docker deployments roll back to the previously recorded exact version or
-  manifest digest, then pull and recreate the container.
-- Native deployments use `rnlctl rollback` to select the retained previous
-  generation. A deliberate downgrade beyond that retained generation uses an
-  exact verified release bundle.
-- A project-wide corrective release receives a new version and goes through the
-  complete workflow.
-
-Avoid repairing a bad stable release by manually moving `latest` to an
-unreviewed image. Publish a corrected stable version so the changelog,
-artifacts, exact image, attestations, and rollback identity remain coherent.
-
-## 13. Following a New Official Node Version
-
-The scheduled contract workflow opens an issue when the official Node publishes
-a version different from the pinned baseline. That issue starts investigation;
-it does not authorize an automatic version bump.
-
-Before changing `ContractVersion`:
-
-1. pin the official tag and immutable commit;
-2. regenerate and review contract evidence;
-3. compare routes, request and response schemas, errors, plugin behavior, and
-   side effects;
-4. update the Go implementation and tests;
-5. run the full repository and release gates;
-6. verify the candidate with the target Panel and real traffic; and
-7. document the actual compatibility scope and known differences.
-
-Development may use a new `X.Y.Z-rnl.N` project line before this work is
-complete, but the binary must continue to report the older verified contract.
-Use a plain `X.Y.Z` release only after same-version alignment is complete.
-
-## 14. Maintainer Checklist
-
-- [ ] The version format selects the intended stable or preview class.
-- [ ] `Version`, `ContractVersion`, Compose defaults, tests, changelog, and
-      documentation agree.
-- [ ] Canonical English documentation and maintained translations are current.
-- [ ] The official source evidence is pinned and verified.
-- [ ] CI, container, Native, network-administration, security, and release
-      preflight checks pass.
-- [ ] The accepted `sha-<commit>` candidate is the current `main` HEAD.
-- [ ] Real Panel and traffic verification used that exact candidate digest.
-- [ ] Native lifecycle changes were tested on the claimed distributions and
-      architectures.
-- [ ] The annotated release tag points to the current remote `main` HEAD.
-- [ ] Draft assets match the build by name, digest, and size.
-- [ ] Every release asset and the container manifest has a valid attestation.
-- [ ] The exact image tag matches the accepted candidate digest.
-- [ ] A preview is a GitHub prerelease and does not change GitHub Latest or
-      GHCR `latest`.
-- [ ] A stable release is a full GitHub Release and advances GHCR `latest`.
-- [ ] The published release's `preview` or `latest` channel resolves to the
-      exact release digest.
-- [ ] The previous exact deployment reference is retained for rollback.
+- [ ] Version, contract, changelog, deployment examples, and documentation agree.
+- [ ] The `dev -> main` pull request passed required checks and was reviewed.
+- [ ] `ci` and `candidate` succeeded for the current `main` commit.
+- [ ] The exact `sha-<commit>` image passed real Panel and traffic acceptance.
+- [ ] Native behavior was tested when Native delivery changed.
+- [ ] The release workflow is dispatched from `main` with the exact source version.
+- [ ] The published Release shows **Immutable** and `gh release verify` succeeds.
+- [ ] The exact image tag resolves to the digest recorded by the immutable
+  Release's `release-index.json`.
+- [ ] Stable advanced `latest`, or preview advanced `preview`, but never both.
+- [ ] Previous exact deployment references remain available for rollback.

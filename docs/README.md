@@ -41,7 +41,7 @@ You do not need to read every design document first:
 1. Read [Versioning and image tags](versioning.md); never couple project `Version` to `ContractVersion` implicitly.
 2. Review the [roadmap](development/roadmap.md) and current contract baseline.
 3. Prepare the version, root [CHANGELOG](../CHANGELOG.md), documentation, and tests on `dev`, then promote them to `main`.
-4. Follow the [Release process](release.md) to verify the `sha-<commit>` candidate with a real Panel and real traffic, then create the annotated tag. Runtime observations stay outside the repository.
+4. Follow the [Release process](release.md) to verify the `sha-<commit>` candidate with a real Panel and real traffic, then dispatch the Release workflow from `main`. Runtime observations stay outside the repository.
 5. A version is published only after its GitHub Release, assets, and exact GHCR tag exist.
 
 ## Complete index

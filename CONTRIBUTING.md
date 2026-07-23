@@ -395,18 +395,19 @@ candidate images, final tags, moving channels, and release assets under the
 [versioning policy](docs/versioning.md) and [release procedure](docs/release.md).
 
 Every `main` commit receives an immutable `sha-<commit>` candidate image. Before
-tagging a release, a maintainer confirms that this candidate starts cleanly,
+dispatching a release, a maintainer confirms that this candidate starts cleanly,
 connects to a real Panel, and carries real proxy traffic under the maintained
 Compose limits. These operational checks happen outside the repository: do not
 commit host inventories, logs, Secrets, smoke JSON, or other production data.
 
-When the candidate is ready, create an annotated version tag on the current
-`main` HEAD. The Release workflow verifies the candidate manifest and build
-attestation, builds and verifies both Native bundles, publishes all assets, and
-promotes the accepted image digest without rebuilding it. A plain `X.Y.Z`
-release advances `latest` and GitHub Latest; an `X.Y.Z-rnl.N` prerelease
-advances `preview` and never changes `latest`. `edge` and `sha-*` are not
-releases.
+When the candidate is ready, dispatch the release workflow from the current
+`main` HEAD with the exact source version. It verifies the candidate manifest,
+the prebuilt Native assets, and their attestations, creates and verifies a
+draft Release, promotes the accepted image digest, then publishes and verifies
+the immutable Release before reconfirming that digest without rebuilding it. A plain
+`X.Y.Z` release advances `latest` and GitHub Latest; an `X.Y.Z-rnl.N`
+prerelease advances `preview` and never changes `latest`. `edge` and `sha-*`
+are not releases.
 
 ## License
 

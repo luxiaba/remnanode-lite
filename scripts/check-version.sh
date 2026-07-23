@@ -87,7 +87,7 @@ if [[ "$version" != *-rnl.* ]]; then
   done < <(git tag --list 'v*')
 fi
 
-metadata="$(bash scripts/release-metadata.sh "v${version}")" ||
+metadata="$(go run ./cmd/release-tool metadata --tag "v${version}")" ||
   fail "release metadata rejected v${version}"
 grep -Fxq "version=${version}" <<<"$metadata" ||
   fail "release metadata did not preserve version ${version}"
