@@ -76,50 +76,50 @@ run_preview() {
     "$root_dir/scripts/require-channel-owner.sh" "$@"
 }
 
-output="$(run_stable '{"tag_name":"v2.8.1"}' 200 0 \
-  --allow-non-owner v2.8.1 false)" ||
+output="$(run_stable '{"tag_name":"2.8.1"}' 200 0 \
+  --allow-non-owner 2.8.1 false)" ||
   fail "current stable Release was rejected"
 [ "$output" = 'promote=true' ] || fail "current stable Release returned $output"
 
 output="$(run_stable '{"message":"Not Found"}' 404 0 \
-  --allow-non-owner v2.8.1 false)" ||
+  --allow-non-owner 2.8.1 false)" ||
   fail "first stable Release did not claim an empty latest channel"
 [ "$output" = 'promote=true' ] || fail "empty latest channel returned $output"
 
-if ! output="$(run_stable '{"tag_name":"v2.8.1"}' 200 0 \
-  --allow-non-owner v2.8.0 false 2>"$test_dir/stable-old.err")"; then
+if ! output="$(run_stable '{"tag_name":"2.8.1"}' 200 0 \
+  --allow-non-owner 2.8.0 false 2>"$test_dir/stable-old.err")"; then
   fail "older stable Release did not finish as a no-op"
 fi
 [ "$output" = 'promote=false' ] || fail "older stable Release returned $output"
 grep -Fq 'leaving latest unchanged' "$test_dir/stable-old.err" ||
   fail "older stable Release did not explain the no-op"
 
-if run_stable '{"tag_name":"v2.8.1"}' 200 0 \
-  v2.8.0 false >"$test_dir/stable-required.out" 2>&1; then
+if run_stable '{"tag_name":"2.8.1"}' 200 0 \
+  2.8.0 false >"$test_dir/stable-required.out" 2>&1; then
   fail "older stable Release was accepted without no-op mode"
 fi
 
 if run_stable '{"message":"Bad credentials"}' 401 0 \
-  --allow-non-owner v2.8.1 false >"$test_dir/stable-error.out" 2>&1; then
+  --allow-non-owner 2.8.1 false >"$test_dir/stable-error.out" 2>&1; then
   fail "stable API failure was treated as a no-op"
 fi
 grep -Fq 'HTTP 401' "$test_dir/stable-error.out" ||
   fail "stable API failure lost its diagnostic"
 
-preview_current='[{"tagName":"v2.8.1-rnl.2","isPrerelease":true}]'
+preview_current='[{"tagName":"2.8.1-rnl.2","isPrerelease":true}]'
 output="$(run_preview "$preview_current" 0 \
-  --allow-non-owner v2.8.1-rnl.2 true)" ||
+  --allow-non-owner 2.8.1-rnl.2 true)" ||
   fail "current preview Release was rejected"
 [ "$output" = 'promote=true' ] || fail "current preview Release returned $output"
 
 output="$(run_preview '[]' 0 \
-  --allow-non-owner v2.8.1-rnl.1 true)" ||
+  --allow-non-owner 2.8.1-rnl.1 true)" ||
   fail "first preview Release did not claim an empty preview channel"
 [ "$output" = 'promote=true' ] || fail "empty preview channel returned $output"
 
-preview_newer='[{"tagName":"v2.8.1-rnl.3","isPrerelease":true}]'
+preview_newer='[{"tagName":"2.8.1-rnl.3","isPrerelease":true}]'
 if ! output="$(run_preview "$preview_newer" 0 \
-  --allow-non-owner v2.8.1-rnl.2 true 2>"$test_dir/preview-old.err")"; then
+  --allow-non-owner 2.8.1-rnl.2 true 2>"$test_dir/preview-old.err")"; then
   fail "older preview Release did not finish as a no-op"
 fi
 [ "$output" = 'promote=false' ] || fail "older preview Release returned $output"
@@ -127,12 +127,12 @@ grep -Fq 'leaving preview unchanged' "$test_dir/preview-old.err" ||
   fail "older preview Release did not explain the no-op"
 
 if run_preview 'not-json' 0 \
-  --allow-non-owner v2.8.1-rnl.2 true >"$test_dir/preview-json.out" 2>&1; then
+  --allow-non-owner 2.8.1-rnl.2 true >"$test_dir/preview-json.out" 2>&1; then
   fail "malformed preview metadata was treated as a no-op"
 fi
 
 if run_preview '[]' 1 \
-  --allow-non-owner v2.8.1-rnl.2 true >"$test_dir/preview-api.out" 2>&1; then
+  --allow-non-owner 2.8.1-rnl.2 true >"$test_dir/preview-api.out" 2>&1; then
   fail "preview API failure was treated as a no-op"
 fi
 grep -Fq 'upstream API failure' "$test_dir/preview-api.out" ||

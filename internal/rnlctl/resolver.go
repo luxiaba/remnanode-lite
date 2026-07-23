@@ -61,10 +61,10 @@ func (resolver *GitHubResolver) Resolve(ctx context.Context, version, architectu
 	if err := ensureDirectory(destinationDir, 0o700); err != nil {
 		return "", err
 	}
-	base := "https://github.com/" + resolver.repository + "/releases/download/v" + version + "/"
+	base := "https://github.com/" + resolver.repository + "/releases/download/" + version + "/"
 	checksumData, err := resolver.downloadBytes(ctx, base+"SHA256SUMS", 1<<20)
 	if err != nil {
-		return "", fmt.Errorf("download SHA256SUMS for v%s: %w", version, err)
+		return "", fmt.Errorf("download SHA256SUMS for %s: %w", version, err)
 	}
 	name := fmt.Sprintf("remnanode-lite_%s_linux_%s.tar.gz", version, architecture)
 	expected, err := checksumForAsset(checksumData, name)

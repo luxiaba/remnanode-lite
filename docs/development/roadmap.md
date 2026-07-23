@@ -186,5 +186,5 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Keep each commit explainable and verifiable; do not mix unrelated formatting.
 - Run tests proportional to the change risk before merging. Failed checks do not enter `dev` or `main`.
 - Wait for the `main` `sha-*` candidate and verify it with a real Panel and real traffic before dispatching the release workflow. Do not commit operational test data.
-- Formal tags use `vX.Y.Z` or `vX.Y.Z-rnl.N` and exactly match project `Version`. Never overwrite an exact published tag.
+- Formal tags use `X.Y.Z` or `X.Y.Z-rnl.N` and exactly match project `Version`. Never overwrite an exact published tag.
 - Do not configure an upstream code remote. External implementations are protocol and behavioral evidence only.

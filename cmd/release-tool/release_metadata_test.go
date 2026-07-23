@@ -32,7 +32,7 @@ func TestClassifyRelease(t *testing.T) {
 			if err != nil {
 				t.Fatalf("classifyRelease(%q, %q): %v", test.version, test.contract, err)
 			}
-			if metadata.Tag != "v"+test.version || metadata.Channel != test.channel ||
+			if metadata.Tag != test.version || metadata.Channel != test.channel ||
 				metadata.Prerelease != test.prerelease || metadata.MakeLatest != test.latest {
 				t.Fatalf("unexpected metadata: %+v", metadata)
 			}
@@ -45,7 +45,7 @@ func TestRunMetadata(t *testing.T) {
 	if err := runMetadata([]string{"--version", "2.8.0"}, &stdout, &stderr); err != nil {
 		t.Fatalf("runMetadata(): %v; stderr=%s", err, stderr.String())
 	}
-	want := "version=2.8.0\ntag=v2.8.0\nchannel=latest\nprerelease=false\nmake_latest=true\n"
+	want := "version=2.8.0\ntag=2.8.0\nchannel=latest\nprerelease=false\nmake_latest=true\n"
 	if stdout.String() != want {
 		t.Fatalf("runMetadata() output = %q, want %q", stdout.String(), want)
 	}
@@ -58,10 +58,16 @@ func TestRunMetadata(t *testing.T) {
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runMetadata([]string{"--tag", "v2.8.1-rnl.9"}, &stdout, &stderr); err != nil {
+	if err := runMetadata([]string{"--tag", "2.8.1-rnl.9"}, &stdout, &stderr); err != nil {
 		t.Fatalf("runMetadata(--tag): %v", err)
 	}
 	if !strings.Contains(stdout.String(), "channel=preview\n") {
 		t.Fatalf("runMetadata(--tag) output = %q", stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if err := runMetadata([]string{"--tag", "v2.8.1-rnl.9"}, &stdout, &stderr); err == nil {
+		t.Fatal("runMetadata(--tag) accepted a prefixed release tag")
 	}
 }

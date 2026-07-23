@@ -58,7 +58,7 @@ Download the single-file asset and checksums from the same GitHub Release:
 
 ```bash
 VERSION=X.Y.Z-rnl.N # or X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
@@ -268,7 +268,7 @@ Both supported templates automatically interpolate their explicitly declared var
 
 ```bash
 VERSION=X.Y.Z-rnl.N # or X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE_URL}/compose.yaml"
 curl -fLO "${BASE_URL}/remnanode-lite.env.example"

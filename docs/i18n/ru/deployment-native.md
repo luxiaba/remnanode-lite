@@ -51,7 +51,7 @@ sudo apt-get install -y ca-certificates curl nftables iproute2
 
 ```bash
 VERSION="<published-version>" # например: X.Y.Z или X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
 trap 'rm -rf "$workdir"' EXIT

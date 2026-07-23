@@ -59,7 +59,7 @@ mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
 
 VERSION="<published-version>" # например: X.Y.Z или X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fL \
   "${BASE}/docker-compose.single-file.yaml" \
@@ -113,7 +113,7 @@ Native-установка никогда не следует за движущи
 
 ```bash
 VERSION="<published-version>" # например: X.Y.Z или X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
 curl -fLO "${BASE}/SHA256SUMS"

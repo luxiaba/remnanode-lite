@@ -13,7 +13,7 @@ expected_prerelease=$3
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 
 printf '%s\n' "$release_tag" | grep -Eq \
-  '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$' || {
+  '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$' || {
   echo "invalid release tag: $release_tag" >&2
   exit 2
 }

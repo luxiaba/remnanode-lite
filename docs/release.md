@@ -9,7 +9,7 @@ rebuilds them.
 
 GitHub Releases are draft-first and immutable after publication. Creating a
 draft does not create its Git tag. Publishing the verified draft creates the
-`v<version>` tag at the accepted `main` commit, then GitHub locks the tag and
+`<version>` tag at the accepted `main` commit, then GitHub locks the tag and
 assets and creates a release attestation.
 
 ```text
@@ -31,7 +31,7 @@ dev -> pull request -> main
                          |
                    exact image tag
                          |
-        publish: create v<version> + lock Release
+        publish: create <version> + lock Release
                          |
                latest or preview channel
 ```
@@ -63,15 +63,15 @@ Keep these settings in place:
   `dev`.
 - The `release` environment accepts deployments from `main` only.
 - **Release immutability** is enabled under **Settings -> General -> Releases**.
-- A tag ruleset must allow the Releases API to create `v*` tags when a draft is
-  published, while denying ordinary users and workstations the ability to
-  create, update, or delete those tags. Configure its bypass policy so only the
-  protected release automation can use that path. GitHub release immutability
+- A tag ruleset may block updates and deletions, but must allow new release
+  tags to be created by the workflow's `GITHUB_TOKEN`. GitHub's standard
+  Actions token is not a ruleset bypass actor. The workflow fails closed if an
+  unpublished exact version tag already exists; GitHub release immutability
   protects the tag after publication.
 
 Do not create or push release tags from a workstation. The release workflow is
 the only supported publication entry point. For an unpublished version, it
-fails closed if a `v*` tag already exists instead of adopting it.
+fails closed if that exact version tag already exists instead of adopting it.
 
 ## 1. Prepare the Version
 
@@ -180,14 +180,14 @@ The workflow performs these operations in order:
    is the digest recorded by `release-index.json`.
 5. Creates or updates a draft GitHub Release without creating the Git tag.
 6. Compares every uploaded draft asset with the local digest and size, and
-   requires the unpublished `v<version>` tag to remain absent.
+   requires the unpublished `<version>` tag to remain absent.
 7. Reconfirms that the accepted commit is still the remote `main` HEAD and
-   that no `v<version>` tag appeared during draft verification.
+   that no `<version>` tag appeared during draft verification.
 8. Gives the accepted image digest its immutable exact version tag. No image
    build occurs here, and an existing exact tag is accepted only when its
    digest is identical.
 9. Publishes the draft with the correct stable or prerelease status. This is
-   the step that creates the `v<version>` tag. The exact image is already
+   the step that creates the `<version>` tag. The exact image is already
    available before a stable Release can become GitHub Latest.
 10. Requires GitHub release immutability and verifies the tag target, Release
     attestation, every local asset including `release-index.json`, and the
@@ -208,14 +208,14 @@ GitHub CLI:
 
 ```bash
 VERSION="<published-version>"
-gh release verify "v${VERSION}" --repo luxiaba/remnanode-lite
+gh release verify "${VERSION}" --repo luxiaba/remnanode-lite
 ```
 
 The expected stable references are:
 
 ```text
-Git tag:       vX.Y.Z
-GitHub Release vX.Y.Z
+Git tag:       X.Y.Z
+GitHub Release X.Y.Z
 GHCR exact:    ghcr.io/luxiaba/remnanode-lite:X.Y.Z
 GHCR channel:  ghcr.io/luxiaba/remnanode-lite:latest
 ```

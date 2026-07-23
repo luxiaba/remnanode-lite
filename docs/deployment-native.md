@@ -60,7 +60,7 @@ candidate image is not a downloadable Native bundle:
 
 ```bash
 VERSION="<published-version>" # for example: X.Y.Z or X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
 cd "$workdir"
@@ -73,7 +73,7 @@ sudo sh ./install.sh --version "$VERSION" --port 38329
 
 Replace `38329` with the port configured for this Node in the Panel. If no valid Secret already exists, the installer reads it from the terminal without echoing it. It then asks for a separate installation confirmation.
 
-The online installer downloads only the exact `v${VERSION}` archive for the machine architecture. It never follows GitHub Latest and never resolves a moving container channel.
+The online installer downloads only the exact `${VERSION}` archive for the machine architecture. It never follows GitHub Latest and never resolves a moving container channel.
 
 ### Unattended install
 

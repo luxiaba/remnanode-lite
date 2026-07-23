@@ -172,5 +172,5 @@ Release notes 由 GitHub 自动生成。
 - commit 只包含一个可说明、可验证的变化，不混入无关格式化。
 - 提交前必须运行与改动风险匹配的测试；失败不得合入 `dev` 或 `main`。
 - 等待 `main` 的 `sha-*` 候选并用真实 Panel 和真实流量验证后再发起 release workflow；不要提交运行测试数据。
-- 正式 tag 使用 `vX.Y.Z` 或 `vX.Y.Z-rnl.N` 并与项目 `Version` 完全一致；已发布精确 tag 不得覆盖。
+- 正式 tag 使用 `X.Y.Z` 或 `X.Y.Z-rnl.N` 并与项目 `Version` 完全一致；已发布精确 tag 不得覆盖。
 - 仓库不配置代码上游 remote；外部实现只作为协议或行为验证材料。

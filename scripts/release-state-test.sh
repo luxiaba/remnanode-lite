@@ -25,22 +25,22 @@ write_fixture() {
       ;;
     draft)
       cat >"$test_dir/release.json" <<'EOF'
-[{"id":42,"tag_name":"v2.8.0","target_commitish":"0123456789012345678901234567890123456789","draft":true,"prerelease":false,"immutable":false}]
+[{"id":42,"tag_name":"2.8.0","target_commitish":"0123456789012345678901234567890123456789","draft":true,"prerelease":false,"immutable":false}]
 EOF
       ;;
     stale-draft)
       cat >"$test_dir/release.json" <<'EOF'
-[{"id":42,"tag_name":"v2.8.0","target_commitish":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","draft":true,"prerelease":false,"immutable":false}]
+[{"id":42,"tag_name":"2.8.0","target_commitish":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","draft":true,"prerelease":false,"immutable":false}]
 EOF
       ;;
     published)
       cat >"$test_dir/release.json" <<'EOF'
-[{"id":42,"tag_name":"v2.8.0","target_commitish":"0123456789012345678901234567890123456789","draft":false,"prerelease":false,"immutable":true}]
+[{"id":42,"tag_name":"2.8.0","target_commitish":"0123456789012345678901234567890123456789","draft":false,"prerelease":false,"immutable":true}]
 EOF
       ;;
     mutable)
       cat >"$test_dir/release.json" <<'EOF'
-[{"id":42,"tag_name":"v2.8.0","target_commitish":"0123456789012345678901234567890123456789","draft":false,"prerelease":false,"immutable":false}]
+[{"id":42,"tag_name":"2.8.0","target_commitish":"0123456789012345678901234567890123456789","draft":false,"prerelease":false,"immutable":false}]
 EOF
       ;;
   esac
@@ -52,7 +52,7 @@ run_state() {
     GITHUB_REPOSITORY=luxiaba/remnanode-lite \
     RELEASE_FIXTURE="$test_dir/release.json" \
     bash "$root_dir/scripts/release-state.sh" \
-      v2.8.0 0123456789012345678901234567890123456789 false
+      2.8.0 0123456789012345678901234567890123456789 false
 }
 
 write_fixture absent

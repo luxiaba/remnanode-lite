@@ -50,10 +50,10 @@ func TestRunCLIRejectsUnknownMalformedAndExtraArguments(t *testing.T) {
 		{"validate-secret", "extra"},
 		{"canonicalize-secret"},
 		{"canonicalize-secret", "-", "extra"},
-		{"release-url", "v9.8.7-rnl.3"},
-		{"release-url", "v9.8.7-rnl.3", "amd64", "extra"},
-		{"install-script-url", "v9.8.7-rnl.3"},
-		{"install-script-url", "v9.8.7-rnl.3", "install.sh", "extra"},
+		{"release-url", "9.8.7-rnl.3"},
+		{"release-url", "9.8.7-rnl.3", "amd64", "extra"},
+		{"install-script-url", "9.8.7-rnl.3"},
+		{"install-script-url", "9.8.7-rnl.3", "install.sh", "extra"},
 	}
 
 	for _, args := range tests {
@@ -148,8 +148,8 @@ func TestRunCLIPreservesCommandDispatch(t *testing.T) {
 			args []string
 			want string
 		}{
-			{[]string{"release-url", "v2.8.0", "amd64"}, "/v2.8.0/remnanode-lite_2.8.0_linux_amd64.tar.gz"},
-			{[]string{"install-script-url", "v9.8.7-rnl.3", "install.sh"}, "/v9.8.7-rnl.3/install.sh"},
+			{[]string{"release-url", "2.8.0", "amd64"}, "/2.8.0/remnanode-lite_2.8.0_linux_amd64.tar.gz"},
+			{[]string{"install-script-url", "9.8.7-rnl.3", "install.sh"}, "/9.8.7-rnl.3/install.sh"},
 		} {
 			var stdout bytes.Buffer
 			code := runCLI(test.args, strings.NewReader(""), &stdout, &bytes.Buffer{}, func() error {
@@ -166,9 +166,9 @@ func TestRunCLIPreservesCommandDispatch(t *testing.T) {
 func TestRunCLIRejectsUnsafeReleaseURLInputs(t *testing.T) {
 	for _, args := range [][]string{
 		{"release-url", "../main", "amd64"},
-		{"release-url", "v2.8.0", "../amd64"},
+		{"release-url", "2.8.0", "../amd64"},
 		{"install-script-url", "main", "install.sh"},
-		{"install-script-url", "v2.8.0", "../install.sh"},
+		{"install-script-url", "2.8.0", "../install.sh"},
 	} {
 		var stderr bytes.Buffer
 		code := runCLI(args, strings.NewReader(""), &bytes.Buffer{}, &stderr, func() error {

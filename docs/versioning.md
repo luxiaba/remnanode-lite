@@ -51,7 +51,7 @@ match for this form.
 
 A stable release is published as:
 
-- a `vX.Y.Z` Git tag created when the draft GitHub Release is published;
+- an `X.Y.Z` Git tag created when the draft GitHub Release is published;
 - a normal, non-prerelease GitHub Release;
 - an exact GHCR tag named `X.Y.Z`; and
 - the source of the moving GHCR `latest` tag.
@@ -68,7 +68,7 @@ behavior while keeping an existing contract baseline.
 
 A preview is published as:
 
-- a `vX.Y.Z-rnl.N` Git tag created when the draft GitHub Release is published;
+- an `X.Y.Z-rnl.N` Git tag created when the draft GitHub Release is published;
 - a GitHub prerelease;
 - an exact GHCR tag named `X.Y.Z-rnl.N`; and
 - the source of the moving GHCR `preview` tag.
@@ -95,10 +95,10 @@ tag format.
 
 ## Git Tags and Exact Image Tags
 
-Formal Git tags include a `v` prefix. Container tags do not:
+Formal Git tags use the exact project version, matching the exact container tag:
 
 ```text
-Git tag:       vX.Y.Z
+Git tag:       X.Y.Z
 Container tag: ghcr.io/luxiaba/remnanode-lite:X.Y.Z
 ```
 
@@ -112,11 +112,13 @@ The release workflow does not rebuild the container. It verifies the
 `sha-<commit>` candidate produced from `main`, then gives that same manifest
 digest the exact release tag.
 
-Do not create or push `v*` tags from a workstation. Creating the draft does not
-create a tag; publishing it creates the tag at the accepted `main` commit. With
-GitHub Release immutability enabled, that publication also locks the tag and
-assets. A tag ruleset must allow this Releases API creation. For an unpublished
-version, the workflow refuses an existing tag rather than adopting it.
+Do not create or push release tags from a workstation. Creating the draft does
+not create a tag; publishing it creates the exact version tag at the accepted
+`main` commit. With GitHub Release immutability enabled, that publication also
+locks the tag and assets. A tag ruleset may block updates and deletions, but
+must allow new tags because the standard `GITHUB_TOKEN` is not a ruleset bypass
+actor. For an unpublished version, the workflow refuses an existing tag rather
+than adopting it.
 
 Registry tags are names, not content addresses. Use
 `ghcr.io/luxiaba/remnanode-lite@sha256:<manifest-digest>` when a deployment must
@@ -221,14 +223,14 @@ complete publication.
 
 A published preview has all of the following:
 
-1. a `vX.Y.Z-rnl.N` tag created when its draft Release is published on the
+1. an `X.Y.Z-rnl.N` tag created when its draft Release is published on the
    accepted `main` commit;
 2. a published GitHub prerelease with verified assets, including its attested
    `release-index.json`;
 3. an exact `X.Y.Z-rnl.N` GHCR tag matching the digest in that index; and
 4. successful promotion of that digest to `preview`.
 
-A published stable release has the corresponding plain `vX.Y.Z` tag, normal
+A published stable release has the corresponding plain `X.Y.Z` tag, normal
 GitHub Release, exact `X.Y.Z` image, GitHub Latest designation, and GHCR
 `latest` promotion.
 

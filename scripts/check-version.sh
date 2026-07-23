@@ -78,17 +78,17 @@ stable_version_is_greater() {
 
 if [[ "$version" != *-rnl.* ]]; then
   while IFS= read -r existing_tag; do
-    existing_version=${existing_tag#v}
+    existing_version=$existing_tag
     [[ "$existing_version" =~ $stable_version_pattern ]] || continue
     [ "$existing_version" = "$version" ] && continue
     if stable_version_is_greater "$existing_version" "$version"; then
       fail "stable release $version is older than existing tag $existing_tag"
     fi
-  done < <(git tag --list 'v*')
+  done < <(git tag --list)
 fi
 
-metadata="$(go run ./cmd/release-tool metadata --tag "v${version}")" ||
-  fail "release metadata rejected v${version}"
+metadata="$(go run ./cmd/release-tool metadata --tag "$version")" ||
+  fail "release metadata rejected ${version}"
 grep -Fxq "version=${version}" <<<"$metadata" ||
   fail "release metadata did not preserve version ${version}"
 if [[ "$version" == *-rnl.* ]]; then
@@ -117,14 +117,14 @@ toolchain="$(sed -n 's/^toolchain[[:space:]][[:space:]]*//p' go.mod)"
 
 release_tag="${RELEASE_TAG:-}"
 if [ -n "$release_tag" ]; then
-  [[ "${release_tag#v}" =~ $version_pattern ]] && [[ "$release_tag" == v* ]] ||
-    fail "release tag $release_tag must use vX.Y.Z or vX.Y.Z-rnl.N"
-  [ "$release_tag" = "v$version" ] || fail "release tag $release_tag does not match v$version"
+  [[ "$release_tag" =~ $version_pattern ]] ||
+    fail "release tag $release_tag must use X.Y.Z or X.Y.Z-rnl.N"
+  [ "$release_tag" = "$version" ] || fail "release tag $release_tag does not match $version"
 
   if [[ "$version" == *-rnl.* ]]; then
     version_line="${version%%-rnl.*}"
     revision="${version##*-rnl.}"
-    preview_tag_pattern="^v${version_line//./\.}-rnl\.([1-9][0-9]*)$"
+    preview_tag_pattern="^${version_line//./\.}-rnl\.([1-9][0-9]*)$"
     while IFS= read -r existing_tag; do
       [ "$existing_tag" = "$release_tag" ] && continue
       [[ "$existing_tag" =~ $preview_tag_pattern ]] || continue
@@ -132,7 +132,7 @@ if [ -n "$release_tag" ]; then
       if decimal_is_greater_or_equal "$existing_revision" "$revision"; then
         fail "$release_tag must advance beyond existing $existing_tag"
       fi
-    done < <(git tag --list "v${version_line}-rnl.*")
+    done < <(git tag --list "${version_line}-rnl.*")
   fi
 fi
 

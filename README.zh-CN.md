@@ -59,7 +59,7 @@ mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
 
 VERSION="<published-version>" # 例如：X.Y.Z 或 X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fL \
   "${BASE}/docker-compose.single-file.yaml" \
@@ -113,7 +113,7 @@ Native 安装永远不跟随移动通道。先在 GitHub Releases 页面选择�
 
 ```bash
 VERSION="<published-version>" # 例如：X.Y.Z 或 X.Y.Z-rnl.N
-BASE="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
 curl -fLO "${BASE}/SHA256SUMS"

@@ -104,7 +104,7 @@ func TestRunVerifyReleaseIndexBindsExpectedIdentity(t *testing.T) {
 	}
 	var stdout, stderr strings.Builder
 	if err := runVerifyReleaseIndex([]string{
-		"--file", path, "--tag", "v2.8.0", "--image", index.Image,
+		"--file", path, "--tag", "2.8.0", "--image", index.Image,
 		"--source-revision", index.SourceRevision, "--index-digest", index.IndexDigest,
 	}, &stdout, &stderr); err != nil {
 		t.Fatalf("runVerifyReleaseIndex(): %v", err)
@@ -113,7 +113,7 @@ func TestRunVerifyReleaseIndexBindsExpectedIdentity(t *testing.T) {
 		t.Fatalf("verify-release-index output = %q, want %q", got, want)
 	}
 	if err := runVerifyReleaseIndex([]string{
-		"--file", path, "--tag", "v2.8.0", "--image", index.Image,
+		"--file", path, "--tag", "2.8.0", "--image", index.Image,
 		"--index-digest", "sha256:" + strings.Repeat("c", 64),
 	}, &stdout, &stderr); err == nil || !strings.Contains(err.Error(), "does not match") {
 		t.Fatalf("runVerifyReleaseIndex() error = %v, want digest mismatch", err)
@@ -130,7 +130,7 @@ func TestVerifyReleaseSnapshot(t *testing.T) {
 	}
 	addReleaseIndexFixture(t, output)
 	snapshot := githubReleaseSnapshot{
-		TagName: "v2.8.0", TargetCommitish: strings.Repeat("a", 40), Draft: true,
+		TagName: "2.8.0", TargetCommitish: strings.Repeat("a", 40), Draft: true,
 	}
 	for _, name := range releaseAssetNames("2.8.0") {
 		digest, size, err := fileDigestAndSize(filepath.Join(output, name))
@@ -152,7 +152,7 @@ func TestVerifyReleaseSnapshot(t *testing.T) {
 	if err := os.WriteFile(snapshotPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), true, false, releaseImmutabilityFalse); err != nil {
+	if err := verifyReleaseSnapshot(snapshotPath, output, "2.8.0", strings.Repeat("a", 40), true, false, releaseImmutabilityFalse); err != nil {
 		t.Fatalf("verifyReleaseSnapshot(): %v", err)
 	}
 
@@ -161,7 +161,7 @@ func TestVerifyReleaseSnapshot(t *testing.T) {
 	if err := os.WriteFile(snapshotPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), true, false, releaseImmutabilityFalse); err == nil {
+	if err := verifyReleaseSnapshot(snapshotPath, output, "2.8.0", strings.Repeat("a", 40), true, false, releaseImmutabilityFalse); err == nil {
 		t.Fatal("verifyReleaseSnapshot() accepted a mismatched asset digest")
 	}
 }
@@ -176,7 +176,7 @@ func TestVerifyReleaseSnapshotAllowsPendingImmutability(t *testing.T) {
 	}
 	addReleaseIndexFixture(t, output)
 	snapshot := githubReleaseSnapshot{
-		TagName: "v2.8.0", TargetCommitish: strings.Repeat("a", 40), Immutable: false,
+		TagName: "2.8.0", TargetCommitish: strings.Repeat("a", 40), Immutable: false,
 	}
 	for _, name := range releaseAssetNames("2.8.0") {
 		digest, size, err := fileDigestAndSize(filepath.Join(output, name))
@@ -198,10 +198,10 @@ func TestVerifyReleaseSnapshotAllowsPendingImmutability(t *testing.T) {
 	if err := os.WriteFile(snapshotPath, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), false, false, releaseImmutabilityAny); err != nil {
+	if err := verifyReleaseSnapshot(snapshotPath, output, "2.8.0", strings.Repeat("a", 40), false, false, releaseImmutabilityAny); err != nil {
 		t.Fatalf("pending immutable state was rejected during identity verification: %v", err)
 	}
-	if err := verifyReleaseSnapshot(snapshotPath, output, "v2.8.0", strings.Repeat("a", 40), false, false, releaseImmutabilityTrue); err == nil {
+	if err := verifyReleaseSnapshot(snapshotPath, output, "2.8.0", strings.Repeat("a", 40), false, false, releaseImmutabilityTrue); err == nil {
 		t.Fatal("pending immutable state satisfied the final immutable check")
 	}
 }

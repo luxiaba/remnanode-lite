@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: $0 [--allow-non-owner] <expected-vX.Y.Z[-rnl.N]-tag> <true|false>" >&2
+  echo "usage: $0 [--allow-non-owner] <expected-X.Y.Z[-rnl.N]-tag> <true|false>" >&2
   exit 2
 }
 

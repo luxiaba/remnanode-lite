@@ -29,7 +29,7 @@ set -euo pipefail
 [ "$3" = metadata ]
 [ "$4" = --tag ]
 tag=$5
-if [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$ ]]; then
+if [[ "$tag" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-rnl\.[1-9][0-9]*)?$ ]]; then
   :
 else
   exit 1
@@ -46,7 +46,7 @@ case "$tag" in
     make_latest=true
     ;;
 esac
-printf 'version=%s\n' "${tag#v}"
+printf 'version=%s\n' "$tag"
 printf 'tag=%s\n' "$tag"
 printf 'channel=%s\n' "$channel"
 printf 'prerelease=%s\n' "$prerelease"
@@ -121,63 +121,63 @@ assert_version_fails() {
 
 # Stable releases compare each component numerically and ignore preview tags.
 assert_version_passes \
-  'stable minor advancement' 2.10.0 2.10.0 v2.10.0 1 v2.9.999
+  'stable minor advancement' 2.10.0 2.10.0 2.10.0 1 2.9.999
 assert_version_passes \
-  'stable major advancement' 3.0.0 3.0.0 v3.0.0 1 v2.999.999
+  'stable major advancement' 3.0.0 3.0.0 3.0.0 1 2.999.999
 assert_version_passes \
-  'stable exact tag rerun' 2.8.0 2.8.0 v2.8.0 1 v2.8.0
+  'stable exact tag rerun' 2.8.0 2.8.0 2.8.0 1 2.8.0
 assert_version_passes \
-  'preview tag does not block stable' 2.8.0 2.8.0 v2.8.0 1 v99.0.0-rnl.9
+  'preview tag does not block stable' 2.8.0 2.8.0 2.8.0 1 99.0.0-rnl.9
 assert_version_fails \
-  'stable minor rollback' 'older than existing tag v2.10.0' \
-  2.9.999 2.9.999 v2.9.999 1 v2.10.0
+  'stable minor rollback' 'older than existing tag 2.10.0' \
+  2.9.999 2.9.999 2.9.999 1 2.10.0
 assert_version_fails \
-  'stable patch rollback' 'older than existing tag v2.8.10' \
-  2.8.9 2.8.9 v2.8.9 1 v2.8.10
+  'stable patch rollback' 'older than existing tag 2.8.10' \
+  2.8.9 2.8.9 2.8.9 1 2.8.10
 assert_version_passes \
   'stable component wider than shell integer' \
   100000000000000000000.0.0 100000000000000000000.0.0 \
-  v100000000000000000000.0.0 1 v99999999999999999999.999.999
+  100000000000000000000.0.0 1 99999999999999999999.999.999
 assert_version_fails \
   'stable rollback beyond shell integer width' \
-  'older than existing tag v100000000000000000000.0.0' \
+  'older than existing tag 100000000000000000000.0.0' \
   99999999999999999999.999.999 99999999999999999999.999.999 \
-  v99999999999999999999.999.999 1 v100000000000000000000.0.0
+  99999999999999999999.999.999 1 100000000000000000000.0.0
 
 # Preview revisions are monotonic only within their X.Y.Z line. Exact reruns
 # are allowed, but any other release tag must advance N.
 assert_version_passes \
-  'preview revision advancement' 2.8.0-rnl.10 2.8.0 v2.8.0-rnl.10 1 \
-  v2.8.0-rnl.9
+  'preview revision advancement' 2.8.0-rnl.10 2.8.0 2.8.0-rnl.10 1 \
+  2.8.0-rnl.9
 assert_version_passes \
-  'preview exact tag rerun' 2.8.0-rnl.9 2.8.0 v2.8.0-rnl.9 1 \
-  v2.8.0-rnl.9
+  'preview exact tag rerun' 2.8.0-rnl.9 2.8.0 2.8.0-rnl.9 1 \
+  2.8.0-rnl.9
 assert_version_passes \
-  'separate preview line is independent' 2.9.0-rnl.1 2.8.0 v2.9.0-rnl.1 1 \
-  v2.8.0-rnl.999
+  'separate preview line is independent' 2.9.0-rnl.1 2.8.0 2.9.0-rnl.1 1 \
+  2.8.0-rnl.999
 assert_version_fails \
-  'preview revision rollback' 'must advance beyond existing v2.8.0-rnl.10' \
-  2.8.0-rnl.9 2.8.0 v2.8.0-rnl.9 1 v2.8.0-rnl.10
+  'preview revision rollback' 'must advance beyond existing 2.8.0-rnl.10' \
+  2.8.0-rnl.9 2.8.0 2.8.0-rnl.9 1 2.8.0-rnl.10
 assert_version_passes \
   'preview revision wider than shell integer' \
   2.8.0-rnl.100000000000000000000 2.8.0 \
-  v2.8.0-rnl.100000000000000000000 1 \
-  v2.8.0-rnl.99999999999999999999
+  2.8.0-rnl.100000000000000000000 1 \
+  2.8.0-rnl.99999999999999999999
 assert_version_fails \
   'preview rollback beyond shell integer width' \
-  'must advance beyond existing v2.8.0-rnl.100000000000000000000' \
+  'must advance beyond existing 2.8.0-rnl.100000000000000000000' \
   2.8.0-rnl.99999999999999999999 2.8.0 \
-  v2.8.0-rnl.99999999999999999999 1 \
-  v2.8.0-rnl.100000000000000000000
+  2.8.0-rnl.99999999999999999999 1 \
+  2.8.0-rnl.100000000000000000000
 assert_version_passes \
-  'malformed preview tag is ignored' 2.8.0-rnl.2 2.8.0 v2.8.0-rnl.2 1 \
-  v2.8.0-rnl.invalid-rnl.999
+  'malformed preview tag is ignored' 2.8.0-rnl.2 2.8.0 2.8.0-rnl.2 1 \
+  2.8.0-rnl.invalid-rnl.999
 
 assert_version_fails \
   'stable must match contract' 'must match contract 2.8.0' \
-  2.8.1 2.8.0 v2.8.1 0
+  2.8.1 2.8.0 2.8.1 0
 assert_version_fails \
   'zero preview revision is invalid' 'must use X.Y.Z or X.Y.Z-rnl.N' \
-  2.8.0-rnl.0 2.8.0 v2.8.0-rnl.0 0
+  2.8.0-rnl.0 2.8.0 2.8.0-rnl.0 0
 
 echo 'version policy tests passed'

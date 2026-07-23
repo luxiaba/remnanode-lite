@@ -173,7 +173,7 @@ The table summarizes only core constraints. Executable schemas in `internal/cont
 
 The previously recorded TLS/socket and system supply-chain differences are closed. There is currently no known static P1/P2 difference in the `/node` contract.
 
-A `v2.8.0` candidate must be verified as the immutable
+A `2.8.0` candidate must be verified as the immutable
 `sha-<40-character-main-commit>` image with the production Compose template on
 native `x86_64`/`amd64`, including its version, a real Panel 2.8.1 connection,
 and real proxy traffic. This operational confirmation stays outside the source

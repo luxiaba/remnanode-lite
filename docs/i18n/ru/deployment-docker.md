@@ -61,7 +61,7 @@ Compose использует `network_mode: host`; не добавляйте `po
 
 ```bash
 VERSION=X.Y.Z-rnl.N # or X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 mkdir -p /opt/remnanode-lite
 cd /opt/remnanode-lite
@@ -271,7 +271,7 @@ docker compose logs --tail=100 remnanode-lite
 
 ```bash
 VERSION=X.Y.Z-rnl.N # or X.Y.Z
-BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/v${VERSION}"
+BASE_URL="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE_URL}/compose.yaml"
 curl -fLO "${BASE_URL}/remnanode-lite.env.example"
