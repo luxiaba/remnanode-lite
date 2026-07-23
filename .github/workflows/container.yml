@@ -160,9 +160,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      id-token: write
-      attestations: write
-      artifact-metadata: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -185,21 +182,76 @@ jobs:
       - name: Build deterministic Native bundles
         run: bash scripts/build-native-bundle.sh dist/native amd64 arm64
 
-      - name: Assemble release assets
+      - name: Smoke test Native bundles
+        run: bash scripts/test-native-release-bundles.sh dist/native "${{ steps.metadata.outputs.version }}"
+
+      - name: Preserve verified Native bundles
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-bundles-${{ github.sha }}
+          path: dist/native/*
+          if-no-files-found: error
+          compression-level: 0
+          overwrite: true
+          retention-days: 30
+
+  release-assets:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [image, native]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Resolve release metadata
+        id: metadata
+        run: go run ./cmd/release-tool metadata >>"$GITHUB_OUTPUT"
+
+      - name: Download verified Native bundles
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: native-bundles-${{ github.sha }}
+          path: dist/native
+
+      - name: Assemble the staging Release package
         run: go run ./cmd/release-tool assemble --native-dir dist/native --out-dir dist/release
 
-      - name: Verify release assets
-        run: go run ./cmd/release-tool verify-package --directory dist/release --source-revision "$GITHUB_SHA"
+      - name: Bind the accepted OCI index to the Release package
+        env:
+          SOURCE_DIGEST: ${{ needs.image.outputs.digest }}
+          IMAGE: ${{ env.IMAGE }}
+        run: >-
+          go run ./cmd/release-tool finalize-release
+          --directory dist/release
+          --source-revision "$GITHUB_SHA"
+          --image "$IMAGE"
+          --index-digest "$SOURCE_DIGEST"
 
-      - name: Smoke test Native bundles
-        run: bash scripts/test-native-release-bundles.sh dist/release "${{ steps.metadata.outputs.version }}"
+      - name: Verify the complete Release package
+        run: >-
+          go run ./cmd/release-tool verify-package
+          --directory dist/release
+          --source-revision "$GITHUB_SHA"
+          --require-release-index
 
-      - name: Attest every release asset
+      - name: Attest every final Release asset
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-path: dist/release/*
 
-      - name: Preserve the release candidate
+      - name: Preserve the complete Release candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-assets-${{ github.sha }}
@@ -211,7 +263,7 @@ jobs:
 
   promote-edge:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [image, native]
+    needs: [image, release-assets]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     concurrency:

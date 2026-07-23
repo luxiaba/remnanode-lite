@@ -67,9 +67,8 @@ expected=$'state=published\nrelease_id=42'
 [ "$(run_state)" = "$expected" ] || fail "published immutable Release was not recognized"
 
 write_fixture mutable
-if run_state >/dev/null 2>&1; then
-  fail "published mutable Release was accepted"
-fi
+expected=$'state=published-pending-immutability\nrelease_id=42'
+[ "$(run_state)" = "$expected" ] || fail "pending immutable Release was not recognized"
 
 write_fixture stale-draft
 if run_state >"$test_dir/stale-draft.out" 2>&1; then

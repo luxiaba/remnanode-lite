@@ -28,7 +28,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 5. Every concurrency limit, queue, request body, and cache must have an explicit bound.
 6. The Node owns only its rw-core process, internal sockets, and private nftables table; it does not own the host firewall policy. Destroying sockets by IP can affect the host network namespace and is treated as an explicit, documented side effect.
 7. `dev` is the stable development and integration branch. Topic branches enter it through PR and CI. `main` is the release branch and accepts only candidates that have passed the code gate on `dev`.
-8. Every `main` commit gets one immutable `sha-<40-character-commit>` container candidate. After maintainer acceptance, the release workflow verifies a draft Release, publishes and locks it at the current `main` HEAD, then promotes the exact candidate without rebuilding.
+8. Every `main` commit gets one immutable `sha-<40-character-commit>` container candidate and an attested `release-index.json` binding. After maintainer acceptance, the release workflow verifies a draft Release, promotes the recorded exact candidate before publication, publishes and locks it at the current `main` HEAD, then reconfirms that exact tag without rebuilding.
 
 ## Compatibility boundary
 
@@ -159,7 +159,8 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Verify the selected candidate with a real Panel and real proxy traffic under the production container limits before dispatching a release. Keep host details, logs, and runtime records outside the repository.
 - Require the release dispatch commit to be the current `main` HEAD. Verify the
   candidate manifest and source attestation, reuse and attest the prebuilt Native bundles,
-  then promote the same digest to the exact version without rebuilding it.
+  bind their Release asset set to the accepted OCI digest, then promote that
+  digest to the exact version without rebuilding it.
   Plain stable tags advance `latest`; `rnl.N` tags advance `preview` only.
 - Keep the existing lifecycle, process-group cleanup, installer, 50,000-user, and rollback results as code-level tests or dated engineering baselines.
 - Update the compatibility documentation and dated root `CHANGELOG.md`; let GitHub generate the Release notes.

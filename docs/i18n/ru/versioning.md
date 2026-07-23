@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=ccc47c901a358f1f1298d39563de09b8f1c390a0d59c572da4598d8bc802bca7 -->
+<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=11a0d577a7fe9ec624cde68d3359f201c15e995d08cd8f935e0ceed2685c1d62 -->
 
 # Версии и теги образов
 
@@ -139,6 +139,8 @@ docker compose up -d --no-build --force-recreate
 
 `sha-<commit>` служит для проверки candidate, который может стать Release. Не используйте `edge` для release acceptance: новый build из `main` может передвинуть его во время тестирования.
 
+Candidate workflow также записывает принятый content address в attestированный asset `release-index.json`. Перед публикацией эта запись должна совпасть с проверенным candidate `sha-<commit>`. После того как Release становится immutable, восстановление использует записанный digest напрямую и не считает registry tag долговечной identity.
+
 ## Native Linux принимает только точные версии
 
 Native install и upgrade используют полные versioned bundles и специально не следуют движущимся каналам:
@@ -157,8 +159,8 @@ sudo rnlctl upgrade --to <exact-version>
 Опубликованный preview одновременно имеет:
 
 1. `vX.Y.Z-rnl.N` tag, созданный при публикации draft Release на принятом commit `main`;
-2. опубликованный GitHub Prerelease с проверенными assets;
-3. точный GHCR tag `X.Y.Z-rnl.N`, совпадающий с candidate digest;
+2. опубликованный GitHub Prerelease с проверенными assets, включая attestированный `release-index.json`;
+3. точный GHCR tag `X.Y.Z-rnl.N`, совпадающий с digest из этого index;
 4. успешное продвижение этого digest в `preview`.
 
 Stable имеет обычный `vX.Y.Z`, полный GitHub Release, точный image `X.Y.Z`, GitHub Latest и продвижение в `latest`.
@@ -184,7 +186,7 @@ remnanode-lite <Version> (contract <ContractVersion>)
 rnlctl <Version> (contract <ContractVersion>)
 ```
 
-Release records должны также указывать класс и продвинутый канал, project version и source commit, официальный контракт и закреплённый исходный код, принятый container digest и attestation, locked runtime assets, статус `amd64` и `arm64`, известные риски и rollback reference, а также checksums Native bundle и attestation assets.
+Release records должны также указывать класс и продвинутый канал, project version и source commit, официальный контракт и закреплённый исходный код, принятый container digest и его attestation, а также `release-index.json`, связывающий digest с source revision, locked runtime assets, статус `amd64` и `arm64`, известные риски и rollback reference, а также checksums Native bundle и attestation assets.
 
 GitHub формирует Release notes из merged changes. Списки хостов, сведения о Panel, logs, secrets и другие runtime observations не являются release assets и не должны попадать в репозиторий.
 

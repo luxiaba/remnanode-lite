@@ -80,7 +80,11 @@ jobs:
           run-id: ${{ steps.runs.outputs.candidate_run_id }}
 
       - name: Verify the release package
-        run: go run ./cmd/release-tool verify-package --directory dist/release --source-revision "$GITHUB_SHA"
+        run: >-
+          go run ./cmd/release-tool verify-package
+          --directory dist/release
+          --source-revision "$GITHUB_SHA"
+          --require-release-index
 
       - name: Verify release asset provenance
         env:
@@ -97,6 +101,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash scripts/verify-candidate-image.sh >>"$GITHUB_OUTPUT"
+
+      - name: Bind the Release package to the accepted OCI index
+        env:
+          CANDIDATE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: >-
+          go run ./cmd/release-tool verify-release-index
+          --file dist/release/release-index.json
+          --tag "${{ steps.metadata.outputs.tag }}"
+          --image "$IMAGE"
+          --source-revision "$GITHUB_SHA"
+          --index-digest "$CANDIDATE_DIGEST"
 
   reject-invalid-ref:
     if: github.ref != 'refs/heads/main'
@@ -139,7 +154,23 @@ jobs:
           run-id: ${{ needs.verify-candidate.outputs.candidate_run_id }}
 
       - name: Reverify the transferred package
-        run: go run ./cmd/release-tool verify-package --directory dist/release --source-revision "$GITHUB_SHA"
+        run: >-
+          go run ./cmd/release-tool verify-package
+          --directory dist/release
+          --source-revision "$GITHUB_SHA"
+          --require-release-index
+
+      - name: Reconfirm the accepted OCI index binding
+        env:
+          CANDIDATE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
+          RELEASE_TAG: ${{ needs.verify-candidate.outputs.tag }}
+        run: >-
+          go run ./cmd/release-tool verify-release-index
+          --file dist/release/release-index.json
+          --tag "$RELEASE_TAG"
+          --image "$IMAGE"
+          --source-revision "$GITHUB_SHA"
+          --index-digest "$CANDIDATE_DIGEST"
 
       - name: Require current main before creating a draft
         run: bash scripts/require-current-main.sh "$GITHUB_SHA"
@@ -154,7 +185,9 @@ jobs:
 
       - name: Create or update the draft Release
         id: draft
-        if: steps.release-state.outputs.state != 'published'
+        if: >-
+          steps.release-state.outputs.state == 'absent' ||
+          steps.release-state.outputs.state == 'draft'
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
         with:
           draft: true
@@ -174,10 +207,13 @@ jobs:
             dist/release/compose.yaml
             dist/release/docker-compose.single-file.yaml
             dist/release/remnanode-lite.env.example
+            dist/release/release-index.json
             dist/release/SHA256SUMS
 
       - name: Verify the draft Release
-        if: steps.release-state.outputs.state != 'published'
+        if: >-
+          steps.release-state.outputs.state == 'absent' ||
+          steps.release-state.outputs.state == 'draft'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.draft.outputs.id }}
@@ -207,7 +243,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Reconfirm the source and tag before publication
-        if: steps.release-state.outputs.state != 'published'
+        if: >-
+          steps.release-state.outputs.state == 'absent' ||
+          steps.release-state.outputs.state == 'draft'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.verify-candidate.outputs.tag }}
@@ -215,8 +253,19 @@ jobs:
           bash scripts/require-current-main.sh "$GITHUB_SHA"
           bash scripts/verify-release-tag.sh --require-missing "$RELEASE_TAG" "$GITHUB_SHA"
 
+      - name: Promote the exact image tag before publication
+        if: >-
+          steps.release-state.outputs.state == 'absent' ||
+          steps.release-state.outputs.state == 'draft'
+        env:
+          SOURCE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
+          VERSION: ${{ needs.verify-candidate.outputs.version }}
+        run: bash scripts/promote-image-tag.sh immutable "$IMAGE" "$SOURCE_DIGEST" "$VERSION"
+
       - name: Publish the draft Release
-        if: steps.release-state.outputs.state != 'published'
+        if: >-
+          steps.release-state.outputs.state == 'absent' ||
+          steps.release-state.outputs.state == 'draft'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.verify-candidate.outputs.tag }}
@@ -239,7 +288,7 @@ jobs:
           MAKE_LATEST: ${{ needs.verify-candidate.outputs.make_latest }}
         run: bash scripts/verify-published-release.sh "$RELEASE_ID" "$RELEASE_TAG" "$GITHUB_SHA" "$PRERELEASE" "$MAKE_LATEST" dist/release
 
-      - name: Promote the exact image tag
+      - name: Confirm the exact image tag after Release verification
         env:
           SOURCE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
           VERSION: ${{ needs.verify-candidate.outputs.version }}

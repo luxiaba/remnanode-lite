@@ -403,8 +403,8 @@ commit host inventories, logs, Secrets, smoke JSON, or other production data.
 When the candidate is ready, dispatch the release workflow from the current
 `main` HEAD with the exact source version. It verifies the candidate manifest,
 the prebuilt Native assets, and their attestations, creates and verifies a
-draft Release, then publishes and verifies the immutable Release before
-promoting the accepted image digest without rebuilding it. A plain
+draft Release, promotes the accepted image digest, then publishes and verifies
+the immutable Release before reconfirming that digest without rebuilding it. A plain
 `X.Y.Z` release advances `latest` and GitHub Latest; an `X.Y.Z-rnl.N`
 prerelease advances `preview` and never changes `latest`. `edge` and `sha-*`
 are not releases.

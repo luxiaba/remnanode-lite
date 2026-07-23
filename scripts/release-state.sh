@@ -78,8 +78,10 @@ case "$draft:$immutable" in
     state=published
     ;;
   false:false)
-    echo "${release_tag} is published but GitHub Release immutability is disabled" >&2
-    exit 1
+    # GitHub can expose a public Release before its immutable marker and
+    # attestations have propagated. The release workflow handles this bounded
+    # transitional state; reconciliation still requires the final state.
+    state=published-pending-immutability
     ;;
   true:true)
     echo "${release_tag} cannot be both draft and immutable" >&2

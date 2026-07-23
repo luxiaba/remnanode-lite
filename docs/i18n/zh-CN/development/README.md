@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=a5f055d155e8413ad9660099330340d10026f143751532d3ce92c3370149be84 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=307ccd46540d259324d216bd86dede137bc062acb88f9f78ffdaeae15ec8fb98 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -162,9 +162,9 @@ go test -count=1 ./internal/contract
 | 路径 | 职责 |
 | --- | --- |
 | `.github/workflows/ci.yml` | 必需的 Go、仓库、installer 与 Linux 网络管理 CI 门禁 |
-| `.github/workflows/container.yml` | candidate workflow：候选多架构镜像构建、attestation 与不可变候选标签 |
-| `.github/workflows/release.yml` | 以 draft-first 方式发布已验证资产，先确认 Release immutable，再晋升精确镜像和移动通道 |
-| `.github/workflows/reconcile.yml` | 从已公开 Release 幂等恢复精确镜像标签及其有资格拥有的 `latest` 或 `preview` 通道 |
+| `.github/workflows/container.yml` | candidate workflow：候选多架构镜像构建、attestation、不可变候选标签和记录已接受 digest 的 `release-index.json` 资产 |
+| `.github/workflows/release.yml` | 以 draft-first 方式发布：校验已接受 digest 绑定，在公开 Release 前晋升精确镜像，验证 immutable 状态后再次确认精确标签，再推进移动通道 |
+| `.github/workflows/reconcile.yml` | 从已公开 Release 中已 attestation 的 index 幂等恢复精确镜像标签及其有资格拥有的 `latest` 或 `preview` 通道 |
 | `.github/workflows/contract-sync.yml`、`.github/workflows/security.yml` | 官方版本监测与定时安全检查 |
 | `scripts/check*.sh` | Go、仓库、供应链和完整门禁的稳定入口 |
 | `cmd/rnlctl`、`release/native/install.sh`、`internal/rnlctl` | Native bundle 安装、generation 事务、升级、回滚、修复和卸载 |
@@ -208,7 +208,7 @@ git diff
 
 测试范围应与改动风险相匹配。完整仓库检查适合在一个逻辑批次完成后或提交 Pull Request 前运行，不必每次小改动都执行。
 
-正式发布前，维护者应使用不可变的 `sha-<main commit>` 候选镜像确认它能在仓库维护的 Compose 限制下正常启动、连接真实 Panel 并承载真实代理流量。随后从当前 `main` 以精确源码版本发起 release workflow；它会验证候选镜像、Native 资产和 attestation，创建并校验 draft Release，公开其 tag，确认 Release 已变为 immutable，再晋升同一个 digest。稳定版推进 `latest`，预发布版只推进 `preview`。公开后若 registry 晋升失败，使用 `reconcile-release` 恢复精确标签和符合条件的通道，不会重新构建。运行观测只用于人工发布判断，不作为文件提交到仓库。
+正式发布前，维护者应使用不可变的 `sha-<main commit>` 候选镜像确认它能在仓库维护的 Compose 限制下正常启动、连接真实 Panel 并承载真实代理流量。随后从当前 `main` 以精确源码版本发起 release workflow；它会验证候选镜像、Native 资产、attestation 和 `release-index.json` 记录的已接受 digest，创建并校验 draft Release，在公开前晋升精确镜像，确认最终 Release 已变为 immutable 后再次确认精确标签，再推进对应移动通道。稳定版推进 `latest`，预发布版只推进 `preview`。公开后若 registry 晋升失败，使用 `reconcile-release` 从 immutable Release 资产恢复精确标签和符合条件的通道，不会重新构建。运行观测只用于人工发布判断，不作为文件提交到仓库。
 
 ## 常见修改路径
 

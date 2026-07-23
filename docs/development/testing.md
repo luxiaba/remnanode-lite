@@ -356,15 +356,16 @@ repository.
 The workflow requires the dispatch commit to remain the current `main` HEAD.
 It resolves that commit's `sha-*` candidate, requires the runnable
 `linux/amd64` and `linux/arm64` manifests, validates each platform's SPDX SBOM
-and BuildKit attestations,
-verifies the GitHub attestations for the prebuilt Native assets, creates and
-verifies a draft Release, publishes and verifies the immutable Release, and
-promotes the same digest to the exact version without rebuilding. A plain
+and BuildKit attestations, verifies the GitHub attestations for the prebuilt
+Native assets and their `release-index.json` digest binding, creates and
+verifies a draft Release, promotes the same digest to the exact version before
+publication, then verifies the immutable Release and reconfirms the exact tag
+without rebuilding. A plain
 `X.Y.Z` Release is stable and advances `latest`; an
 `X.Y.Z-rnl.N` Release is a GitHub prerelease and advances `preview` only.
 If publication succeeds but registry promotion does not, `reconcile-release`
-revalidates the published Release and source candidate before restoring the
-exact tag and eligible channel.
+revalidates the published Release and its attested digest record before
+restoring the exact tag and eligible channel.
 
 See the [versioning policy](../versioning.md) for tag, version, and channel semantics, and the [release process](../release.md) for candidate verification and publication steps.
 
@@ -408,8 +409,9 @@ The candidate workflow remains path-filtered for pull requests, so it does not
 run on every PR. Every push to `main`, however, builds and attests the manifest
 and publishes the immutable `sha-<40-character-commit>` candidate. The manual
 release workflow resolves that candidate, verifies its shape and attestation,
-including both per-platform SPDX SBOMs, and promotes the same digest only after
-the GitHub Release is immutable. A path-filtered “not run” is not a
+including both per-platform SPDX SBOMs and the Release digest binding, promotes
+the exact tag before publishing, then requires the GitHub Release to become
+immutable and reconfirms the exact tag. A path-filtered “not run” is not a
 failure, and an optional container job must not become a required check on pull
 requests where it cannot appear.
 

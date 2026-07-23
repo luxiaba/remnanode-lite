@@ -188,6 +188,12 @@ Use `sha-<commit>` to verify the candidate that may become a release. Do not use
 `edge` for release acceptance because another `main` build can move it during
 testing.
 
+The candidate workflow also records the accepted content address in an
+attested `release-index.json` asset. Publication requires that record to match
+the verified `sha-<commit>` candidate. Once the Release is immutable, recovery
+uses the recorded digest directly instead of assuming a registry tag is a
+durable identity.
+
 ## Native Linux Uses Exact Versions Only
 
 Native installation and upgrade resolve complete, versioned release bundles.
@@ -217,8 +223,9 @@ A published preview has all of the following:
 
 1. a `vX.Y.Z-rnl.N` tag created when its draft Release is published on the
    accepted `main` commit;
-2. a published GitHub prerelease with verified assets;
-3. an exact `X.Y.Z-rnl.N` GHCR tag matching the accepted candidate digest; and
+2. a published GitHub prerelease with verified assets, including its attested
+   `release-index.json`;
+3. an exact `X.Y.Z-rnl.N` GHCR tag matching the digest in that index; and
 4. successful promotion of that digest to `preview`.
 
 A published stable release has the corresponding plain `vX.Y.Z` tag, normal
@@ -267,7 +274,8 @@ Release records should also identify:
 - the release class and promoted channel;
 - the project version, Git tag, and source commit;
 - the official contract version and pinned source commit;
-- the accepted container manifest digest and its attestation;
+- the accepted container manifest digest, its attestation, and the
+  `release-index.json` record that binds it to the source revision;
 - the Panel and runtime scope used for maintainer verification;
 - the locked rw-core and runtime asset versions;
 - the `amd64` and `arm64` publication status;

@@ -32,7 +32,7 @@ contract_version="$(tr -d ' \n\r' <internal/version/contract.version)"
   fail "compiled version output does not match source metadata"
 
 release_tool_help="$(go run ./cmd/release-tool help)"
-for command in metadata validate materialize build verify assemble verify-package verify-index verify-release; do
+for command in metadata validate materialize build verify assemble finalize-release verify-package verify-release-index verify-index verify-release; do
   grep -Eq "^[[:space:]]+${command}[[:space:]]" <<<"$release_tool_help" ||
     fail "release-tool does not expose ${command}"
 done
@@ -87,15 +87,20 @@ for required in \
   'sbom: generator=docker.io/docker/buildkit-syft-scanner:stable-1@sha256:79e7b013cbec16bbb436f312819a49a4a57752b2270c1a9332ae1a10fcc82a68' \
   'push-to-registry: true' \
   'release-tool assemble' \
+  'release-tool finalize-release' \
   'release-tool verify-package' \
-  'Attest every release asset' \
+  '--require-release-index' \
+  'Attest every final Release asset' \
+  "native-bundles-${literal_dollar}{{ github.sha }}" \
   'actions/upload-artifact@' \
   "release-assets-${literal_dollar}{{ github.sha }}" \
   'scripts/promote-image-tag.sh immutable' \
   'scripts/promote-candidate-edge.sh' \
-  'needs: [image, native]'; do
+  'needs: [image, native]' \
+  'needs: [image, release-assets]'; do
   require_text "$candidate" "$required"
 done
+require_order "$candidate" 'name: Bind the accepted OCI index to the Release package' 'name: Attest every final Release asset'
 require_text scripts/verify-candidate-image.sh 'index .SBOM'
 require_text scripts/verify-candidate-image.sh '--predicate-type https://slsa.dev/provenance/v1'
 if grep -Eq '(^|[^[:alnum:]_-])latest([^[:alnum:]_.-]|$)' "$candidate"; then
@@ -111,6 +116,9 @@ for required in \
   'scripts/check-release-metadata.sh' \
   'actions/download-artifact@' \
   'release-tool verify-package' \
+  'release-tool verify-release-index' \
+  '--require-release-index' \
+  'release-index.json' \
   'scripts/verify-release-asset-attestations.sh' \
   'scripts/verify-candidate-image.sh' \
   'draft: true' \
@@ -121,8 +129,9 @@ for required in \
   require_text "$release" "$required"
 done
 require_order "$release" 'name: Publish the draft Release' 'name: Verify the immutable Release and every asset'
-require_order "$release" 'name: Verify the immutable Release and every asset' 'name: Promote the exact image tag'
-require_order "$release" 'name: Promote the exact image tag' 'name: Promote the published channel without rebuilding'
+require_order "$release" 'name: Promote the exact image tag before publication' 'name: Publish the draft Release'
+require_order "$release" 'name: Verify the immutable Release and every asset' 'name: Confirm the exact image tag after Release verification'
+require_order "$release" 'name: Confirm the exact image tag after Release verification' 'name: Promote the published channel without rebuilding'
 publish_line="$(grep -nF 'name: Publish the draft Release' "$release" | cut -d: -f1)"
 if tail -n "+$publish_line" "$release" | grep -Fq 'scripts/require-current-main.sh'; then
   fail "release workflow must not rebind a published Release to a newer main commit"
@@ -142,6 +151,7 @@ for script in \
   scripts/verify-release-image-test.sh \
   scripts/verify-published-release-test.sh \
   scripts/promote-image-tag-test.sh \
+  scripts/require-channel-owner-test.sh \
   scripts/require-channel-owner.sh \
   scripts/release-state.sh \
   scripts/verify-draft-release.sh \
@@ -154,7 +164,7 @@ require_text scripts/verify-candidate-image.sh 'release-tool verify-index'
 require_text scripts/verify-candidate-image.sh 'gh attestation verify'
 require_text scripts/verify-candidate-image.sh 'state=absent'
 require_text scripts/verify-candidate-image.sh 'state=present'
-require_text scripts/release-state.sh 'GitHub Release immutability is disabled'
+require_text scripts/release-state.sh 'published-pending-immutability'
 require_text scripts/verify-draft-release.sh 'release-tool verify-release'
 require_text scripts/verify-draft-release.sh 'verify-release-tag.sh --require-missing'
 require_text scripts/verify-published-release.sh '--immutable=any'
@@ -165,7 +175,13 @@ require_text scripts/verify-published-release.sh 'gh release verify-asset'
 require_text scripts/verify-published-release.sh 'scripts/verify-release-latest.sh'
 require_text scripts/verify-release-image.sh 'scripts/verify-candidate-image.sh'
 require_text scripts/verify-release-image.sh 'scripts/release-state.sh'
+require_text scripts/verify-release-image.sh 'gh release download'
+require_text scripts/verify-release-image.sh 'gh release verify-asset'
+require_text scripts/verify-release-image.sh 'release-index.json'
+require_text scripts/verify-release-image.sh 'release-tool verify-release-index'
+require_text scripts/verify-release-image.sh "--digest \"${literal_dollar}index_digest\""
 require_text scripts/require-channel-owner.sh 'scripts/verify-release-latest.sh'
+require_text scripts/require-channel-owner.sh 'promote=false'
 
 reconcile=.github/workflows/reconcile.yml
 for required in \
@@ -178,6 +194,8 @@ for required in \
 done
 require_order "$reconcile" 'name: Verify the immutable Release and its candidate' 'name: Restore the immutable exact image tag'
 require_order "$reconcile" 'name: Restore the immutable exact image tag' 'name: Restore the moving channel'
+require_text "$reconcile" "if: steps.channel-owner.outputs.promote == 'true'"
+require_text "$reconcile" "if: steps.channel-owner.outputs.promote == 'false'"
 
 require_text scripts/install-ci-checks.sh 'readonly SHELLCHECK_VERSION=0.11.0'
 require_text scripts/install-ci-checks.sh \

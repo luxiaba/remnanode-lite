@@ -19,7 +19,7 @@ dev -> pull request -> main
                          |
           +--------------+----------------+
           |                               |
-  sha-<commit> image              Native release assets
+  sha-<commit> image       Native assets + release index
           |                               |
           +--------------+----------------+
                          |
@@ -29,9 +29,9 @@ dev -> pull request -> main
                          |
               draft Release + verified assets
                          |
-        publish: create v<version> + lock Release
-                         |
                    exact image tag
+                         |
+        publish: create v<version> + lock Release
                          |
                latest or preview channel
 ```
@@ -64,7 +64,10 @@ Keep these settings in place:
 - The `release` environment accepts deployments from `main` only.
 - **Release immutability** is enabled under **Settings -> General -> Releases**.
 - A tag ruleset must allow the Releases API to create `v*` tags when a draft is
-  published. GitHub release immutability protects the tag after publication.
+  published, while denying ordinary users and workstations the ability to
+  create, update, or delete those tags. Configure its bypass policy so only the
+  protected release automation can use that path. GitHub release immutability
+  protects the tag after publication.
 
 Do not create or push release tags from a workstation. The release workflow is
 the only supported publication entry point. For an unpublished version, it
@@ -104,7 +107,8 @@ the resulting `main` commit:
 
 - `ci` runs the Go, repository, Native bootstrap, and Linux network tests.
 - `candidate` builds and attests the multi-architecture image, builds and
-  verifies both Native bundles, and stores the complete release asset set as a
+  verifies both Native bundles, binds the accepted OCI index digest in
+  `release-index.json`, and stores the complete attested release asset set as a
   workflow artifact.
 
 The candidate image is:
@@ -118,6 +122,12 @@ must not be used as release evidence. Native candidate artifacts are retained
 for 30 days. Re-run the candidate workflow on `main` if they expire. The rerun
 verifies and reuses the existing `sha-<commit>` image instead of rebuilding it,
 then reproduces the Native bundles from the same source and locked inputs.
+
+`release-index.json` is a small, checksummed Release asset that records the
+accepted version, source commit, GHCR repository, and OCI index digest. It is
+attested with the rest of the candidate package. Recovery uses this immutable
+Release asset rather than treating a registry tag as the historical digest
+record.
 
 ## 3. Perform Maintainer Acceptance
 
@@ -162,26 +172,31 @@ The workflow performs these operations in order:
 1. Confirms the requested version matches the source and that the dispatch
    commit is still the remote `main` HEAD.
 2. Finds successful `ci` and `candidate` runs for that exact commit.
-3. Downloads the previously built Native assets and verifies their canonical
-   file set, checksums, bundle manifests, SBOMs, source revision, and
+3. Downloads the previously built Release assets and verifies their canonical
+   file set, checksums, Native bundle manifests, SBOMs, source revision, and
    attestations.
 4. Resolves `sha-<commit>`, verifies the two runnable image manifests, their
-   attestation manifests, and GitHub provenance.
+   attestation manifests, and GitHub provenance, then confirms that its digest
+   is the digest recorded by `release-index.json`.
 5. Creates or updates a draft GitHub Release without creating the Git tag.
 6. Compares every uploaded draft asset with the local digest and size, and
    requires the unpublished `v<version>` tag to remain absent.
 7. Reconfirms that the accepted commit is still the remote `main` HEAD and
    that no `v<version>` tag appeared during draft verification.
-8. Publishes the draft with the correct stable or prerelease status. This is
-   the step that creates the `v<version>` tag.
-9. Requires GitHub release immutability and verifies the tag target, release
-   attestation, and every local asset against it. Identity and asset errors fail
-   immediately; only immutable-state and attestation propagation are retried.
-10. Gives the accepted image digest its immutable exact version tag. No image
-    build occurs here, and an existing exact tag is accepted only when its
-    digest is identical.
-11. Moves the same image digest to `latest` for a stable release or `preview`
-    for a prerelease.
+8. Gives the accepted image digest its immutable exact version tag. No image
+   build occurs here, and an existing exact tag is accepted only when its
+   digest is identical.
+9. Publishes the draft with the correct stable or prerelease status. This is
+   the step that creates the `v<version>` tag. The exact image is already
+   available before a stable Release can become GitHub Latest.
+10. Requires GitHub release immutability and verifies the tag target, Release
+    attestation, every local asset including `release-index.json`, and the
+    stable Latest pointer when relevant. Identity and asset errors fail
+    immediately; only GitHub publication propagation (immutability, Latest,
+    and attestations) is retried.
+11. Reconfirms that the exact image tag still resolves to the accepted digest,
+    then moves that digest to `latest` for a stable release or `preview` for a
+    prerelease.
 
 Only the jobs that publish the Release or registry tags receive write access.
 Candidate validation remains read-only.
@@ -229,16 +244,18 @@ late.
 | --- | --- | --- |
 | Source, CI, candidate, package, or provenance verification | No Release created | Fix the cause or wait for the required workflow, then run release again |
 | Draft creation or asset upload | A draft may exist; the release tag does not exist | Re-run the same version only while `main` still points to the accepted commit; the workflow updates and re-verifies the draft |
-| Publication | A draft may remain, or the Release and tag may already be public | Inspect the Release first. If it is still a draft and `main` is unchanged, rerun `release`. If it is public, never delete or rewrite it; continue with `reconcile-release` |
-| Immutable-state or Release-attestation verification | The Release and tag are public; the exact image may still be absent | Rerun `release` while its commit is still `main`, otherwise run `reconcile-release` after GitHub finishes propagation |
-| Exact image or `latest`/`preview` promotion | The immutable Release is public; registry publication is incomplete | Run `reconcile-release` for the published tag. Matching exact tags are no-ops; conflicting digests fail closed and require investigation |
+| Exact image promotion | A verified draft may exist; the Git release tag does not exist | Re-run the same version only while `main` still points to the accepted commit. A matching exact image tag is a no-op; a conflicting digest fails closed. If publication never occurred and `main` advanced, do not reuse that version for a new candidate; choose a new version. Retention cleanup must never delete a digest that a Release or deployment may reference |
+| Publication or GitHub propagation (immutability, Latest, or Release attestation) | The Release and tag may already be public; the exact image tag already exists | Inspect the Release first. If it is still a draft and `main` is unchanged, rerun `release`. If it is public, never delete or rewrite it; continue with `reconcile-release` after GitHub finishes propagation |
+| `latest` or `preview` promotion | Immutable Release and exact image are valid; a moving channel may be incomplete | Run `reconcile-release` for the published tag. It restores an eligible current channel only; an older Release remains successful after its exact tag is confirmed |
 
 The `reconcile-release` workflow derives the source commit from an immutable
-published Release, verifies its `sha-<commit>` candidate and provenance, then
-creates or confirms the exact image tag before considering the moving channel.
-It refuses to move `latest` away from GitHub's current stable Latest Release and
-refuses to move `preview` to an older prerelease. It never rebuilds an image and
-never overwrites a conflicting exact tag.
+published Release, downloads and verifies its attested `release-index.json`,
+then verifies the recorded OCI digest and its provenance before creating or
+confirming the exact image tag. It does not infer a historical digest from a
+`sha-<commit>` registry tag. It restores `latest` or `preview` only when that
+Release still owns its channel; an older Release completes successfully after
+exact-tag recovery. It never rebuilds an image and never overwrites a
+conflicting exact tag.
 
 A draft is tied to its accepted commit. If `main` advances before the draft is
 published, the workflow intentionally refuses to resume it. Delete only that
@@ -272,6 +289,7 @@ mechanism.
 - [ ] Native behavior was tested when Native delivery changed.
 - [ ] The release workflow is dispatched from `main` with the exact source version.
 - [ ] The published Release shows **Immutable** and `gh release verify` succeeds.
-- [ ] The exact image tag resolves to the accepted candidate digest.
+- [ ] The exact image tag resolves to the digest recorded by the immutable
+  Release's `release-index.json`.
 - [ ] Stable advanced `latest`, or preview advanced `preview`, but never both.
 - [ ] Previous exact deployment references remain available for rollback.

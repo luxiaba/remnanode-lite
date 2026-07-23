@@ -52,8 +52,14 @@ go run ./cmd/release-tool verify-release \
   --draft=false \
   --prerelease="$prerelease" \
   --immutable=any
-bash scripts/verify-release-tag.sh "$release_tag" "$source_commit"
-bash scripts/verify-release-latest.sh "$release_tag" "$make_latest"
+# The public Release can appear before its Git ref is visible through the tag
+# endpoint. Validate an already visible ref now, then require it inside the
+# bounded immutable-state retry below.
+bash scripts/verify-release-tag.sh --allow-missing "$release_tag" "$source_commit"
+
+# GitHub returns the public Release and its tag before the repository's
+# "Latest" pointer is always visible through the API. The immutable retry
+# below rechecks the complete final snapshot, including that pointer.
 
 verify_immutable() {
   gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
@@ -62,6 +68,16 @@ verify_immutable() {
     echo "GitHub Release $release_tag is public but not immutable yet" >&2
     return 1
   }
+  go run ./cmd/release-tool verify-release \
+    --snapshot "$snapshot" \
+    --directory "$asset_directory" \
+    --tag "$release_tag" \
+    --commit "$source_commit" \
+    --draft=false \
+    --prerelease="$prerelease" \
+    --immutable=true || return 1
+  bash scripts/verify-release-tag.sh "$release_tag" "$source_commit" || return 1
+  bash scripts/verify-release-latest.sh "$release_tag" "$make_latest" || return 1
 }
 
 verify_attestations() {

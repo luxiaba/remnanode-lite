@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=7071068e39be34bf4bc4a31fe14e51c90ffe3b24d592a3b19feb574f24784b8b -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=72b7f1e959c7c0bcddea863cdf870933d073458762d2a782b6abd2258929ffa8 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -338,7 +338,7 @@ REQUIRE_GOVULNCHECK=1 \
 
 `release-check.sh` 用于当前 `main` 的正式发布准备。它要求工作区干净、版本与带日期的 `CHANGELOG.md` 一致、固定官方源码可验证，并运行完整仓库检查。它在 release workflow 创建 draft Release、随后公开其 tag 前运行。运行时验证不由该脚本读取：维护者应在发起 release workflow 前人工确认同一 `sha-<commit>` 候选能够连接真实 Panel、承载真实代理流量且没有意外生命周期或资源故障，不把运行数据提交到仓库。
 
-release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance 和 Native 资产，公开并确认 immutable Release 后才晋升精确镜像与移动通道。若公开成功但 registry 晋升失败，`reconcile-release` 会重新校验 Release 与源码候选，再恢复精确标签和符合条件的通道，不会重新构建。
+release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance、Native 资产及其 `release-index.json` digest 绑定；它先创建并校验 draft、晋升精确镜像，再公开并确认 immutable Release，重新确认精确标签后才推进移动通道。若公开成功但 registry 晋升失败，`reconcile-release` 会重新校验 Release 及其已 attestation 的 digest 记录，再恢复精确标签和符合条件的通道，不会重新构建。
 
 具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
 [发布流程](../release.md)。
@@ -379,7 +379,7 @@ release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance 
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
 
-并非所有 PR 都会执行 candidate workflow；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。手工发起的 release workflow 会校验该候选的 OCI 结构、双平台 SPDX SBOM 与 attestation，并只在 GitHub Release 已 immutable 后把同一镜像摘要晋升为正式标签。不要把只在部分 PR 出现的 candidate job 配成所有 PR 都必须出现的门禁。
+并非所有 PR 都会执行 candidate workflow；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。手工发起的 release workflow 会校验该候选的 OCI 结构、双平台 SPDX SBOM、attestation 和 Release digest 绑定，在公开前晋升正式标签，再要求 GitHub Release 变为 immutable 并重新确认精确标签。不要把只在部分 PR 出现的 candidate job 配成所有 PR 都必须出现的门禁。
 
 ## 编写测试
 

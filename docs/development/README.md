@@ -159,9 +159,9 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | Path | Responsibility |
 | --- | --- |
 | `.github/workflows/ci.yml` | Required Go, repository, Native bootstrap/lifecycle, and Linux network-management CI gate |
-| `.github/workflows/container.yml` | Candidate workflow: multi-architecture image build, attestation, and the immutable `sha-<40-character-main-commit>` candidate |
-| `.github/workflows/release.yml` | Draft-first publication that verifies an immutable Release before exact and moving image promotion |
-| `.github/workflows/reconcile.yml` | Idempotent recovery of an exact image tag and its eligible `latest` or `preview` channel from a published Release |
+| `.github/workflows/container.yml` | Candidate workflow: multi-architecture image build, attestations, immutable `sha-<40-character-main-commit>` candidate, and the accepted-digest `release-index.json` asset |
+| `.github/workflows/release.yml` | Draft-first publication that verifies the accepted digest binding, promotes the exact image before public Release, verifies immutability, then reconfirms the exact tag before moving a channel |
+| `.github/workflows/reconcile.yml` | Idempotent recovery of an exact image tag and its eligible `latest` or `preview` channel from the attested index in a published Release |
 | `.github/workflows/contract-sync.yml`, `.github/workflows/security.yml` | Official-version monitoring and scheduled security checks |
 | `scripts/check*.sh` | Stable Go, repository, supply-chain, and complete-gate entry points |
 | `scripts/build-native-bundle.sh` | Reproducible `amd64`/`arm64` Native bundle build around `release-tool` |
@@ -212,13 +212,15 @@ Before publishing a release, merge `dev` into `main`, wait for the immutable
 real Panel and real proxy traffic. This is a maintainer decision, not a source
 artifact: do not commit host inventories, container details, logs, or smoke
 records. Dispatch the release workflow from the current `main` commit with the
-exact source version. It verifies the candidate image, Native assets, and their
-attestations, creates and verifies a draft Release, publishes its tag, then
-requires the Release to become immutable before promoting the same digest to
-the exact version. Plain `X.Y.Z` releases advance `latest`;
+exact source version. It verifies the candidate image, Native assets, their
+attestations, and the accepted digest recorded in `release-index.json`, then
+creates and verifies a draft Release. It promotes the exact image before
+making that Release public, verifies the immutable final state, reconfirms the
+exact tag, and advances the appropriate moving channel. Plain `X.Y.Z` releases advance `latest`;
 `X.Y.Z-rnl.N` prereleases advance `preview` and never change GitHub or GHCR
 `latest`. If registry promotion fails after publication, `reconcile-release`
-recovers the exact tag and eligible channel without rebuilding.
+recovers the exact tag and eligible channel from the immutable Release asset
+without rebuilding.
 
 ## Common Change Paths
 

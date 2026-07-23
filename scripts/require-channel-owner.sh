@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+allow_non_owner=false
+if [ "${1:-}" = --allow-non-owner ]; then
+  allow_non_owner=true
+  shift
+fi
+
 if [ "$#" -ne 2 ]; then
-  echo "usage: $0 <vX.Y.Z[-rnl.N]-tag> <true|false-prerelease>" >&2
+  echo "usage: $0 [--allow-non-owner] <vX.Y.Z[-rnl.N]-tag> <true|false-prerelease>" >&2
   exit 2
 fi
 
@@ -25,13 +31,35 @@ case "$prerelease" in
       | first
       | .tagName // empty
     ' <<<"$releases")"
-    [ "$newest" = "$release_tag" ] || {
+    if [ "$newest" = "$release_tag" ] ||
+      { [ "$allow_non_owner" = true ] && [ -z "$newest" ]; }; then
+      promote=true
+    elif [ "$allow_non_owner" = true ]; then
+      promote=false
+      echo "${release_tag} is not the newest published preview (${newest:-none}); leaving preview unchanged" >&2
+    else
       echo "${release_tag} is not the newest published preview (${newest:-none})" >&2
       exit 1
-    }
+    fi
     ;;
   false)
-    bash scripts/verify-release-latest.sh "$release_tag" true
+    if [ "$allow_non_owner" = true ]; then
+      owner="$(bash scripts/verify-release-latest.sh --allow-non-owner "$release_tag" true)"
+      case "$owner" in
+        owner=true) promote=true ;;
+        owner=false)
+          promote=false
+          echo "${release_tag} is not GitHub Latest; leaving latest unchanged" >&2
+          ;;
+        *)
+          echo "could not classify GitHub Latest ownership for ${release_tag}" >&2
+          exit 1
+          ;;
+      esac
+    else
+      bash scripts/verify-release-latest.sh "$release_tag" true
+      promote=true
+    fi
     ;;
   *)
     echo "prerelease must be true or false" >&2
@@ -39,4 +67,4 @@ case "$prerelease" in
     ;;
 esac
 
-echo "verified $release_tag owns its moving release channel"
+printf 'promote=%s\n' "$promote"

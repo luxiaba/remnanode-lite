@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=038e84cb39143a279d9bb897880e9e08c198a929a214f285e23a83ae2aecc08f -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=d98ea6e03e031efbc4750021b09c1187936efde41bdb735bf1c489b9af6f4938 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -30,7 +30,7 @@
 5. 所有并发、队列、请求体和缓存都必须有明确上限。
 6. Node 只管理自己启动的 rw-core 进程、内部 socket 和 nftables 私有表，不接管整机防火墙。按 IP 执行 socket destroy 可能影响宿主 network namespace，属于必须明确记录的副作用。
 7. `dev` 是稳定开发与集成分支，主题分支通过 PR 和 CI 进入；`main` 是发布分支，只从 `dev` 接收已通过代码门禁的候选。
-8. `main` 的每个提交都生成一个不可变的 `sha-<40位提交>` 容器候选。维护者完成验收后，release workflow 会校验 draft Release，在当前 `main` HEAD 公开并锁定 Release，再在不重建的前提下晋升精确候选。
+8. `main` 的每个提交都生成一个不可变的 `sha-<40位提交>` 容器候选和已 attestation 的 `release-index.json` 绑定。维护者完成验收后，release workflow 会校验 draft Release，在公开前晋升记录的精确候选，再在当前 `main` HEAD 公开并锁定 Release，随后再次确认精确标签，不重新构建。
 
 ## 兼容边界
 
@@ -150,7 +150,7 @@ Release notes 由 GitHub 自动生成。
 - 通过 `go test`、race、vet、静态检查、脚本检查和多架构构建。
 - 为每个 `main` 提交发布一个不可变的 `sha-<40位提交>` 镜像，并包含 `linux/amd64`、`linux/arm64` runnable manifest 与对应 attestation。
 - 发起 release 前，在生产容器限制下使用真实 Panel 和真实代理流量验证候选；宿主详情、日志和运行记录不写入仓库。
-- release 发起提交必须是当前 `main` HEAD。校验候选 manifest 和源码 attestation，复用并证明已构建的 Native bundle，再在不重建容器的情况下把同一 digest 晋升为精确版本。纯稳定版推进 `latest`，`rnl.N` 预发布版只推进 `preview`。
+- release 发起提交必须是当前 `main` HEAD。校验候选 manifest 和源码 attestation，复用并证明已构建的 Native bundle，将完整 Release 资产绑定到已接受的 OCI digest，再在不重建容器的情况下把该 digest 晋升为精确版本。纯稳定版推进 `latest`，`rnl.N` 预发布版只推进 `preview`。
 - 将生命周期、进程组清理、安装器、50,000 用户和回滚结果保留为代码测试或带日期的工程基线。
 - 更新兼容文档和带日期的根 `CHANGELOG.md`，Release notes 由 GitHub 自动生成。
 

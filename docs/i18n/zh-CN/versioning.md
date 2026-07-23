@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=ccc47c901a358f1f1298d39563de09b8f1c390a0d59c572da4598d8bc802bca7 -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=11a0d577a7fe9ec624cde68d3359f201c15e995d08cd8f935e0ceed2685c1d62 -->
 
 # 版本与镜像标签
 
@@ -139,6 +139,8 @@ docker compose up -d --no-build --force-recreate
 
 `sha-<commit>` 用于验收可能成为 Release 的候选。不要用 `edge` 进行发布验收，因为新的 `main` 构建可能在测试期间移动它。
 
+candidate workflow 还会把已接受的内容地址记录在已 attestation 的 `release-index.json` 资产中。发布前必须确认该记录与已验证的 `sha-<commit>` 候选一致；Release 变为 immutable 后，恢复流程直接使用其中记录的 digest，不会把 registry tag 当作持久身份。
+
 ## Native Linux 只接受精确版本
 
 Native 安装和升级解析的是完整、带版本号的发布 bundle，因此不会跟随移动通道：
@@ -157,8 +159,8 @@ sudo rnlctl upgrade --to <精确版本>
 已发布的预发布版同时具备：
 
 1. 公开 draft Release 时在已接受 `main` 提交上创建的 `vX.Y.Z-rnl.N` tag；
-2. 带已验证资产的已公开 GitHub Prerelease；
-3. 与候选 digest 一致的精确 `X.Y.Z-rnl.N` GHCR 标签；
+2. 带已验证资产（包括已 attestation 的 `release-index.json`）的已公开 GitHub Prerelease；
+3. 与该 index 中 digest 一致的精确 `X.Y.Z-rnl.N` GHCR 标签；
 4. 成功推进到 `preview` 的同一个 digest。
 
 稳定版则具备普通 `vX.Y.Z` tag、完整 GitHub Release、精确 `X.Y.Z` 镜像、GitHub Latest 标识以及 `latest` 晋升。
@@ -184,7 +186,7 @@ remnanode-lite <Version> (contract <ContractVersion>)
 rnlctl <Version> (contract <ContractVersion>)
 ```
 
-发布记录还应清楚标明发布类别与通道、项目版本和源码提交、官方契约与固定源码、已接受的镜像 digest 与 attestation、锁定的运行时资产、两种架构的发布状态、已知风险与回滚引用，以及 Native bundle 校验和和资产 attestation。
+发布记录还应清楚标明发布类别与通道、项目版本和源码提交、官方契约与固定源码、已接受的镜像 digest 与 attestation、将其绑定到源码提交的 `release-index.json`、锁定的运行时资产、两种架构的发布状态、已知风险与回滚引用，以及 Native bundle 校验和和资产 attestation。
 
 GitHub 根据已合并变更生成 Release notes。主机清单、Panel 详情、日志、Secret 和其他运行观察不属于 Release 资产，也不能提交到仓库。
 

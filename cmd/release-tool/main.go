@@ -22,8 +22,10 @@ Commands:
   materialize  Materialize locked runtime assets for one architecture
   build     Build and verify one deterministic Native Linux bundle
   verify    Verify bundle structure, manifest, payload digests, and SBOM
-  assemble  Assemble the complete GitHub Release asset set
-  verify-package  Verify a complete GitHub Release asset set
+  assemble  Assemble the staged GitHub Release asset set
+  finalize-release  Bind an accepted OCI index and complete the asset set
+  verify-package  Verify a staged or complete GitHub Release asset set
+  verify-release-index  Verify the accepted OCI index Release asset
   verify-index  Verify the accepted multi-architecture OCI image index
   verify-release  Compare a GitHub Release API snapshot with local assets
 
@@ -60,8 +62,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return runVerify(args[1:], stdout, stderr)
 	case "assemble":
 		return runAssemble(args[1:], stdout, stderr)
+	case "finalize-release":
+		return runFinalizeRelease(args[1:], stdout, stderr)
 	case "verify-package":
 		return runVerifyPackage(args[1:], stdout, stderr)
+	case "verify-release-index":
+		return runVerifyReleaseIndex(args[1:], stdout, stderr)
 	case "verify-index":
 		return runVerifyIndex(args[1:], stdout, stderr)
 	case "verify-release":

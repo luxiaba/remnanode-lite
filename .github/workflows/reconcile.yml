@@ -70,18 +70,26 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
         run: bash scripts/promote-image-tag.sh immutable "$IMAGE" "$SOURCE_DIGEST" "$VERSION"
 
-      - name: Require the current owner of the channel
+      - name: Determine whether this Release still owns the channel
+        id: channel-owner
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
           PRERELEASE: ${{ steps.metadata.outputs.prerelease }}
-        run: bash scripts/require-channel-owner.sh "$RELEASE_TAG" "$PRERELEASE"
+        run: >-
+          bash scripts/require-channel-owner.sh --allow-non-owner
+          "$RELEASE_TAG" "$PRERELEASE" >>"$GITHUB_OUTPUT"
 
       - name: Restore the moving channel
+        if: steps.channel-owner.outputs.promote == 'true'
         env:
           CHANNEL: ${{ steps.metadata.outputs.channel }}
           SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
         run: bash scripts/promote-image-tag.sh mutable "$IMAGE" "$SOURCE_DIGEST" "$CHANNEL"
+
+      - name: Leave a newer moving channel unchanged
+        if: steps.channel-owner.outputs.promote == 'false'
+        run: echo "a newer Release owns this moving channel; exact image recovery is complete"
 
   reject-invalid-ref:
     if: github.ref != 'refs/heads/main'
