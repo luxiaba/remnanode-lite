@@ -17,10 +17,10 @@ func snapshotManagerForTest(manager *Manager) managerTestSnapshot {
 	return managerTestSnapshot{
 		state:               manager.state,
 		process:             manager.process,
-		pendingConfigJSON:   append([]byte(nil), manager.pendingConfigJSON...),
-		runtimeProcessEpoch: manager.runtimeProcessEpoch,
-		emptyConfigHash:     manager.emptyConfigHash,
-		inboundHashCount:    len(manager.inboundHashes),
-		inboundTagCount:     len(manager.inboundTags),
+		pendingConfigJSON:   append([]byte(nil), manager.runtime.pendingConfigJSON...),
+		runtimeProcessEpoch: manager.runtime.runtimeProcessEpoch,
+		emptyConfigHash:     manager.runtime.emptyConfigHash,
+		inboundHashCount:    len(manager.runtime.inboundHashes),
+		inboundTagCount:     len(manager.runtime.inboundTags),
 	}
 }

@@ -201,14 +201,13 @@ func TestStartCommitsConfigOnlyAfterReadiness(t *testing.T) {
 	go func() { response <- manager.Start(context.Background(), lifecycleStartRequest("client-a")) }()
 	awaitSignal(t, probeEntered, "readiness probe")
 
-	manager.mu.RLock()
-	if manager.state != lifecycleStarting || len(manager.pendingConfigJSON) == 0 {
-		t.Fatalf("unexpected starting snapshot: state=%s pending=%v", manager.state, len(manager.pendingConfigJSON) != 0)
+	starting := snapshotManagerForTest(manager)
+	if starting.state != lifecycleStarting || len(starting.pendingConfigJSON) == 0 {
+		t.Fatalf("unexpected starting snapshot: state=%s pending=%v", starting.state, len(starting.pendingConfigJSON) != 0)
 	}
-	if manager.emptyConfigHash != "" || len(manager.inboundHashes) != 0 {
-		t.Fatalf("hash state committed before readiness: empty=%q inbounds=%d", manager.emptyConfigHash, len(manager.inboundHashes))
+	if starting.emptyConfigHash != "" || starting.inboundHashCount != 0 {
+		t.Fatalf("hash state committed before readiness: empty=%q inbounds=%d", starting.emptyConfigHash, starting.inboundHashCount)
 	}
-	manager.mu.RUnlock()
 
 	raw := manager.CurrentConfigJSON()
 	var config map[string]any
@@ -222,17 +221,12 @@ func TestStartCommitsConfigOnlyAfterReadiness(t *testing.T) {
 		t.Fatalf("start response = %#v", resp)
 	}
 
-	manager.mu.RLock()
-	state := manager.state
-	pending := len(manager.pendingConfigJSON) != 0
-	emptyHash := manager.emptyConfigHash
-	inboundCount := len(manager.inboundHashes)
-	manager.mu.RUnlock()
-	if state != lifecycleRunning || pending {
-		t.Fatalf("unexpected committed snapshot: state=%s pending=%v", state, pending)
+	running := snapshotManagerForTest(manager)
+	if running.state != lifecycleRunning || len(running.pendingConfigJSON) != 0 {
+		t.Fatalf("unexpected committed snapshot: state=%s pending=%v", running.state, len(running.pendingConfigJSON) != 0)
 	}
-	if emptyHash != "base-hash" || inboundCount != 1 {
-		t.Fatalf("hash state not committed: empty=%q inbounds=%d", emptyHash, inboundCount)
+	if running.emptyConfigHash != "base-hash" || running.inboundHashCount != 1 {
+		t.Fatalf("hash state not committed: empty=%q inbounds=%d", running.emptyConfigHash, running.inboundHashCount)
 	}
 	if got := string(manager.CurrentConfigJSON()); got != "{}" {
 		t.Fatalf("config cache retained after readiness: %s", got)

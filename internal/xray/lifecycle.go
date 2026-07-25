@@ -405,7 +405,7 @@ func (m *Manager) stagePendingConfig(operationEpoch uint64, previous *processSta
 		m.process = nil
 	}
 	m.clearRuntimeLocked()
-	m.pendingConfigJSON = raw
+	m.runtime.pendingConfigJSON = raw
 	return true
 }
 
@@ -442,9 +442,9 @@ func (m *Manager) commitRunningStart(operationEpoch uint64, process *processStat
 		return false, true, err
 	}
 
-	m.pendingConfigJSON = nil
+	m.runtime.pendingConfigJSON = nil
 	m.applyRuntimeHashStateLocked(hashState)
-	m.runtimeProcessEpoch = process.epoch
+	m.runtime.runtimeProcessEpoch = process.epoch
 	m.publishVersionLocked(version)
 	m.state = lifecycleRunning
 	m.startCancel = nil

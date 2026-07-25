@@ -42,6 +42,19 @@ type TorrentBlockerConfigProvider interface {
 	TorrentBlockerIncludeRuleTags() []string
 }
 
+// runtimeState is guarded by Manager.mu. It intentionally has no lock of its
+// own so lifecycle state and process-bound runtime data remain one atomic
+// publication boundary.
+type runtimeState struct {
+	// pendingConfigJSON is served while rw-core starts and released as soon as
+	// the gRPC API is ready. It is the only full config retained by the manager.
+	pendingConfigJSON   []byte
+	runtimeProcessEpoch uint64
+	emptyConfigHash     string
+	inboundHashes       map[string]*HashedSet
+	inboundTags         map[string]struct{}
+}
+
 type Manager struct {
 	// lifecycleMu serializes process ownership. State publication and
 	// lifecycleMu acquisition/release are performed while mu is held.
@@ -61,21 +74,15 @@ type Manager struct {
 	system           SystemSnapshotter
 	torrentBlocker   TorrentBlockerConfigProvider
 
-	xrayVersion         *string
-	state               lifecycleState
-	operationEpoch      uint64
-	nextProcessEpoch    uint64
-	runtimeProcessEpoch uint64
-	startCancel         context.CancelFunc
-	stopOp              *stopOperation
-	process             *processState
+	xrayVersion      *string
+	state            lifecycleState
+	operationEpoch   uint64
+	nextProcessEpoch uint64
+	startCancel      context.CancelFunc
+	stopOp           *stopOperation
+	process          *processState
 
-	// pendingConfigJSON is the only full config retained by the manager. It is
-	// served while rw-core starts and released as soon as the gRPC API is ready.
-	pendingConfigJSON []byte
-	emptyConfigHash   string
-	inboundHashes     map[string]*HashedSet
-	inboundTags       map[string]struct{}
+	runtime runtimeState
 
 	readinessProbe      func(context.Context) bool
 	readinessInterval   time.Duration
@@ -264,15 +271,15 @@ func (m *Manager) CurrentConfigJSON() []byte {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if len(m.pendingConfigJSON) == 0 {
+	if len(m.runtime.pendingConfigJSON) == 0 {
 		return emptyConfigJSON
 	}
-	return m.pendingConfigJSON
+	return m.runtime.pendingConfigJSON
 }
 
 func (m *Manager) clearRuntimeLocked() {
-	m.pendingConfigJSON = nil
-	m.runtimeProcessEpoch = 0
+	m.runtime.pendingConfigJSON = nil
+	m.runtime.runtimeProcessEpoch = 0
 	m.clearHashStateLocked()
 	m.clearInboundTagsLocked()
 }
