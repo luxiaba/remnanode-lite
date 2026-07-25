@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/luxiaba/remnanode-lite/internal/executil"
 	"github.com/luxiaba/remnanode-lite/internal/system"
 )
 
@@ -55,10 +53,10 @@ type runtimeState struct {
 	inboundTags         map[string]struct{}
 }
 
-// versionState is guarded by Manager.mu. It intentionally shares the
-// Manager's publication boundary with lifecycle state: Health schedules a
-// recovery only while holding that lock, and Shutdown closes the scheduling
-// gate before waiting for an already scheduled recovery.
+// versionState shares Manager.mu with lifecycle state. That lock protects the
+// cached version and recovery scheduling fields, and makes Health's Add happen
+// before Shutdown closes the scheduling gate. WaitGroup and Once retain their
+// own synchronization semantics outside that critical section.
 type versionState struct {
 	coreOverride string
 	cached       *string
@@ -111,12 +109,6 @@ type Manager struct {
 	processGroupCleanup func(*os.Process, time.Duration) error
 	processWaitDelay    time.Duration
 }
-
-const (
-	versionProbeTimeout  = 5 * time.Second
-	versionProbeRetry    = 30 * time.Second
-	versionOutputMaxSize = 4 << 10
-)
 
 type StartRequest struct {
 	Internals  StartInternals `json:"internals"`
@@ -244,35 +236,6 @@ func (m *Manager) torrentBlockerOptions() TorrentBlockerOptions {
 	return opts
 }
 
-func (m *Manager) Health() HealthResponse {
-	m.mu.Lock()
-	running := m.state == lifecycleRunning
-	version := m.version.cached
-	retryVersion := !m.version.shutdown && m.version.context.Err() == nil && version == nil && m.state != lifecycleStarting && !m.version.busy &&
-		!time.Now().Before(m.version.nextProbe)
-	var probeContext context.Context
-	if retryVersion {
-		m.version.busy = true
-		m.version.nextProbe = time.Now().Add(versionProbeRetry)
-		m.version.wg.Add(1)
-		probeContext = m.version.context
-	}
-	m.mu.Unlock()
-	if retryVersion {
-		go func() {
-			defer m.version.wg.Done()
-			m.refreshUnknownVersion(probeContext)
-		}()
-	}
-
-	return HealthResponse{
-		IsAlive:                  true,
-		XrayInternalStatusCached: running,
-		XrayVersion:              version,
-		NodeVersion:              m.nodeVersion,
-	}
-}
-
 // CurrentConfigJSON returns the config exactly as served to a starting
 // rw-core. Once readiness is confirmed the process has consumed the config,
 // so the cache is released and this method returns an empty object.
@@ -317,134 +280,6 @@ func BuildCommandArgs(socketPath string) []string {
 
 func BuildConfigURL(socketPath string) string {
 	return fmt.Sprintf("http+unix://%s/internal/get-config", socketPath)
-}
-
-func (m *Manager) refreshVersion(parent context.Context) {
-	version := m.probeVersion(parent)
-	m.mu.Lock()
-	m.publishVersionLocked(version)
-	m.mu.Unlock()
-}
-
-func (m *Manager) probeVersion(parent context.Context) *string {
-	m.mu.RLock()
-	override := m.version.coreOverride
-	m.mu.RUnlock()
-	if override != "" {
-		return &override
-	}
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithTimeout(parent, versionProbeTimeout)
-	defer cancel()
-
-	m.mu.RLock()
-	probe := m.version.probe
-	xrayBin := m.xrayBin
-	m.mu.RUnlock()
-
-	var version string
-	var err error
-	if probe != nil {
-		version, err = probe(ctx)
-	} else {
-		var result executil.Result
-		result, err = executil.RunWithEnv(
-			ctx,
-			nil,
-			versionOutputMaxSize,
-			sanitizedChildEnvironment(os.Environ()),
-			xrayBin,
-			"version",
-		)
-		if err == nil {
-			version = parseVersionLine(string(result.Stdout))
-		}
-	}
-	if err != nil {
-		return nil
-	}
-	if version == "" {
-		return nil
-	}
-	return &version
-}
-
-func (m *Manager) publishVersionLocked(version *string) {
-	m.version.cached = version
-	if version == nil {
-		m.version.nextProbe = time.Now().Add(versionProbeRetry)
-	} else {
-		m.version.nextProbe = time.Time{}
-	}
-}
-
-func (m *Manager) refreshUnknownVersion(parent context.Context) {
-	version := m.probeVersion(parent)
-	m.mu.Lock()
-	if !m.version.shutdown && m.version.cached == nil && version != nil {
-		m.publishVersionLocked(version)
-	}
-	m.version.busy = false
-	m.mu.Unlock()
-}
-
-// Shutdown permanently stops background version recovery. It is reserved for
-// node process shutdown; Stop remains reusable for the public xray/stop route.
-func (m *Manager) Shutdown(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	m.version.shutdownOnce.Do(func() {
-		m.mu.Lock()
-		m.version.shutdown = true
-		cancel := m.version.cancel
-		m.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-		go func() {
-			m.version.wg.Wait()
-			close(m.version.shutdownDone)
-		}()
-	})
-
-	select {
-	case <-m.version.shutdownDone:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-var xraySemverRe = regexp.MustCompile(`\d+\.\d+\.\d+`)
-
-// parseVersionLine returns semver like "26.3.27", matching official node semver coercion.
-func parseVersionLine(output string) string {
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if v := extractSemver(line); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-func coerceSemver(raw string) string {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "v")
-	return extractSemver(raw)
-}
-
-func extractSemver(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	return xraySemverRe.FindString(raw)
 }
 
 func (m *Manager) startResponse(isStarted bool, message *string) StartResponse {
