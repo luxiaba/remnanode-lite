@@ -15,22 +15,6 @@ const (
 	logDirectory     = "/var/log/remnanode-lite"
 )
 
-const logsUsage = `Usage: rnlctl logs <node|core|core-errors> [--follow] [--lines N] [--since DURATION]
-
-Sources:
-  node         remnanode-lite service output
-  core         rw-core standard output
-  core-errors  rw-core standard error
-
-Options:
-  --follow, -f       Continue following new log entries
-  --lines N, -n N    Show the last N lines (default: 50)
-  --since DURATION   Limit systemd Node logs to a recent duration, such as 15m
-
---since is available only for the node source on systemd hosts. OpenRC and
-rw-core log files do not provide a reliable common timestamp format.
-`
-
 type logOptions struct {
 	source   string
 	lines    int
@@ -40,6 +24,7 @@ type logOptions struct {
 }
 
 func (a *App) runLogs(ctx context.Context, args []string) int {
+	logsUsage := usageForCommand("logs")
 	options, showHelp, err := parseLogsArgs(args)
 	if showHelp {
 		return a.write(a.stdout, logsUsage)

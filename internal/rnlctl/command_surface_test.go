@@ -256,13 +256,13 @@ func expectedPublicCommandSurface() []publicCommandSurface {
 	}
 }
 
-func TestPublicCommandAndOptionSurfaceMatchesCompletionSpecification(t *testing.T) {
-	root := rnlctlCompletionSpec()
-	actual := []publicCommandSurface{{Path: "", Options: publicOptionsFromCompletion(root.Options)}}
-	visitCompletionCommands(root, nil, func(path []string, command completionCommandSpec) {
+func TestPublicCommandAndOptionSurfaceMatchesCommandSpecification(t *testing.T) {
+	root := rnlctlCommandSpec()
+	actual := []publicCommandSurface{{Path: "", Options: publicOptionsFromCommandSpec(root.Options)}}
+	visitCompletionCommands(root, nil, func(path []string, command commandSpec) {
 		actual = append(actual, publicCommandSurface{
 			Path:    strings.Join(path, " "),
-			Options: publicOptionsFromCompletion(command.Options),
+			Options: publicOptionsFromCommandSpec(command.Options),
 		})
 	})
 
@@ -284,7 +284,7 @@ func TestPublicCommandAndOptionSurfaceMatchesCompletionSpecification(t *testing.
 	}
 }
 
-func publicOptionsFromCompletion(options []completionOptionSpec) []publicOptionSurface {
+func publicOptionsFromCommandSpec(options []commandOptionSpec) []publicOptionSurface {
 	if len(options) == 0 {
 		return nil
 	}
@@ -293,22 +293,22 @@ func publicOptionsFromCompletion(options []completionOptionSpec) []publicOptionS
 		result = append(result, publicOptionSurface{
 			Long:            option.Long,
 			Short:           option.Short,
-			Value:           completionValueNameForSurfaceTest(option.Value),
+			Value:           commandValueNameForSurfaceTest(option.Value),
 			UnavailableWith: append([]string(nil), option.UnavailableWith...),
 		})
 	}
 	return result
 }
 
-func completionValueNameForSurfaceTest(value completionValueKind) string {
+func commandValueNameForSurfaceTest(value commandValueKind) string {
 	switch value {
-	case completionValueNone:
+	case commandValueNone:
 		return "none"
-	case completionValueWord:
+	case commandValueWord:
 		return "word"
-	case completionValueFile:
+	case commandValueFile:
 		return "file"
-	case completionValueDirectory:
+	case commandValueDirectory:
 		return "directory"
 	default:
 		return "unknown"

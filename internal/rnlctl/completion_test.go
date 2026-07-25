@@ -11,10 +11,10 @@ import (
 	"testing"
 )
 
-func TestCompletionSpecIsValidAndContainsExpectedCommands(t *testing.T) {
-	spec := rnlctlCompletionSpec()
-	if err := validateCompletionSpec(spec); err != nil {
-		t.Fatalf("validateCompletionSpec() error = %v", err)
+func TestCommandSpecIsValidAndContainsExpectedCommands(t *testing.T) {
+	spec := rnlctlCommandSpec()
+	if err := validateCommandSpec(spec); err != nil {
+		t.Fatalf("validateCommandSpec() error = %v", err)
 	}
 
 	wantPaths := map[string]bool{
@@ -22,7 +22,7 @@ func TestCompletionSpecIsValidAndContainsExpectedCommands(t *testing.T) {
 		"config set": false, "secret set": false, "logs": false,
 		"completion": false,
 	}
-	visitCompletionCommands(spec, nil, func(path []string, _ completionCommandSpec) {
+	visitCompletionCommands(spec, nil, func(path []string, _ commandSpec) {
 		joined := strings.Join(path, " ")
 		if _, exists := wantPaths[joined]; exists {
 			wantPaths[joined] = true
@@ -52,7 +52,7 @@ func TestConfigurationCompletionCandidatesFollowKeyMetadata(t *testing.T) {
 	}
 
 	found := make(map[string][]string, len(want))
-	visitCompletionCommands(rnlctlCompletionSpec(), nil, func(path []string, command completionCommandSpec) {
+	visitCompletionCommands(rnlctlCommandSpec(), nil, func(path []string, command commandSpec) {
 		joined := strings.Join(path, " ")
 		if _, expected := want[joined]; !expected {
 			return
@@ -73,7 +73,7 @@ func TestConfigurationCompletionCandidatesFollowKeyMetadata(t *testing.T) {
 }
 
 func TestCompletionOptionShellPatternsKeepInlineWildcardUnquoted(t *testing.T) {
-	options := []completionOptionSpec{{Long: "lines", Short: "n", Value: completionValueWord}}
+	options := []commandOptionSpec{{Long: "lines", Short: "n", Value: commandValueWord}}
 	if got, want := strings.Join(completionOptionShellPatterns(options, false), "|"), "'--lines'|'-n'"; got != want {
 		t.Fatalf("completionOptionShellPatterns(false) = %q, want %q", got, want)
 	}
@@ -116,6 +116,7 @@ func TestRunCompletionRendersSupportedShells(t *testing.T) {
 }
 
 func TestRunCompletionRejectsInvalidArguments(t *testing.T) {
+	completionUsage := usageForCommand("completion")
 	for _, test := range []struct {
 		name string
 		args []string
@@ -142,6 +143,7 @@ func TestRunCompletionRejectsInvalidArguments(t *testing.T) {
 }
 
 func TestRunCompletionHelp(t *testing.T) {
+	completionUsage := usageForCommand("completion")
 	var stdout, stderr bytes.Buffer
 	application := New(Options{Stdout: &stdout, Stderr: &stderr})
 	if code := application.runCompletion([]string{"--help"}); code != 0 {

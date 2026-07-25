@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func renderZshCompletion(root completionCommandSpec) string {
+func renderZshCompletion(root commandSpec) string {
 	var output strings.Builder
 	output.WriteString(`#compdef rnlctl
 compdef _rnlctl rnlctl
@@ -31,7 +31,7 @@ _rnlctl() {
 `)
 	writeZshGlobalScan(&output, root.Options)
 	writeZshDescribe(&output, "    ", "commands", "rnlctl command", append(rootCommandCandidates(root), append(optionCandidates(root.Options),
-		completionCandidateSpec{Value: "--version", Description: "Show version"},
+		commandArgumentSpec{Value: "--version", Description: "Show version"},
 	)...))
 	output.WriteString("    return\n  fi\n\n  subcommand=\n")
 	for _, command := range root.Commands {
@@ -44,7 +44,7 @@ _rnlctl() {
 		output.WriteString("      return\n    fi\n  fi\n")
 	}
 	output.WriteString("  command_path=$command\n  argument_start=$((command_index + 1))\n  if [[ -n $subcommand ]]; then\n    command_path+=\" $subcommand\"\n    argument_start=$((subcommand_index + 1))\n  fi\n\n  case $command_path in\n")
-	visitCompletionCommands(root, nil, func(path []string, command completionCommandSpec) {
+	visitCompletionCommands(root, nil, func(path []string, command commandSpec) {
 		if len(path) == 0 || len(command.Commands) != 0 {
 			return
 		}
@@ -71,7 +71,7 @@ fi
 	return output.String()
 }
 
-func writeZshGlobalScan(output *strings.Builder, options []completionOptionSpec) {
+func writeZshGlobalScan(output *strings.Builder, options []commandOptionSpec) {
 	output.WriteString("  _rnlctl_completion_is_global_option() {\n    case $1 in\n      ")
 	output.WriteString(strings.Join(completionOptionPatterns(options), "|"))
 	output.WriteString(`) return 0 ;;
@@ -101,10 +101,10 @@ func writeZshGlobalScan(output *strings.Builder, options []completionOptionSpec)
 `)
 }
 
-func writeZshOptionValues(output *strings.Builder, command completionCommandSpec) {
-	var valueOptions []completionOptionSpec
+func writeZshOptionValues(output *strings.Builder, command commandSpec) {
+	var valueOptions []commandOptionSpec
 	for _, option := range command.Options {
-		if option.Value != completionValueNone {
+		if option.Value != commandValueNone {
 			valueOptions = append(valueOptions, option)
 		}
 	}
@@ -119,9 +119,9 @@ func writeZshOptionValues(output *strings.Builder, command completionCommandSpec
 		}
 		fmt.Fprintf(output, "        %s)\n", strings.Join(patterns, "|"))
 		switch option.Value {
-		case completionValueFile:
+		case commandValueFile:
 			output.WriteString("          _files\n")
-		case completionValueDirectory:
+		case commandValueDirectory:
 			output.WriteString("          _files -/\n")
 		}
 		output.WriteString("          return\n          ;;\n")
@@ -130,9 +130,9 @@ func writeZshOptionValues(output *strings.Builder, command completionCommandSpec
 	for _, option := range valueOptions {
 		long := "--" + option.Long + "="
 		fmt.Fprintf(output, "      if [[ $current == %s* ]]; then\n", shellQuote(long))
-		if option.Value == completionValueFile || option.Value == completionValueDirectory {
+		if option.Value == commandValueFile || option.Value == commandValueDirectory {
 			output.WriteString("        compset -P '*='\n")
-			if option.Value == completionValueDirectory {
+			if option.Value == commandValueDirectory {
 				output.WriteString("        _files -/\n")
 			} else {
 				output.WriteString("        _files\n")
@@ -142,7 +142,7 @@ func writeZshOptionValues(output *strings.Builder, command completionCommandSpec
 	}
 }
 
-func writeZshArgumentScan(output *strings.Builder, command completionCommandSpec) {
+func writeZshArgumentScan(output *strings.Builder, command commandSpec) {
 	if len(command.Arguments) == 0 {
 		return
 	}
@@ -155,9 +155,9 @@ func writeZshArgumentScan(output *strings.Builder, command completionCommandSpec
 	output.WriteString("          -*)\n            continue\n            ;;\n          *)\n            used_arguments+=(\"$token\")\n            ;;\n        esac\n      done\n")
 }
 
-func writeZshOptionCandidates(output *strings.Builder, indent string, options []completionOptionSpec) {
-	available := make([]completionOptionSpec, 0, len(options))
-	conditional := make([]completionOptionSpec, 0, len(options))
+func writeZshOptionCandidates(output *strings.Builder, indent string, options []commandOptionSpec) {
+	available := make([]commandOptionSpec, 0, len(options))
+	conditional := make([]commandOptionSpec, 0, len(options))
 	for _, option := range options {
 		if len(option.UnavailableWith) == 0 {
 			available = append(available, option)
@@ -181,7 +181,7 @@ func writeZshOptionCandidates(output *strings.Builder, indent string, options []
 	fmt.Fprintf(output, "%s_describe -t options %s candidates\n", indent, shellQuote("option"))
 }
 
-func writeZshArgumentCandidates(output *strings.Builder, indent string, command completionCommandSpec) {
+func writeZshArgumentCandidates(output *strings.Builder, indent string, command commandSpec) {
 	if !command.RepeatArgs {
 		fmt.Fprintf(output, "%sif (( ${#used_arguments} == 0 )); then\n", indent)
 		writeZshCandidateValues(output, indent+"  ", command.Arguments)
@@ -206,7 +206,7 @@ func writeZshArgumentCandidates(output *strings.Builder, indent string, command 
 	output.WriteString(indent + "(( ${#candidates} > 0 )) && _describe -t values 'value' candidates\n")
 }
 
-func writeZshCandidateValues(output *strings.Builder, indent string, candidates []completionCandidateSpec) {
+func writeZshCandidateValues(output *strings.Builder, indent string, candidates []commandArgumentSpec) {
 	if hasNoSpaceCandidate(candidates) {
 		output.WriteString(indent + "compadd -S '' --")
 		for _, candidate := range candidates {
@@ -219,7 +219,7 @@ func writeZshCandidateValues(output *strings.Builder, indent string, candidates 
 	writeZshDescribe(output, indent, "values", "value", candidates)
 }
 
-func zshOptionAvailableCondition(option completionOptionSpec) string {
+func zshOptionAvailableCondition(option commandOptionSpec) string {
 	conditions := make([]string, 0, len(option.UnavailableWith))
 	for _, argument := range option.UnavailableWith {
 		conditions = append(conditions, "! _rnlctl_completion_argument_used "+shellQuote(argument)+" \"${used_arguments[@]}\"")
@@ -227,7 +227,7 @@ func zshOptionAvailableCondition(option completionOptionSpec) string {
 	return strings.Join(conditions, " && ")
 }
 
-func writeZshDescribe(output *strings.Builder, indent, tag, label string, candidates []completionCandidateSpec) {
+func writeZshDescribe(output *strings.Builder, indent, tag, label string, candidates []commandArgumentSpec) {
 	output.WriteString(indent + "local -a candidates\n")
 	output.WriteString(indent + "candidates=(\n")
 	for _, candidate := range candidates {
