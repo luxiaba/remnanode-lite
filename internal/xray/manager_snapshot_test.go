@@ -52,17 +52,17 @@ func snapshotVersionForTest(manager *Manager) versionTestSnapshot {
 	defer manager.mu.RUnlock()
 
 	return versionTestSnapshot{
-		cached:     manager.xrayVersion,
-		busy:       manager.versionProbeBusy,
-		nextProbe:  manager.nextVersionProbe,
-		shutdown:   manager.versionProbeShutdown,
-		contextErr: manager.versionProbeContext.Err(),
+		cached:     manager.version.cached,
+		busy:       manager.version.busy,
+		nextProbe:  manager.version.nextProbe,
+		shutdown:   manager.version.shutdown,
+		contextErr: manager.version.context.Err(),
 	}
 }
 
 func setVersionRetryNowForTest(manager *Manager) {
 	manager.mu.Lock()
-	manager.nextVersionProbe = time.Time{}
+	manager.version.nextProbe = time.Time{}
 	manager.mu.Unlock()
 }
 

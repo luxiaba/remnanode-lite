@@ -244,8 +244,8 @@ func TestManagerInitialVersionProbeUsesLifetime(t *testing.T) {
 		if outcome.manager == nil {
 			t.Fatal("newManager returned a nil manager")
 		}
-		if !errors.Is(outcome.manager.versionProbeContext.Err(), context.Canceled) {
-			t.Fatalf("version probe context error = %v, want context canceled", outcome.manager.versionProbeContext.Err())
+		if !errors.Is(outcome.manager.version.context.Err(), context.Canceled) {
+			t.Fatalf("version probe context error = %v, want context canceled", outcome.manager.version.context.Err())
 		}
 		if err := outcome.manager.Shutdown(context.Background()); err != nil {
 			t.Fatalf("Shutdown: %v", err)
@@ -284,7 +284,7 @@ func TestManagerLifetimeCancelsBackgroundVersionProbeAndShutdownRemainsIdempoten
 	}
 
 	manager.mu.Lock()
-	manager.nextVersionProbe = time.Time{}
+	manager.version.nextProbe = time.Time{}
 	manager.mu.Unlock()
 	_ = manager.Health()
 	select {
@@ -302,7 +302,7 @@ func TestManagerLifetimeCancelsBackgroundVersionProbeAndShutdownRemainsIdempoten
 	deadline := time.Now().Add(time.Second)
 	for {
 		manager.mu.RLock()
-		busy := manager.versionProbeBusy
+		busy := manager.version.busy
 		manager.mu.RUnlock()
 		if !busy {
 			break
@@ -313,7 +313,7 @@ func TestManagerLifetimeCancelsBackgroundVersionProbeAndShutdownRemainsIdempoten
 		time.Sleep(time.Millisecond)
 	}
 	manager.mu.Lock()
-	manager.nextVersionProbe = time.Time{}
+	manager.version.nextProbe = time.Time{}
 	manager.mu.Unlock()
 	_ = manager.Health()
 	if got := calls.Load(); got != 2 {

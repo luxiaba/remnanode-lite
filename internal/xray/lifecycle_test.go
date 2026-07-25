@@ -319,7 +319,7 @@ func TestFailedReplacementAfterPreviousTerminationClearsRuntimeState(t *testing.
 func TestSuccessfulStartRefreshesCoreVersion(t *testing.T) {
 	manager, _ := newLifecycleManager(t, "hold")
 	manager.readinessProbe = func(context.Context) bool { return true }
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.probe = func(context.Context) (string, error) {
 		return "26.6.27", nil
 	}
 
@@ -336,7 +336,7 @@ func TestStartCancellationDuringVersionProbeDoesNotCommit(t *testing.T) {
 	manager, _ := newLifecycleManager(t, "hold")
 	manager.readinessProbe = func(context.Context) bool { return true }
 	probeEntered := make(chan struct{})
-	manager.versionProbe = func(ctx context.Context) (string, error) {
+	manager.version.probe = func(ctx context.Context) (string, error) {
 		close(probeEntered)
 		<-ctx.Done()
 		return "", ctx.Err()
@@ -359,11 +359,11 @@ func TestVersionProbePublishesOnlyWithRunningState(t *testing.T) {
 	manager.readinessProbe = func(context.Context) bool { return true }
 	oldVersion := "old"
 	manager.mu.Lock()
-	manager.xrayVersion = &oldVersion
+	manager.version.cached = &oldVersion
 	manager.mu.Unlock()
 	probeEntered := make(chan struct{})
 	releaseProbe := make(chan struct{})
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.probe = func(context.Context) (string, error) {
 		close(probeEntered)
 		<-releaseProbe
 		return "26.6.27", nil
@@ -386,9 +386,9 @@ func TestSuccessfulStartClearsStaleVersionWhenProbeFails(t *testing.T) {
 	manager.readinessProbe = func(context.Context) bool { return true }
 	oldVersion := "old"
 	manager.mu.Lock()
-	manager.xrayVersion = &oldVersion
+	manager.version.cached = &oldVersion
 	manager.mu.Unlock()
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.probe = func(context.Context) (string, error) {
 		return "", errors.New("version failed")
 	}
 
@@ -403,15 +403,15 @@ func TestHealthRetriesUnknownVersionWithSingleFlight(t *testing.T) {
 	probeEntered := make(chan struct{})
 	releaseProbe := make(chan struct{})
 	var probes atomic.Int32
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.probe = func(context.Context) (string, error) {
 		probes.Add(1)
 		close(probeEntered)
 		<-releaseProbe
 		return "26.6.27", nil
 	}
 	manager.mu.Lock()
-	manager.xrayVersion = nil
-	manager.nextVersionProbe = time.Time{}
+	manager.version.cached = nil
+	manager.version.nextProbe = time.Time{}
 	manager.mu.Unlock()
 
 	for range 8 {
@@ -439,7 +439,7 @@ func TestShutdownCancelsAndWaitsForHealthVersionProbe(t *testing.T) {
 	probeEntered := make(chan struct{})
 	probeExited := make(chan struct{})
 	var probes atomic.Int32
-	manager.versionProbe = func(ctx context.Context) (string, error) {
+	manager.version.probe = func(ctx context.Context) (string, error) {
 		probes.Add(1)
 		close(probeEntered)
 		<-ctx.Done()
@@ -447,8 +447,8 @@ func TestShutdownCancelsAndWaitsForHealthVersionProbe(t *testing.T) {
 		return "", ctx.Err()
 	}
 	manager.mu.Lock()
-	manager.xrayVersion = nil
-	manager.nextVersionProbe = time.Time{}
+	manager.version.cached = nil
+	manager.version.nextProbe = time.Time{}
 	manager.mu.Unlock()
 
 	_ = manager.Health()
@@ -461,8 +461,8 @@ func TestShutdownCancelsAndWaitsForHealthVersionProbe(t *testing.T) {
 	awaitSignal(t, probeExited, "canceled health version retry")
 
 	manager.mu.RLock()
-	busy := manager.versionProbeBusy
-	shutdown := manager.versionProbeShutdown
+	busy := manager.version.busy
+	shutdown := manager.version.shutdown
 	manager.mu.RUnlock()
 	if busy || !shutdown {
 		t.Fatalf("version probe state after shutdown: busy=%v shutdown=%v", busy, shutdown)
@@ -479,9 +479,9 @@ func TestHealthVersionProbeDoesNotOverwriteNewerPublishedVersion(t *testing.T) {
 	backgroundProbeEntered := make(chan struct{})
 	releaseBackgroundProbe := make(chan struct{})
 	manager.mu.Lock()
-	manager.xrayVersion = nil
-	manager.nextVersionProbe = time.Time{}
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.cached = nil
+	manager.version.nextProbe = time.Time{}
+	manager.version.probe = func(context.Context) (string, error) {
 		close(backgroundProbeEntered)
 		<-releaseBackgroundProbe
 		return "1.2.3", nil
@@ -491,7 +491,7 @@ func TestHealthVersionProbeDoesNotOverwriteNewerPublishedVersion(t *testing.T) {
 	awaitSignal(t, backgroundProbeEntered, "background health version probe")
 
 	manager.mu.Lock()
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.probe = func(context.Context) (string, error) {
 		return "4.5.6", nil
 	}
 	manager.mu.Unlock()
@@ -503,8 +503,8 @@ func TestHealthVersionProbeDoesNotOverwriteNewerPublishedVersion(t *testing.T) {
 	deadline := time.Now().Add(time.Second)
 	for {
 		manager.mu.RLock()
-		busy := manager.versionProbeBusy
-		version := manager.xrayVersion
+		busy := manager.version.busy
+		version := manager.version.cached
 		manager.mu.RUnlock()
 		if !busy {
 			if version == nil || *version != "4.5.6" {
@@ -525,9 +525,9 @@ func TestHealthVersionProbeMayPublishAcrossLifecycleEpochWhenStillUnknown(t *tes
 	probeEntered := make(chan struct{})
 	releaseProbe := make(chan struct{})
 	manager.mu.Lock()
-	manager.xrayVersion = nil
-	manager.nextVersionProbe = time.Time{}
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.cached = nil
+	manager.version.nextProbe = time.Time{}
+	manager.version.probe = func(context.Context) (string, error) {
 		close(probeEntered)
 		<-releaseProbe
 		return "1.2.3", nil
@@ -537,7 +537,7 @@ func TestHealthVersionProbeMayPublishAcrossLifecycleEpochWhenStillUnknown(t *tes
 	awaitSignal(t, probeEntered, "background health version probe")
 
 	manager.mu.Lock()
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.probe = func(context.Context) (string, error) {
 		return "", errors.New("start probe failed")
 	}
 	manager.mu.Unlock()
@@ -550,8 +550,8 @@ func TestHealthVersionProbeMayPublishAcrossLifecycleEpochWhenStillUnknown(t *tes
 	deadline := time.Now().Add(time.Second)
 	for {
 		manager.mu.RLock()
-		busy := manager.versionProbeBusy
-		version := manager.xrayVersion
+		busy := manager.version.busy
+		version := manager.version.cached
 		manager.mu.RUnlock()
 		if !busy {
 			if version == nil || *version != "1.2.3" {

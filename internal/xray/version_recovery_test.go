@@ -21,7 +21,7 @@ func TestHealthDoesNotRecoverUnknownVersionWhileStarting(t *testing.T) {
 	defer releaseStart()
 	manager.readinessProbe = func(context.Context) bool { return true }
 
-	manager.versionProbe = func(context.Context) (string, error) {
+	manager.version.probe = func(context.Context) (string, error) {
 		if calls.Add(1) == 1 {
 			close(startProbeEntered)
 			<-releaseStartProbe

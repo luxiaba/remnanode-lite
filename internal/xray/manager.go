@@ -55,6 +55,25 @@ type runtimeState struct {
 	inboundTags         map[string]struct{}
 }
 
+// versionState is guarded by Manager.mu. It intentionally shares the
+// Manager's publication boundary with lifecycle state: Health schedules a
+// recovery only while holding that lock, and Shutdown closes the scheduling
+// gate before waiting for an already scheduled recovery.
+type versionState struct {
+	coreOverride string
+	cached       *string
+	probe        func(context.Context) (string, error)
+	busy         bool
+	nextProbe    time.Time
+
+	context      context.Context
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
+	shutdownOnce sync.Once
+	shutdownDone chan struct{}
+	shutdown     bool
+}
+
 type Manager struct {
 	// lifecycleMu serializes process ownership. State publication and
 	// lifecycleMu acquisition/release are performed while mu is held.
@@ -70,11 +89,9 @@ type Manager struct {
 	disableHashCheck bool
 	lowMemory        bool
 	nodeVersion      string
-	coreVersion      string
 	system           SystemSnapshotter
 	torrentBlocker   TorrentBlockerConfigProvider
 
-	xrayVersion      *string
 	state            lifecycleState
 	operationEpoch   uint64
 	nextProcessEpoch uint64
@@ -83,6 +100,7 @@ type Manager struct {
 	process          *processState
 
 	runtime runtimeState
+	version versionState
 
 	readinessProbe      func(context.Context) bool
 	readinessInterval   time.Duration
@@ -92,16 +110,6 @@ type Manager struct {
 	processCommand      func() *exec.Cmd
 	processGroupCleanup func(*os.Process, time.Duration) error
 	processWaitDelay    time.Duration
-	versionProbe        func(context.Context) (string, error)
-	versionProbeBusy    bool
-	nextVersionProbe    time.Time
-
-	versionProbeContext      context.Context
-	versionProbeCancel       context.CancelFunc
-	versionProbeWG           sync.WaitGroup
-	versionProbeShutdownOnce sync.Once
-	versionProbeShutdownDone chan struct{}
-	versionProbeShutdown     bool
 }
 
 const (
@@ -179,27 +187,29 @@ func newManager(opts Options, versionProbe func(context.Context) (string, error)
 	}
 	versionProbeContext, versionProbeCancel := context.WithCancel(lifetime)
 	manager := &Manager{
-		xrayBin:                  opts.XrayBin,
-		geoDir:                   opts.GeoDir,
-		logDir:                   opts.LogDir,
-		socketPath:               opts.InternalSocketPath,
-		token:                    opts.InternalRESTToken,
-		socketPrefix:             socket,
-		disableHashCheck:         opts.DisableHashCheck,
-		lowMemory:                opts.LowMemory,
-		nodeVersion:              strings.TrimSpace(opts.NodeVersion),
-		coreVersion:              coreVersion,
-		system:                   opts.System,
-		torrentBlocker:           opts.TorrentBlocker,
-		readinessInterval:        defaultReadinessInterval,
-		interruptTimeout:         defaultInterruptTimeout,
-		killTimeout:              defaultKillTimeout,
-		processWaitDelay:         defaultProcessWaitDelay,
-		processGroupCleanup:      cleanupOwnedProcessGroup,
-		versionProbe:             versionProbe,
-		versionProbeContext:      versionProbeContext,
-		versionProbeCancel:       versionProbeCancel,
-		versionProbeShutdownDone: make(chan struct{}),
+		xrayBin:             opts.XrayBin,
+		geoDir:              opts.GeoDir,
+		logDir:              opts.LogDir,
+		socketPath:          opts.InternalSocketPath,
+		token:               opts.InternalRESTToken,
+		socketPrefix:        socket,
+		disableHashCheck:    opts.DisableHashCheck,
+		lowMemory:           opts.LowMemory,
+		nodeVersion:         strings.TrimSpace(opts.NodeVersion),
+		system:              opts.System,
+		torrentBlocker:      opts.TorrentBlocker,
+		readinessInterval:   defaultReadinessInterval,
+		interruptTimeout:    defaultInterruptTimeout,
+		killTimeout:         defaultKillTimeout,
+		processWaitDelay:    defaultProcessWaitDelay,
+		processGroupCleanup: cleanupOwnedProcessGroup,
+		version: versionState{
+			coreOverride: coreVersion,
+			probe:        versionProbe,
+			context:      versionProbeContext,
+			cancel:       versionProbeCancel,
+			shutdownDone: make(chan struct{}),
+		},
 	}
 	manager.refreshVersion(versionProbeContext)
 	return manager, nil
@@ -237,20 +247,20 @@ func (m *Manager) torrentBlockerOptions() TorrentBlockerOptions {
 func (m *Manager) Health() HealthResponse {
 	m.mu.Lock()
 	running := m.state == lifecycleRunning
-	version := m.xrayVersion
-	retryVersion := !m.versionProbeShutdown && m.versionProbeContext.Err() == nil && version == nil && m.state != lifecycleStarting && !m.versionProbeBusy &&
-		!time.Now().Before(m.nextVersionProbe)
+	version := m.version.cached
+	retryVersion := !m.version.shutdown && m.version.context.Err() == nil && version == nil && m.state != lifecycleStarting && !m.version.busy &&
+		!time.Now().Before(m.version.nextProbe)
 	var probeContext context.Context
 	if retryVersion {
-		m.versionProbeBusy = true
-		m.nextVersionProbe = time.Now().Add(versionProbeRetry)
-		m.versionProbeWG.Add(1)
-		probeContext = m.versionProbeContext
+		m.version.busy = true
+		m.version.nextProbe = time.Now().Add(versionProbeRetry)
+		m.version.wg.Add(1)
+		probeContext = m.version.context
 	}
 	m.mu.Unlock()
 	if retryVersion {
 		go func() {
-			defer m.versionProbeWG.Done()
+			defer m.version.wg.Done()
 			m.refreshUnknownVersion(probeContext)
 		}()
 	}
@@ -318,7 +328,7 @@ func (m *Manager) refreshVersion(parent context.Context) {
 
 func (m *Manager) probeVersion(parent context.Context) *string {
 	m.mu.RLock()
-	override := m.coreVersion
+	override := m.version.coreOverride
 	m.mu.RUnlock()
 	if override != "" {
 		return &override
@@ -330,7 +340,7 @@ func (m *Manager) probeVersion(parent context.Context) *string {
 	defer cancel()
 
 	m.mu.RLock()
-	probe := m.versionProbe
+	probe := m.version.probe
 	xrayBin := m.xrayBin
 	m.mu.RUnlock()
 
@@ -362,21 +372,21 @@ func (m *Manager) probeVersion(parent context.Context) *string {
 }
 
 func (m *Manager) publishVersionLocked(version *string) {
-	m.xrayVersion = version
+	m.version.cached = version
 	if version == nil {
-		m.nextVersionProbe = time.Now().Add(versionProbeRetry)
+		m.version.nextProbe = time.Now().Add(versionProbeRetry)
 	} else {
-		m.nextVersionProbe = time.Time{}
+		m.version.nextProbe = time.Time{}
 	}
 }
 
 func (m *Manager) refreshUnknownVersion(parent context.Context) {
 	version := m.probeVersion(parent)
 	m.mu.Lock()
-	if !m.versionProbeShutdown && m.xrayVersion == nil && version != nil {
+	if !m.version.shutdown && m.version.cached == nil && version != nil {
 		m.publishVersionLocked(version)
 	}
-	m.versionProbeBusy = false
+	m.version.busy = false
 	m.mu.Unlock()
 }
 
@@ -386,22 +396,22 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	m.versionProbeShutdownOnce.Do(func() {
+	m.version.shutdownOnce.Do(func() {
 		m.mu.Lock()
-		m.versionProbeShutdown = true
-		cancel := m.versionProbeCancel
+		m.version.shutdown = true
+		cancel := m.version.cancel
 		m.mu.Unlock()
 		if cancel != nil {
 			cancel()
 		}
 		go func() {
-			m.versionProbeWG.Wait()
-			close(m.versionProbeShutdownDone)
+			m.version.wg.Wait()
+			close(m.version.shutdownDone)
 		}()
 	})
 
 	select {
-	case <-m.versionProbeShutdownDone:
+	case <-m.version.shutdownDone:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -439,7 +449,7 @@ func extractSemver(raw string) string {
 
 func (m *Manager) startResponse(isStarted bool, message *string) StartResponse {
 	m.mu.RLock()
-	version := m.xrayVersion
+	version := m.version.cached
 	m.mu.RUnlock()
 
 	return StartResponse{
