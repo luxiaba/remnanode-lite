@@ -254,6 +254,7 @@ jobs:
           bash scripts/verify-release-tag.sh --require-missing "$RELEASE_TAG" "$GITHUB_SHA"
 
       - name: Promote the exact image tag before publication
+        id: promote-exact
         if: >-
           steps.release-state.outputs.state == 'absent' ||
           steps.release-state.outputs.state == 'draft'
@@ -263,6 +264,7 @@ jobs:
         run: bash scripts/promote-image-tag.sh immutable "$IMAGE" "$SOURCE_DIGEST" "$VERSION"
 
       - name: Publish the draft Release
+        id: publish-release
         if: >-
           steps.release-state.outputs.state == 'absent' ||
           steps.release-state.outputs.state == 'draft'
@@ -280,6 +282,7 @@ jobs:
           --latest="$MAKE_LATEST"
 
       - name: Verify the immutable Release and every asset
+        id: verify-release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ steps.release.outputs.id }}
@@ -289,6 +292,7 @@ jobs:
         run: bash scripts/verify-published-release.sh "$RELEASE_ID" "$RELEASE_TAG" "$GITHUB_SHA" "$PRERELEASE" "$MAKE_LATEST" dist/release
 
       - name: Confirm the exact image tag after Release verification
+        id: confirm-exact
         env:
           SOURCE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
           VERSION: ${{ needs.verify-candidate.outputs.version }}
@@ -302,6 +306,7 @@ jobs:
         run: bash scripts/require-channel-owner.sh "$RELEASE_TAG" "$PRERELEASE"
 
       - name: Promote the published channel without rebuilding
+        id: promote-channel
         env:
           CHANNEL: ${{ needs.verify-candidate.outputs.channel }}
           SOURCE_DIGEST: ${{ needs.verify-candidate.outputs.candidate_digest }}
