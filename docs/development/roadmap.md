@@ -69,7 +69,11 @@ repository, and GitHub generates the Release notes.
 ## Current focus
 
 - **Now:** Complete release acceptance for the `2.8.0-rnl.1` Native operator
-  experience and qualified Alpine lifecycle.
+  experience and qualified Alpine lifecycle, while reducing maintenance cost in
+  the `rnlctl` command surface, Xray state ownership, and release validation.
+- **Release discipline:** For the next two release cycles, do not add release
+  channels, artifact types, publication state, or proof mechanisms. Reliability
+  and security fixes, and removal of redundant checks, remain in scope.
 - **Next:** Evaluate the next official release detected by automation. Pin its
   source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
@@ -85,7 +89,10 @@ apply the risk-based verification rules in the testing and release guides:
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
 - Revisit the memory tradeoff of a resident active-config copy and runtime `dump-config` only with measured need.
 - P3 test additions remain for top-level `runNode` failure convergence and cancellation of active Unix-server handlers.
-- After the first real production soak, split process supervision, runtime state, or version tracking from `xray.Manager` only when actual change pressure justifies it. Keep the Manager facade and current concurrency invariants.
+- Runtime and version state are now grouped behind the existing `xray.Manager`
+  facade. Extract process supervision only when a concrete change benefits from
+  it; retain the current concurrency invariants and avoid a second lifecycle
+  owner.
 - The rw-core gRPC adapter now has the explicit package path `internal/xrayrpc`. Introduce neutral application types only when they create real decoupling value.
 
 The historical remediation record is archived at [`docs/archive/2026-07-audit-remediation.md`](../archive/2026-07-audit-remediation.md).

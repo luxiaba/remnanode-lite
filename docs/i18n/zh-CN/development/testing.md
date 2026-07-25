@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=3e82d4779ecf4a3ff1e8af530d10e664575e07fa928a1471e0f5e4ee225b73e5 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=b0655eaf6791b595362d3519d1a76526ddcc470654cf7a7c77aaa16670993cfd -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -28,6 +28,7 @@
 | Shell、Docker、workflow 或供应链 | `bash scripts/check-repository.sh` | 中至高 |
 | Native bootstrap 或 bundle 格式 | `sh release/native/install_test.sh`、`go test ./cmd/release-tool` | 中至高 |
 | Native 生命周期或 service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | 高 |
+| `rnlctl` 命令、帮助或补全接口 | `go test ./internal/rnlctl` | 低 |
 | Alpine/OpenRC 宿主机资格验证 | 持久化 Alpine 3.22.x 完整虚拟机的全生命周期与重启测试 | Linux/root |
 | 完整仓库门禁 | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | 高 |
 | Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
@@ -221,6 +222,10 @@ bootstrap fixtures 覆盖精确版本下载、本地归档摘要、`--yes`、`--
 
 `--prepare-only` 只能证明 bundle 校验和宿主文件准备正确；它不会启动服务、应用 cgroup 限制或确认 Alpine/OpenRC 主机符合条件。这些检查在 `rnlctl activate` 时才第一次真正生效。
 
+若改动只涉及命令名称、选项、帮助或补全，先运行
+`go test -count=1 ./internal/rnlctl`。命令定义驱动帮助与补全，但解析器行为和公开输出预期
+仍由独立测试覆盖；不要用同一份定义生成这些测试。
+
 当归档结构、runtime assets 或 release 脚本发生变化时，还要构建并验证真实 bundle：
 
 ```bash
@@ -361,7 +366,7 @@ REQUIRE_GOVULNCHECK=1 \
 
 release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance、Native 资产及其 `release-index.json` digest 绑定；它先创建并校验 draft、晋升精确镜像，再公开并确认 immutable Release，重新确认精确标签后才推进移动通道。若公开成功但 registry 晋升失败，`reconcile-release` 会重新校验 Release 及其已 attestation 的 digest 记录，再恢复精确标签和符合条件的通道，不会重新构建。
 
-具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选冻结与发布步骤见
+具体 tag、版本和 `latest` 语义见[版本策略](../versioning.md)，候选验证与发布步骤见
 [发布流程](../release.md)。
 
 ## 按改动选择测试
@@ -379,6 +384,7 @@ release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance�
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
 | Native bootstrap | `sh release/native/install_test.sh` | 在目标主机安装精确 Release |
 | Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`、`go test -race ./internal/rnlctl` | 改动 Native runtime 行为时实测 systemd 或符合条件的 Alpine/OpenRC 主机 |
+| `rnlctl` 命令接口 | `go test ./internal/rnlctl` | shell 补全语法检查和命令接口回归套件 |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建，以及严格容器限制下的真实候选验证 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |

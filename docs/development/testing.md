@@ -25,6 +25,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Shell, Docker, workflow, or supply chain | `bash scripts/check-repository.sh` | Medium to high |
 | Native bootstrap or bundle format | `sh release/native/install_test.sh`, `go test ./cmd/release-tool` | Medium to high |
 | Native lifecycle state or service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | High |
+| `rnlctl` command, help, or completion surface | `go test ./internal/rnlctl` | Low |
 | Alpine/OpenRC host qualification | Full persistent Alpine 3.22.x VM lifecycle and reboot | Linux/root |
 | Complete repository gate | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | High |
 | Linux network management | Two network-namespace integration tests | Linux/root |
@@ -226,6 +227,12 @@ service.
 does not start the service, apply cgroup limits, or qualify an Alpine/OpenRC
 host. Those checks first become authoritative during `rnlctl activate`.
 
+For a command-name, option, help, or completion-only change, start with
+`go test -count=1 ./internal/rnlctl`. The command specification drives help and
+completion, while parser behavior and public-output expectations remain
+independent tests; do not replace those tests with output generated from the
+same specification.
+
 Build and verify real bundles when the archive shape, runtime assets, or
 release scripts change:
 
@@ -424,6 +431,7 @@ See the [versioning policy](../versioning.md) for tag, version, and channel sema
 | Configuration/Secret/JWT | `config`, `secret`, `auth`, server security | Installer Secret flow |
 | Native bootstrap | `sh release/native/install_test.sh` | Exact-release install on the target host |
 | Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`, `go test -race ./internal/rnlctl` | Real systemd or qualified Alpine/OpenRC host when the change affects Native runtime behavior |
+| `rnlctl` command surface | `go test ./internal/rnlctl` | Shell completion syntax checks and the command-surface regression suite |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build plus risk-driven real-environment verification |
 | Dependency or downloadable asset | `go mod tidy -diff`, supply-chain checks, govulncheck | Dual-architecture build, SBOM, and attestation |
 | Project version | `bash scripts/check-version.sh` | Release preflight |

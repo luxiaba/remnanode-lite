@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d5e10e04646ff547899040110f434fc87dcedea9cba8e44993246690c0a09e91 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=a2dea1856ee23f4d85d6a6277e601276210a6a1301c9c5c1d8bb2ea7cc512a0b -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -315,6 +315,10 @@ HTTP 层还有一层 `xrayLifecycleGate`：
 - 已等待的独占请求会阻止后续 start 插队。
 
 这两层职责不同：HTTP gate 协调跨组件操作，Manager 锁维护真实进程所有权。
+
+版本恢复代码位于 `internal/xray/version.go`，但它不是第二个进程监管器或生命周期所有者。
+`Health()` 在持有 `Manager.mu` 时决定是否安排一次带节流的恢复；`Shutdown()` 在同一把锁内
+关闭调度门，再等待已经安排的工作完成。因此版本结果、生命周期发布和关闭顺序仍在一个原子边界内。
 
 ### 7.2 详细启动链
 

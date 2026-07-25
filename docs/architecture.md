@@ -313,6 +313,13 @@ The HTTP layer adds an `xrayLifecycleGate`:
 
 These two layers have different responsibilities: the HTTP gate coordinates cross-component operations, while Manager locks preserve actual process ownership.
 
+Version recovery is organized in `internal/xray/version.go`, but it is not a
+second supervisor or lifecycle owner. `Health()` decides whether to schedule a
+single throttled recovery while holding `Manager.mu`; `Shutdown()` closes that
+scheduling gate under the same lock before joining already scheduled work. This
+keeps a version result, lifecycle publication, and shutdown ordering on one
+atomic boundary.
+
 ### 7.2 Detailed Startup Sequence
 
 ```mermaid
