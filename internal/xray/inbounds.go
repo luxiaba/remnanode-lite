@@ -25,13 +25,6 @@ func extractInboundTags(config map[string]any) []string {
 	return tags
 }
 
-func (m *Manager) resetInboundTags(tags []string) {
-	m.runtime.inboundTags = make(map[string]struct{}, len(tags))
-	for _, tag := range tags {
-		m.runtime.inboundTags[tag] = struct{}{}
-	}
-}
-
 func (m *Manager) AddInboundTag(tag string) {
 	if tag == "" {
 		return

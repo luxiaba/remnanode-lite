@@ -30,7 +30,8 @@ func TestManagerInboundTags(t *testing.T) {
 	t.Parallel()
 
 	manager := &Manager{}
-	manager.resetInboundTags([]string{"a", "b"})
+	manager.AddInboundTag("a")
+	manager.AddInboundTag("b")
 	manager.AddInboundTag("c")
 
 	tags := manager.InboundTags()

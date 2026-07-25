@@ -1017,15 +1017,17 @@ func assertStoppedAndCleared(t *testing.T, manager *Manager) {
 	if snapshot.state != lifecycleStopped || snapshot.process != nil {
 		t.Fatalf("manager not stopped: state=%s process=%v", snapshot.state, snapshot.process != nil)
 	}
-	if len(snapshot.pendingConfigJSON) != 0 || snapshot.runtimeProcessEpoch != 0 ||
-		snapshot.emptyConfigHash != "" || snapshot.inboundHashCount != 0 || snapshot.inboundTagCount != 0 {
+	if snapshot.pendingConfigSet || snapshot.runtimeProcessEpoch != 0 || snapshot.emptyConfigHash != "" ||
+		snapshot.inboundHashesSet || snapshot.inboundTagsSet {
 		t.Fatalf(
-			"runtime state not cleared: pending=%v processEpoch=%d empty=%q hashes=%d tags=%d",
-			len(snapshot.pendingConfigJSON) != 0,
+			"runtime state not cleared: pending=%v processEpoch=%d empty=%q hashes=%d/%v tags=%d/%v",
+			snapshot.pendingConfigSet,
 			snapshot.runtimeProcessEpoch,
 			snapshot.emptyConfigHash,
 			snapshot.inboundHashCount,
+			snapshot.inboundHashesSet,
 			snapshot.inboundTagCount,
+			snapshot.inboundTagsSet,
 		)
 	}
 }
