@@ -293,40 +293,27 @@ func (engine *Engine) Activate(ctx context.Context, request ActivateRequest) (Re
 }
 
 func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Result, error) {
-	input, cleanup, err := engine.resolveBundleInput(ctx, request.Bundle, request.To)
+	bundle, cleanup, err := engine.prepareUpgradeCandidate(ctx, request)
 	if err != nil {
 		return Result{}, err
 	}
 	defer cleanup()
-	bundle, err := openBundle(input, engine.architecture)
-	if err != nil {
-		return Result{}, err
-	}
-	defer bundle.Close()
-	if err := engine.requirePrivileges(); err != nil {
-		return Result{}, err
-	}
 	lock, err := acquireOperationLock(engine.paths)
 	if err != nil {
 		return Result{}, err
 	}
 	defer lock.Close()
-	state, err := engine.requireCleanState()
+	inspection, err := engine.inspectUpgrade(ctx, bundle)
 	if err != nil {
 		return Result{}, err
 	}
-	oldRecord := state.Generations[state.Current]
-	superseded, hasSuperseded := state.Generations[state.Previous]
-	if oldRecord.Identity == bundle.Identity {
+	state := inspection.state
+	oldRecord := inspection.current
+	superseded, hasSuperseded := inspection.superseded, inspection.hasPrevious
+	if !inspection.plan.ChangeRequired {
 		return Result{Operation: "upgrade", Generation: oldRecord.ID, Version: oldRecord.Version}, nil
 	}
-	serviceBefore, err := engine.host.ServiceStatus(ctx)
-	if err != nil {
-		return Result{}, err
-	}
-	if err := engine.host.Preflight(ctx, serviceBefore.Active, engine.paths); err != nil {
-		return Result{}, err
-	}
+	serviceBefore := inspection.plan.Service
 	desired := desiredServiceState{Enabled: serviceBefore.Enabled, Active: serviceBefore.Active}
 	cache, cacheCreated, err := cacheBundle(bundle, engine.paths.BundleCache)
 	if err != nil {
@@ -339,16 +326,20 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 		Account: state.Account, StartedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := saveJournal(engine.paths, journal); err != nil {
-		if cacheCreated {
-			_ = os.Remove(cache.Path)
-		}
-		return Result{}, err
+		cleanupErr := engine.discardStagedUpgrade(record, cacheCreated, false)
+		return Result{}, errors.Join(err, cleanupErr)
 	}
 	generationCreated := false
+	transitionStarted := false
 	rollback := func(cause error) (Result, error) {
-		rollbackErr := engine.rollbackTransition(ctx, *state, desired, record, cacheCreated, generationCreated)
+		var rollbackErr error
+		if transitionStarted {
+			rollbackErr = engine.rollbackTransition(ctx, *state, desired, record, cacheCreated, generationCreated)
+		} else {
+			rollbackErr = engine.discardStagedUpgrade(record, cacheCreated, generationCreated)
+		}
 		if rollbackErr == nil {
-			_ = clearJournal(engine.paths)
+			rollbackErr = clearJournal(engine.paths)
 		}
 		return Result{}, errors.Join(cause, rollbackErr)
 	}
@@ -361,7 +352,16 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	if err := saveJournal(engine.paths, journal); err != nil {
 		return rollback(err)
 	}
+	if err := engine.host.ValidateBinary(
+		ctx,
+		filepath.Join(targetRoot, "bin", "remnanode-lite"),
+		record.Version,
+		record.ContractVersion,
+	); err != nil {
+		return rollback(err)
+	}
 	if serviceBefore.Active {
+		transitionStarted = true
 		if err := engine.host.SetActive(ctx, false); err != nil {
 			return rollback(err)
 		}
@@ -372,6 +372,7 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	if err := engine.ensureRuntimeDirectories(); err != nil {
 		return rollback(err)
 	}
+	transitionStarted = true
 	if err := engine.selectGeneration(record.ID, oldRecord.ID); err != nil {
 		return rollback(err)
 	}
@@ -540,8 +541,8 @@ func (engine *Engine) resolveBundleInput(ctx context.Context, input BundleInput,
 		}
 		return input, func() {}, nil
 	}
-	if input.Root != "" || input.Archive != "" {
-		return BundleInput{}, func() {}, fmt.Errorf("--to cannot be combined with --bundle-root or --bundle")
+	if input.Root != "" || input.Archive != "" || input.SHA256 != "" || input.ExpectedVersion != "" {
+		return BundleInput{}, func() {}, fmt.Errorf("--to cannot be combined with local bundle options")
 	}
 	if !projectVersionRE.MatchString(version) {
 		return BundleInput{}, func() {}, fmt.Errorf("--to requires an exact version such as 2.8.0 or 2.8.0-rnl.1")
@@ -742,6 +743,7 @@ func (engine *Engine) rollbackTransition(ctx context.Context, old persistentStat
 	}
 	if err := saveState(engine.paths, old); err != nil {
 		errs = append(errs, err)
+		return errors.Join(errs...)
 	}
 	if generationCreated {
 		errs = appendIf(errs, os.RemoveAll(filepath.Join(engine.paths.Generations, target.ID)))
@@ -758,11 +760,12 @@ func (engine *Engine) removeSuperseded(record generationRecord, keep persistentS
 	if record.ID == "" {
 		return nil
 	}
-	if _, retained := keep.Generations[record.ID]; retained {
-		return nil
-	}
-	if err := os.RemoveAll(filepath.Join(engine.paths.Generations, record.ID)); err != nil {
-		return err
+	// Re-selecting a retained generation keeps its payload but may replace its
+	// repair cache with a separately staged verified archive.
+	if _, retained := keep.Generations[record.ID]; !retained {
+		if err := os.RemoveAll(filepath.Join(engine.paths.Generations, record.ID)); err != nil {
+			return err
+		}
 	}
 	for _, retained := range keep.Generations {
 		if retained.CacheFile == record.CacheFile {

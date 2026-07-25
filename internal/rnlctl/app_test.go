@@ -3,11 +3,14 @@ package rnlctl
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 type recordingRunner struct {
@@ -19,13 +22,18 @@ type fakeLifecycle struct {
 	installRequest   *InstallRequest
 	activateRequest  *ActivateRequest
 	upgradeRequest   *UpgradeRequest
+	preflightRequest *UpgradeRequest
 	rollbackRequest  *RollbackRequest
 	repairRequest    *RepairRequest
 	uninstallRequest *UninstallRequest
+	configRequest    *ConfigurationUpdateRequest
+	secretRequest    *SecretUpdateRequest
 	called           []string
 	result           Result
 	status           Status
 	doctor           DoctorReport
+	upgradePlan      UpgradePlan
+	configuration    Configuration
 	err              error
 }
 
@@ -45,6 +53,12 @@ func (l *fakeLifecycle) Upgrade(_ context.Context, request UpgradeRequest) (Resu
 	l.called = append(l.called, "upgrade")
 	l.upgradeRequest = &request
 	return l.result, l.err
+}
+
+func (l *fakeLifecycle) PreflightUpgrade(_ context.Context, request UpgradeRequest) (UpgradePlan, error) {
+	l.called = append(l.called, "upgrade-preflight")
+	l.preflightRequest = &request
+	return l.upgradePlan, l.err
 }
 
 func (l *fakeLifecycle) Rollback(_ context.Context, request RollbackRequest) (Result, error) {
@@ -90,6 +104,33 @@ func (l *fakeLifecycle) Restart(context.Context) (Result, error) {
 	return l.result, l.err
 }
 
+func (l *fakeLifecycle) ReadConfiguration(context.Context) (Configuration, error) {
+	l.called = append(l.called, "config-read")
+	return l.configuration, l.err
+}
+
+func (l *fakeLifecycle) UpdateConfiguration(_ context.Context, request ConfigurationUpdateRequest) (Result, error) {
+	l.called = append(l.called, "config-update")
+	l.configRequest = &request
+	return l.result, l.err
+}
+
+func (l *fakeLifecycle) CheckConfiguration(context.Context) error {
+	l.called = append(l.called, "config-check")
+	return l.err
+}
+
+func (l *fakeLifecycle) ApplyConfiguration(context.Context) (Result, error) {
+	l.called = append(l.called, "config-apply")
+	return l.result, l.err
+}
+
+func (l *fakeLifecycle) SetSecret(_ context.Context, request SecretUpdateRequest) (Result, error) {
+	l.called = append(l.called, "secret-set")
+	l.secretRequest = &request
+	return l.result, l.err
+}
+
 func (r *recordingRunner) Run(_ context.Context, command Command) int {
 	command.Args = append([]string(nil), command.Args...)
 	r.commands = append(r.commands, command)
@@ -109,6 +150,8 @@ func TestAppHelpAndVersionDoNotRunExternalCommands(t *testing.T) {
 		{name: "version", args: []string{"version"}, want: "rnlctl test-version\n"},
 		{name: "version flag", args: []string{"--version"}, want: "rnlctl test-version\n"},
 		{name: "command help", args: []string{"status", "--help"}, want: "Usage: rnlctl status [--json]\n"},
+		{name: "config help", args: []string{"config", "--help"}, want: "Usage: rnlctl config"},
+		{name: "secret help", args: []string{"secret", "--help"}, want: "Usage: rnlctl secret set"},
 		{name: "logs help", args: []string{"logs", "core", "--help"}, want: "Usage: rnlctl logs"},
 	}
 
@@ -151,6 +194,20 @@ func TestAppRejectsMalformedCommands(t *testing.T) {
 		{"rollback", "--to", "one", "extra"},
 		{"repair", "--bundle", "/bundle.tar.gz", "--sha256"},
 		{"uninstall", "--purge", "extra"},
+		{"config"},
+		{"config", "show", "extra"},
+		{"config", "get", "SECRET_KEY"},
+		{"config", "set"},
+		{"config", "set", "INTERNAL_REST_TOKEN=value"},
+		{"config", "set", "NODE_PORT=12345", "NODE_PORT=2222"},
+		{"config", "set", "NODE_PORT=12345", "--apply", "--apply"},
+		{"config", "unset"},
+		{"config", "unset", "XRAY_BIN"},
+		{"config", "check", "extra"},
+		{"config", "apply", "extra"},
+		{"secret"},
+		{"secret", "set"},
+		{"secret", "set", "--file", "/one", "--file", "/two"},
 		{"status", "extra"},
 		{"doctor", "extra"},
 		{"start", "extra"},
@@ -164,6 +221,14 @@ func TestAppRejectsMalformedCommands(t *testing.T) {
 		{"logs", "node", "--lines", "0"},
 		{"logs", "node", "--lines", "100001"},
 		{"logs", "node", "--lines", "not-a-number"},
+		{"logs", "node", "--follow", "-f"},
+		{"logs", "node", "--lines", "10", "-n", "20"},
+		{"logs", "node", "--since"},
+		{"logs", "node", "--since", "0s"},
+		{"logs", "node", "--since", "15m", "--since=1h"},
+		{"logs", "core", "--since", "15m"},
+		{"--quiet", "-q", "status"},
+		{"--no-color", "status", "--no-color"},
 		{"unknown"},
 	}
 
@@ -192,98 +257,53 @@ func TestAppRejectsMalformedCommands(t *testing.T) {
 	}
 }
 
-func TestAppDispatchesHumanStatusToSystemdAndPreservesExitCode(t *testing.T) {
-	runner := &recordingRunner{exitCode: 23}
-	application := New(Options{
-		Runner: runner,
-		LookPath: executableFinder(map[string]string{
-			"systemctl":  "/usr/bin/systemctl",
-			"rc-service": "/sbin/rc-service",
-		}),
-		PathExists: func(string) bool { return false },
-		Stdout:     io.Discard,
-		Stderr:     io.Discard,
-	})
-
-	if code := application.Run(context.Background(), []string{"status"}); code != 23 {
-		t.Fatalf("Run(status) = %d, want child exit 23", code)
-	}
-	assertSingleCommand(t, runner, "/usr/bin/systemctl", []string{"--no-pager", "--full", "status", "remnanode-lite.service"})
-}
-
-func TestAppDispatchesHumanStatusToOpenRC(t *testing.T) {
-	runner := &recordingRunner{exitCode: 17}
-	application := New(Options{
-		Runner:   runner,
-		LookPath: executableFinder(map[string]string{"rc-service": "/sbin/rc-service"}),
-		Stdout:   io.Discard,
-		Stderr:   io.Discard,
-	})
-
-	if code := application.Run(context.Background(), []string{"status"}); code != 17 {
-		t.Fatalf("Run(status) = %d, want child exit 17", code)
-	}
-	assertSingleCommand(t, runner, "/sbin/rc-service", []string{"remnanode-lite", "status"})
-}
-
-func TestAppUsesActiveOpenRCWhenBothServiceClientsExist(t *testing.T) {
-	runner := &recordingRunner{}
-	application := New(Options{
-		Runner: runner,
-		LookPath: executableFinder(map[string]string{
-			"systemctl":  "/usr/bin/systemctl",
-			"rc-service": "/sbin/rc-service",
-		}),
-		PathExists: func(path string) bool {
-			return path == openRCRuntime
+func TestAppRendersHumanStatusFromLifecycle(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   Status
+		wantExit int
+		want     []string
+	}{
+		{
+			name: "healthy installed",
+			status: Status{
+				SchemaVersion: 1, Deployment: "installed", Installed: true, Healthy: true,
+				Version: "2.8.0", Generation: "generation-a", Previous: "generation-b",
+				Service:          ServiceStatus{Manager: "systemd", Enabled: true, Active: true},
+				RepairCapability: "verified-archive",
+			},
+			want: []string{"Remnanode Lite", "State:       installed", "Health:      healthy", "Version:     2.8.0", "Service:     systemd (enabled, active)"},
 		},
-		Stdout: io.Discard,
-		Stderr: io.Discard,
-	})
-
-	if code := application.Run(context.Background(), []string{"status"}); code != 0 {
-		t.Fatalf("Run(status) = %d", code)
+		{
+			name:     "recovery required",
+			status:   Status{SchemaVersion: 1, Deployment: "recovery-required", Installed: true, Problems: []string{"interrupted upgrade"}},
+			wantExit: 1,
+			want:     []string{"Health:      unhealthy", "Problems:", "interrupted upgrade", "Next:        sudo rnlctl repair"},
+		},
+		{
+			name:   "absent",
+			status: Status{SchemaVersion: 1, Deployment: "absent", Healthy: true},
+			want:   []string{"State:       absent", "Health:      not installed"},
+		},
 	}
-	assertSingleCommand(t, runner, "/sbin/rc-service", []string{"remnanode-lite", "status"})
-}
-
-func TestAppPrefersSystemdWhenBothRuntimeMarkersExist(t *testing.T) {
-	runner := &recordingRunner{}
-	application := New(Options{
-		Runner: runner,
-		LookPath: executableFinder(map[string]string{
-			"systemctl":  "/usr/bin/systemctl",
-			"rc-service": "/sbin/rc-service",
-		}),
-		PathExists: func(string) bool { return true },
-		Stdout:     io.Discard,
-		Stderr:     io.Discard,
-	})
-
-	if code := application.Run(context.Background(), []string{"status"}); code != 0 {
-		t.Fatalf("Run(status) = %d", code)
-	}
-	assertSingleCommand(t, runner, "/usr/bin/systemctl", []string{"--no-pager", "--full", "status", "remnanode-lite.service"})
-}
-
-func TestAppReportsMissingServiceManager(t *testing.T) {
-	runner := &recordingRunner{}
-	var stderr bytes.Buffer
-	application := New(Options{
-		Runner:   runner,
-		LookPath: missingExecutable,
-		Stdout:   io.Discard,
-		Stderr:   &stderr,
-	})
-
-	if code := application.Run(context.Background(), []string{"status"}); code != 1 {
-		t.Fatalf("Run(status) = %d, stderr = %q", code, stderr.String())
-	}
-	if !strings.Contains(stderr.String(), "neither systemctl nor rc-service") {
-		t.Fatalf("stderr = %q", stderr.String())
-	}
-	if len(runner.commands) != 0 {
-		t.Fatalf("external commands = %#v", runner.commands)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			runner := &recordingRunner{}
+			lifecycle := &fakeLifecycle{status: test.status}
+			var stdout, stderr bytes.Buffer
+			application := New(Options{Lifecycle: lifecycle, Runner: runner, Stdout: &stdout, Stderr: &stderr})
+			if code := application.Run(context.Background(), []string{"status"}); code != test.wantExit {
+				t.Fatalf("Run(status) = %d, want %d; stderr = %q", code, test.wantExit, stderr.String())
+			}
+			for _, want := range test.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+				}
+			}
+			if len(runner.commands) != 0 || !reflect.DeepEqual(lifecycle.called, []string{"status"}) {
+				t.Fatalf("runner commands = %#v, lifecycle calls = %q", runner.commands, lifecycle.called)
+			}
+		})
 	}
 }
 
@@ -319,10 +339,10 @@ func TestAppRendersDoctorReports(t *testing.T) {
 	for _, test := range []struct {
 		name string
 		args []string
-		want string
+		want []string
 	}{
-		{name: "text", args: []string{"doctor"}, want: "[OK] lifecycle-state - generation-a\n[WARNING] configuration\n"},
-		{name: "json", args: []string{"doctor", "--json"}, want: `"schemaVersion":1`},
+		{name: "text", args: []string{"doctor"}, want: []string{"[OK]    lifecycle-state - generation-a", "[WARN]  configuration", "Result: healthy with warnings (2 checks, 0 errors, 1 warnings)"}},
+		{name: "json", args: []string{"doctor", "--json"}, want: []string{`"schemaVersion":1`}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			lifecycle := &fakeLifecycle{doctor: report}
@@ -331,8 +351,10 @@ func TestAppRendersDoctorReports(t *testing.T) {
 			if code := application.Run(context.Background(), test.args); code != 0 {
 				t.Fatalf("Run(%q) = %d, stderr = %q", test.args, code, stderr.String())
 			}
-			if !strings.Contains(stdout.String(), test.want) {
-				t.Fatalf("stdout = %q, want %q", stdout.String(), test.want)
+			for _, want := range test.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+				}
 			}
 			if !reflect.DeepEqual(lifecycle.called, []string{"doctor"}) {
 				t.Fatalf("lifecycle calls = %q", lifecycle.called)
@@ -349,9 +371,9 @@ func TestAppMapsLifecycleCommandFlags(t *testing.T) {
 	}{
 		{
 			name: "install",
-			args: []string{"install", "--bundle-root", "/bundle", "--expected-version", "2.8.0-rnl.1", "--port", "38329", "--secret-file", "/secret", "--prepare-only"},
+			args: []string{"install", "--bundle-root", "/bundle", "--expected-version", "2.8.0-rnl.1", "--port", "12345", "--secret-file", "/secret", "--prepare-only"},
 			assert: func(t *testing.T, lifecycle *fakeLifecycle) {
-				want := InstallRequest{Bundle: BundleInput{Root: "/bundle", ExpectedVersion: "2.8.0-rnl.1"}, Port: 38329, SecretFile: "/secret", PrepareOnly: true}
+				want := InstallRequest{Bundle: BundleInput{Root: "/bundle", ExpectedVersion: "2.8.0-rnl.1"}, Port: 12345, SecretFile: "/secret", PrepareOnly: true}
 				if lifecycle.installRequest == nil || !reflect.DeepEqual(*lifecycle.installRequest, want) {
 					t.Fatalf("install request = %#v, want %#v", lifecycle.installRequest, want)
 				}
@@ -464,6 +486,175 @@ func TestAppStatusJSONUsesLifecycleHealth(t *testing.T) {
 	}
 }
 
+func TestAppRendersUpgradePreflight(t *testing.T) {
+	plan := UpgradePlan{
+		SchemaVersion: 1, ChangeRequired: true,
+		CurrentVersion: "2.8.0", CurrentGeneration: "generation-a",
+		TargetVersion: "2.8.0-rnl.1", TargetGeneration: "generation-b",
+		Service: ServiceStatus{Manager: "systemd", Enabled: true, Active: true},
+	}
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "human", args: []string{"upgrade", "--to", "2.8.0-rnl.1", "--dry-run"}, want: "Known preconditions passed"},
+		{name: "json", args: []string{"upgrade", "--dry-run", "--json", "--to", "2.8.0-rnl.1"}, want: `"changeRequired":true`},
+		{name: "quiet remains explicit", args: []string{"--quiet", "upgrade", "--to", "2.8.0-rnl.1", "--dry-run"}, want: "Upgrade preflight"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			lifecycle := &fakeLifecycle{upgradePlan: plan}
+			var stdout, stderr bytes.Buffer
+			application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+			if code := application.Run(context.Background(), test.args); code != exitOK {
+				t.Fatalf("Run(%q) = %d, stderr = %q", test.args, code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), test.want) {
+				t.Fatalf("stdout = %q, want %q", stdout.String(), test.want)
+			}
+			wantRequest := UpgradeRequest{To: "2.8.0-rnl.1"}
+			if lifecycle.preflightRequest == nil || !reflect.DeepEqual(*lifecycle.preflightRequest, wantRequest) {
+				t.Fatalf("preflight request = %#v, want %#v", lifecycle.preflightRequest, wantRequest)
+			}
+			if !reflect.DeepEqual(lifecycle.called, []string{"upgrade-preflight"}) {
+				t.Fatalf("lifecycle calls = %q", lifecycle.called)
+			}
+		})
+	}
+
+	lifecycle := &fakeLifecycle{}
+	var stdout, stderr bytes.Buffer
+	application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+	if code := application.Run(context.Background(), []string{"upgrade", "--to", "2.8.0-rnl.1", "--json"}); code != exitUsage {
+		t.Fatalf("upgrade --json = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
+	}
+	if len(lifecycle.called) != 0 || !strings.Contains(stderr.String(), "--json requires --dry-run") {
+		t.Fatalf("lifecycle calls = %q, stderr = %q", lifecycle.called, stderr.String())
+	}
+}
+
+func TestAppConfigurationAndSecretCommands(t *testing.T) {
+	values := map[string]string{
+		"NODE_PORT":                "2222",
+		"NODE_BIND_ADDR":           "127.0.0.1",
+		"LOW_MEMORY":               "1",
+		"BODY_LIMIT_MB":            "",
+		"GOMEMLIMIT":               "180MiB",
+		"DISABLE_HASHED_SET_CHECK": "false",
+	}
+
+	t.Run("show and get", func(t *testing.T) {
+		for _, test := range []struct {
+			args       []string
+			wantOutput string
+		}{
+			{args: []string{"config", "show"}, wantOutput: "NODE_PORT=2222\nNODE_BIND_ADDR=127.0.0.1\n"},
+			{args: []string{"config", "show", "--json"}, wantOutput: `"NODE_PORT":"2222"`},
+			{args: []string{"config", "get", "GOMEMLIMIT"}, wantOutput: "180MiB\n"},
+		} {
+			lifecycle := &fakeLifecycle{configuration: Configuration{SchemaVersion: 1, Path: "/etc/remnanode-lite/node.env", Values: values}}
+			var stdout, stderr bytes.Buffer
+			application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+			if code := application.Run(context.Background(), test.args); code != 0 {
+				t.Fatalf("Run(%q) = %d, stderr = %q", test.args, code, stderr.String())
+			}
+			if !strings.Contains(stdout.String(), test.wantOutput) || strings.Contains(stdout.String(), "SECRET") {
+				t.Fatalf("stdout = %q, want %q without Secret data", stdout.String(), test.wantOutput)
+			}
+			if !reflect.DeepEqual(lifecycle.called, []string{"config-read"}) {
+				t.Fatalf("lifecycle calls = %q", lifecycle.called)
+			}
+		}
+	})
+
+	t.Run("show JSON schema", func(t *testing.T) {
+		lifecycle := &fakeLifecycle{configuration: Configuration{
+			SchemaVersion: 1,
+			Path:          "/etc/remnanode-lite/node.env",
+			Values:        values,
+		}}
+		var stdout, stderr bytes.Buffer
+		application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+		if code := application.Run(context.Background(), []string{"config", "show", "--json"}); code != 0 {
+			t.Fatalf("Run(config show --json) = %d, stderr = %q", code, stderr.String())
+		}
+		var envelope map[string]json.RawMessage
+		if err := json.Unmarshal(stdout.Bytes(), &envelope); err != nil {
+			t.Fatalf("decode config JSON: %v", err)
+		}
+		for _, key := range []string{"schemaVersion", "path", "values"} {
+			if _, exists := envelope[key]; !exists {
+				t.Fatalf("config JSON is missing %q: %s", key, stdout.String())
+			}
+		}
+		var outputValues map[string]string
+		if err := json.Unmarshal(envelope["values"], &outputValues); err != nil {
+			t.Fatalf("decode config values: %v", err)
+		}
+		if len(envelope) != 3 || len(outputValues) != len(editableConfigurationKeys) {
+			t.Fatalf("config JSON schema = %s", stdout.String())
+		}
+		for _, forbidden := range []string{"SECRET_KEY", "SECRET_KEY_FILE", "INTERNAL_REST_TOKEN", "XRAY_BIN"} {
+			if bytes.Contains(stdout.Bytes(), []byte(forbidden)) {
+				t.Fatalf("config JSON exposed %s: %s", forbidden, stdout.String())
+			}
+		}
+	})
+
+	tests := []struct {
+		name   string
+		args   []string
+		called string
+		assert func(*testing.T, *fakeLifecycle)
+	}{
+		{
+			name: "set", args: []string{"config", "set", "NODE_PORT=12345", "LOW_MEMORY=1", "--apply"}, called: "config-update",
+			assert: func(t *testing.T, lifecycle *fakeLifecycle) {
+				want := ConfigurationUpdateRequest{Set: map[string]string{"NODE_PORT": "12345", "LOW_MEMORY": "1"}, Apply: true}
+				if lifecycle.configRequest == nil || !reflect.DeepEqual(*lifecycle.configRequest, want) {
+					t.Fatalf("config request = %#v, want %#v", lifecycle.configRequest, want)
+				}
+			},
+		},
+		{
+			name: "unset", args: []string{"config", "unset", "BODY_LIMIT_MB", "GOMEMLIMIT"}, called: "config-update",
+			assert: func(t *testing.T, lifecycle *fakeLifecycle) {
+				want := ConfigurationUpdateRequest{Unset: []string{"BODY_LIMIT_MB", "GOMEMLIMIT"}}
+				if lifecycle.configRequest == nil || !reflect.DeepEqual(*lifecycle.configRequest, want) {
+					t.Fatalf("config request = %#v, want %#v", lifecycle.configRequest, want)
+				}
+			},
+		},
+		{name: "check", args: []string{"config", "check"}, called: "config-check"},
+		{name: "apply", args: []string{"config", "apply"}, called: "config-apply"},
+		{
+			name: "secret", args: []string{"secret", "set", "--file", "/root/new-secret.key", "--apply"}, called: "secret-set",
+			assert: func(t *testing.T, lifecycle *fakeLifecycle) {
+				want := SecretUpdateRequest{File: "/root/new-secret.key", Apply: true}
+				if lifecycle.secretRequest == nil || *lifecycle.secretRequest != want {
+					t.Fatalf("secret request = %#v, want %#v", lifecycle.secretRequest, want)
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lifecycle := &fakeLifecycle{result: Result{Operation: test.called, Changed: true}}
+			var stdout, stderr bytes.Buffer
+			application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+			if code := application.Run(context.Background(), test.args); code != 0 {
+				t.Fatalf("Run(%q) = %d, stderr = %q", test.args, code, stderr.String())
+			}
+			if !reflect.DeepEqual(lifecycle.called, []string{test.called}) {
+				t.Fatalf("lifecycle calls = %q, want %q", lifecycle.called, test.called)
+			}
+			if test.assert != nil {
+				test.assert(t, lifecycle)
+			}
+		})
+	}
+}
+
 func TestAppLifecycleErrorsReturnFailureWithoutExternalCommands(t *testing.T) {
 	runner := &recordingRunner{}
 	lifecycle := &fakeLifecycle{err: errors.New("lifecycle unavailable")}
@@ -473,7 +664,7 @@ func TestAppLifecycleErrorsReturnFailureWithoutExternalCommands(t *testing.T) {
 	if code := application.Run(context.Background(), []string{"restart"}); code != 1 {
 		t.Fatalf("Run(restart) = %d, stdout = %q, stderr = %q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "lifecycle unavailable") {
+	if !strings.Contains(stderr.String(), "rnlctl: restart: lifecycle unavailable") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 	if len(runner.commands) != 0 {
@@ -503,6 +694,49 @@ func TestAppDispatchesSystemdNodeLogs(t *testing.T) {
 		"--lines", "125",
 		"--follow",
 	})
+}
+
+func TestAppDispatchesSystemdNodeLogsSince(t *testing.T) {
+	runner := &recordingRunner{}
+	now := time.Date(2026, time.July, 24, 12, 0, 0, 0, time.UTC)
+	application := New(Options{
+		Runner: runner,
+		LookPath: executableFinder(map[string]string{
+			"systemctl":  "/usr/bin/systemctl",
+			"journalctl": "/usr/bin/journalctl",
+		}),
+		Now:    func() time.Time { return now },
+		Stdout: io.Discard,
+		Stderr: io.Discard,
+	})
+
+	args := []string{"logs", "node", "--since=15m", "--lines", "20"}
+	if code := application.Run(context.Background(), args); code != exitOK {
+		t.Fatalf("Run(%q) = %d", args, code)
+	}
+	assertSingleCommand(t, runner, "/usr/bin/journalctl", []string{
+		"--no-pager",
+		"--unit", "remnanode-lite.service",
+		"--lines", "20",
+		"--since=@" + strconv.FormatInt(now.Add(-15*time.Minute).Unix(), 10),
+	})
+}
+
+func TestAppRejectsLogsSinceOnOpenRC(t *testing.T) {
+	runner := &recordingRunner{}
+	var stderr bytes.Buffer
+	application := New(Options{
+		Runner:   runner,
+		LookPath: executableFinder(map[string]string{"rc-service": "/sbin/rc-service", "tail": "/usr/bin/tail"}),
+		Stdout:   io.Discard,
+		Stderr:   &stderr,
+	})
+	if code := application.Run(context.Background(), []string{"logs", "node", "--since", "15m"}); code != exitFailure {
+		t.Fatalf("Run(logs node --since) = %d, stderr = %q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "systemd") || len(runner.commands) != 0 {
+		t.Fatalf("stderr = %q, commands = %#v", stderr.String(), runner.commands)
+	}
 }
 
 func TestAppDispatchesOpenRCNodeLogs(t *testing.T) {
@@ -625,6 +859,31 @@ func TestAppReportsOutputWriteFailure(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "write output") {
 		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestAppReportsHumanAndJSONWriteFailures(t *testing.T) {
+	tests := []struct {
+		name      string
+		args      []string
+		lifecycle *fakeLifecycle
+	}{
+		{name: "human status", args: []string{"status"}, lifecycle: &fakeLifecycle{status: Status{Deployment: "installed", Healthy: true}}},
+		{name: "JSON status", args: []string{"status", "--json"}, lifecycle: &fakeLifecycle{status: Status{Deployment: "installed", Healthy: true}}},
+		{name: "human doctor", args: []string{"doctor"}, lifecycle: &fakeLifecycle{doctor: DoctorReport{Healthy: true}}},
+		{name: "JSON doctor", args: []string{"doctor", "--json"}, lifecycle: &fakeLifecycle{doctor: DoctorReport{Healthy: true}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var stderr bytes.Buffer
+			application := New(Options{Lifecycle: test.lifecycle, Stdout: failingWriter{}, Stderr: &stderr})
+			if code := application.Run(context.Background(), test.args); code != exitFailure {
+				t.Fatalf("Run(%q) = %d, stderr = %q", test.args, code, stderr.String())
+			}
+			if !strings.Contains(stderr.String(), "write") {
+				t.Fatalf("stderr = %q", stderr.String())
+			}
+		})
 	}
 }
 

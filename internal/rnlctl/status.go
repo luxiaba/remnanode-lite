@@ -11,8 +11,13 @@ import (
 	"time"
 )
 
+const (
+	statusSchemaVersion = 1
+	doctorSchemaVersion = 1
+)
+
 func (engine *Engine) Status(ctx context.Context) (Status, error) {
-	status := Status{SchemaVersion: stateSchemaVersion, Deployment: "absent", Healthy: true}
+	status := Status{SchemaVersion: statusSchemaVersion, Deployment: "absent", Healthy: true}
 	state, err := loadState(engine.paths)
 	if err != nil {
 		status.Deployment = "recovery-required"
@@ -102,7 +107,7 @@ func (engine *Engine) Status(ctx context.Context) (Status, error) {
 }
 
 func (engine *Engine) Doctor(ctx context.Context) (DoctorReport, error) {
-	report := DoctorReport{SchemaVersion: stateSchemaVersion, Healthy: true}
+	report := DoctorReport{SchemaVersion: doctorSchemaVersion, Healthy: true}
 	status, err := engine.Status(ctx)
 	if err != nil {
 		return DoctorReport{}, err
@@ -251,6 +256,23 @@ func (engine *Engine) verifyIndependentControl(record generationRecord) error {
 }
 
 func (engine *Engine) checkManagedPermissions(state persistentState) error {
+	if err := engine.checkConfigurationPermissions(state); err != nil {
+		return err
+	}
+	if engine.paths.LibraryRoot == ProductionPaths().LibraryRoot {
+		info, err := os.Lstat(engine.paths.ControlBinary)
+		if err != nil {
+			return err
+		}
+		stat, ok := info.Sys().(*syscall.Stat_t)
+		if !ok || stat.Uid != 0 || stat.Gid != 0 {
+			return fmt.Errorf("%s must be owned by root:root", engine.paths.ControlBinary)
+		}
+	}
+	return nil
+}
+
+func (engine *Engine) checkConfigurationPermissions(state persistentState) error {
 	expectedGID, err := strconv.ParseUint(state.Account.GID, 10, 32)
 	if err != nil {
 		return fmt.Errorf("managed account gid is invalid")
@@ -271,16 +293,6 @@ func (engine *Engine) checkManagedPermissions(state persistentState) error {
 			if !ok || stat.Uid != 0 || uint64(stat.Gid) != expectedGID {
 				return fmt.Errorf("%s must be owned by root:%s", path, managedAccountName)
 			}
-		}
-	}
-	if engine.paths.LibraryRoot == ProductionPaths().LibraryRoot {
-		info, err := os.Lstat(engine.paths.ControlBinary)
-		if err != nil {
-			return err
-		}
-		stat, ok := info.Sys().(*syscall.Stat_t)
-		if !ok || stat.Uid != 0 || stat.Gid != 0 {
-			return fmt.Errorf("%s must be owned by root:root", engine.paths.ControlBinary)
 		}
 	}
 	return nil

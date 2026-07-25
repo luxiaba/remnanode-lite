@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -60,6 +61,23 @@ func TestLoadEnvironmentOverridesDotEnv(t *testing.T) {
 	}
 	if cfg.NodePort != 4000 || cfg.SecretKey != "from-env" {
 		t.Fatalf("environment did not override .env: %#v", cfg)
+	}
+}
+
+func TestParseDataIgnoresProcessEnvironmentAndAllowsPreparedSecret(t *testing.T) {
+	t.Setenv("NODE_PORT", "65536")
+	t.Setenv("LOW_MEMORY", "not-a-boolean")
+
+	cfg, err := ParseData([]byte("NODE_PORT=12345\nLOW_MEMORY=1\nSECRET_KEY_FILE=/missing/secret.key\n"), false)
+	if err != nil {
+		t.Fatalf("ParseData() error = %v", err)
+	}
+	if cfg.NodePort != 12345 || !cfg.LowMemory || cfg.SecretKey != "" {
+		t.Fatalf("ParseData() = %#v", cfg)
+	}
+
+	if _, err := ParseData([]byte("NODE_PORT=12345\nLOW_MEMORY=1\nSECRET_KEY_FILE=/missing/secret.key\n"), true); err == nil || !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("ParseData(requireSecret=true) error = %v, want missing Secret", err)
 	}
 }
 

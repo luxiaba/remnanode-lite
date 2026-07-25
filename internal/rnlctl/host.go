@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -35,13 +37,18 @@ func (OSCommandExecutor) Run(ctx context.Context, name string, args ...string) (
 	command.Stderr = &output
 	err := command.Run()
 	if err != nil {
+		diagnostic := strings.TrimSpace(output.String())
+		if diagnostic != "" {
+			return output.Bytes(), fmt.Errorf("%s: %w\n%s", filepath.Base(name), err, diagnostic)
+		}
 		return output.Bytes(), fmt.Errorf("%s: %w", filepath.Base(name), err)
 	}
 	return output.Bytes(), nil
 }
 
 type limitedWriter struct {
-	bytes.Buffer
+	// A named field prevents io.Copy from bypassing Write through Buffer.ReadFrom.
+	buffer    bytes.Buffer
 	remaining int
 }
 
@@ -52,10 +59,18 @@ func (writer *limitedWriter) Write(data []byte) (int, error) {
 		if keep > writer.remaining {
 			keep = writer.remaining
 		}
-		_, _ = writer.Buffer.Write(data[:keep])
+		_, _ = writer.buffer.Write(data[:keep])
 		writer.remaining -= keep
 	}
 	return original, nil
+}
+
+func (writer *limitedWriter) Bytes() []byte {
+	return writer.buffer.Bytes()
+}
+
+func (writer *limitedWriter) String() string {
+	return writer.buffer.String()
 }
 
 type LinuxHostOptions struct {
@@ -92,13 +107,15 @@ func (host *LinuxHost) Preflight(_ context.Context, activating bool, paths Paths
 		return err
 	}
 	if manager.kind == serviceManagerOpenRC {
-		for _, name := range []string{"rc-service", "supervise-daemon", "checkpath"} {
+		// checkpath is an OpenRC-internal helper exposed by openrc-run while it
+		// evaluates a service. It is not a command in the administrator's PATH.
+		for _, name := range []string{"rc-service", "supervise-daemon"} {
 			if _, err := host.requireExecutable(name); err != nil {
-				return fmt.Errorf("OpenRC experimental support: %w", err)
+				return fmt.Errorf("OpenRC support: %w", err)
 			}
 		}
 		if activating && !host.pathExists("/sys/fs/cgroup/cgroup.controllers") && !host.pathExists("/sys/fs/cgroup/unified/cgroup.controllers") {
-			return fmt.Errorf("OpenRC experimental support requires cgroup v2")
+			return fmt.Errorf("OpenRC support requires cgroup v2")
 		}
 	}
 	if account, err := user.Lookup(managedAccountName); err == nil {
@@ -130,7 +147,7 @@ func (host *LinuxHost) Preflight(_ context.Context, activating bool, paths Paths
 			}
 		}
 		if len(missing) > 0 {
-			return fmt.Errorf("missing runtime commands %s; install them first (Rocky: dnf install nftables iproute; Debian: apt install nftables iproute2)", strings.Join(missing, ", "))
+			return fmt.Errorf("missing runtime commands %s; install them first (Rocky: dnf install nftables iproute; Debian: apt install nftables iproute2; Alpine: apk add nftables iproute2)", strings.Join(missing, ", "))
 		}
 	}
 	return nil
@@ -180,10 +197,13 @@ func (host *LinuxHost) Prepare(ctx context.Context, generationRoot string, paths
 func (host *LinuxHost) RemoveService(ctx context.Context, paths Paths) error {
 	manager, detectErr := host.manager()
 	var errs []error
-	for _, target := range []string{paths.SystemdUnit, paths.SystemdDropIn, paths.OpenRCUnit} {
+	for _, target := range []string{paths.SystemdUnit, paths.OpenRCUnit} {
 		if err := removeAndSync(target); err != nil && !errors.Is(err, os.ErrNotExist) {
 			errs = append(errs, err)
 		}
+	}
+	if err := removeManagedSystemdDropIn(paths.SystemdDropIn); err != nil {
+		errs = append(errs, fmt.Errorf("remove systemd drop-in: %w", err))
 	}
 	if detectErr == nil && manager.kind == serviceManagerSystemd {
 		if _, err := host.executor.Run(ctx, manager.executable, "daemon-reload"); err != nil {
@@ -191,6 +211,55 @@ func (host *LinuxHost) RemoveService(ctx context.Context, paths Paths) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// removeManagedSystemdDropIn deletes only the managed drop-in from a real
+// directory. Local overrides and unusual parent objects are not ours to
+// remove, so they are deliberately left in place.
+func removeManagedSystemdDropIn(path string) error {
+	if path == "" {
+		return nil
+	}
+	directory := filepath.Dir(path)
+	directoryFD, err := openRealDirectoryNoFollow(directory)
+	if shouldLeaveDropInDirectory(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer unix.Close(directoryFD)
+
+	if err := unix.Unlinkat(directoryFD, filepath.Base(path), 0); err != nil && !errors.Is(err, unix.ENOENT) {
+		return err
+	}
+	if err := unix.Fsync(directoryFD); err != nil {
+		return err
+	}
+
+	parentFD, err := openRealDirectoryNoFollow(filepath.Dir(directory))
+	if shouldLeaveDropInDirectory(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer unix.Close(parentFD)
+	if err := unix.Unlinkat(parentFD, filepath.Base(directory), unix.AT_REMOVEDIR); err != nil {
+		if errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ENOTEMPTY) || errors.Is(err, unix.EEXIST) || errors.Is(err, unix.ENOTDIR) {
+			return nil
+		}
+		return err
+	}
+	return unix.Fsync(parentFD)
+}
+
+func openRealDirectoryNoFollow(path string) (int, error) {
+	return unix.Open(path, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+}
+
+func shouldLeaveDropInDirectory(err error) bool {
+	return errors.Is(err, unix.ENOENT) || errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR)
 }
 
 func (host *LinuxHost) RemoveAccount(ctx context.Context, expected ManagedAccount) error {
@@ -584,14 +653,8 @@ func validateManagedAccount(account *user.User, expectedHome string, userCreated
 func (host *LinuxHost) manager() (serviceManager, error) {
 	systemctl := host.findExecutable("systemctl")
 	rcUpdate := host.findExecutable("rc-update")
-	if systemctl != "" && (host.pathExists(systemdRuntime) || rcUpdate == "") {
-		return serviceManager{kind: serviceManagerSystemd, executable: systemctl}, nil
-	}
-	if rcUpdate != "" {
-		return serviceManager{kind: serviceManagerOpenRC, executable: rcUpdate}, nil
-	}
-	if systemctl != "" {
-		return serviceManager{kind: serviceManagerSystemd, executable: systemctl}, nil
+	if manager, ok := chooseServiceManager(systemctl, rcUpdate, host.pathExists(systemdRuntime)); ok {
+		return manager, nil
 	}
 	return serviceManager{}, fmt.Errorf("neither systemd nor OpenRC is available")
 }

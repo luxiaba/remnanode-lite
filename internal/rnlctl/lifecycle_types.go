@@ -103,6 +103,19 @@ type UpgradeRequest struct {
 	To     string
 }
 
+// UpgradePlan is the stable, non-secret result of an upgrade preflight.
+// It describes a point-in-time plan; it does not reserve host resources.
+type UpgradePlan struct {
+	SchemaVersion     int           `json:"schemaVersion"`
+	ChangeRequired    bool          `json:"changeRequired"`
+	CurrentVersion    string        `json:"currentVersion"`
+	CurrentGeneration string        `json:"currentGeneration"`
+	TargetVersion     string        `json:"targetVersion"`
+	TargetGeneration  string        `json:"targetGeneration"`
+	Prepared          bool          `json:"prepared"`
+	Service           ServiceStatus `json:"service"`
+}
+
 type RollbackRequest struct {
 	GenerationID string
 }
@@ -114,6 +127,25 @@ type RepairRequest struct {
 type UninstallRequest struct {
 	Purge bool
 	Yes   bool
+}
+
+// Configuration is the non-sensitive, administrator-controlled portion of
+// node.env. Managed paths and secret material are deliberately excluded.
+type Configuration struct {
+	SchemaVersion int               `json:"schemaVersion"`
+	Path          string            `json:"path"`
+	Values        map[string]string `json:"values"`
+}
+
+type ConfigurationUpdateRequest struct {
+	Set   map[string]string
+	Unset []string
+	Apply bool
+}
+
+type SecretUpdateRequest struct {
+	File  string
+	Apply bool
 }
 
 // Result describes a successful lifecycle mutation without exposing secret
@@ -161,6 +193,7 @@ type Lifecycle interface {
 	Install(context.Context, InstallRequest) (Result, error)
 	Activate(context.Context, ActivateRequest) (Result, error)
 	Upgrade(context.Context, UpgradeRequest) (Result, error)
+	PreflightUpgrade(context.Context, UpgradeRequest) (UpgradePlan, error)
 	Rollback(context.Context, RollbackRequest) (Result, error)
 	Repair(context.Context, RepairRequest) (Result, error)
 	Uninstall(context.Context, UninstallRequest) (Result, error)
@@ -169,6 +202,11 @@ type Lifecycle interface {
 	Start(context.Context) (Result, error)
 	Stop(context.Context) (Result, error)
 	Restart(context.Context) (Result, error)
+	ReadConfiguration(context.Context) (Configuration, error)
+	UpdateConfiguration(context.Context, ConfigurationUpdateRequest) (Result, error)
+	CheckConfiguration(context.Context) error
+	ApplyConfiguration(context.Context) (Result, error)
+	SetSecret(context.Context, SecretUpdateRequest) (Result, error)
 }
 
 type ServiceStatus struct {

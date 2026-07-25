@@ -9,24 +9,19 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/luxiaba/remnanode-lite/internal/version"
 )
 
 const (
-	defaultLogLines = 50
-	maxLogLines     = 100_000
-
-	systemdService = "remnanode-lite.service"
-	openRCService  = "remnanode-lite"
-	systemdRuntime = "/run/systemd/system"
-	openRCRuntime  = "/run/openrc"
-	logDirectory   = "/var/log/remnanode-lite"
+	exitOK      = 0
+	exitFailure = 1
+	exitUsage   = 2
 )
 
-const usage = `Usage: rnlctl <command>
+const usage = `Usage: rnlctl [--quiet|-q] [--no-color] <command>
 
 Commands:
   version                         Show the rnlctl version
@@ -36,30 +31,26 @@ Commands:
   rollback [--to ID]              Roll back to the retained generation
   repair [options]                Recover the committed generation
   uninstall [--purge --yes]       Remove the Native installation
-  status [--json]                 Show service or lifecycle status
+  config <command>                Inspect or change Native Node configuration
+  secret set [options]            Replace the managed Panel Secret
+  status [--json]                 Show Native lifecycle status
   doctor [--json]                 Run deployment diagnostics
   start                           Start the service
   stop                            Stop the service
   restart                         Restart the service
   logs <source> [options]         Show logs from node, core, or core-errors
+  completion <bash|zsh|fish>      Generate shell completion
+
+Global options:
+  --quiet, -q                     Hide confirmations and human status reports
+  --no-color                      Disable color in human diagnostic output
 
 Log options:
   --follow, -f                    Continue following new log entries
   --lines N, -n N                 Show the last N lines (default: 50)
+  --since DURATION                Show recent systemd Node logs (for example 15m)
 
 Use "rnlctl logs --help" for log source details.
-`
-
-const logsUsage = `Usage: rnlctl logs <node|core|core-errors> [--follow] [--lines N]
-
-Sources:
-  node         remnanode-lite service output
-  core         rw-core standard output
-  core-errors  rw-core standard error
-
-Options:
-  --follow, -f       Continue following new log entries
-  --lines N, -n N    Show the last N lines (default: 50)
 `
 
 // LookPathFunc resolves an executable without invoking a shell.
@@ -67,6 +58,18 @@ type LookPathFunc func(string) (string, error)
 
 // PathExistsFunc reports whether a host path exists.
 type PathExistsFunc func(string) bool
+
+// IsTerminalFunc reports whether a writer is connected to an interactive
+// terminal. It is injectable so output behavior can be tested without a TTY.
+type IsTerminalFunc func(io.Writer) bool
+
+// LookupEnvFunc retrieves one environment variable without exposing the full
+// process environment to tests.
+type LookupEnvFunc func(string) (string, bool)
+
+// NowFunc returns the current time. Log tests inject it so relative --since
+// values produce deterministic journalctl arguments.
+type NowFunc func() time.Time
 
 // Options contains the process and I/O dependencies used by App.
 type Options struct {
@@ -78,6 +81,9 @@ type Options struct {
 	Stderr        io.Writer
 	VersionString string
 	Lifecycle     Lifecycle
+	IsTerminal    IsTerminalFunc
+	LookupEnv     LookupEnvFunc
+	Now           NowFunc
 }
 
 // App parses rnlctl commands and dispatches them to the host service manager.
@@ -90,6 +96,11 @@ type App struct {
 	stderr        io.Writer
 	versionString string
 	lifecycle     Lifecycle
+	isTerminal    IsTerminalFunc
+	lookupEnv     LookupEnvFunc
+	now           NowFunc
+	quiet         bool
+	noColor       bool
 }
 
 // New creates an rnlctl application with production defaults for omitted
@@ -123,6 +134,15 @@ func New(options Options) *App {
 	if options.Lifecycle == nil {
 		options.Lifecycle = NewEngine(EngineOptions{})
 	}
+	if options.IsTerminal == nil {
+		options.IsTerminal = isTerminalWriter
+	}
+	if options.LookupEnv == nil {
+		options.LookupEnv = os.LookupEnv
+	}
+	if options.Now == nil {
+		options.Now = time.Now
+	}
 	return &App{
 		runner:        options.Runner,
 		lookPath:      options.LookPath,
@@ -132,6 +152,9 @@ func New(options Options) *App {
 		stderr:        options.Stderr,
 		versionString: options.VersionString,
 		lifecycle:     options.Lifecycle,
+		isTerminal:    options.IsTerminal,
+		lookupEnv:     options.LookupEnv,
+		now:           options.Now,
 	}
 }
 
@@ -140,6 +163,17 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	commandArgs, quiet, noColor, err := parseGlobalOptions(args)
+	if err != nil {
+		return a.usageError("", err.Error(), usage)
+	}
+	scoped := *a
+	scoped.quiet = quiet
+	scoped.noColor = noColor
+	return scoped.run(ctx, commandArgs)
+}
+
+func (a *App) run(ctx context.Context, args []string) int {
 	if len(args) == 0 {
 		return a.write(a.stdout, usage)
 	}
@@ -147,7 +181,7 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	switch args[0] {
 	case "help", "-h", "--help":
 		if len(args) != 1 {
-			return a.usageError("help does not accept arguments", usage)
+			return a.usageError("help", "does not accept arguments", usage)
 		}
 		return a.write(a.stdout, usage)
 	case "version", "-version", "--version":
@@ -169,7 +203,7 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		case "restart":
 			result, err = a.lifecycle.Restart(ctx)
 		}
-		return a.lifecycleResult(result, err)
+		return a.lifecycleResult(args[0], result, err)
 	case "install":
 		return a.runInstall(ctx, args[1:])
 	case "activate":
@@ -182,15 +216,44 @@ func (a *App) Run(ctx context.Context, args []string) int {
 		return a.runRepair(ctx, args[1:])
 	case "uninstall":
 		return a.runUninstall(ctx, args[1:])
+	case "config":
+		return a.runConfig(ctx, args[1:])
+	case "secret":
+		return a.runSecret(ctx, args[1:])
 	case "status":
 		return a.runStatus(ctx, args[1:])
 	case "doctor":
 		return a.runDoctor(ctx, args[1:])
 	case "logs":
 		return a.runLogs(ctx, args[1:])
+	case "completion":
+		return a.runCompletion(args[1:])
 	default:
-		return a.usageError(fmt.Sprintf("unknown command %q", args[0]), usage)
+		return a.usageError("", fmt.Sprintf("unknown command %q", args[0]), usage)
 	}
+}
+
+func parseGlobalOptions(args []string) ([]string, bool, bool, error) {
+	commandArgs := make([]string, 0, len(args))
+	quiet := false
+	noColor := false
+	for _, argument := range args {
+		switch argument {
+		case "--quiet", "-q":
+			if quiet {
+				return nil, false, false, fmt.Errorf("global option --quiet may be specified only once")
+			}
+			quiet = true
+		case "--no-color":
+			if noColor {
+				return nil, false, false, fmt.Errorf("global option --no-color may be specified only once")
+			}
+			noColor = true
+		default:
+			commandArgs = append(commandArgs, argument)
+		}
+	}
+	return commandArgs, quiet, noColor, nil
 }
 
 const installUsage = `Usage: rnlctl install (--bundle-root DIR | --bundle ARCHIVE --sha256 HEX) [options]
@@ -210,6 +273,8 @@ const upgradeUsage = `Usage: rnlctl upgrade (--bundle-root DIR | --bundle ARCHIV
 Options:
   --expected-version VERSION  Require a local bundle manifest version
   --to VERSION                Download an exact X.Y.Z or X.Y.Z-rnl.N release
+  --dry-run                   Verify the candidate and known host preconditions
+  --json                      Emit the dry-run plan as JSON (requires --dry-run)
 `
 
 const rollbackUsage = `Usage: rnlctl rollback [--to GENERATION-ID]
@@ -232,7 +297,7 @@ func (a *App) runInstall(ctx context.Context, args []string) int {
 		return code
 	}
 	result, err := a.lifecycle.Install(ctx, request)
-	return a.lifecycleResult(result, err)
+	return a.lifecycleResult("install", result, err)
 }
 
 func (a *App) runActivate(ctx context.Context, args []string) int {
@@ -243,19 +308,39 @@ func (a *App) runActivate(ctx context.Context, args []string) int {
 		return code
 	}
 	result, err := a.lifecycle.Activate(ctx, request)
-	return a.lifecycleResult(result, err)
+	return a.lifecycleResult("activate", result, err)
 }
 
 func (a *App) runUpgrade(ctx context.Context, args []string) int {
 	flags := a.flagSet("upgrade", upgradeUsage)
 	request := UpgradeRequest{}
+	dryRun := false
+	jsonOutput := false
 	bindBundleFlags(flags, &request.Bundle)
 	flags.StringVar(&request.To, "to", "", "")
+	flags.BoolVar(&dryRun, "dry-run", false, "")
+	flags.BoolVar(&jsonOutput, "json", false, "")
 	if code, ok := a.parseFlags(flags, args, upgradeUsage); !ok {
 		return code
 	}
+	if jsonOutput && !dryRun {
+		return a.usageError("upgrade", "--json requires --dry-run", upgradeUsage)
+	}
+	if dryRun {
+		plan, err := a.lifecycle.PreflightUpgrade(ctx, request)
+		if err != nil {
+			return a.runtimeError("upgrade", err)
+		}
+		if jsonOutput {
+			if err := a.writeJSON(plan); err != nil {
+				return a.runtimeError("upgrade", err)
+			}
+			return exitOK
+		}
+		return a.write(a.stdout, renderUpgradePlan(plan))
+	}
 	result, err := a.lifecycle.Upgrade(ctx, request)
-	return a.lifecycleResult(result, err)
+	return a.lifecycleResult("upgrade", result, err)
 }
 
 func (a *App) runRollback(ctx context.Context, args []string) int {
@@ -266,7 +351,7 @@ func (a *App) runRollback(ctx context.Context, args []string) int {
 		return code
 	}
 	result, err := a.lifecycle.Rollback(ctx, request)
-	return a.lifecycleResult(result, err)
+	return a.lifecycleResult("rollback", result, err)
 }
 
 func (a *App) runRepair(ctx context.Context, args []string) int {
@@ -277,7 +362,7 @@ func (a *App) runRepair(ctx context.Context, args []string) int {
 		return code
 	}
 	result, err := a.lifecycle.Repair(ctx, request)
-	return a.lifecycleResult(result, err)
+	return a.lifecycleResult("repair", result, err)
 }
 
 func (a *App) runUninstall(ctx context.Context, args []string) int {
@@ -289,74 +374,59 @@ func (a *App) runUninstall(ctx context.Context, args []string) int {
 		return code
 	}
 	result, err := a.lifecycle.Uninstall(ctx, request)
-	return a.lifecycleResult(result, err)
+	return a.lifecycleResult("uninstall", result, err)
 }
 
 func (a *App) runStatus(ctx context.Context, args []string) int {
-	if len(args) == 0 {
-		return a.runServiceCommand(ctx, "status")
-	}
 	if len(args) == 1 && isHelp(args[0]) {
 		return a.write(a.stdout, "Usage: rnlctl status [--json]\n")
 	}
-	if len(args) != 1 || args[0] != "--json" {
-		return a.usageError("status accepts only --json", "Usage: rnlctl status [--json]\n")
+	if len(args) > 1 || (len(args) == 1 && args[0] != "--json") {
+		return a.usageError("status", "accepts only --json", "Usage: rnlctl status [--json]\n")
 	}
 	status, err := a.lifecycle.Status(ctx)
 	if err != nil {
-		fmt.Fprintf(a.stderr, "rnlctl: status: %v\n", err)
-		return 1
+		return a.runtimeError("status", err)
 	}
-	if err := a.writeJSON(status); err != nil {
-		fmt.Fprintf(a.stderr, "rnlctl: status: %v\n", err)
-		return 1
+	if len(args) == 1 {
+		if err := a.writeJSON(status); err != nil {
+			return a.runtimeError("status", err)
+		}
+	} else if !a.quiet {
+		if code := a.write(a.stdout, renderStatus(status, a.colorEnabled())); code != exitOK {
+			return code
+		}
 	}
 	if !status.Healthy && status.Deployment != "absent" {
-		return 1
+		return exitFailure
 	}
-	return 0
+	return exitOK
 }
 
 func (a *App) runDoctor(ctx context.Context, args []string) int {
-	if len(args) == 0 {
-		report, err := a.lifecycle.Doctor(ctx)
-		if err != nil {
-			fmt.Fprintf(a.stderr, "rnlctl: doctor: %v\n", err)
-			return 1
-		}
-		for _, check := range report.Checks {
-			line := "[" + strings.ToUpper(check.Status) + "] " + check.Name
-			if check.Detail != "" {
-				line += " - " + check.Detail
-			}
-			if code := a.write(a.stdout, line+"\n"); code != 0 {
-				return code
-			}
-		}
-		if !report.Healthy {
-			return 1
-		}
-		return 0
-	}
 	if len(args) == 1 && isHelp(args[0]) {
 		return a.write(a.stdout, "Usage: rnlctl doctor [--json]\n")
 	}
-	if len(args) != 1 || args[0] != "--json" {
-		return a.usageError("doctor accepts only --json", "Usage: rnlctl doctor [--json]\n")
+	if len(args) > 1 || (len(args) == 1 && args[0] != "--json") {
+		return a.usageError("doctor", "accepts only --json", "Usage: rnlctl doctor [--json]\n")
 	}
 	report, err := a.lifecycle.Doctor(ctx)
 	if err != nil {
-		fmt.Fprintf(a.stderr, "rnlctl: doctor: %v\n", err)
-		return 1
+		return a.runtimeError("doctor", err)
 	}
-	if err := a.writeJSON(report); err != nil {
-		fmt.Fprintf(a.stderr, "rnlctl: doctor: %v\n", err)
-		return 1
+	if len(args) == 1 {
+		if err := a.writeJSON(report); err != nil {
+			return a.runtimeError("doctor", err)
+		}
+	} else if !a.quiet {
+		if code := a.write(a.stdout, renderDoctor(report, a.colorEnabled())); code != exitOK {
+			return code
+		}
 	}
 	if !report.Healthy {
-		return 1
+		return exitFailure
 	}
-	return 0
+	return exitOK
 }
 
 func bindBundleFlags(flags *flag.FlagSet, input *BundleInput) {
@@ -385,24 +455,26 @@ func (a *App) parseFlags(flags *flag.FlagSet, args []string, commandUsage string
 				name = name[:index]
 			}
 			if _, duplicate := seen[name]; duplicate {
-				return a.usageError("option --"+name+" may be specified only once", commandUsage), false
+				return a.usageError(flags.Name(), "option --"+name+" may be specified only once", commandUsage), false
 			}
 			seen[name] = struct{}{}
 		}
 	}
 	if err := flags.Parse(args); err != nil {
-		return a.usageError(err.Error(), commandUsage), false
+		return a.usageError(flags.Name(), err.Error(), commandUsage), false
 	}
 	if flags.NArg() != 0 {
-		return a.usageError("unexpected positional arguments", commandUsage), false
+		return a.usageError(flags.Name(), "unexpected positional arguments", commandUsage), false
 	}
 	return 0, true
 }
 
-func (a *App) lifecycleResult(result Result, err error) int {
+func (a *App) lifecycleResult(command string, result Result, err error) int {
 	if err != nil {
-		fmt.Fprintf(a.stderr, "rnlctl: %v\n", err)
-		return 1
+		return a.runtimeError(command, err)
+	}
+	if a.quiet {
+		return exitOK
 	}
 	verb := "unchanged"
 	if result.Changed {
@@ -428,89 +500,7 @@ func (a *App) commandHelpOrReject(args []string, commandUsage string) (int, bool
 	if len(args) == 2 && isHelp(args[1]) {
 		return a.write(a.stdout, commandUsage), true
 	}
-	return a.usageError(args[0]+" does not accept arguments", commandUsage), true
-}
-
-func (a *App) runServiceCommand(ctx context.Context, action string) int {
-	manager, err := a.detectServiceManager()
-	if err != nil {
-		fmt.Fprintf(a.stderr, "rnlctl: %v\n", err)
-		return 1
-	}
-
-	var args []string
-	switch manager.kind {
-	case serviceManagerSystemd:
-		if action == "status" {
-			args = []string{"--no-pager", "--full", "status", systemdService}
-		} else {
-			args = []string{action, systemdService}
-		}
-	case serviceManagerOpenRC:
-		args = []string{openRCService, action}
-	}
-	return a.runExternal(ctx, manager.executable, args)
-}
-
-func (a *App) runLogs(ctx context.Context, args []string) int {
-	options, showHelp, err := parseLogsArgs(args)
-	if showHelp {
-		return a.write(a.stdout, logsUsage)
-	}
-	if err != nil {
-		return a.usageError(err.Error(), logsUsage)
-	}
-
-	lineCount := strconv.Itoa(options.lines)
-	switch options.source {
-	case "node":
-		manager, detectErr := a.detectServiceManager()
-		if detectErr != nil {
-			fmt.Fprintf(a.stderr, "rnlctl: %v\n", detectErr)
-			return 1
-		}
-		if manager.kind == serviceManagerSystemd {
-			journalctl, findErr := a.requireExecutable("journalctl")
-			if findErr != nil {
-				fmt.Fprintf(a.stderr, "rnlctl: %v\n", findErr)
-				return 1
-			}
-			journalArgs := []string{
-				"--no-pager",
-				"--unit", systemdService,
-				"--lines", lineCount,
-			}
-			if options.follow {
-				journalArgs = append(journalArgs, "--follow")
-			}
-			return a.runExternal(ctx, journalctl, journalArgs)
-		}
-		return a.runTail(ctx, options, []string{
-			logDirectory + "/openrc.log",
-			logDirectory + "/openrc.err.log",
-		})
-	case "core":
-		return a.runTail(ctx, options, []string{logDirectory + "/xray.out.log"})
-	case "core-errors":
-		return a.runTail(ctx, options, []string{logDirectory + "/xray.err.log"})
-	default:
-		panic("unreachable log source")
-	}
-}
-
-func (a *App) runTail(ctx context.Context, options logOptions, paths []string) int {
-	tail, err := a.requireExecutable("tail")
-	if err != nil {
-		fmt.Fprintf(a.stderr, "rnlctl: %v\n", err)
-		return 1
-	}
-	tailArgs := []string{"-n", strconv.Itoa(options.lines)}
-	if options.follow {
-		// -F follows the path across the runtime's bounded log rotation.
-		tailArgs = append(tailArgs, "-F")
-	}
-	tailArgs = append(tailArgs, paths...)
-	return a.runExternal(ctx, tail, tailArgs)
+	return a.usageError(args[0], "does not accept arguments", commandUsage), true
 }
 
 func (a *App) runExternal(ctx context.Context, name string, args []string) int {
@@ -521,43 +511,6 @@ func (a *App) runExternal(ctx context.Context, name string, args []string) int {
 		Stdout: a.stdout,
 		Stderr: a.stderr,
 	})
-}
-
-type serviceManagerKind uint8
-
-const (
-	serviceManagerSystemd serviceManagerKind = iota + 1
-	serviceManagerOpenRC
-)
-
-type serviceManager struct {
-	kind       serviceManagerKind
-	executable string
-}
-
-func (a *App) detectServiceManager() (serviceManager, error) {
-	systemctl := a.findExecutable("systemctl")
-	rcService := a.findExecutable("rc-service")
-
-	if systemctl != "" && rcService != "" {
-		switch {
-		case a.pathExists(systemdRuntime):
-			return serviceManager{kind: serviceManagerSystemd, executable: systemctl}, nil
-		case a.pathExists(openRCRuntime):
-			return serviceManager{kind: serviceManagerOpenRC, executable: rcService}, nil
-		default:
-			// Prefer systemd when installed clients exist but runtime markers are
-			// unavailable, for example while operating in a recovery chroot.
-			return serviceManager{kind: serviceManagerSystemd, executable: systemctl}, nil
-		}
-	}
-	if systemctl != "" {
-		return serviceManager{kind: serviceManagerSystemd, executable: systemctl}, nil
-	}
-	if rcService != "" {
-		return serviceManager{kind: serviceManagerOpenRC, executable: rcService}, nil
-	}
-	return serviceManager{}, fmt.Errorf("neither systemctl nor rc-service is available")
 }
 
 func (a *App) findExecutable(name string) string {
@@ -581,87 +534,35 @@ func (a *App) requireExecutable(name string) (string, error) {
 	return path, nil
 }
 
-type logOptions struct {
-	source string
-	lines  int
-	follow bool
-}
-
-func parseLogsArgs(args []string) (logOptions, bool, error) {
-	options := logOptions{lines: defaultLogLines}
-	for index := 0; index < len(args); index++ {
-		argument := args[index]
-		switch {
-		case isHelp(argument):
-			return logOptions{}, true, nil
-		case argument == "--follow" || argument == "-f":
-			options.follow = true
-		case argument == "--lines" || argument == "-n":
-			index++
-			if index >= len(args) {
-				return logOptions{}, false, fmt.Errorf("%s requires a line count", argument)
-			}
-			lines, err := parseLogLines(args[index])
-			if err != nil {
-				return logOptions{}, false, err
-			}
-			options.lines = lines
-		case strings.HasPrefix(argument, "--lines="):
-			lines, err := parseLogLines(strings.TrimPrefix(argument, "--lines="))
-			if err != nil {
-				return logOptions{}, false, err
-			}
-			options.lines = lines
-		case strings.HasPrefix(argument, "-n="):
-			lines, err := parseLogLines(strings.TrimPrefix(argument, "-n="))
-			if err != nil {
-				return logOptions{}, false, err
-			}
-			options.lines = lines
-		case strings.HasPrefix(argument, "-"):
-			return logOptions{}, false, fmt.Errorf("unknown logs option %q", argument)
-		case options.source == "":
-			options.source = argument
-		default:
-			return logOptions{}, false, fmt.Errorf("logs accepts exactly one source")
-		}
-	}
-
-	if options.source == "" {
-		return logOptions{}, false, fmt.Errorf("logs requires a source")
-	}
-	switch options.source {
-	case "node", "core", "core-errors":
-		return options, false, nil
-	default:
-		return logOptions{}, false, fmt.Errorf("unknown log source %q", options.source)
-	}
-}
-
-func parseLogLines(raw string) (int, error) {
-	lines, err := strconv.Atoi(raw)
-	if err != nil || lines < 1 || lines > maxLogLines {
-		return 0, fmt.Errorf("log line count must be between 1 and %d", maxLogLines)
-	}
-	return lines, nil
-}
-
 func isHelp(argument string) bool {
 	return argument == "help" || argument == "-h" || argument == "--help"
 }
 
-func (a *App) usageError(message, commandUsage string) int {
+func (a *App) usageError(command, message, commandUsage string) int {
 	if message != "" {
-		fmt.Fprintf(a.stderr, "rnlctl: %s\n", message)
+		prefix := "rnlctl"
+		if command != "" {
+			prefix += ": " + command
+		}
+		fmt.Fprintf(a.stderr, "%s: %s\n", prefix, message)
 	}
 	_, _ = io.WriteString(a.stderr, commandUsage)
-	return 2
+	return exitUsage
+}
+
+func (a *App) runtimeError(command string, err error) int {
+	prefix := "rnlctl"
+	if command != "" {
+		prefix += ": " + command
+	}
+	fmt.Fprintf(a.stderr, "%s: %v\n", prefix, err)
+	return exitFailure
 }
 
 func (a *App) write(writer io.Writer, content string) int {
 	if _, err := io.WriteString(writer, content); err != nil {
 		fmt.Fprintf(a.stderr, "rnlctl: write output: %v\n", err)
-		return 1
+		return exitFailure
 	}
-	return 0
+	return exitOK
 }
