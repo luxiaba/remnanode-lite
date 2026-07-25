@@ -119,6 +119,22 @@ assert_version_fails() {
     fail "$name failed for the wrong reason: $output"
 }
 
+assert_stale_exact_tag_fails() {
+  local name=$1 version=$2 contract=$3 fixture output
+  fixture="$(make_fixture "$version" "$contract" "$version")"
+  printf 'new source\n' >"$fixture/source.txt"
+  git -C "$fixture" add source.txt
+  git -C "$fixture" -c core.hooksPath=/dev/null commit --quiet --no-gpg-sign \
+    -m 'advance source'
+
+  if output="$(cd "$fixture" && PATH="$fixture/bin:$PATH" \
+    RELEASE_TAG="$version" bash scripts/check-version.sh 2>&1)"; then
+    fail "$name unexpectedly passed"
+  fi
+  [[ "$output" == *"release tag $version points to "*'current HEAD is '* ]] ||
+    fail "$name failed for the wrong reason: $output"
+}
+
 # Stable releases compare each component numerically and ignore preview tags.
 assert_version_passes \
   'stable minor advancement' 2.10.0 2.10.0 2.10.0 1 2.9.999
@@ -172,6 +188,8 @@ assert_version_fails \
 assert_version_passes \
   'malformed preview tag is ignored' 2.8.0-rnl.2 2.8.0 2.8.0-rnl.2 1 \
   2.8.0-rnl.invalid-rnl.999
+assert_stale_exact_tag_fails 'stale stable exact tag' 2.8.0 2.8.0
+assert_stale_exact_tag_fails 'stale preview exact tag' 2.8.0-rnl.1 2.8.0
 
 assert_version_fails \
   'stable must match contract' 'must match contract 2.8.0' \

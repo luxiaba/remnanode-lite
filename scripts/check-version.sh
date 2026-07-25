@@ -121,6 +121,17 @@ if [ -n "$release_tag" ]; then
     fail "release tag $release_tag must use X.Y.Z or X.Y.Z-rnl.N"
   [ "$release_tag" = "$version" ] || fail "release tag $release_tag does not match $version"
 
+  if git show-ref --verify --quiet "refs/tags/$release_tag"; then
+    if ! tag_commit="$(git rev-parse --verify "refs/tags/${release_tag}^{commit}" 2>/dev/null)"; then
+      fail "release tag $release_tag does not resolve to a commit"
+    fi
+    if ! head_commit="$(git rev-parse --verify 'HEAD^{commit}' 2>/dev/null)"; then
+      fail "current HEAD does not resolve to a commit"
+    fi
+    [ "$tag_commit" = "$head_commit" ] ||
+      fail "release tag $release_tag points to $tag_commit, current HEAD is $head_commit"
+  fi
+
   if [[ "$version" == *-rnl.* ]]; then
     version_line="${version%%-rnl.*}"
     revision="${version##*-rnl.}"
