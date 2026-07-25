@@ -62,6 +62,9 @@ bash scripts/verify-published-release-test.sh
 bash scripts/promote-image-tag-test.sh
 bash scripts/find-workflow-run-test.sh
 bash scripts/release-state-test.sh
+bash scripts/main-release-guard-test.sh
+bash scripts/verify-release-asset-attestations-test.sh
+bash scripts/verify-draft-release-test.sh
 bash scripts/test-docker-packaging.sh
 bash scripts/check-supply-chain.sh
 
