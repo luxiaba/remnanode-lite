@@ -52,7 +52,7 @@ The Secret is the complete value issued for one Node by Remnawave Panel. It cont
 Put the Secret in the same-directory mode-`0600` `.env` file:
 
 ```env
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=PASTE_THE_COMPLETE_PANEL_SECRET_KEY
 ```
 
@@ -80,7 +80,7 @@ SECRET_KEY=
 SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 ```
 
-The installer writes `/etc/remnanode-lite/secret.key` as `root:remnanode-lite 0640` after validating it. Use `--secret-file` during install or activation; do not pass the Secret itself as an argument.
+The installer writes `/etc/remnanode-lite/secret.key` as `root:remnanode-lite 0640` after validating it. Use `--secret-file` during install or activation; do not pass the Secret itself as an argument. For an installed Node, rotate it through `rnlctl secret set --file PATH [--apply]`. The command reads a bounded regular file and never prints the Secret or accepts it in an argument value.
 
 To rotate it safely, follow [Change the port or Secret](deployment-native.md#change-the-port-or-secret).
 
@@ -116,7 +116,9 @@ They are internal to the published image and do not conflict with the Native hos
 
 ## Native `node.env`
 
-The maintained template is [`deploy/node.env.example`](../deploy/node.env.example). `rnlctl` owns the settings that select the active generation:
+`/etc/remnanode-lite/node.env` is the single source of truth for Native runtime settings. `rnlctl config` reads and updates that file directly; it does not keep a second configuration file or database. The Secret remains separate in `secret.key`, and Panel remains the source of truth for the proxy configuration it sends to the Node.
+
+The maintained template is [`deploy/node.env.example`](../deploy/node.env.example). The lifecycle controller owns the settings that select the active generation:
 
 ```env
 NODE_PORT=2222
@@ -134,6 +136,63 @@ The lifecycle engine rewrites managed path keys during installation and rejects 
 
 The file and Secret must remain regular, non-symlink files. The daemon opens them with no-follow semantics, limits `node.env` to 1 MiB, and verifies that each file did not change while it was read.
 
+### Native configuration commands
+
+`rnlctl config show` and `get` expose only these six administrator-editable keys:
+
+- `NODE_PORT`
+- `NODE_BIND_ADDR`
+- `LOW_MEMORY`
+- `BODY_LIMIT_MB`
+- `GOMEMLIMIT`
+- `DISABLE_HASHED_SET_CHECK`
+
+Secret material, managed runtime path assignments, internal tokens, and version overrides are neither exposed nor editable through `rnlctl config`. The `show --json` envelope contains `schemaVersion`, `path` (the managed `node.env` file), and `values`; only `values` contains configuration assignments, limited to the six keys above. `show` and `get` report values stored in `node.env`, not defaults computed by the daemon. An empty optional value may therefore have an effective runtime default.
+
+```bash
+sudo rnlctl config show
+sudo rnlctl config show --json
+sudo rnlctl config get NODE_PORT
+```
+
+These read commands parse the assignment file, but they are not a complete configuration check.
+
+`check` validates the installed file with the same parser and runtime rules used by the Node, including the low-memory body-limit constraint and managed `node.env`/`secret.key` permissions. It does not write the file, restart the service, contact Panel, or test proxy traffic:
+
+```bash
+sudo rnlctl config check
+```
+
+Validation follows lifecycle state: a prepared installation may omit its Secret until activation, while a stopped or active installed service must have a valid Secret.
+
+Use `set` for one or more assignments and `unset` to remove optional settings. Both commands validate the complete candidate before writing it and, when a write is needed, set ownership and mode to `root:remnanode-lite 0640`:
+
+```bash
+sudo rnlctl config set NODE_PORT=2222 LOW_MEMORY=1
+sudo rnlctl config unset BODY_LIMIT_MB GOMEMLIMIT
+```
+
+Each value passed through `rnlctl config set` must be empty or a single value
+without whitespace or control characters. None of the six editable settings
+needs quoting; keeping them single-token avoids a difference between the
+command's validation and the environment-file parser used by the service.
+
+Configuration and Secret mutations require root, a clean lifecycle state, and the shared lifecycle operation lock. Without `--apply`, no service restart occurs; an active process continues with its previously loaded settings until `config apply` or a restart.
+
+Only the six keys listed above are accepted. `NODE_PORT` is required, so it cannot remain unset. Add `--apply` to validate, write, restart an active service, and wait for internal health in one operation:
+
+```bash
+sudo rnlctl config set NODE_PORT=2222 --apply
+```
+
+If that restart or health check fails after a change, `set --apply` or `unset --apply` attempts to restore the previous `node.env`, its ownership, and the service running with the previous configuration. This is an in-process recovery attempt, not a durable or crash-safe transaction. A stopped service or prepared installation rejects `--apply` before writing; make the change without `--apply`, then use `rnlctl start` or `rnlctl activate` as appropriate.
+
+`rnlctl config apply` is for a valid active installation whose file was changed without `--apply`. It validates contents and managed-file permissions before restarting, then waits for the private internal health check. It does not test Panel connectivity or proxy traffic, and it cannot restore a file that was edited manually because it has no previous snapshot:
+
+```bash
+sudo rnlctl config apply
+```
+
 ## Changing settings
 
 ### Docker
@@ -149,12 +208,21 @@ docker compose up -d --no-build --force-recreate
 
 ### Native Linux
 
-Edit `/etc/remnanode-lite/node.env` as root, keep ownership `root:remnanode-lite` and mode `0640`, then validate and restart:
+Prefer the safe editing layer for routine changes:
 
 ```bash
-sudo rnlctl doctor
-sudo rnlctl restart
+sudo rnlctl config set NODE_PORT=2222 --apply
 ```
+
+Manual editing remains supported. Edit `/etc/remnanode-lite/node.env` as root, preserve `root:remnanode-lite 0640`, then run `rnlctl config check`. On an active installation, apply the checked file with `rnlctl config apply`; on a stopped or prepared installation, use `rnlctl start` or `rnlctl activate` instead.
+
+Rotate a Secret from a protected temporary file. With `--apply`, an active service is restarted and checked; if that fails after the Secret changed, the command attempts to restore the previous Secret and service health:
+
+```bash
+sudo rnlctl secret set --file /root/new-node-secret.key --apply
+```
+
+Remove the source file when it is no longer needed. The same stopped/prepared `--apply` restriction applies to Secret changes.
 
 When changing `NODE_PORT`, update the Panel and host firewall at the same time. With host networking, neither Docker nor the Native service translates ports.
 

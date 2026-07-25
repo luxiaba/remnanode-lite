@@ -41,7 +41,7 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 | Choose it when | Docker Engine with Compose v2 is already available. This is the default path. | Docker cannot be installed, or its daemon and container-runtime overhead are not appropriate for the host. |
 | Installation | Download the Release Compose asset and set the Panel Secret in `.env` or an intentional inline mapping. | Download one exact Release, verify `install.sh`, and run the installer as root. |
 | Update and rollback | Select an exact image tag or digest, then pull and recreate the container; restore the previous image reference to roll back. | Use `rnlctl upgrade --to VERSION` and `rnlctl rollback`; one verified previous generation is retained. |
-| Host service | Requires the Docker Engine daemon and its container runtime. | Does not require the Docker Engine daemon or a container runtime, but `remnanode-lite` still runs as a systemd or OpenRC background service. |
+| Host service | Requires the Docker Engine daemon and its container runtime. | Does not require the Docker Engine daemon or a container runtime, but `remnanode-lite` still runs as a systemd service or, on qualified Alpine hosts, an OpenRC service. |
 | Version reference | Exact tag or manifest digest is recommended; moving `latest` and `preview` are opt-in channels. | Exact `X.Y.Z` or `X.Y.Z-rnl.N` Releases only; moving image channels are never resolved. |
 
 Both paths use host networking and require `NET_ADMIN`. Do not run them beside another Node that uses the same Panel or proxy ports.
@@ -74,19 +74,19 @@ chmod 600 docker-compose.yaml .env
 The Compose CLI automatically reads `.env` from this directory. Both downloaded files select the exact image version from that Release. Set the Node port and complete Secret from the Panel in `.env`:
 
 ```env
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=PASTE_THE_COMPLETE_PANEL_SECRET_KEY
 ```
 
-The Compose fallback for `NODE_PORT` is `2222`; `38329` is only an example. Whichever port you use must match the Node port configured in the Panel.
+The Compose fallback for `NODE_PORT` is the official default, `2222`. Change it only when the Node record in the Panel uses a different port.
 
 Existing deployments may keep their current custom directory; changing the directory name is not required for an upgrade.
 
-To keep a literal single-file deployment without `.env`, replace the `SECRET_KEY` interpolation in `docker-compose.yaml` with the complete value directly. The following example also changes the port fallback to `38329`:
+To keep a literal single-file deployment without `.env`, replace the `SECRET_KEY` interpolation in `docker-compose.yaml` with the complete value directly. The following example keeps the default Node port:
 
 ```yaml
 environment:
-  NODE_PORT: "${NODE_PORT:-38329}"
+  NODE_PORT: "${NODE_PORT:-2222}"
   SECRET_KEY: "PASTE_THE_COMPLETE_PANEL_SECRET_KEY"
 ```
 
@@ -107,7 +107,7 @@ The official container's `NODE_PORT` and `SECRET_KEY` can be reused when migrati
 
 ## Native Linux
 
-Use the Native bundle when Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not mean that the Node has no background service: `remnanode-lite` runs directly under systemd or OpenRC. Rocky Linux 9 with systemd is the primary target; Rocky Linux 8 and Debian 12 are compatible. OpenRC support is experimental and requires a working cgroup v2 setup.
+Use the Native bundle when Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not mean that the Node has no background service: `remnanode-lite` runs directly under the host service manager. Rocky Linux 9 with systemd is the primary target; Rocky Linux 8 and Debian 12 are compatible. Alpine Linux 3.22.x is also supported on `amd64` and `arm64` when it is a persistent `sys` installation, distribution OpenRC is PID 1, and the host passes the documented kernel and cgroup v2 checks. This is not generic OpenRC support: containers and init-less environments are unsupported, while a nested full-system guest qualifies only when the exact host contract passes.
 
 Native installs never follow a moving channel. Choose a version shown on the
 GitHub Releases page, then download `install.sh` and `SHA256SUMS` from that
@@ -119,18 +119,40 @@ BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
 curl -fLO "${BASE}/SHA256SUMS"
-grep '  install.sh$' SHA256SUMS | sha256sum --check --strict -
+grep '  install.sh$' SHA256SUMS | sha256sum -c -
 
-sudo sh ./install.sh --version "$VERSION" --port 38329
+sudo sh ./install.sh --version "$VERSION" --port 2222
 ```
 
 The installer securely prompts for the complete Panel Secret when one is not already installed. It verifies and installs one complete generation: Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, and service definitions. After startup:
 
 ```bash
-sudo rnlctl status --json
+sudo rnlctl status
 sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
+
+`status` now prints a compact lifecycle summary for people; scripts should keep
+using the unchanged `status --json` model. `doctor` ends with a summary and
+specific next commands when it finds a problem. Global `--quiet`/`-q` and
+`--no-color` options may appear anywhere in a command. Shell completion,
+systemd log time filters, and upgrade dry-runs are covered in the
+[Native Linux guide](docs/deployment-native.md#command-line-experience).
+
+Native runtime settings live in `/etc/remnanode-lite/node.env`; `rnlctl config`
+is the safe way to inspect and edit that file, not a second configuration
+store. It shows only administrator-editable, non-secret values. For example:
+
+```bash
+sudo rnlctl config show
+sudo rnlctl config set NODE_PORT=2222 --apply
+sudo rnlctl secret set --file /root/new-node-secret.key --apply
+```
+
+The Secret command reads a protected file and never accepts the Secret itself
+on the command line. A port change must also be made in the Panel and host
+firewall. See the [configuration reference](docs/configuration.md#native-configuration-commands)
+for validation, stopped/prepared installations, and rollback behavior.
 
 Native bundles carry the same contract as their matching Release. Read the
 [Native Linux guide](docs/deployment-native.md) before fleet rollout; it covers
@@ -208,6 +230,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | Item | Current baseline |
 | --- | --- |
 | Native Linux bundles | Exact published Releases |
+| Native hosts | Rocky Linux 8/9 and Debian 12 with systemd; qualified Alpine Linux 3.22.x `sys` installs with distribution OpenRC |
 | Node contract | `2.8.0` |
 | rw-core | `v26.6.27` |
 | Platforms | `linux/amd64`, `linux/arm64` |

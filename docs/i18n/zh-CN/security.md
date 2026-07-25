@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=87d7c31bbe1e046410f0cfa2dd1a0f3b4c3da68d3f31b16ece9db1d41b33cc03 -->
+<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=83e2f3cc294f3199cea83b2174c34ed39e208eabf530c39657702417947f40b1 -->
 
 # 安全策略
 
@@ -38,6 +38,7 @@ Remnanode Lite 是具有网络管理权限的节点软件，不是普通无特�
 - Panel 到 Node 的公开接口要求最低 TLS 1.3、双向认证和 RS256 Bearer JWT。
 - Docker 使用宿主网络；`NET_ADMIN` 允许管理本项目 nftables 表并通过 `NETLINK_SOCK_DIAG` 关闭连接，`NET_BIND_SERVICE` 允许监听低端口。
 - 当前容器以 root UID 启动，但会丢弃其它 capability，启用 `no-new-privileges` 和只读 rootfs。host network 与 `NET_ADMIN` 仍然构成明确的宿主机信任边界。
+- Native 安装中的 Node 进程以不可登录的 `remnanode-lite` 用户运行，只保留 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`。systemd 会设置 capability bounding set 和 sandbox。受支持的 Alpine 3.22.x/OpenRC 路径会保留以 root 身份运行的 `supervise-daemon` 作为服务管理器基础设施，同时启动这个受限的 Node 子进程；受管服务会应用并核验精确的资源 cgroup，所需的统一 cgroup v2 控制不可用时直接拒绝启动。
 - 只应运行来自本仓库、已验证的镜像。生产优先固定精确版本或 manifest digest，并验证 build attestation。
 - Node 不持久化 Panel 下发的完整 Xray 配置；重启后由 Panel 重新同步。运行日志同样可以是临时数据。
 
@@ -45,7 +46,7 @@ Remnanode Lite 是具有网络管理权限的节点软件，不是普通无特�
 
 ## Secret 处理
 
-原生 systemd/OpenRC 部署将 Secret 存放在 `/etc/remnanode-lite/secret.key`，权限为 `root:remnanode-lite 0640`。配置与 Secret 由 Go 进程使用有界、拒绝符号链接的文件读取路径加载，不会把整份 `node.env` 导出到服务环境。
+原生 systemd 和符合条件的 Alpine/OpenRC 部署将 Secret 存放在 `/etc/remnanode-lite/secret.key`，权限为 `root:remnanode-lite 0640`。配置与 Secret 由 Go 进程使用有界、拒绝符号链接的文件读取路径加载，不会把整份 `node.env` 导出到服务环境。
 
 单文件 Compose 必须将 Secret 内联，因此它会出现在 `docker inspect` 可读取的容器元数据中。应执行：
 

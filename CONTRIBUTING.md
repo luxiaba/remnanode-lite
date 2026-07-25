@@ -79,8 +79,8 @@ Before implementing a change, answer these questions:
    output?
 4. What happens on cancellation, process exit, partial failure, and repeated
    calls?
-5. Which macOS stub, Linux implementation, Docker, systemd, or OpenRC paths are
-   affected?
+5. Which macOS stub, Linux implementation, Docker, systemd, or supported
+   Alpine/OpenRC paths are affected?
 6. Which tests prove the behavior rather than merely execute the code?
 
 For a broad change, document the contract, ownership, migration, and validation
@@ -208,15 +208,16 @@ When changing a Linux-specific path:
 - Run the corresponding unit tests on Linux.
 - For nftables or socket destruction, run the isolated network-namespace
   integration tests.
-- For service-manager behavior, account for both systemd and OpenRC.
+- For service-manager behavior, account for systemd and the qualified
+  Alpine/OpenRC path.
 
 The exact commands are in the
 [testing strategy](docs/development/testing.md).
 
 ### Shell, installers, and service definitions
 
-- Bash scripts use `set -euo pipefail`. The public Native bootstrap and OpenRC
-  service remain compatible with POSIX `sh`.
+- Bash scripts use `set -euo pipefail`. The public Native bootstrap and
+  Alpine/OpenRC service remain compatible with POSIX `sh`.
 - Shell and service files use LF line endings; `.gitattributes` enforces this.
 - `release/native/install.sh` is only the bootstrap. Durable lifecycle and
   generation behavior belongs in `internal/rnlctl`; do not reimplement it in
@@ -227,12 +228,18 @@ The exact commands are in the
   strict manifest/file verification, private snapshots, the operation lock,
   durable journal, and two-generation rollback model.
 - Keep the base systemd unit valid on systemd 239. Add newer hardening only to
-  the version-gated drop-in. Treat OpenRC as experimental and preserve its
-  explicit cgroup v2 validation.
+  the version-gated drop-in. OpenRC support is limited to persistent Alpine
+  Linux 3.22.x `sys` installations with distribution OpenRC as PID 1; preserve
+  its explicit Linux 5.14+ and unified cgroup v2 validation. Do not add a
+  generic OpenRC claim or code that attempts to repair host delegation.
 - Installer or lifecycle changes require bootstrap fixtures, focused
   `internal/rnlctl` tests, race coverage for affected state, bundle tamper
-  tests, and the relevant systemd/OpenRC host-controller tests. A successful
-  install on one real host does not replace failure-injection coverage.
+  tests, and the relevant systemd or Alpine/OpenRC host-controller tests. A
+  successful install on one real host does not replace failure-injection
+  coverage. Initial Alpine platform promotion requires a persistent full-VM
+  test on each claimed architecture; later changes repeat only the affected
+  platform or architecture paths. A container or init-less guest is
+  insufficient for qualification.
 
 ### Generated code, dependencies, and supply chain
 

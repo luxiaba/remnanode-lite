@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=5d8454c2e82b23117e96d3f8823b0a7825ceb4ff30f47603aba66cc64aa85145 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=85a212681271f8a1876f38fd330d081af08bcb349e7ebd327150e9622ddff6e7 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > 这是中文译文；涉及契约细节时，请以[英文原文](../../../development/contract-2.8.0.md)为准。
@@ -14,7 +14,7 @@
 - 仓库：`https://github.com/remnawave/node.git`
 - 版本：`2.8.0`
 - 提交：`596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`
-- 集成验证使用的 Panel 版本：`2.8.1`（与项目版本号相互独立）
+- 集成验证：连接真实且兼容的 Panel，并验证代表性代理流量（不作为项目版本或兼容性承诺）
 
 路由方法来自四个官方 controller，请求和响应结构来自 `libs/contract/commands` 下的 Zod schema，应用错误来自 `libs/contract/constants/errors` 与 `HttpExceptionFilter`。`internal/contract/official-source-manifest.json` 记录每个证据 blob 的 SHA-256，以及工具从源码提取的 26 组 method/path/controller decorator。
 
@@ -103,7 +103,7 @@ nft backend 在单个 `nft -f` 原子事务内替换 IPv4/IPv6 私有表和过�
 
 完整的 Xray Go module 已被最小 protobuf wire 客户端替代，并与官方生成类型校准。五种账号类型、Handler 请求、Stats 消息和确定性的 wire golden 测试共同固定兼容性。
 
-`LOW_MEMORY=1` 时，公开 `/node` server 的默认请求体上限为 16 MiB，Go runtime 的内存软上限为 180 MiB。显式 `BODY_LIMIT_MB` 允许 `1..1024`；非法、负数或溢出值会让进程启动失败，而不是静默回退。内部 Unix webhook 仍使用独立的 8 KiB 固定上限。Debian 与 Alpine 安装器会在整机内存不超过 512 MiB 时自动启用该模式。
+`LOW_MEMORY=1` 时，公开 `/node` server 的默认请求体上限为 16 MiB，Go runtime 的内存软上限为 180 MiB。显式 `BODY_LIMIT_MB` 允许 `1..1024`；非法、负数或溢出值会让进程启动失败，而不是静默回退。内部 Unix webhook 仍使用独立的 8 KiB 固定上限。受维护的 Docker 和 Native 模板默认启用低内存模式。
 
 生产 init 只读取 `/etc/remnanode-lite/node.env`，不会回退到服务账号可写的工作目录。配置必须是普通的非符号链接文件，总大小不超过 1 MiB，最多 4096 行和 256 个赋值。配置与 Secret 都通过同一个带 `O_NOFOLLOW|O_NONBLOCK` 的文件描述符完成检查和有界读取。systemd/OpenRC 不会导出整份配置环境，`GOMEMLIMIT` 与版本覆盖值由同一个 Go 解析器验证并应用。
 
@@ -113,11 +113,13 @@ nft backend 在单个 `nft -f` 原子事务内替换 IPv4/IPv6 私有表和过�
 
 公开服务要求 TLS 1.3 或更高版本，并关闭 Go 的 HTTP/2 自动协商，以保持官方连接处理模型。无效 JWT、未知路由和错误 HTTP method 会直接关闭底层连接，而不是返回可枚举的 401/404/405 响应。请求头上限为 64 KiB。真实 TLS 客户端测试覆盖正常连接复用，以及认证失败或未知请求后的连接关闭。
 
-systemd 与 OpenRC 均使用专用 `remnanode-lite:remnanode-lite` 账号，配置为 `root:remnanode-lite 0640`，状态和日志目录为 `remnanode-lite:remnanode-lite 0750`。服务只获得 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`；systemd 同时将 bounding set 收紧到这两项，并启用 `NoNewPrivileges`、只读系统、namespace/syscall/address-family 限制、`448 MiB` 内存、零 swap、1 CPU 和 256 tasks。Alpine 3.22 的 supervise-daemon 实测 `CapInh/Prm/Eff/Amb=0x1400`、`NoNewPrivs=1`，且由服务派生的 `nft` 子进程可创建私有表。
+systemd 与 Alpine/OpenRC 都以专用 `remnanode-lite:remnanode-lite` 账号运行受管 Node 进程；配置为 `root:remnanode-lite 0640`，状态和日志目录为 `remnanode-lite:remnanode-lite 0750`。Node 进程只获得 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`。systemd 还会把它的 bounding set 收紧到这两项，并启用 `NoNewPrivileges`、只读系统、namespace/syscall/address-family 限制、`448 MiB` 内存、零 swap、1 CPU 和 256 tasks。Alpine/OpenRC 的 `supervise-daemon` 仍是 root 服务管理器进程；它启动的 Node 子进程具有 `CapInh/Prm/Eff/Amb=0x1400` 和 `NoNewPrivs=1`，由 Node 启动的 `nft` 子进程可以创建私有表。
 
-Native 项目资产位于 `/usr/local/lib/remnanode-lite` 的 generation 中；Docker 在容器私有镜像路径中使用相同项目名称。两种方式都不接管通用 Xray 路径。Release 归档、rw-core zip、自定义 core 与 ASN 数据必须通过 SHA-256、结构和版本检查后才能安装。固定 rw-core `v26.6.27` 的已审计摘要不能被覆盖。
+Native Alpine 支持仅限 `amd64` 和 `arm64` 上持久化的 Alpine Linux 3.22.x `sys` 安装：发行版 OpenRC 必须作为 PID 1 运行，内核不低于 Linux 5.14，统一 cgroup v2 必须提供服务所需的全部控制项。这不表示泛化的 OpenRC 支持。只完成 prepare 不能证明主机符合条件；activate 必须通过服务的 fail-closed 检查。
 
-升级会备份 binary、service、support、`node.env` 和可选 rw-core 资产。刷新后的服务或端口检查失败时，所有内容都会恢复。Ubuntu/systemd 与 Alpine/OpenRC 的错误 service 注入验证了摘要和运行状态恢复。完整卸载测试也确认：无关的同名进程不会被终止，通用 Xray 文件不会被删除。
+Native 项目资产位于 `/usr/local/lib/remnanode-lite` 下经过校验的 generation 中；Docker 在容器私有镜像路径中使用相同项目名称。两种部署方式都不接管系统中的通用 Xray 路径。一个 release bundle 包含 Node、`rnlctl`、rw-core、geo 数据、ASN 数据、第三方声明和服务文件。安装前会校验外层归档、严格 manifest、架构、版本以及每个载荷的摘要。
+
+Native 升级会创建一个完整 generation，以原子方式将其设为当前版本，恢复升级前服务是否启用、是否运行的状态，校验二进制版本，并等待私有健康检查通过后再提交。失败时会恢复已提交的 generation；上一 generation 保留下来，可供显式回滚。完整卸载测试也确认：无关进程、原先已存在的账号对象和通用 Xray 文件不会被改动。
 
 上述带日期的 M7 systemd/OpenRC 与错误 service 回滚观测属于工程基线，只适用于当时记录的提交和环境。
 
@@ -172,15 +174,15 @@ Native 项目资产位于 `/usr/local/lib/remnanode-lite` 的 generation 中；D
 
 此前记录的 TLS/socket 与系统供应链偏差已经关闭。当前没有已知的静态 `/node` 契约 P1/P2。
 
-`2.8.0` 候选必须使用生产 Compose 模板在原生 `x86_64`/`amd64` 上验证不可变的 `sha-<main-commit>` 镜像，确认版本输出、真实 Panel 2.8.1 连接和真实代理流量。该人工判断不作为运行数据提交到仓库。容器仍必须限制为 448 MiB 内存、不得获得额外容器 swap、1 CPU 和 256 PIDs。
+`2.8.0` 候选必须使用生产 Compose 模板在原生 `x86_64`/`amd64` 上验证不可变的 `sha-<40-character-main-commit>` 镜像，确认版本输出、与真实兼容 Panel 的连接和代表性代理流量。该运维验证不存入源码仓库。容器仍必须限制为 448 MiB 内存、不得获得额外容器 swap、1 CPU 和 256 PIDs。
 
-Release workflow 只从当前 `main` HEAD 运行。它会解析该提交的 `sha-*` 候选，校验两个可运行 Linux manifest、各平台 SBOM 和 attestation，验证已构建的 Native bundle 及其已 attestation 的 `release-index.json` digest 绑定，创建并校验 draft Release，在公开前晋升同一 digest，再在不重建镜像的情况下确认 immutable Release 与精确标签。纯稳定版随后推进 `latest`。Release notes 由 GitHub 自动生成。
+Release workflow 只从当前 `main` HEAD 运行。它会解析该提交的 `sha-*` 候选，校验两个可运行 Linux manifest 和 attestation，验证已构建的 Native bundle 及其已 attestation 的 `release-index.json` digest 绑定，创建并校验 draft Release，在公开前晋升同一 digest，再在不重建镜像的情况下确认 immutable Release 与精确标签。纯稳定版本只推进 `latest`，`rnl.N` 预发布版本只推进 `preview`。
 
-原生 `arm64` 运行、systemd/OpenRC 安装、50,000 用户负载复测、长时间 soak 和故障注入仍是有价值的后续验证。没有实际运行时不得描述为已经通过。
+更多 Native 整机发行版与架构组合、50,000 用户负载复测、长时间 soak 和故障注入仍是有价值的后续验证。没有实际运行时不得描述为已经通过。
 
 Docker Compose 与官方一样使用 host network 和 `NET_ADMIN`，同时保留低端口监听
 能力；Go Manager 直接拥有 rw-core 生命周期，因此无需复制官方双进程 s6 运行结构。
-systemd/OpenRC 继续作为等价的原生部署入口。
+systemd 是主要 Native 服务路径；Alpine Linux 3.22.x/OpenRC 仅在满足上述宿主机契约时受到支持。
 
 两份受维护的生产 Compose 模板都使用 `remnanode-lite` 作为 service、container 和
 hostname。它们从 `.env` 插值同一组显式运行变量，应用生产默认值，并在创建容器前拒绝
@@ -203,7 +205,7 @@ go test ./internal/contract
 
 ```bash
 go run ./cmd/contract-source-check \
-  -source /tmp/remnawave-node-official-2.8.0-codex
+  -source /tmp/remnawave-node-official-2.8.0
 ```
 
 需要更新固定契约时，在确认 `OfficialNodeCommit` 和证据目录清单后显式加 `-write` 重建

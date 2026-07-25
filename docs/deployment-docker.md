@@ -74,7 +74,7 @@ This command uses GNU `sha256sum`, which is available on the supported Linux hos
 
 ```env
 REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=PASTE_THE_COMPLETE_BASE64_VALUE_FROM_THE_PANEL
 LOW_MEMORY=1
 ```
@@ -106,7 +106,7 @@ Before the first formal Release, or when testing a new candidate, download the C
     -o docker-compose.yaml
   cat >.env <<EOF
 REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${candidate_tag}
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=PASTE_THE_COMPLETE_BASE64_VALUE_FROM_THE_PANEL
 LOW_MEMORY=1
 EOF
@@ -122,7 +122,7 @@ Both the single-file and repository-root templates use interpolation in a YAML m
 
 ```yaml
 environment:
-  NODE_PORT: "${NODE_PORT:-38329}"
+  NODE_PORT: "${NODE_PORT:-2222}"
   SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY in .env or the shell}"
 ```
 
@@ -152,7 +152,7 @@ docker compose pull
 docker compose up -d --no-build
 docker compose ps
 docker compose logs --tail=100 remnanode-lite
-ss -H -lnt "sport = :38329"
+ss -H -lnt "sport = :2222"
 ```
 
 Do not run `docker compose config` without `--quiet` in automation logs; it expands and prints the effective Secret.
@@ -283,7 +283,7 @@ Set at least:
 
 ```env
 REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=PASTE_THE_COMPLETE_VALUE
 LOW_MEMORY=1
 ```

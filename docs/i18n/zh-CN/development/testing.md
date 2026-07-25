@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=72b7f1e959c7c0bcddea863cdf870933d073458762d2a782b6abd2258929ffa8 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=3e82d4779ecf4a3ff1e8af530d10e664575e07fa928a1471e0f5e4ee225b73e5 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -14,7 +14,7 @@
 - 官方可见行为变化必须运行固定源码契约测试。
 - Linux capability、netlink、nftables、进程组和 cgroup 结论只能由 Linux 测试支持。
 - 正式发布前，维护者应使用当前 `main` 的不可变 `sha-<40 位提交>` 候选，在生产限制下连接真实 Panel 并验证真实代理流量。这是人工发布判断；随后从 `main` 发起 release workflow，运行观测不提交到仓库。
-- 精确整机 512 MiB 目标、原生安装路径、`arm64` 运行、大用户量、长时间运行和故障注入仍是有价值的后续检查。单元测试不能替代它们没有覆盖的真实环境。
+- 精确整机 512 MiB 目标、尚未实测的 Native 发行版/架构组合、大用户量、长时间运行和故障注入仍是有价值的后续检查。单元测试不能替代它们没有覆盖的真实环境。
 - 测试数据不得包含真实 Secret、JWT、证书、私钥、节点 IP、hostname 或原始响应；宿主清单、容器标识、时间戳、日志和 smoke JSON 也不写入仓库。
 
 ## 快速选择
@@ -28,6 +28,7 @@
 | Shell、Docker、workflow 或供应链 | `bash scripts/check-repository.sh` | 中至高 |
 | Native bootstrap 或 bundle 格式 | `sh release/native/install_test.sh`、`go test ./cmd/release-tool` | 中至高 |
 | Native 生命周期或 service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | 高 |
+| Alpine/OpenRC 宿主机资格验证 | 持久化 Alpine 3.22.x 完整虚拟机的全生命周期与重启测试 | Linux/root |
 | 完整仓库门禁 | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | 高 |
 | Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
 | 低内存预算 | `scripts/test-low-memory.sh --rw-core ...` | Docker/真实 core |
@@ -218,6 +219,8 @@ go test -race -count=1 ./cmd/release-tool ./internal/rnlctl
 
 bootstrap fixtures 覆盖精确版本下载、本地归档摘要、`--yes`、`--prepare-only`、Secret 文件和移动通道拒绝。`internal/rnlctl` 使用临时 root 与 service fake，覆盖严格 manifest、锁和 journal、generation 原子选择、服务状态恢复、回滚、repair、账号所有权及 purge 安全；不会写入真实 `/etc/remnanode-lite` 或启动宿主服务。
 
+`--prepare-only` 只能证明 bundle 校验和宿主文件准备正确；它不会启动服务、应用 cgroup 限制或确认 Alpine/OpenRC 主机符合条件。这些检查在 `rnlctl activate` 时才第一次真正生效。
+
 当归档结构、runtime assets 或 release 脚本发生变化时，还要构建并验证真实 bundle：
 
 ```bash
@@ -228,7 +231,25 @@ bash scripts/test-native-release-bundle.sh "dist/native/remnanode-lite_${version
 bash scripts/test-native-release-bundle.sh "dist/native/remnanode-lite_${version}_linux_arm64.tar.gz" arm64
 ```
 
-构建需要精确 Go toolchain 和完整的固定 runtime asset cache。只有在 cache 完整时才使用 `RNL_OFFLINE_BUILD=1`。bundle smoke test 会用真实 `rnlctl` 生命周期代码打开生成的归档，在带限制 `umask` 的临时 test root 中安装，同时保留假的 service-manager 边界。若改动影响 service-manager 行为，它不能替代真实 systemd/OpenRC 检查。
+构建需要精确 Go toolchain 和完整的固定 runtime asset cache。只有在 cache 完整时才使用 `RNL_OFFLINE_BUILD=1`。bundle smoke test 会用真实 `rnlctl` 生命周期代码打开生成的归档，在带限制 `umask` 的临时 test root 中安装，同时保留假的 service-manager 边界。若改动影响 service-manager 行为，它不能替代真实 systemd 或 Alpine/OpenRC 检查。
+
+### Native 发行版资格验证
+
+首次把一个 Native 平台纳入支持范围时，每个声明支持的架构都必须使用持久化完整虚拟机验证。后续变更如果触及对应的服务管理器路径、原生二进制形态或架构专属资产，再复验相关平台或架构；无关版本无需重新完成整套资格验证。容器和没有 init 的 guest 可用于检查安装器的可移植性，cgroup 受限的嵌套 guest 也适合验证拒绝行为，但它们都不能用于确认某个发行版受到支持。
+
+Alpine 必须使用所声明 `amd64` 或 `arm64` 架构上的持久化 Alpine Linux 3.22.x `sys` 安装。发行版 OpenRC 必须作为 PID 1 运行，内核不低于 Linux 5.14；统一 cgroup v2 必须提供可用的 `cpu`、`memory`、`pids` controller、`memory.swap.max`、可写的父级 `cgroup.procs` 和可写的服务 `cgroup.kill`。至少验证以下内容：
+
+1. 安装依赖并将 `cgroups` 加入开机启动；
+2. 使用非生产测试凭据准备并激活精确 bundle；
+3. 执行 `rnlctl status`、`doctor` 和 `config check`；
+4. 检查预期的 memory、swap、CPU 和 PID 限制，以及受管 Node 进程的两项 capability 与 `NoNewPrivs`；
+5. 执行精确版本 upgrade 和随后的 rollback，每次切换后服务都恢复健康；
+6. 使用保留的已校验缓存执行 repair，并覆盖一次有意制造的中断或损坏状态恢复；
+7. 停止服务后精确 service cgroup 已清理，再验证 start 和 restart；
+8. 完整重启虚拟机后，服务自动恢复、健康状态正常，资源限制保持不变；
+9. 分别执行普通 uninstall 和 `--purge --yes`，确认无关账号、进程、文件和防火墙状态不受影响。
+
+本地健康并不能证明 Panel 连接或代理流量正常。只有确实执行过时，才能把它们作为另一项 Release 验收结论；主机信息、凭据、日志和 smoke 输出仍须留在仓库之外。
 
 ## Linux 网络管理集成测试
 
@@ -357,7 +378,7 @@ release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance�
 | nftables/socket destroy | 对应 Linux unit test | 两条 namespace 集成测试 |
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
 | Native bootstrap | `sh release/native/install_test.sh` | 在目标主机安装精确 Release |
-| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`、`go test -race ./internal/rnlctl` | 改动 Native runtime 行为时实测 systemd/OpenRC |
+| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`、`go test -race ./internal/rnlctl` | 改动 Native runtime 行为时实测 systemd 或符合条件的 Alpine/OpenRC 主机 |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建，以及严格容器限制下的真实候选验证 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |

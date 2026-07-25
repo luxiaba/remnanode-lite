@@ -142,8 +142,12 @@ the behavior relevant to the release, including:
 - no unexpected restart, OOM, or shutdown behavior.
 
 When Native delivery changed, test the candidate bundle on the affected
-systemd or OpenRC platform as well. State exactly which architecture and
-distribution were exercised; one host does not prove every Linux target.
+systemd or qualified Alpine/OpenRC platform as well. State exactly which
+architecture, distribution, init system, and lifecycle paths were exercised;
+one host does not prove every Linux target. An Alpine support claim requires a
+persistent `sys` installation with distribution OpenRC as PID 1 and the full
+documented cgroup v2 contract. Container, init-less, and constrained nested
+tests may prove rejection behavior but cannot qualify a supported host.
 
 Acceptance records are operational data. Do not commit host inventories,
 addresses, Panel details, secrets, logs, container identifiers, or smoke-test
@@ -152,19 +156,20 @@ output.
 ## 4. Run the Release Workflow
 
 Open **Actions -> release -> Run workflow**, choose `main`, and enter the exact
-source version. For example:
+source version. For a preview, the input has this form:
 
 ```text
-version: 2.8.0
+version: X.Y.Z-rnl.N
 ```
 
 The CLI equivalent is:
 
 ```bash
+VERSION="<prepared-source-version>"
 gh workflow run release.yml \
   --repo luxiaba/remnanode-lite \
   --ref main \
-  -f version=2.8.0
+  -f "version=${VERSION}"
 ```
 
 The workflow performs these operations in order:
@@ -286,7 +291,7 @@ mechanism.
 - [ ] The `dev -> main` pull request passed required checks and was reviewed.
 - [ ] `ci` and `candidate` succeeded for the current `main` commit.
 - [ ] The exact `sha-<commit>` image passed real Panel and traffic acceptance.
-- [ ] Native behavior was tested when Native delivery changed.
+- [ ] Native changes were tested on the affected service-manager and architecture paths; initial Alpine qualification used persistent full VMs.
 - [ ] The release workflow is dispatched from `main` with the exact source version.
 - [ ] The published Release shows **Immutable** and `gh release verify` succeeds.
 - [ ] The exact image tag resolves to the digest recorded by the immutable

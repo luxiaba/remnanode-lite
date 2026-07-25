@@ -24,15 +24,15 @@ command derives the stable-versus-preview class from the source version.
 `Version` and `ContractVersion` move independently. For example:
 
 ```text
-Version:         2.8.0
+Version:         2.8.0-rnl.1
 ContractVersion: 2.8.0
 ```
 
-This is the stable Remnanode Lite release line aligned with the verified
-official Node `2.8.0` contract. Its Native Linux distribution is attached only
-when the corresponding GitHub Release is published. A future `rnl.N` suffix
-describes this project's release; it is not a revision published by the
-official project.
+This is a Remnanode Lite preview that improves Native delivery while continuing
+to implement the verified official Node `2.8.0` contract. Its Native Linux
+distribution is attached only when the corresponding GitHub Release is
+published. The `rnl.N` suffix describes this project's release; it is not a
+revision published by the official project.
 
 Changing `ContractVersion` requires pinned official source, a reviewed contract
 delta, corresponding implementation and test changes, and completed
@@ -86,7 +86,8 @@ contract has already been implemented.
 
 | Release | Contract | Class | Status |
 | --- | --- | --- | --- |
-| `2.8.0` | `2.8.0` | Stable | Current contract-aligned release line; Native bundles exist only for published Releases |
+| `2.8.0` | `2.8.0` | Stable | Published contract-alignment baseline and current `latest` line |
+| `2.8.0-rnl.1` | `2.8.0` | Preview | Native administration and qualified Alpine improvements; exact assets exist only after publication |
 
 Semantic Versioning orders an `X.Y.Z-rnl.N` preview before its `X.Y.Z` stable
 counterpart. Do not infer publication order or channel selection from SemVer

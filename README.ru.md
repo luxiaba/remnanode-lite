@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=README.md; source-sha256=18908111338dd91a84e897009e1978ffd93af96f6009ee4b396bd5c4fa56a7bf -->
+<!-- translation: locale=ru; source=README.md; source-sha256=9a38091f456cbecff27783ed75b08dff854bd8ab1c1727196d63d36f5a6e4b0c -->
 <div align="center">
 
 # Remnanode Lite
@@ -30,7 +30,7 @@ Remnanode Lite работает как Remnawave-совместимый Node н�
 
 - Реализует контракт API Remnawave Node `2.8.0`.
 - Node работает как единый процесс на Go и напрямую управляет rw-core; Node.js и s6 не требуются.
-- Включает поддерживаемый Compose-профиль с пониженным потреблением памяти для серверов с 512 MiB RAM.
+- Использует единый поддерживаемый профиль с пониженным потреблением памяти для контейнера и Native-службы на серверах с 512 MiB RAM.
 - Поддерживает обновление пользователей на лету, сбор статистики, управление соединениями и официальные форматы правил плагинов.
 - Публикует в GHCR мультиархитектурные образы с SBOM, данными о происхождении и аттестациями сборки.
 - Native Linux поддерживает транзакционные установку, обновление, откат и восстановление через `rnlctl`.
@@ -43,7 +43,7 @@ Remnanode Lite работает как Remnawave-совместимый Node н�
 | Когда выбирать | Docker Engine с Compose v2 уже доступен; это вариант по умолчанию. | Docker нельзя установить либо постоянные расходы Docker daemon и container runtime для хоста не подходят. |
 | Установка | Скачайте Compose-asset Release и задайте Secret Panel в `.env` или в намеренно встроенном mapping. | Скачайте точный Release, проверьте `install.sh` и запустите installer от root. |
 | Обновление и откат | Выберите точный tag или digest образа, выполните pull и recreate; для отката верните предыдущую ссылку на образ. | Используйте `rnlctl upgrade --to VERSION` и `rnlctl rollback`; сохраняется один проверенный previous generation. |
-| Служба хоста | Нужны Docker Engine daemon и container runtime. | Docker Engine daemon и container runtime не нужны, но `remnanode-lite` всё равно работает как фоновая служба systemd или OpenRC. |
+| Служба хоста | Нужны Docker Engine daemon и container runtime. | Docker Engine daemon и container runtime не нужны, но `remnanode-lite` всё равно работает как служба systemd, а на подходящем хосте Alpine — как служба OpenRC. |
 | Выбор версии | Рекомендуются точный tag или manifest digest; `latest` и `preview` — явно выбранные движущиеся каналы. | Только точные Releases `X.Y.Z` или `X.Y.Z-rnl.N`; движущиеся каналы образов не разрешаются. |
 
 Оба варианта используют host networking и требуют `NET_ADMIN`. Не запускайте их рядом с другим Node, использующим те же Panel или proxy ports.
@@ -74,19 +74,19 @@ chmod 600 docker-compose.yaml .env
 Compose CLI автоматически читает `.env` из этого каталога. Оба скачанных файла выбирают точную версию образа из соответствующего выпуска. Укажите в `.env` порт узла и полный Secret Key из Panel:
 
 ```env
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=PASTE_THE_COMPLETE_PANEL_SECRET_KEY
 ```
 
-Значение `NODE_PORT` по умолчанию в Compose равно `2222`; `38329` приведено только как пример. Выбранный порт должен совпадать с портом узла в Panel.
+Значение `NODE_PORT` по умолчанию в Compose соответствует официальному значению `2222`. Меняйте его только если в Panel для этого Node настроен другой порт.
 
 Существующие установки могут продолжать использовать свой текущий каталог; для обновления переименовывать его не требуется.
 
-Чтобы сохранить буквально однофайловое развёртывание без `.env`, замените подстановку `SECRET_KEY` в `docker-compose.yaml` полным значением. В следующем примере значение порта по умолчанию также изменено на `38329`:
+Чтобы сохранить буквально однофайловое развёртывание без `.env`, замените подстановку `SECRET_KEY` в `docker-compose.yaml` полным значением. Следующий пример сохраняет стандартный порт Node:
 
 ```yaml
 environment:
-  NODE_PORT: "${NODE_PORT:-38329}"
+  NODE_PORT: "${NODE_PORT:-2222}"
   SECRET_KEY: "PASTE_THE_COMPLETE_PANEL_SECRET_KEY"
 ```
 
@@ -107,7 +107,7 @@ docker compose logs --tail=100 remnanode-lite
 
 ## Native Linux
 
-Используйте Native bundle, когда Docker Engine нельзя установить или когда постоянные расходы Docker daemon и container runtime для хоста не подходят. Native не означает отсутствие фоновой службы: `remnanode-lite` запускается непосредственно systemd или OpenRC. Основная цель — Rocky Linux 9 с systemd; Rocky Linux 8 и Debian 12 совместимы. OpenRC является экспериментальным путём и требует рабочего cgroup v2.
+Используйте Native bundle, когда Docker Engine нельзя установить или когда постоянные расходы Docker daemon и container runtime для хоста не подходят. Native не означает, что Node работает без фоновой службы: `remnanode-lite` запускается под управлением менеджера служб хоста. Основная цель — Rocky Linux 9 с systemd; Rocky Linux 8 и Debian 12 совместимы. Alpine Linux 3.22.x также поддерживается на `amd64` и `arm64`, если это постоянная установка типа `sys`, штатный OpenRC работает как PID 1, используется Linux 5.14 или новее, а единая иерархия cgroup v2 проходит проверки из руководства по Native. Это не универсальная поддержка OpenRC: контейнеры и окружения без init не поддерживаются, а вложенная полноценная виртуальная машина подходит только в том случае, если проходит тот же набор проверок.
 
 Native-установка никогда не следует за движущимся каналом. Выберите опубликованную версию на странице GitHub Releases, затем скачайте `install.sh` и `SHA256SUMS` из этого точного Release, проверьте installer и явно укажите версию:
 
@@ -117,18 +117,41 @@ BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
 curl -fLO "${BASE}/SHA256SUMS"
-grep '  install.sh$' SHA256SUMS | sha256sum --check --strict -
+grep '  install.sh$' SHA256SUMS | sha256sum -c -
 
-sudo sh ./install.sh --version "$VERSION" --port 38329
+sudo sh ./install.sh --version "$VERSION" --port 2222
 ```
 
 Если действующий Secret ещё не установлен, installer безопасно запросит полный Secret Panel в терминале. Он проверяет и устанавливает полный generation: Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data и service definitions. После старта:
 
 ```bash
-sudo rnlctl status --json
+sudo rnlctl status
 sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
+
+По умолчанию `status` выводит краткую сводку жизненного цикла для человека;
+скриптам следует по-прежнему использовать `status --json` с неизменной схемой.
+При обнаружении проблемы `doctor` завершает вывод итогом и конкретными
+следующими командами. Глобальные параметры `--quiet`/`-q` и `--no-color`
+можно ставить в любом месте команды. Автодополнение команд оболочки, фильтр времени
+для журналов systemd и dry-run обновления описаны в
+[руководстве Native Linux](docs/i18n/ru/deployment-native.md#работа-в-командной-строке).
+
+Параметры Native хранятся в `/etc/remnanode-lite/node.env`. Команда
+`rnlctl config` читает и изменяет этот файл напрямую, а не ведёт отдельное
+хранилище. Она показывает только разрешённые администратору поля без Secret:
+
+```bash
+sudo rnlctl config show
+sudo rnlctl config set NODE_PORT=2222 --apply
+sudo rnlctl secret set --file /root/new-node-secret.key --apply
+```
+
+Secret читается только из защищённого файла и не принимается значением в
+командной строке. При смене порта обновите также Panel и firewall хоста.
+Проверка, работа с остановленной или prepared-установкой и поведение при сбое
+описаны в [справочнике конфигурации](docs/i18n/ru/configuration.md#команды-конфигурации-native).
 
 Native bundle использует тот же контракт, что и соответствующий Release. Перед массовым развёртыванием прочитайте [руководство Native Linux](docs/i18n/ru/deployment-native.md): prerequisites, unattended и offline installation, точное обновление, откат, repair и uninstall.
 
@@ -203,6 +226,7 @@ docker compose up -d --no-build --force-recreate
 | Компонент | Текущее значение |
 | --- | --- |
 | Native Linux bundle | Точные опубликованные Releases |
+| Хосты для Native | Rocky Linux 8/9 и Debian 12 с systemd; подходящие установки Alpine Linux 3.22.x типа `sys` со штатным OpenRC |
 | Контракт Node | `2.8.0` |
 | rw-core | `v26.6.27` |
 | Платформы | `linux/amd64`, `linux/arm64` |

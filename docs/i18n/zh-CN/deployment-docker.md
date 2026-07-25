@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=89f255a56acd9499c51b87341b648d6f68f6a4365fc0416c6ba88292e064d232 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=182a0ccbb28489ea87e947c8bc3467718f0b7acd692c3c29e21ae527e9b63b1e -->
 
 # Docker Compose 部署
 
@@ -78,7 +78,7 @@ chmod 600 docker-compose.yaml
 
 ```env
 REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=粘贴_Panel_提供的完整_base64_内容
 LOW_MEMORY=1
 ```
@@ -110,7 +110,7 @@ chmod 600 .env
     -o docker-compose.yaml
   cat >.env <<EOF
 REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:${candidate_tag}
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=粘贴_Panel_提供的完整_base64_内容
 LOW_MEMORY=1
 EOF
@@ -126,7 +126,7 @@ EOF
 
 ```yaml
 environment:
-  NODE_PORT: "${NODE_PORT:-38329}"
+  NODE_PORT: "${NODE_PORT:-2222}"
   SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY in .env or the shell}"
 ```
 
@@ -156,7 +156,7 @@ docker compose pull
 docker compose up -d --no-build
 docker compose ps
 docker compose logs --tail=100 remnanode-lite
-ss -H -lnt "sport = :38329"
+ss -H -lnt "sport = :2222"
 ```
 
 不要在自动化日志中运行不带 `--quiet` 的 `docker compose config`，它会展开并打印实际生效的 Secret。
@@ -287,7 +287,7 @@ chmod 600 .env
 
 ```env
 REMNANODE_IMAGE=ghcr.io/luxiaba/remnanode-lite:X.Y.Z-rnl.N
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=粘贴完整内容
 LOW_MEMORY=1
 ```
