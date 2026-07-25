@@ -239,6 +239,89 @@ func TestStartCommitsConfigOnlyAfterReadiness(t *testing.T) {
 	}
 }
 
+func TestPendingConfigVisibleOnlyDuringStartingWindow(t *testing.T) {
+	manager, _ := newLifecycleManager(t, "hold")
+	probeEntered := make(chan struct{})
+	allowReady := make(chan struct{})
+	var once sync.Once
+	manager.readinessProbe = func(ctx context.Context) bool {
+		once.Do(func() { close(probeEntered) })
+		select {
+		case <-allowReady:
+			return true
+		case <-ctx.Done():
+			return false
+		}
+	}
+
+	if got := string(manager.CurrentConfigJSON()); got != "{}" {
+		t.Fatalf("stopped manager exposed pending config: %s", got)
+	}
+
+	response := make(chan StartResponse, 1)
+	go func() { response <- manager.Start(context.Background(), lifecycleStartRequest("client-a")) }()
+	awaitSignal(t, probeEntered, "readiness probe")
+
+	starting := snapshotManagerForTest(manager)
+	if starting.state != lifecycleStarting || len(starting.pendingConfigJSON) == 0 {
+		t.Fatalf("starting snapshot does not expose pending config: state=%s pending=%v", starting.state, len(starting.pendingConfigJSON) != 0)
+	}
+	if got := string(manager.CurrentConfigJSON()); got == "{}" {
+		t.Fatal("starting manager did not serve pending config")
+	}
+
+	close(allowReady)
+	if resp := awaitStartResponse(t, response); !resp.IsStarted {
+		t.Fatalf("start failed: %#v", resp)
+	}
+	running := snapshotManagerForTest(manager)
+	if running.state != lifecycleRunning || len(running.pendingConfigJSON) != 0 {
+		t.Fatalf("running snapshot retained pending config: state=%s pending=%v", running.state, len(running.pendingConfigJSON) != 0)
+	}
+	if got := string(manager.CurrentConfigJSON()); got != "{}" {
+		t.Fatalf("running manager exposed pending config: %s", got)
+	}
+
+	if stopped := manager.Stop(); !stopped.IsStopped {
+		t.Fatalf("stop failed: %#v", stopped)
+	}
+	if got := string(manager.CurrentConfigJSON()); got != "{}" {
+		t.Fatalf("stopped manager exposed pending config: %s", got)
+	}
+}
+
+func TestFailedReplacementAfterPreviousTerminationClearsRuntimeState(t *testing.T) {
+	manager, _ := newLifecycleManager(t, "hold")
+	manager.readinessProbe = func(context.Context) bool { return true }
+	request := lifecycleStartRequest("client-a")
+	if response := manager.Start(context.Background(), request); !response.IsStarted {
+		t.Fatalf("initial start failed: %#v", response)
+	}
+
+	running := snapshotManagerForTest(manager)
+	if running.process == nil || running.runtimeProcessEpoch != running.process.epoch ||
+		running.emptyConfigHash == "" || running.inboundHashCount == 0 || running.inboundTagCount == 0 {
+		t.Fatalf("initial runtime state was not committed: %#v", running)
+	}
+	previous := running.process
+	manager.processCommand = func() *exec.Cmd {
+		return exec.Command(filepath.Join(t.TempDir(), "missing-rw-core"))
+	}
+
+	request = lifecycleStartRequest("client-b")
+	request.Internals.ForceRestart = true
+	response := manager.Start(context.Background(), request)
+	if response.IsStarted || response.Error == nil || !strings.Contains(*response.Error, "spawn rw-core") {
+		t.Fatalf("replacement spawn response = %#v", response)
+	}
+	select {
+	case <-previous.done:
+	default:
+		t.Fatal("previous process was not finalized before replacement spawn failure")
+	}
+	assertStoppedAndCleared(t, manager)
+}
+
 func TestSuccessfulStartRefreshesCoreVersion(t *testing.T) {
 	manager, _ := newLifecycleManager(t, "hold")
 	manager.readinessProbe = func(context.Context) bool { return true }
@@ -936,12 +1019,19 @@ func waitForEvent(t *testing.T, path, want string) {
 
 func assertStoppedAndCleared(t *testing.T, manager *Manager) {
 	t.Helper()
-	manager.mu.RLock()
-	defer manager.mu.RUnlock()
-	if manager.state != lifecycleStopped || manager.process != nil {
-		t.Fatalf("manager not stopped: state=%s process=%v", manager.state, manager.process != nil)
+	snapshot := snapshotManagerForTest(manager)
+	if snapshot.state != lifecycleStopped || snapshot.process != nil {
+		t.Fatalf("manager not stopped: state=%s process=%v", snapshot.state, snapshot.process != nil)
 	}
-	if len(manager.pendingConfigJSON) != 0 || manager.emptyConfigHash != "" || len(manager.inboundHashes) != 0 {
-		t.Fatalf("runtime state not cleared: pending=%v empty=%q hashes=%d", len(manager.pendingConfigJSON) != 0, manager.emptyConfigHash, len(manager.inboundHashes))
+	if len(snapshot.pendingConfigJSON) != 0 || snapshot.runtimeProcessEpoch != 0 ||
+		snapshot.emptyConfigHash != "" || snapshot.inboundHashCount != 0 || snapshot.inboundTagCount != 0 {
+		t.Fatalf(
+			"runtime state not cleared: pending=%v processEpoch=%d empty=%q hashes=%d tags=%d",
+			len(snapshot.pendingConfigJSON) != 0,
+			snapshot.runtimeProcessEpoch,
+			snapshot.emptyConfigHash,
+			snapshot.inboundHashCount,
+			snapshot.inboundTagCount,
+		)
 	}
 }
