@@ -76,16 +76,9 @@ func renderCompletion(shell string) (string, error) {
 }
 
 func rnlctlCompletionSpec() completionCommandSpec {
-	editableKeys := []completionCandidateSpec{
-		{Value: "NODE_PORT=", Description: "Node HTTPS port", NoSpace: true},
-		{Value: "NODE_BIND_ADDR=", Description: "Local bind address", NoSpace: true},
-		{Value: "LOW_MEMORY=", Description: "Small-server memory profile", NoSpace: true},
-		{Value: "BODY_LIMIT_MB=", Description: "Request budget in MiB", NoSpace: true},
-		{Value: "GOMEMLIMIT=", Description: "Go soft memory limit", NoSpace: true},
-		{Value: "DISABLE_HASHED_SET_CHECK=", Description: "Configuration hash debug switch", NoSpace: true},
-	}
-	getKeys := withoutCandidateSuffix(editableKeys, "=")
-	unsetKeys := append([]completionCandidateSpec(nil), getKeys[1:]...)
+	editableKeys := editableConfigurationCompletionCandidates(true, false)
+	getKeys := editableConfigurationCompletionCandidates(false, false)
+	unsetKeys := editableConfigurationCompletionCandidates(false, true)
 
 	bundleOptions := []completionOptionSpec{
 		{Long: "bundle-root", Description: "Extracted Native bundle directory", Value: completionValueDirectory},
@@ -210,12 +203,21 @@ func jsonCompletionOption() []completionOptionSpec {
 	return []completionOptionSpec{{Long: "json", Description: "Emit machine-readable JSON"}}
 }
 
-func withoutCandidateSuffix(candidates []completionCandidateSpec, suffix string) []completionCandidateSpec {
-	result := make([]completionCandidateSpec, len(candidates))
-	for index, candidate := range candidates {
-		candidate.Value = strings.TrimSuffix(candidate.Value, suffix)
-		candidate.NoSpace = false
-		result[index] = candidate
+func editableConfigurationCompletionCandidates(assignments, optionalOnly bool) []completionCandidateSpec {
+	result := make([]completionCandidateSpec, 0, len(editableConfigurationKeySpecs))
+	for _, spec := range editableConfigurationKeySpecs {
+		if optionalOnly && !spec.Optional {
+			continue
+		}
+		value := spec.Name
+		if assignments {
+			value += "="
+		}
+		result = append(result, completionCandidateSpec{
+			Value:       value,
+			Description: spec.Description,
+			NoSpace:     assignments,
+		})
 	}
 	return result
 }

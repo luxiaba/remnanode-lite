@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,6 +31,43 @@ func TestCompletionSpecIsValidAndContainsExpectedCommands(t *testing.T) {
 	for path, found := range wantPaths {
 		if !found {
 			t.Errorf("completion spec is missing %q", path)
+		}
+	}
+}
+
+func TestConfigurationCompletionCandidatesFollowKeyMetadata(t *testing.T) {
+	want := map[string][]string{
+		"config get": {
+			"NODE_PORT", "NODE_BIND_ADDR", "LOW_MEMORY", "BODY_LIMIT_MB",
+			"GOMEMLIMIT", "DISABLE_HASHED_SET_CHECK",
+		},
+		"config set": {
+			"NODE_PORT=", "NODE_BIND_ADDR=", "LOW_MEMORY=", "BODY_LIMIT_MB=",
+			"GOMEMLIMIT=", "DISABLE_HASHED_SET_CHECK=",
+		},
+		"config unset": {
+			"NODE_BIND_ADDR", "LOW_MEMORY", "BODY_LIMIT_MB", "GOMEMLIMIT",
+			"DISABLE_HASHED_SET_CHECK",
+		},
+	}
+
+	found := make(map[string][]string, len(want))
+	visitCompletionCommands(rnlctlCompletionSpec(), nil, func(path []string, command completionCommandSpec) {
+		joined := strings.Join(path, " ")
+		if _, expected := want[joined]; !expected {
+			return
+		}
+		for _, candidate := range command.Arguments {
+			found[joined] = append(found[joined], candidate.Value)
+			if strings.Contains(candidate.Value, "SECRET") || strings.Contains(candidate.Value, "INTERNAL_") {
+				t.Errorf("%s completion exposes private key %q", joined, candidate.Value)
+			}
+		}
+	})
+
+	for path, candidates := range want {
+		if got := found[path]; !reflect.DeepEqual(got, candidates) {
+			t.Errorf("%s candidates = %q, want %q", path, got, candidates)
 		}
 	}
 }
