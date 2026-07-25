@@ -20,6 +20,20 @@ fi
 
 git diff --check
 git diff --cached --check
+
+forbidden_content_re='383[2]9|/[U]sers/|[Cc][Oo][Dd][Ee][Xx]|[Pp][Aa][Nn][Ee][Ll][[:space:]]+[^[:alnum:][:space:]]*[vV]?[0-9]+\.[0-9]+\.[0-9]+'
+content_policy_failed=0
+while IFS= read -r -d '' file; do
+  [ -f "$file" ] || continue
+  if LC_ALL=C grep -HInE -- "$forbidden_content_re" "$file"; then
+    content_policy_failed=1
+  fi
+done < <(git ls-files -co --exclude-standard -z)
+if [ "$content_policy_failed" -ne 0 ]; then
+  echo 'repository contains personalized or fixed-compatibility content' >&2
+  exit 1
+fi
+
 go run ./cmd/docs-check
 native_shell_files=()
 while IFS= read -r -d '' file; do
