@@ -14,6 +14,10 @@ port=
 secret_file=
 prepare_only=0
 assume_yes=0
+progress_mode=auto
+progress_set=0
+effective_progress_mode=
+interactive_download=0
 temporary_directory=
 temporary_secret=
 temporary_root=
@@ -40,6 +44,7 @@ Options:
   --prepare-only         Install and configure without enabling or starting
                          the service
   --yes                  Skip the non-secret installation confirmation
+  --progress MODE        Progress output: auto, plain, or never (default: auto)
   -h, --help             Show this help
 
 When no Secret file exists and --secret-file is omitted, the installer reads
@@ -163,6 +168,22 @@ while [ "$#" -gt 0 ]; do
 			assume_yes=1
 			shift
 			;;
+		--progress)
+			[ "$#" -ge 2 ] \
+				|| usage_error "--progress requires auto, plain, or never"
+			[ "$progress_set" -eq 0 ] \
+				|| usage_error "--progress may be specified only once"
+			progress_mode=$2
+			progress_set=1
+			shift 2
+			;;
+		--progress=*)
+			[ "$progress_set" -eq 0 ] \
+				|| usage_error "--progress may be specified only once"
+			progress_mode=${1#*=}
+			progress_set=1
+			shift
+			;;
 		-h|--help)
 			usage
 			exit 0
@@ -182,6 +203,24 @@ fi
 if [ -n "$sha256_value" ] && [ -z "$bundle_path" ]; then
 	usage_error "--sha256 is valid only with --bundle"
 fi
+case "$progress_mode" in
+	auto|plain|never) ;;
+	*) usage_error "--progress must be auto, plain, or never" ;;
+esac
+
+effective_progress_mode=$progress_mode
+if [ "$progress_mode" = auto ]; then
+	if [ "${TERM:-}" != dumb ] && [ -t 2 ]; then
+		interactive_download=1
+	else
+		effective_progress_mode=plain
+	fi
+fi
+
+progress_message() {
+	[ "$effective_progress_mode" = never ] \
+		|| printf '%s: %s\n' "$PROGRAM" "$1" >&2
+}
 
 if [ -n "$version" ]; then
 	printf '%s\n' "$version" | grep -Eq \
@@ -328,17 +367,32 @@ download_file() {
 	esac
 
 	if command -v curl >/dev/null 2>&1; then
-		curl --disable --fail --location --silent --show-error --retry 3 \
+		curl_progress_option=--silent
+		[ "$interactive_download" -eq 0 ] || curl_progress_option=--progress-bar
+		curl --disable --fail --location "$curl_progress_option" --show-error --retry 3 \
 			--proto '=https' --proto-redir '=https' --tlsv1.2 \
 			--connect-timeout 15 --max-time 900 \
 			--output "$download_destination" "$download_url" \
 			|| fail "download failed: $download_url"
-	elif command -v wget >/dev/null 2>&1; then
-		wget --quiet --https-only --tries=3 --timeout=30 \
-			--output-document="$download_destination" "$download_url" \
-			|| fail "download failed: $download_url"
+	elif command -v wget >/dev/null 2>&1 \
+		&& wget --help 2>&1 | grep -q -- '--https-only'; then
+		if [ "$interactive_download" -eq 1 ]; then
+			if wget --help 2>&1 | grep -q -- '--show-progress'; then
+				wget --quiet --show-progress --https-only --tries=3 --timeout=30 \
+					--output-document="$download_destination" "$download_url" \
+					|| fail "download failed: $download_url"
+			else
+				wget --https-only --tries=3 --timeout=30 \
+					--output-document="$download_destination" "$download_url" \
+					|| fail "download failed: $download_url"
+			fi
+		else
+			wget --quiet --https-only --tries=3 --timeout=30 \
+				--output-document="$download_destination" "$download_url" \
+				|| fail "download failed: $download_url"
+		fi
 	else
-		fail "online installation requires curl or wget"
+		fail "online installation requires curl or GNU Wget with --https-only support"
 	fi
 }
 
@@ -446,6 +500,7 @@ archive_install=0
 expected_sha256=
 expected_version=
 if [ -n "$bundle_path" ]; then
+	progress_message "Verify local linux/$architecture Native bundle"
 	regular_file "$bundle_path" || fail "--bundle must name a regular non-symlink file"
 	bundle_path=$(absolute_file_path "$bundle_path") \
 		|| fail "cannot resolve the local bundle path"
@@ -495,11 +550,13 @@ else
 	release_url=$REPOSITORY_URL/releases/download/${version}
 	checksum_path=$temporary_directory/SHA256SUMS
 	bundle_path=$temporary_directory/$asset_name
-	printf 'Downloading Remnanode Lite %s for linux/%s...\n' "$version" "$architecture"
+	progress_message "Download release checksums"
 	download_file "$release_url/SHA256SUMS" "$checksum_path"
 	check_file_size "$checksum_path" "$MAX_CHECKSUM_BYTES" "SHA256SUMS"
+	progress_message "Download Remnanode Lite $version for linux/$architecture"
 	download_file "$release_url/$asset_name" "$bundle_path"
 	check_file_size "$bundle_path" "$MAX_BUNDLE_BYTES" "Native bundle"
+	progress_message "Verify downloaded linux/$architecture Native bundle"
 	expected_sha256=$(checksum_for_asset "$checksum_path" "$asset_name") \
 		|| fail "SHA256SUMS has no unique valid entry for $asset_name"
 	verify_bundle_checksum "$bundle_path" "$expected_sha256"
@@ -574,14 +631,15 @@ elif [ "$prepare_only" -eq 0 ] \
 fi
 
 if [ "$archive_install" -eq 1 ]; then
-	set -- install --bundle "$bundle_path" --sha256 "$expected_sha256"
+	set -- --progress "$effective_progress_mode" install \
+		--bundle "$bundle_path" --sha256 "$expected_sha256"
 else
-	set -- install --bundle-root "$bundle_root"
+	set -- --progress "$effective_progress_mode" install --bundle-root "$bundle_root"
 fi
 [ -z "$expected_version" ] || set -- "$@" --expected-version "$expected_version"
 [ -z "$port" ] || set -- "$@" --port "$port"
 [ -z "$secret_file" ] || set -- "$@" --secret-file "$secret_file"
 [ "$prepare_only" -eq 0 ] || set -- "$@" --prepare-only
 
-printf 'Installing from the verified linux/%s Native bundle...\n' "$architecture"
+progress_message "Install verified linux/$architecture Native bundle"
 "$control_binary" "$@"
