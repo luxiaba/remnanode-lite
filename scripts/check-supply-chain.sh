@@ -81,6 +81,7 @@ done < <(
 candidate=.github/workflows/container.yml
 for required in \
   'name: candidate' \
+  '      - "release/**"' \
   'platforms: linux/amd64,linux/arm64' \
   'push-by-digest=true,name-canonical=true,push=true' \
   'provenance: mode=max' \
@@ -90,10 +91,12 @@ for required in \
   'release-tool finalize-release' \
   'release-tool verify-package' \
   '--require-release-index' \
-  'Attest every final Release asset' \
+  'id: attest-assets' \
   "native-bundles-${literal_dollar}{{ github.sha }}" \
   'actions/upload-artifact@' \
   "release-assets-${literal_dollar}{{ github.sha }}" \
+  "digest: ${literal_dollar}{{ steps.accepted.outputs.digest }}" \
+  'scripts/verify-candidate-image.sh --allow-missing' \
   'scripts/promote-image-tag.sh immutable' \
   'scripts/promote-candidate-edge.sh' \
   'needs: [image, native]' \
