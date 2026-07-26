@@ -288,9 +288,14 @@ func (s *StatsAPI) getUsersIPListLegacy(ctx context.Context) ([]UserIPEntry, err
 		return []UserIPEntry{}, nil
 	}
 
+	lookupCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	results := make([]UserIPEntry, len(userIDs))
 	var wg sync.WaitGroup
 	var cursor atomic.Uint64
+	var firstErr error
+	var firstErrOnce sync.Once
 	workerCount := min(legacyIPLookupWorkers, len(userIDs))
 	for range workerCount {
 		wg.Add(1)
@@ -298,12 +303,21 @@ func (s *StatsAPI) getUsersIPListLegacy(ctx context.Context) ([]UserIPEntry, err
 			defer wg.Done()
 			for {
 				index := int(cursor.Add(1) - 1)
-				if index >= len(userIDs) || ctx.Err() != nil {
+				if index >= len(userIDs) || lookupCtx.Err() != nil {
 					return
 				}
 				userID := userIDs[index]
-				ips, err := s.GetUserIPList(ctx, userID, false)
-				if err == nil && len(ips) != 0 {
+				ips, err := s.GetUserIPList(lookupCtx, userID, false)
+				if err != nil {
+					if ctx.Err() == nil {
+						firstErrOnce.Do(func() {
+							firstErr = err
+							cancel()
+						})
+					}
+					return
+				}
+				if len(ips) != 0 {
 					results[index] = UserIPEntry{UserID: userID, IPs: ips}
 				}
 			}
@@ -312,6 +326,9 @@ func (s *StatsAPI) getUsersIPListLegacy(ctx context.Context) ([]UserIPEntry, err
 	wg.Wait()
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if firstErr != nil {
+		return nil, firstErr
 	}
 
 	filtered := make([]UserIPEntry, 0, len(userIDs))

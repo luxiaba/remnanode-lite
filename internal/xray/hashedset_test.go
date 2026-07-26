@@ -127,7 +127,11 @@ func TestAddRemoveUserFromInboundHash(t *testing.T) {
 	t.Parallel()
 
 	process := &processState{epoch: 7}
-	manager := &Manager{state: lifecycleRunning, process: process, runtimeProcessEpoch: 7}
+	manager := &Manager{
+		state:   lifecycleRunning,
+		process: process,
+		runtime: runtimeState{runtimeProcessEpoch: 7},
+	}
 	token := &mutationToken{manager: manager, process: process, epoch: 7}
 	token.active.Store(true)
 	if !manager.commitUserAdded(token, "in-1", "uuid-1") ||
@@ -152,7 +156,11 @@ func TestHashCommitRejectsStaleProcessEpoch(t *testing.T) {
 
 	current := &processState{epoch: 8}
 	stale := &processState{epoch: 7}
-	manager := &Manager{state: lifecycleRunning, process: current, runtimeProcessEpoch: 8}
+	manager := &Manager{
+		state:   lifecycleRunning,
+		process: current,
+		runtime: runtimeState{runtimeProcessEpoch: 8},
+	}
 	token := &mutationToken{manager: manager, process: stale, epoch: 7}
 	token.active.Store(true)
 	if manager.commitUserAdded(token, "in-1", "uuid-1") {

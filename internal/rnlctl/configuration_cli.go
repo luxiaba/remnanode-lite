@@ -6,27 +6,8 @@ import (
 	"strings"
 )
 
-const configUsage = `Usage: rnlctl config <show|get|set|unset|check|apply>
-
-Commands:
-  show [--json]                    Show safe administrator-controlled values
-  get KEY                          Print one administrator-controlled value
-  set KEY=VALUE... [--apply]       Set and validate one or more values
-  unset KEY... [--apply]           Remove one or more optional values
-  check                            Validate the installed Native configuration
-  apply                            Restart the active service and verify health
-
-Managed runtime assignments and secret material are not exposed or editable.
-The JSON envelope identifies the managed node.env file without exposing those values.
-`
-
-const secretUsage = `Usage: rnlctl secret set --file PATH [--apply]
-
-The Secret is read from a bounded regular file and is never accepted as a value
-argument or written to command output.
-`
-
 func (a *App) runConfig(ctx context.Context, args []string) int {
+	configUsage := usageForCommand("config")
 	if len(args) == 0 {
 		return a.usageError("config", "a command is required", configUsage)
 	}
@@ -35,11 +16,12 @@ func (a *App) runConfig(ctx context.Context, args []string) int {
 	}
 	switch args[0] {
 	case "show":
+		commandUsage := usageForCommand("config", "show")
 		if len(args) == 2 && isHelp(args[1]) {
-			return a.write(a.stdout, "Usage: rnlctl config show [--json]\n")
+			return a.write(a.stdout, commandUsage)
 		}
 		if len(args) > 2 || (len(args) == 2 && args[1] != "--json") {
-			return a.usageError("config show", "accepts only --json", "Usage: rnlctl config show [--json]\n")
+			return a.usageError("config show", "accepts only --json", commandUsage)
 		}
 		configuration, err := a.lifecycle.ReadConfiguration(ctx)
 		if err != nil {
@@ -58,11 +40,12 @@ func (a *App) runConfig(ctx context.Context, args []string) int {
 		}
 		return exitOK
 	case "get":
+		commandUsage := usageForCommand("config", "get")
 		if len(args) == 2 && isHelp(args[1]) {
-			return a.write(a.stdout, "Usage: rnlctl config get KEY\n")
+			return a.write(a.stdout, commandUsage)
 		}
 		if len(args) != 2 || !isEditableConfigurationKey(args[1]) {
-			return a.usageError("config get", "requires one administrator-editable key", "Usage: rnlctl config get KEY\n")
+			return a.usageError("config get", "requires one administrator-editable key", commandUsage)
 		}
 		configuration, err := a.lifecycle.ReadConfiguration(ctx)
 		if err != nil {
@@ -70,31 +53,34 @@ func (a *App) runConfig(ctx context.Context, args []string) int {
 		}
 		return a.write(a.stdout, configuration.Values[args[1]]+"\n")
 	case "set":
+		commandUsage := usageForCommand("config", "set")
 		request, showHelp, err := parseConfigurationSetArgs(args[1:])
 		if showHelp {
-			return a.write(a.stdout, "Usage: rnlctl config set KEY=VALUE... [--apply]\n")
+			return a.write(a.stdout, commandUsage)
 		}
 		if err != nil {
-			return a.usageError("config set", err.Error(), "Usage: rnlctl config set KEY=VALUE... [--apply]\n")
+			return a.usageError("config set", err.Error(), commandUsage)
 		}
 		result, err := a.lifecycle.UpdateConfiguration(ctx, request)
 		return a.lifecycleResult("config set", result, err)
 	case "unset":
+		commandUsage := usageForCommand("config", "unset")
 		request, showHelp, err := parseConfigurationUnsetArgs(args[1:])
 		if showHelp {
-			return a.write(a.stdout, "Usage: rnlctl config unset KEY... [--apply]\n")
+			return a.write(a.stdout, commandUsage)
 		}
 		if err != nil {
-			return a.usageError("config unset", err.Error(), "Usage: rnlctl config unset KEY... [--apply]\n")
+			return a.usageError("config unset", err.Error(), commandUsage)
 		}
 		result, err := a.lifecycle.UpdateConfiguration(ctx, request)
 		return a.lifecycleResult("config unset", result, err)
 	case "check":
+		commandUsage := usageForCommand("config", "check")
 		if len(args) == 2 && isHelp(args[1]) {
-			return a.write(a.stdout, "Usage: rnlctl config check\n")
+			return a.write(a.stdout, commandUsage)
 		}
 		if len(args) != 1 {
-			return a.usageError("config check", "does not accept arguments", "Usage: rnlctl config check\n")
+			return a.usageError("config check", "does not accept arguments", commandUsage)
 		}
 		if err := a.lifecycle.CheckConfiguration(ctx); err != nil {
 			return a.runtimeError("config check", err)
@@ -104,11 +90,12 @@ func (a *App) runConfig(ctx context.Context, args []string) int {
 		}
 		return a.write(a.stdout, "configuration ok\n")
 	case "apply":
+		commandUsage := usageForCommand("config", "apply")
 		if len(args) == 2 && isHelp(args[1]) {
-			return a.write(a.stdout, "Usage: rnlctl config apply\n")
+			return a.write(a.stdout, commandUsage)
 		}
 		if len(args) != 1 {
-			return a.usageError("config apply", "does not accept arguments", "Usage: rnlctl config apply\n")
+			return a.usageError("config apply", "does not accept arguments", commandUsage)
 		}
 		result, err := a.lifecycle.ApplyConfiguration(ctx)
 		return a.lifecycleResult("config apply", result, err)
@@ -118,6 +105,7 @@ func (a *App) runConfig(ctx context.Context, args []string) int {
 }
 
 func (a *App) runSecret(ctx context.Context, args []string) int {
+	secretUsage := usageForCommand("secret", "set")
 	if len(args) == 1 && isHelp(args[0]) {
 		return a.write(a.stdout, secretUsage)
 	}

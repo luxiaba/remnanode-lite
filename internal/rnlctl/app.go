@@ -21,38 +21,6 @@ const (
 	exitUsage   = 2
 )
 
-const usage = `Usage: rnlctl [--quiet|-q] [--no-color] <command>
-
-Commands:
-  version                         Show the rnlctl version
-  install [options]               Install one verified Native bundle
-  activate [options]              Activate a prepared installation
-  upgrade [options]               Upgrade to one complete generation
-  rollback [--to ID]              Roll back to the retained generation
-  repair [options]                Recover the committed generation
-  uninstall [--purge --yes]       Remove the Native installation
-  config <command>                Inspect or change Native Node configuration
-  secret set [options]            Replace the managed Panel Secret
-  status [--json]                 Show Native lifecycle status
-  doctor [--json]                 Run deployment diagnostics
-  start                           Start the service
-  stop                            Stop the service
-  restart                         Restart the service
-  logs <source> [options]         Show logs from node, core, or core-errors
-  completion <bash|zsh|fish>      Generate shell completion
-
-Global options:
-  --quiet, -q                     Hide confirmations and human status reports
-  --no-color                      Disable color in human diagnostic output
-
-Log options:
-  --follow, -f                    Continue following new log entries
-  --lines N, -n N                 Show the last N lines (default: 50)
-  --since DURATION                Show recent systemd Node logs (for example 15m)
-
-Use "rnlctl logs --help" for log source details.
-`
-
 // LookPathFunc resolves an executable without invoking a shell.
 type LookPathFunc func(string) (string, error)
 
@@ -165,7 +133,7 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	}
 	commandArgs, quiet, noColor, err := parseGlobalOptions(args)
 	if err != nil {
-		return a.usageError("", err.Error(), usage)
+		return a.usageError("", err.Error(), usageForCommand())
 	}
 	scoped := *a
 	scoped.quiet = quiet
@@ -175,22 +143,22 @@ func (a *App) Run(ctx context.Context, args []string) int {
 
 func (a *App) run(ctx context.Context, args []string) int {
 	if len(args) == 0 {
-		return a.write(a.stdout, usage)
+		return a.write(a.stdout, usageForCommand())
 	}
 
 	switch args[0] {
 	case "help", "-h", "--help":
 		if len(args) != 1 {
-			return a.usageError("help", "does not accept arguments", usage)
+			return a.usageError("help", "does not accept arguments", usageForCommand())
 		}
-		return a.write(a.stdout, usage)
+		return a.write(a.stdout, usageForCommand())
 	case "version", "-version", "--version":
-		if code, handled := a.commandHelpOrReject(args, "Usage: rnlctl version\n"); handled {
+		if code, handled := a.commandHelpOrReject(args, usageForCommand("version")); handled {
 			return code
 		}
 		return a.write(a.stdout, a.versionString+"\n")
 	case "start", "stop", "restart":
-		if code, handled := a.commandHelpOrReject(args, "Usage: rnlctl "+args[0]+"\n"); handled {
+		if code, handled := a.commandHelpOrReject(args, usageForCommand(args[0])); handled {
 			return code
 		}
 		var result Result
@@ -229,7 +197,7 @@ func (a *App) run(ctx context.Context, args []string) int {
 	case "completion":
 		return a.runCompletion(args[1:])
 	default:
-		return a.usageError("", fmt.Sprintf("unknown command %q", args[0]), usage)
+		return a.usageError("", fmt.Sprintf("unknown command %q", args[0]), usageForCommand())
 	}
 }
 
@@ -256,37 +224,8 @@ func parseGlobalOptions(args []string) ([]string, bool, bool, error) {
 	return commandArgs, quiet, noColor, nil
 }
 
-const installUsage = `Usage: rnlctl install (--bundle-root DIR | --bundle ARCHIVE --sha256 HEX) [options]
-
-Options:
-  --expected-version VERSION  Require the manifest to contain this exact version
-  --port PORT                 Node HTTPS port (default: 2222 on a new install)
-  --secret-file PATH          Read the Secret Key from a regular file
-  --prepare-only              Install stopped and disabled; Secret may be omitted
-`
-
-const activateUsage = `Usage: rnlctl activate [--secret-file PATH]
-`
-
-const upgradeUsage = `Usage: rnlctl upgrade (--bundle-root DIR | --bundle ARCHIVE --sha256 HEX | --to VERSION)
-
-Options:
-  --expected-version VERSION  Require a local bundle manifest version
-  --to VERSION                Download an exact X.Y.Z or X.Y.Z-rnl.N release
-  --dry-run                   Verify the candidate and known host preconditions
-  --json                      Emit the dry-run plan as JSON (requires --dry-run)
-`
-
-const rollbackUsage = `Usage: rnlctl rollback [--to GENERATION-ID]
-`
-
-const repairUsage = `Usage: rnlctl repair [--bundle-root DIR | --bundle ARCHIVE --sha256 HEX] [--expected-version VERSION]
-`
-
-const uninstallUsage = `Usage: rnlctl uninstall [--purge --yes]
-`
-
 func (a *App) runInstall(ctx context.Context, args []string) int {
+	installUsage := usageForCommand("install")
 	flags := a.flagSet("install", installUsage)
 	request := InstallRequest{}
 	bindBundleFlags(flags, &request.Bundle)
@@ -301,6 +240,7 @@ func (a *App) runInstall(ctx context.Context, args []string) int {
 }
 
 func (a *App) runActivate(ctx context.Context, args []string) int {
+	activateUsage := usageForCommand("activate")
 	flags := a.flagSet("activate", activateUsage)
 	request := ActivateRequest{}
 	flags.StringVar(&request.SecretFile, "secret-file", "", "")
@@ -312,6 +252,7 @@ func (a *App) runActivate(ctx context.Context, args []string) int {
 }
 
 func (a *App) runUpgrade(ctx context.Context, args []string) int {
+	upgradeUsage := usageForCommand("upgrade")
 	flags := a.flagSet("upgrade", upgradeUsage)
 	request := UpgradeRequest{}
 	dryRun := false
@@ -344,6 +285,7 @@ func (a *App) runUpgrade(ctx context.Context, args []string) int {
 }
 
 func (a *App) runRollback(ctx context.Context, args []string) int {
+	rollbackUsage := usageForCommand("rollback")
 	flags := a.flagSet("rollback", rollbackUsage)
 	request := RollbackRequest{}
 	flags.StringVar(&request.GenerationID, "to", "", "")
@@ -355,6 +297,7 @@ func (a *App) runRollback(ctx context.Context, args []string) int {
 }
 
 func (a *App) runRepair(ctx context.Context, args []string) int {
+	repairUsage := usageForCommand("repair")
 	flags := a.flagSet("repair", repairUsage)
 	request := RepairRequest{}
 	bindBundleFlags(flags, &request.Bundle)
@@ -366,6 +309,7 @@ func (a *App) runRepair(ctx context.Context, args []string) int {
 }
 
 func (a *App) runUninstall(ctx context.Context, args []string) int {
+	uninstallUsage := usageForCommand("uninstall")
 	flags := a.flagSet("uninstall", uninstallUsage)
 	request := UninstallRequest{}
 	flags.BoolVar(&request.Purge, "purge", false, "")
@@ -378,11 +322,12 @@ func (a *App) runUninstall(ctx context.Context, args []string) int {
 }
 
 func (a *App) runStatus(ctx context.Context, args []string) int {
+	statusUsage := usageForCommand("status")
 	if len(args) == 1 && isHelp(args[0]) {
-		return a.write(a.stdout, "Usage: rnlctl status [--json]\n")
+		return a.write(a.stdout, statusUsage)
 	}
 	if len(args) > 1 || (len(args) == 1 && args[0] != "--json") {
-		return a.usageError("status", "accepts only --json", "Usage: rnlctl status [--json]\n")
+		return a.usageError("status", "accepts only --json", statusUsage)
 	}
 	status, err := a.lifecycle.Status(ctx)
 	if err != nil {
@@ -404,11 +349,12 @@ func (a *App) runStatus(ctx context.Context, args []string) int {
 }
 
 func (a *App) runDoctor(ctx context.Context, args []string) int {
+	doctorUsage := usageForCommand("doctor")
 	if len(args) == 1 && isHelp(args[0]) {
-		return a.write(a.stdout, "Usage: rnlctl doctor [--json]\n")
+		return a.write(a.stdout, doctorUsage)
 	}
 	if len(args) > 1 || (len(args) == 1 && args[0] != "--json") {
-		return a.usageError("doctor", "accepts only --json", "Usage: rnlctl doctor [--json]\n")
+		return a.usageError("doctor", "accepts only --json", doctorUsage)
 	}
 	report, err := a.lifecycle.Doctor(ctx)
 	if err != nil {

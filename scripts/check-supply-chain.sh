@@ -81,6 +81,7 @@ done < <(
 candidate=.github/workflows/container.yml
 for required in \
   'name: candidate' \
+  '      - "release/**"' \
   'platforms: linux/amd64,linux/arm64' \
   'push-by-digest=true,name-canonical=true,push=true' \
   'provenance: mode=max' \
@@ -90,17 +91,19 @@ for required in \
   'release-tool finalize-release' \
   'release-tool verify-package' \
   '--require-release-index' \
-  'Attest every final Release asset' \
+  'id: attest-assets' \
   "native-bundles-${literal_dollar}{{ github.sha }}" \
   'actions/upload-artifact@' \
   "release-assets-${literal_dollar}{{ github.sha }}" \
+  "digest: ${literal_dollar}{{ steps.accepted.outputs.digest }}" \
+  'scripts/verify-candidate-image.sh --allow-missing' \
   'scripts/promote-image-tag.sh immutable' \
   'scripts/promote-candidate-edge.sh' \
   'needs: [image, native]' \
   'needs: [image, release-assets]'; do
   require_text "$candidate" "$required"
 done
-require_order "$candidate" 'name: Bind the accepted OCI index to the Release package' 'name: Attest every final Release asset'
+require_order "$candidate" 'id: bind-index' 'id: attest-assets'
 require_text scripts/verify-candidate-image.sh 'index .SBOM'
 require_text scripts/verify-candidate-image.sh '--predicate-type https://slsa.dev/provenance/v1'
 if grep -Eq '(^|[^[:alnum:]_-])latest([^[:alnum:]_.-]|$)' "$candidate"; then
@@ -128,11 +131,11 @@ for required in \
   'scripts/promote-image-tag.sh mutable'; do
   require_text "$release" "$required"
 done
-require_order "$release" 'name: Publish the draft Release' 'name: Verify the immutable Release and every asset'
-require_order "$release" 'name: Promote the exact image tag before publication' 'name: Publish the draft Release'
-require_order "$release" 'name: Verify the immutable Release and every asset' 'name: Confirm the exact image tag after Release verification'
-require_order "$release" 'name: Confirm the exact image tag after Release verification' 'name: Promote the published channel without rebuilding'
-publish_line="$(grep -nF 'name: Publish the draft Release' "$release" | cut -d: -f1)"
+require_order "$release" 'id: publish-release' 'id: verify-release'
+require_order "$release" 'id: promote-exact' 'id: publish-release'
+require_order "$release" 'id: verify-release' 'id: confirm-exact'
+require_order "$release" 'id: confirm-exact' 'id: promote-channel'
+publish_line="$(grep -nF 'id: publish-release' "$release" | cut -d: -f1)"
 if tail -n "+$publish_line" "$release" | grep -Fq 'scripts/require-current-main.sh'; then
   fail "release workflow must not rebind a published Release to a newer main commit"
 fi
@@ -165,8 +168,6 @@ require_text scripts/verify-candidate-image.sh 'gh attestation verify'
 require_text scripts/verify-candidate-image.sh 'state=absent'
 require_text scripts/verify-candidate-image.sh 'state=present'
 require_text scripts/release-state.sh 'published-pending-immutability'
-require_text scripts/verify-draft-release.sh 'release-tool verify-release'
-require_text scripts/verify-draft-release.sh 'verify-release-tag.sh --require-missing'
 require_text scripts/verify-published-release.sh '--immutable=any'
 require_text scripts/verify-published-release.sh '.immutable == true'
 require_text scripts/verify-published-release.sh 'scripts/verify-release-tag.sh'
@@ -192,8 +193,8 @@ for required in \
   'scripts/promote-image-tag.sh mutable'; do
   require_text "$reconcile" "$required"
 done
-require_order "$reconcile" 'name: Verify the immutable Release and its candidate' 'name: Restore the immutable exact image tag'
-require_order "$reconcile" 'name: Restore the immutable exact image tag' 'name: Restore the moving channel'
+require_order "$reconcile" 'id: image' 'id: restore-exact'
+require_order "$reconcile" 'id: restore-exact' 'id: restore-channel'
 require_text "$reconcile" "if: steps.channel-owner.outputs.promote == 'true'"
 require_text "$reconcile" "if: steps.channel-owner.outputs.promote == 'false'"
 

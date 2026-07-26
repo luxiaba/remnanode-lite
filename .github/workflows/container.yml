@@ -229,6 +229,7 @@ jobs:
         run: go run ./cmd/release-tool assemble --native-dir dist/native --out-dir dist/release
 
       - name: Bind the accepted OCI index to the Release package
+        id: bind-index
         env:
           SOURCE_DIGEST: ${{ needs.image.outputs.digest }}
           IMAGE: ${{ env.IMAGE }}
@@ -247,6 +248,7 @@ jobs:
           --require-release-index
 
       - name: Attest every final Release asset
+        id: attest-assets
         uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
         with:
           subject-path: dist/release/*

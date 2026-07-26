@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=85a212681271f8a1876f38fd330d081af08bcb349e7ebd327150e9622ddff6e7 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=b7f365b2d72108cd924c9038bc9a75d1b662181f5fa4e4fa24b8cc0549e7b228 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > 这是中文译文；涉及契约细节时，请以[英文原文](../../../development/contract-2.8.0.md)为准。
@@ -95,7 +95,7 @@ nft backend 在单个 `nft -f` 原子事务内替换 IPv4/IPv6 私有表和过�
 
 连接踢除会先规范化和去重 IP，跳过白名单，并拒绝非法地址、unspecified、loopback、link-local、multicast、IPv4 广播和本机接口地址。每批通过 `NETLINK_SOCK_DIAG` 分别枚举 IPv4/IPv6 socket，并逐条校验 `SOCK_DESTROY` ACK；仅 `ENOENT` 作为幂等成功，缺少 `CAP_NET_ADMIN`、用户 IP 查询失败或任一销毁失败都会返回真实的 `success=false`。CI 在独立 Linux network namespace 中建立真实 TCP 连接并验证 socket 被关闭；该门禁已在 Linux arm64 6.8 内核上通过。
 
-`get-users-ip-list` 优先使用 rw-core 的单次 `GetUsersStats` 扩展 RPC；旧 core 返回 `UNIMPLEMENTED` 后会缓存 capability 并降级为最多 8 个固定 worker，不再为每个在线用户创建 goroutine。所有 Handler/Stats unary RPC 默认共享最多 5 秒 deadline，健康探测为 3 秒，调用方已有的更早 deadline 和取消信号保持生效；legacy 批量查询使用单一总预算，不会为每个用户重新续期。
+`get-users-ip-list` 优先使用 rw-core 的单次 `GetUsersStats` 扩展 RPC；旧 core 返回 `UNIMPLEMENTED` 后会缓存 capability 并降级为最多 8 个固定 worker，不再为每个在线用户创建 goroutine。所有 Handler/Stats unary RPC 默认共享最多 5 秒 deadline，健康探测为 3 秒，调用方已有的更早 deadline 和取消信号保持生效；legacy 批量查询使用单一总预算，不会为每个用户重新续期。该批次采用全有或全无语义：任一单用户查询发生意外错误时，会取消其余查询，并按官方兼容行为返回空列表，而不是发布部分数据。
 
 ## Go 资源预算实现
 

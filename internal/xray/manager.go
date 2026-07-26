@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/luxiaba/remnanode-lite/internal/executil"
 	"github.com/luxiaba/remnanode-lite/internal/system"
 )
 
@@ -42,6 +40,38 @@ type TorrentBlockerConfigProvider interface {
 	TorrentBlockerIncludeRuleTags() []string
 }
 
+// runtimeState is guarded by Manager.mu. It intentionally has no lock of its
+// own so lifecycle state and process-bound runtime data remain one atomic
+// publication boundary.
+type runtimeState struct {
+	// pendingConfigJSON is served while rw-core starts and released as soon as
+	// the gRPC API is ready. It is the only full config retained by the manager.
+	pendingConfigJSON   []byte
+	runtimeProcessEpoch uint64
+	emptyConfigHash     string
+	inboundHashes       map[string]*HashedSet
+	inboundTags         map[string]struct{}
+}
+
+// versionState shares Manager.mu with lifecycle state. That lock protects the
+// cached version and recovery scheduling fields, and makes Health's Add happen
+// before Shutdown closes the scheduling gate. WaitGroup and Once retain their
+// own synchronization semantics outside that critical section.
+type versionState struct {
+	coreOverride string
+	cached       *string
+	probe        func(context.Context) (string, error)
+	busy         bool
+	nextProbe    time.Time
+
+	context      context.Context
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
+	shutdownOnce sync.Once
+	shutdownDone chan struct{}
+	shutdown     bool
+}
+
 type Manager struct {
 	// lifecycleMu serializes process ownership. State publication and
 	// lifecycleMu acquisition/release are performed while mu is held.
@@ -57,25 +87,18 @@ type Manager struct {
 	disableHashCheck bool
 	lowMemory        bool
 	nodeVersion      string
-	coreVersion      string
 	system           SystemSnapshotter
 	torrentBlocker   TorrentBlockerConfigProvider
 
-	xrayVersion         *string
-	state               lifecycleState
-	operationEpoch      uint64
-	nextProcessEpoch    uint64
-	runtimeProcessEpoch uint64
-	startCancel         context.CancelFunc
-	stopOp              *stopOperation
-	process             *processState
+	state            lifecycleState
+	operationEpoch   uint64
+	nextProcessEpoch uint64
+	startCancel      context.CancelFunc
+	stopOp           *stopOperation
+	process          *processState
 
-	// pendingConfigJSON is the only full config retained by the manager. It is
-	// served while rw-core starts and released as soon as the gRPC API is ready.
-	pendingConfigJSON []byte
-	emptyConfigHash   string
-	inboundHashes     map[string]*HashedSet
-	inboundTags       map[string]struct{}
+	runtime runtimeState
+	version versionState
 
 	readinessProbe      func(context.Context) bool
 	readinessInterval   time.Duration
@@ -85,23 +108,7 @@ type Manager struct {
 	processCommand      func() *exec.Cmd
 	processGroupCleanup func(*os.Process, time.Duration) error
 	processWaitDelay    time.Duration
-	versionProbe        func(context.Context) (string, error)
-	versionProbeBusy    bool
-	nextVersionProbe    time.Time
-
-	versionProbeContext      context.Context
-	versionProbeCancel       context.CancelFunc
-	versionProbeWG           sync.WaitGroup
-	versionProbeShutdownOnce sync.Once
-	versionProbeShutdownDone chan struct{}
-	versionProbeShutdown     bool
 }
-
-const (
-	versionProbeTimeout  = 5 * time.Second
-	versionProbeRetry    = 30 * time.Second
-	versionOutputMaxSize = 4 << 10
-)
 
 type StartRequest struct {
 	Internals  StartInternals `json:"internals"`
@@ -172,27 +179,29 @@ func newManager(opts Options, versionProbe func(context.Context) (string, error)
 	}
 	versionProbeContext, versionProbeCancel := context.WithCancel(lifetime)
 	manager := &Manager{
-		xrayBin:                  opts.XrayBin,
-		geoDir:                   opts.GeoDir,
-		logDir:                   opts.LogDir,
-		socketPath:               opts.InternalSocketPath,
-		token:                    opts.InternalRESTToken,
-		socketPrefix:             socket,
-		disableHashCheck:         opts.DisableHashCheck,
-		lowMemory:                opts.LowMemory,
-		nodeVersion:              strings.TrimSpace(opts.NodeVersion),
-		coreVersion:              coreVersion,
-		system:                   opts.System,
-		torrentBlocker:           opts.TorrentBlocker,
-		readinessInterval:        defaultReadinessInterval,
-		interruptTimeout:         defaultInterruptTimeout,
-		killTimeout:              defaultKillTimeout,
-		processWaitDelay:         defaultProcessWaitDelay,
-		processGroupCleanup:      cleanupOwnedProcessGroup,
-		versionProbe:             versionProbe,
-		versionProbeContext:      versionProbeContext,
-		versionProbeCancel:       versionProbeCancel,
-		versionProbeShutdownDone: make(chan struct{}),
+		xrayBin:             opts.XrayBin,
+		geoDir:              opts.GeoDir,
+		logDir:              opts.LogDir,
+		socketPath:          opts.InternalSocketPath,
+		token:               opts.InternalRESTToken,
+		socketPrefix:        socket,
+		disableHashCheck:    opts.DisableHashCheck,
+		lowMemory:           opts.LowMemory,
+		nodeVersion:         strings.TrimSpace(opts.NodeVersion),
+		system:              opts.System,
+		torrentBlocker:      opts.TorrentBlocker,
+		readinessInterval:   defaultReadinessInterval,
+		interruptTimeout:    defaultInterruptTimeout,
+		killTimeout:         defaultKillTimeout,
+		processWaitDelay:    defaultProcessWaitDelay,
+		processGroupCleanup: cleanupOwnedProcessGroup,
+		version: versionState{
+			coreOverride: coreVersion,
+			probe:        versionProbe,
+			context:      versionProbeContext,
+			cancel:       versionProbeCancel,
+			shutdownDone: make(chan struct{}),
+		},
 	}
 	manager.refreshVersion(versionProbeContext)
 	return manager, nil
@@ -227,35 +236,6 @@ func (m *Manager) torrentBlockerOptions() TorrentBlockerOptions {
 	return opts
 }
 
-func (m *Manager) Health() HealthResponse {
-	m.mu.Lock()
-	running := m.state == lifecycleRunning
-	version := m.xrayVersion
-	retryVersion := !m.versionProbeShutdown && m.versionProbeContext.Err() == nil && version == nil && m.state != lifecycleStarting && !m.versionProbeBusy &&
-		!time.Now().Before(m.nextVersionProbe)
-	var probeContext context.Context
-	if retryVersion {
-		m.versionProbeBusy = true
-		m.nextVersionProbe = time.Now().Add(versionProbeRetry)
-		m.versionProbeWG.Add(1)
-		probeContext = m.versionProbeContext
-	}
-	m.mu.Unlock()
-	if retryVersion {
-		go func() {
-			defer m.versionProbeWG.Done()
-			m.refreshUnknownVersion(probeContext)
-		}()
-	}
-
-	return HealthResponse{
-		IsAlive:                  true,
-		XrayInternalStatusCached: running,
-		XrayVersion:              version,
-		NodeVersion:              m.nodeVersion,
-	}
-}
-
 // CurrentConfigJSON returns the config exactly as served to a starting
 // rw-core. Once readiness is confirmed the process has consumed the config,
 // so the cache is released and this method returns an empty object.
@@ -264,15 +244,15 @@ func (m *Manager) CurrentConfigJSON() []byte {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	if len(m.pendingConfigJSON) == 0 {
+	if len(m.runtime.pendingConfigJSON) == 0 {
 		return emptyConfigJSON
 	}
-	return m.pendingConfigJSON
+	return m.runtime.pendingConfigJSON
 }
 
 func (m *Manager) clearRuntimeLocked() {
-	m.pendingConfigJSON = nil
-	m.runtimeProcessEpoch = 0
+	m.runtime.pendingConfigJSON = nil
+	m.runtime.runtimeProcessEpoch = 0
 	m.clearHashStateLocked()
 	m.clearInboundTagsLocked()
 }
@@ -302,137 +282,9 @@ func BuildConfigURL(socketPath string) string {
 	return fmt.Sprintf("http+unix://%s/internal/get-config", socketPath)
 }
 
-func (m *Manager) refreshVersion(parent context.Context) {
-	version := m.probeVersion(parent)
-	m.mu.Lock()
-	m.publishVersionLocked(version)
-	m.mu.Unlock()
-}
-
-func (m *Manager) probeVersion(parent context.Context) *string {
-	m.mu.RLock()
-	override := m.coreVersion
-	m.mu.RUnlock()
-	if override != "" {
-		return &override
-	}
-	if parent == nil {
-		parent = context.Background()
-	}
-	ctx, cancel := context.WithTimeout(parent, versionProbeTimeout)
-	defer cancel()
-
-	m.mu.RLock()
-	probe := m.versionProbe
-	xrayBin := m.xrayBin
-	m.mu.RUnlock()
-
-	var version string
-	var err error
-	if probe != nil {
-		version, err = probe(ctx)
-	} else {
-		var result executil.Result
-		result, err = executil.RunWithEnv(
-			ctx,
-			nil,
-			versionOutputMaxSize,
-			sanitizedChildEnvironment(os.Environ()),
-			xrayBin,
-			"version",
-		)
-		if err == nil {
-			version = parseVersionLine(string(result.Stdout))
-		}
-	}
-	if err != nil {
-		return nil
-	}
-	if version == "" {
-		return nil
-	}
-	return &version
-}
-
-func (m *Manager) publishVersionLocked(version *string) {
-	m.xrayVersion = version
-	if version == nil {
-		m.nextVersionProbe = time.Now().Add(versionProbeRetry)
-	} else {
-		m.nextVersionProbe = time.Time{}
-	}
-}
-
-func (m *Manager) refreshUnknownVersion(parent context.Context) {
-	version := m.probeVersion(parent)
-	m.mu.Lock()
-	if !m.versionProbeShutdown && m.xrayVersion == nil && version != nil {
-		m.publishVersionLocked(version)
-	}
-	m.versionProbeBusy = false
-	m.mu.Unlock()
-}
-
-// Shutdown permanently stops background version recovery. It is reserved for
-// node process shutdown; Stop remains reusable for the public xray/stop route.
-func (m *Manager) Shutdown(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	m.versionProbeShutdownOnce.Do(func() {
-		m.mu.Lock()
-		m.versionProbeShutdown = true
-		cancel := m.versionProbeCancel
-		m.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-		go func() {
-			m.versionProbeWG.Wait()
-			close(m.versionProbeShutdownDone)
-		}()
-	})
-
-	select {
-	case <-m.versionProbeShutdownDone:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-var xraySemverRe = regexp.MustCompile(`\d+\.\d+\.\d+`)
-
-// parseVersionLine returns semver like "26.3.27", matching official node semver coercion.
-func parseVersionLine(output string) string {
-	for _, line := range strings.Split(output, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if v := extractSemver(line); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-func coerceSemver(raw string) string {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "v")
-	return extractSemver(raw)
-}
-
-func extractSemver(raw string) string {
-	if raw == "" {
-		return ""
-	}
-	return xraySemverRe.FindString(raw)
-}
-
 func (m *Manager) startResponse(isStarted bool, message *string) StartResponse {
 	m.mu.RLock()
-	version := m.xrayVersion
+	version := m.version.cached
 	m.mu.RUnlock()
 
 	return StartResponse{

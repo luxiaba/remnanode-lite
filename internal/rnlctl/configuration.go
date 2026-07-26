@@ -14,14 +14,28 @@ import (
 
 const configurationSchemaVersion = 1
 
-var editableConfigurationKeys = []string{
-	"NODE_PORT",
-	"NODE_BIND_ADDR",
-	"LOW_MEMORY",
-	"BODY_LIMIT_MB",
-	"GOMEMLIMIT",
-	"DISABLE_HASHED_SET_CHECK",
+type editableConfigurationKeySpec struct {
+	Name        string
+	Description string
+	Optional    bool
 }
+
+var editableConfigurationKeySpecs = [...]editableConfigurationKeySpec{
+	{Name: "NODE_PORT", Description: "Node HTTPS port"},
+	{Name: "NODE_BIND_ADDR", Description: "Local bind address", Optional: true},
+	{Name: "LOW_MEMORY", Description: "Small-server memory profile", Optional: true},
+	{Name: "BODY_LIMIT_MB", Description: "Request budget in MiB", Optional: true},
+	{Name: "GOMEMLIMIT", Description: "Go soft memory limit", Optional: true},
+	{Name: "DISABLE_HASHED_SET_CHECK", Description: "Configuration hash debug switch", Optional: true},
+}
+
+var editableConfigurationKeys = func() []string {
+	keys := make([]string, 0, len(editableConfigurationKeySpecs))
+	for _, spec := range editableConfigurationKeySpecs {
+		keys = append(keys, spec.Name)
+	}
+	return keys
+}()
 
 var editableConfigurationKeySet = func() map[string]struct{} {
 	keys := make(map[string]struct{}, len(editableConfigurationKeys))

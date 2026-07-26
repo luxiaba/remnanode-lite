@@ -83,9 +83,6 @@ jobs:
       - name: Offline Native bootstrap tests
         run: sh release/native/install_test.sh
 
-      - name: Validate the shared runtime asset lock
-        run: go run ./cmd/release-tool validate --lock release/runtime-assets.lock.json
-
   netadmin:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

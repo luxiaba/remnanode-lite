@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d5e10e04646ff547899040110f434fc87dcedea9cba8e44993246690c0a09e91 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=3394860dbc826c12536d504c926ee9afa7bd424e5e40d866ebf9a0fe58174f3a -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -246,7 +246,7 @@ JSON DTO 边界具备以下行为：
 - `plugin.Service`：待收集 Torrent report 数量。
 - `internal/system`：`uname`、`/proc/meminfo`、`/proc/loadavg`、`/proc/uptime`、`/proc/cpuinfo` 和默认接口速率。
 
-Manager 为每次 Handler/Stats 操作创建短生命周期 gRPC client，调用完成即关闭。普通 RPC 默认 5 秒，Ping 为 3 秒，接收消息上限为 `16 MiB`。全用户 IP 优先使用 rw-core 扩展 RPC；遇到 `Unimplemented` 后缓存 legacy 能力并用最多 8 个 worker 查询单用户 IP。
+Manager 为每次 Handler/Stats 操作创建短生命周期 gRPC client，调用完成即关闭。普通 RPC 默认 5 秒，Ping 为 3 秒，接收消息上限为 `16 MiB`。全用户 IP 优先使用 rw-core 扩展 RPC；遇到 `Unimplemented` 后缓存 legacy 能力并用最多 8 个 worker 查询单用户 IP。legacy 批次采用全有或全无语义：任一单用户查询发生意外错误时会取消其余查询，并由应用层返回与上游兼容的空列表，而不是发布部分数据。
 
 由 map 聚合的用户和 tag 统计结果没有稳定顺序保证，调用方不应依赖排序。
 
@@ -315,6 +315,10 @@ HTTP 层还有一层 `xrayLifecycleGate`：
 - 已等待的独占请求会阻止后续 start 插队。
 
 这两层职责不同：HTTP gate 协调跨组件操作，Manager 锁维护真实进程所有权。
+
+版本恢复代码位于 `internal/xray/version.go`，但它不是第二个进程监管器或生命周期所有者。
+`Health()` 在持有 `Manager.mu` 时决定是否安排一次带节流的恢复；`Shutdown()` 在同一把锁内
+关闭调度门，再等待已经安排的工作完成。因此版本结果、生命周期发布和关闭顺序仍在一个原子边界内。
 
 ### 7.2 详细启动链
 
@@ -573,7 +577,7 @@ HTTP Xray lifecycle lease -> Plugin operation gate / nodehandler mutation gate -
 
 - 公网 API 默认可能绑定所有地址；端口暴露范围由部署防火墙控制。
 - mTLS 证明客户端证书由 Panel Secret 中 CA 签发。
-- JWT 只允许 RS256，校验签名，并在 claim 存在时校验 `exp`/`nbf`。
+- JWT 只允许 RS256，要求 header 和 claims set 均为 JSON object，校验签名，并在 claim 存在时校验 `exp`/`nbf`。
 - 当前 daemon 使用空的 issuer/audience/subject expectations，不应在文档中宣称已强制这些 claim。
 - 无效认证和未知路由直接断开，降低接口枚举面。
 
@@ -644,7 +648,7 @@ Node 只拥有固定的项目表和自己创建的 rw-core 进程组，不应修
 架构约束主要由可执行测试而不是文档自证：
 
 - 常规：`go test ./...`
-- 并发：`go test -race ./...`
+- 并发：`go test -race ./internal/... ./cmd/remnanode-lite`
 - 静态：`go vet ./...`、`gofmt`、`go mod tidy -diff`
 - 官方源码证据：`go run ./cmd/contract-source-check -source <official-git-repository>`
 - nftables 集成：`REMNANODE_NFT_INTEGRATION=1`

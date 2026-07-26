@@ -109,6 +109,15 @@ change is needed and how it was tested.
 - Add tests with new code. A bug fix should normally include a deterministic
   regression test that fails without the fix.
 
+### `rnlctl` command surface
+
+`internal/rnlctl/command_spec.go` is the source for public command names,
+options, help, and shell-completion metadata. Keep the parser, typed request
+mapping, and execution paths explicit; do not introduce a reflection-driven
+CLI framework simply to remove a few declarations. Public-surface and golden
+tests must state their expectations independently of the specification so they
+can detect metadata drift.
+
 ### Contract and HTTP boundaries
 
 The `/node` API is not an open-ended design surface. Panel may depend on the

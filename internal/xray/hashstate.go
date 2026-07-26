@@ -53,9 +53,9 @@ func buildRuntimeHashState(hashes ConfigHash, config map[string]any) runtimeHash
 }
 
 func (m *Manager) applyRuntimeHashStateLocked(state runtimeHashState) {
-	m.emptyConfigHash = state.emptyConfigHash
-	m.inboundHashes = state.inboundHashes
-	m.inboundTags = state.inboundTags
+	m.runtime.emptyConfigHash = state.emptyConfigHash
+	m.runtime.inboundHashes = state.inboundHashes
+	m.runtime.inboundTags = state.inboundTags
 }
 
 func (m *Manager) extractUsersFromConfigLocked(hashes ConfigHash, config map[string]any) {
@@ -63,19 +63,19 @@ func (m *Manager) extractUsersFromConfigLocked(hashes ConfigHash, config map[str
 }
 
 func (m *Manager) isNeedRestartCoreLocked(incoming ConfigHash) bool {
-	if m.emptyConfigHash == "" {
+	if m.runtime.emptyConfigHash == "" {
 		return true
 	}
-	if incoming.EmptyConfig != m.emptyConfigHash {
+	if incoming.EmptyConfig != m.runtime.emptyConfigHash {
 		slog.Warn("detected changes in Xray Core base configuration")
 		return true
 	}
-	if len(incoming.Inbounds) != len(m.inboundHashes) {
+	if len(incoming.Inbounds) != len(m.runtime.inboundHashes) {
 		slog.Warn("number of Xray Core inbounds has changed")
 		return true
 	}
 
-	for tag, usersSet := range m.inboundHashes {
+	for tag, usersSet := range m.runtime.inboundHashes {
 		var incomingInbound *InboundHash
 		for i := range incoming.Inbounds {
 			if incoming.Inbounds[i].Tag == tag {
@@ -112,19 +112,19 @@ func (m *Manager) commitUserAdded(token *mutationToken, inboundTag, userUUID str
 		return false
 	}
 
-	set, ok := m.inboundHashes[inboundTag]
+	set, ok := m.runtime.inboundHashes[inboundTag]
 	if !ok {
-		if m.inboundHashes == nil {
-			m.inboundHashes = make(map[string]*HashedSet)
+		if m.runtime.inboundHashes == nil {
+			m.runtime.inboundHashes = make(map[string]*HashedSet)
 		}
 		set = NewHashedSet()
-		m.inboundHashes[inboundTag] = set
+		m.runtime.inboundHashes[inboundTag] = set
 	}
-	if m.inboundTags == nil {
-		m.inboundTags = make(map[string]struct{})
+	if m.runtime.inboundTags == nil {
+		m.runtime.inboundTags = make(map[string]struct{})
 	}
 	set.Add(userUUID)
-	m.inboundTags[inboundTag] = struct{}{}
+	m.runtime.inboundTags[inboundTag] = struct{}{}
 	return true
 }
 
@@ -138,22 +138,22 @@ func (m *Manager) commitUserRemoved(token *mutationToken, inboundTag, userUUID s
 		return false
 	}
 
-	set, ok := m.inboundHashes[inboundTag]
+	set, ok := m.runtime.inboundHashes[inboundTag]
 	if !ok {
 		return true
 	}
 	set.Delete(userUUID)
 	if set.Size() == 0 {
-		delete(m.inboundHashes, inboundTag)
-		delete(m.inboundTags, inboundTag)
+		delete(m.runtime.inboundHashes, inboundTag)
+		delete(m.runtime.inboundTags, inboundTag)
 		slog.Warn("inbound has no users, clearing hash map", "tag", inboundTag)
 	}
 	return true
 }
 
 func (m *Manager) clearHashStateLocked() {
-	m.emptyConfigHash = ""
-	m.inboundHashes = nil
+	m.runtime.emptyConfigHash = ""
+	m.runtime.inboundHashes = nil
 }
 
 func extractClientIDs(inbound map[string]any) []string {

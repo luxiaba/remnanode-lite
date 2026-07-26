@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=1b24201b9873949954a51798dacd3f622ae9450d3016fde9d43b361e63e60684 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=d0d9bdd09d4a180437fef430b0f0cc5f335336ce02eaf9a247dfa3481edc7e04 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -65,7 +65,10 @@
 
 ## 当前重点
 
-- **当前**：完成 `2.8.0-rnl.1` 的 Native 运维体验和 Alpine 生命周期发布验收。
+- **当前**：完成 `2.8.0-rnl.1` 的 Native 运维体验和 Alpine 生命周期发布验收，同时降低
+  `rnlctl` 命令接口、Xray 状态所有权和 release 验证的维护成本。
+- **发布范围**：未来两个发布周期不新增发布通道、产物类型、发布状态或证明机制；可靠性、
+  安全修复和删除重复检查仍在范围内。
 - **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码并审查契约
   差异，再决定项目版本线。
 - **后续**：在不牺牲 512 MiB 目标的前提下改进可观测性、自动化升级和更多发行环境验证。
@@ -79,7 +82,7 @@
 - OpenRC 正常执行 `stop_post` 时会清理专用 cgroup。`supervise-daemon` 异常退出后，通过重启主机或重新部署恢复。
 - 只有出现实测需求时，才重新评估活动配置常驻副本与运行时 `dump-config` 的内存取舍。
 - P3 测试补强：`runNode` 顶层失败收敛，以及 Unix server 活动 handler 取消。
-- 首轮真实生产 soak 完成后，再根据实际变更压力，逐步从 `xray.Manager` 中拆分进程监管、运行时状态和版本跟踪职责；对外仍保留 Manager facade 和当前并发不变式。
+- 运行时状态和版本状态现已在既有 `xray.Manager` facade 内完成归组。仅当具体改动确实受益时再提取进程监管；保留当前并发不变式，不创建第二个生命周期所有者。
 - 已将实际职责是 rw-core gRPC wire adapter 的包规范为 `internal/xrayrpc`；只有在有真实解耦收益时才引入中性应用类型。
 
 ## 里程碑

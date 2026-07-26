@@ -65,6 +65,7 @@ jobs:
         run: bash scripts/verify-release-image.sh "$RELEASE_TAG" "$VERSION" "$PRERELEASE" >>"$GITHUB_OUTPUT"
 
       - name: Restore the immutable exact image tag
+        id: restore-exact
         env:
           SOURCE_DIGEST: ${{ steps.image.outputs.digest }}
           VERSION: ${{ steps.metadata.outputs.version }}
@@ -81,6 +82,7 @@ jobs:
           "$RELEASE_TAG" "$PRERELEASE" >>"$GITHUB_OUTPUT"
 
       - name: Restore the moving channel
+        id: restore-channel
         if: steps.channel-owner.outputs.promote == 'true'
         env:
           CHANNEL: ${{ steps.metadata.outputs.channel }}

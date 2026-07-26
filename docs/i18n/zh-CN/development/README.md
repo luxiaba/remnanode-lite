@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=307ccd46540d259324d216bd86dede137bc062acb88f9f78ffdaeae15ec8fb98 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=bd2603c30dc34c89013b52f0099d7119bb7be819957c80bc7d0f03f9dbb12046 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -28,7 +28,7 @@
 - Bash 4 或更高版本；CI 与安装脚本建议 Bash 5。macOS 自带 Bash 3.2 不支持脚本使用的 `${var,,}` 等语法。
 - `go.mod` 中 `toolchain` 指定的完整 Go 版本，当前为 Go `1.26.5`。
 - `gofmt`，随 Go 工具链安装。
-- C 编译器与可用的 CGO；`check-go.sh` 无条件运行 race detector。macOS 安装 Xcode Command Line Tools，Linux 安装对应 build toolchain。
+- C 编译器与可用的 CGO；`check-go.sh` 会对 `./internal/...` 和 daemon 命令运行 race detector。macOS 安装 Xcode Command Line Tools，Linux 安装对应 build toolchain。
 - GNU `timeout`；供应链和安装器检查会直接调用该命令。macOS 可安装 Homebrew `coreutils` 并把 `$(brew --prefix coreutils)/libexec/gnubin` 加入 `PATH`。
 
 推荐使用与 CI 完全相同的 Go patch 版本。普通 `go test` 可能允许 Go 自动下载
@@ -95,7 +95,9 @@ git switch -c fix/short-description
 go test -count=1 ./...
 mkdir -p bin
 go build -trimpath -o bin/remnanode-lite ./cmd/remnanode-lite
+go build -trimpath -o bin/rnlctl ./cmd/rnlctl
 ./bin/remnanode-lite version
+./bin/rnlctl version
 ```
 
 上述二进制适合 CLI smoke test。完整守护进程还需要有效的 Panel Secret、mTLS
@@ -135,6 +137,8 @@ go test -count=1 ./internal/contract
 | `cmd/contract-source-check` | 从固定官方 Git object 重建并核验源码证据 manifest |
 | `cmd/asn-builder` | 将固定 ASN 数据源构建为紧凑的只读前缀数据库 |
 | `cmd/docs-check` | 校验 Markdown 结构、相对链接、锚点和入口可达性 |
+| `cmd/rnlctl` | Native 宿主机生命周期命令：generation、service 状态、升级、回滚、修复和卸载 |
+| `cmd/release-tool` | 校验 runtime lock、物化资产、构建并校验确定性 Native bundle 与 SPDX SBOM |
 
 ### 运行时包
 
@@ -148,13 +152,14 @@ go test -count=1 ./internal/contract
 | `internal/stats` | 统计用例，不拥有 rw-core 进程 |
 | `internal/nodehandler` | 用户增删、查询和连接清理用例 |
 | `internal/plugin` | 插件快照、计划、torrent report、nftables 与 operation gate |
-| `internal/xray` | rw-core 进程、配置、hash、日志和生命周期的唯一所有者 |
+| `internal/xray` | rw-core 进程、配置、hash、日志和生命周期的唯一所有者；`version.go` 将带节流的版本恢复从进程生命周期文件中分离，但不创建新的所有者 |
 | `internal/xrayrpc` | 与 rw-core 通信的最小 protobuf/gRPC 客户端 |
 | `internal/xrayrpc/wire` | `internal/xrayrpc` 使用的最小生成 protobuf wire 类型 |
 | `internal/unixconfig` | rw-core 读取配置及发送 webhook 的内部 Unix socket 服务 |
 | `internal/connections`、`internal/netadmin` | 用户/IP 连接解析与 Linux socket destroy |
 | `internal/system`、`internal/asn` | 系统指标、网络监控和紧凑 ASN 查询 |
 | `internal/contract` | 固定官方版本的可执行行为契约与差分语义 |
+| `internal/rnlctl` | Native bundle 校验、持久事务、文件系统布局、服务管理器适配、恢复，以及共享的命令、帮助和补全定义 |
 | `internal/version` | 项目版本与官方契约版本；二者含义见版本策略 |
 
 ### 工程与交付目录
@@ -167,7 +172,9 @@ go test -count=1 ./internal/contract
 | `.github/workflows/reconcile.yml` | 从已公开 Release 中已 attestation 的 index 幂等恢复精确镜像标签及其有资格拥有的 `latest` 或 `preview` 通道 |
 | `.github/workflows/contract-sync.yml`、`.github/workflows/security.yml` | 官方版本监测与定时安全检查 |
 | `scripts/check*.sh` | Go、仓库、供应链和完整门禁的稳定入口 |
-| `cmd/rnlctl`、`release/native/install.sh`、`internal/rnlctl` | Native bundle 安装、generation 事务、升级、回滚、修复和卸载 |
+| `scripts/build-native-bundle.sh` | 围绕 `release-tool` 构建可复现 `amd64`/`arm64` Native bundle |
+| `release/native/install.sh` | 支持精确线上 Release、本地归档或解包 bundle 的 POSIX bootstrap |
+| `release/runtime-assets.lock.json` | Docker 与 Native 共用的精确 rw-core、GeoIP、GeoSite、ASN、许可、来源、大小与摘要输入 |
 | `deploy/` | systemd/OpenRC service、原生 `node.env` 与生产单文件 Compose 模板 |
 | `compose.yaml`、`compose.build.yaml` | GHCR 运行配置与本地源码构建覆盖层 |
 | `Dockerfile` | 双架构 Node、固定 rw-core/geo/ASN 资产和最小 runtime 镜像 |
@@ -222,11 +229,18 @@ git diff
 | 配置、Secret 或认证 | `internal/config`、`internal/secret`、`internal/auth`、`internal/httpserver` | 有界输入、文件安全、Secret 不进入日志 |
 | Linux 系统能力 | `*_linux.go` 与对应 `*_stub.go` | 非 Linux 仍须编译；Linux 行为必须在 Linux 验证 |
 | Docker 镜像 | `Dockerfile`、`compose*.yaml`、`.dockerignore`、candidate workflow | 资产固定摘要、多架构、资源限制与非持久日志 |
-| 安装、升级、卸载 | `scripts/`、`deploy/` | 锁、原子替换、回滚、权限和 systemd/OpenRC 对称性 |
+| Native 安装、升级、回滚、修复或卸载 | `internal/rnlctl`、`cmd/rnlctl`、`release/native/install.sh`、`deploy/` | 精确 bundle 身份、持久 journal、generation 原子选择、service 意图、权限与恢复 |
+| `rnlctl` 命令、帮助或补全接口 | `internal/rnlctl/command_spec.go`、显式解析器与请求映射、命令接口测试 | 定义管理公开元数据；解析器和独立预期输出测试保持显式 |
 | 项目版本 | `internal/version`、安装脚本、Compose、发布 workflow | 不要把项目版本与契约版本重新耦合 |
 | 官方契约升级 | `internal/version/contract.version`、`internal/contract`、source manifest、CI 固定 ref、契约文档 | 固定源码 commit，先机器提取并评审 diff 再实现，不自动宣称完整 Zod 等价 |
 
 每类修改的最低测试集合见[测试指南](testing.md#按改动选择测试)。
+
+### 维护 `rnlctl` 命令接口
+
+`internal/rnlctl/command_spec.go` 是命令名称、选项、帮助文案和 shell 补全元数据的生产来源。
+解析器、类型化请求构造和执行仍保留在 `app.go` 中显式实现，这样校验和错误路径更容易审查。
+改动命令时同时更新定义与解析器，再运行独立的命令接口和 golden 测试；这些测试不能从同一份定义自动生成。
 
 ## 工程约束
 
@@ -246,6 +260,7 @@ git diff
 - `xray.Manager` 拥有 rw-core 进程和 Xray 生命周期。
 - `plugin.Service`/`plugin.State` 拥有插件状态与防火墙计划。
 - `httpserver` 协调跨 Xray 与 Plugin 的请求锁序。
+- `rnlctl.Engine` 拥有持久 Native generation、事务状态和期望的 service 状态；daemon 不直接编辑这些文件。
 
 不要在新 handler 中绕开这些入口直接改共享状态，也不要引入反向锁序。
 

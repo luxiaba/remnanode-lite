@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=955604c5a06bf17e25044e4c5f8258fc19780b5461fbea3db043e4d4acf89ac9 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=c43cb0774ac9c8dbb09e08f63a5022413bad903ecd11fdd60dfe834c7096963d -->
 
 # 贡献指南
 
@@ -78,6 +78,12 @@ git switch -c fix/short-description
 - 使用 `fmt.Errorf("operation: %w", err)` 添加操作上下文，并保留可检查的错误链。
 - 注释解释不明显的不变量、协议来源或锁序，不复述代码表面动作。
 - 新代码必须配套测试；bug 修复优先加入能稳定复现问题的回归测试。
+
+### `rnlctl` 命令接口
+
+`internal/rnlctl/command_spec.go` 是公开命令名称、选项、帮助与 shell 补全元数据的来源。
+解析器、类型化请求映射与执行路径保持显式；不要为了减少几处声明就引入反射驱动的 CLI
+框架。public-surface 与 golden 测试必须独立写出预期，才能发现命令定义漂移。
 
 ### 契约与 HTTP 边界
 

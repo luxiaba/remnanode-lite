@@ -243,7 +243,7 @@ Before deleting a user, the service retrieves that user's online IPs with `reset
 - `plugin.Service` for the number of pending Torrent reports.
 - `internal/system` for `uname`, `/proc/meminfo`, `/proc/loadavg`, `/proc/uptime`, `/proc/cpuinfo`, and the default-interface rate.
 
-The Manager creates a short-lived gRPC client for each Handler or Stats operation and closes it when the call completes. Ordinary RPCs default to 5 seconds, Ping to 3 seconds, and the receive-message limit is `16 MiB`. The all-user IP path prefers the rw-core extension RPC. After an `Unimplemented` response, it caches legacy capability and queries per-user IPs with at most 8 workers.
+The Manager creates a short-lived gRPC client for each Handler or Stats operation and closes it when the call completes. Ordinary RPCs default to 5 seconds, Ping to 3 seconds, and the receive-message limit is `16 MiB`. The all-user IP path prefers the rw-core extension RPC. After an `Unimplemented` response, it caches legacy capability and queries per-user IPs with at most 8 workers. The legacy batch is all-or-nothing: an unexpected per-user failure cancels sibling lookups, and the application returns the upstream-compatible empty list instead of publishing partial data.
 
 User and tag statistics aggregated from maps have no stable ordering guarantee. Callers must not rely on their order.
 
@@ -312,6 +312,13 @@ The HTTP layer adds an `xrayLifecycleGate`:
 - A waiting exclusive request prevents later starts from cutting ahead of it.
 
 These two layers have different responsibilities: the HTTP gate coordinates cross-component operations, while Manager locks preserve actual process ownership.
+
+Version recovery is organized in `internal/xray/version.go`, but it is not a
+second supervisor or lifecycle owner. `Health()` decides whether to schedule a
+single throttled recovery while holding `Manager.mu`; `Shutdown()` closes that
+scheduling gate under the same lock before joining already scheduled work. This
+keeps a version result, lifecycle publication, and shutdown ordering on one
+atomic boundary.
 
 ### 7.2 Detailed Startup Sequence
 
@@ -574,7 +581,7 @@ At the HTTP boundary, start takes a shared lease. Stop, Plugin mutations, user m
 
 - The public API may bind all addresses by default. Deployment firewall policy controls the exposed port range.
 - mTLS proves that the client certificate was signed by the CA in the Panel Secret.
-- JWT accepts only RS256, verifies the signature, and validates `exp` and `nbf` when those claims are present.
+- JWT accepts only RS256, requires the header and claims set to be JSON objects, verifies the signature, and validates `exp` and `nbf` when those claims are present.
 - The current daemon uses empty issuer, audience, and subject expectations. Documentation must not claim that those claims are enforced.
 - Invalid authentication and unknown routes close the connection directly, reducing the enumerable API surface.
 
@@ -645,7 +652,7 @@ Socket destruction matches connected TCP sockets in the same network namespace b
 Architecture constraints are primarily enforced by executable tests, not asserted by documentation:
 
 - Regular: `go test ./...`
-- Concurrency: `go test -race ./...`
+- Concurrency: `go test -race ./internal/... ./cmd/remnanode-lite`
 - Static: `go vet ./...`, `gofmt`, and `go mod tidy -diff`
 - Official source evidence: `go run ./cmd/contract-source-check -source <official-git-repository>`
 - nftables integration: `REMNANODE_NFT_INTEGRATION=1`

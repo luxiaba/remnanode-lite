@@ -168,6 +168,23 @@ func TestJWTValidatorRejectsTrailingJSON(t *testing.T) {
 	}
 }
 
+func TestJWTValidatorRejectsNonObjectClaims(t *testing.T) {
+	key, publicPEM := testJWTKeyPair(t)
+	validator, err := NewJWTValidator(publicPEM)
+	if err != nil {
+		t.Fatalf("NewJWTValidator: %v", err)
+	}
+
+	for _, claims := range []string{"null", `[]`, `"claims"`} {
+		t.Run(claims, func(t *testing.T) {
+			token := signedRawJWT(t, key, `{"alg":"RS256"}`, claims)
+			if err := validator.Validate(token); err == nil {
+				t.Fatalf("Validate accepted non-object claims %s", claims)
+			}
+		})
+	}
+}
+
 func signedJWT(t *testing.T, key *rsa.PrivateKey, header, claims map[string]any) string {
 	t.Helper()
 

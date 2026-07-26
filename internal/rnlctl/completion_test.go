@@ -5,15 +5,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-func TestCompletionSpecIsValidAndContainsExpectedCommands(t *testing.T) {
-	spec := rnlctlCompletionSpec()
-	if err := validateCompletionSpec(spec); err != nil {
-		t.Fatalf("validateCompletionSpec() error = %v", err)
+func TestCommandSpecIsValidAndContainsExpectedCommands(t *testing.T) {
+	spec := rnlctlCommandSpec()
+	if err := validateCommandSpec(spec); err != nil {
+		t.Fatalf("validateCommandSpec() error = %v", err)
 	}
 
 	wantPaths := map[string]bool{
@@ -21,7 +22,7 @@ func TestCompletionSpecIsValidAndContainsExpectedCommands(t *testing.T) {
 		"config set": false, "secret set": false, "logs": false,
 		"completion": false,
 	}
-	visitCompletionCommands(spec, nil, func(path []string, _ completionCommandSpec) {
+	visitCompletionCommands(spec, nil, func(path []string, _ commandSpec) {
 		joined := strings.Join(path, " ")
 		if _, exists := wantPaths[joined]; exists {
 			wantPaths[joined] = true
@@ -34,8 +35,45 @@ func TestCompletionSpecIsValidAndContainsExpectedCommands(t *testing.T) {
 	}
 }
 
+func TestConfigurationCompletionCandidatesFollowKeyMetadata(t *testing.T) {
+	want := map[string][]string{
+		"config get": {
+			"NODE_PORT", "NODE_BIND_ADDR", "LOW_MEMORY", "BODY_LIMIT_MB",
+			"GOMEMLIMIT", "DISABLE_HASHED_SET_CHECK",
+		},
+		"config set": {
+			"NODE_PORT=", "NODE_BIND_ADDR=", "LOW_MEMORY=", "BODY_LIMIT_MB=",
+			"GOMEMLIMIT=", "DISABLE_HASHED_SET_CHECK=",
+		},
+		"config unset": {
+			"NODE_BIND_ADDR", "LOW_MEMORY", "BODY_LIMIT_MB", "GOMEMLIMIT",
+			"DISABLE_HASHED_SET_CHECK",
+		},
+	}
+
+	found := make(map[string][]string, len(want))
+	visitCompletionCommands(rnlctlCommandSpec(), nil, func(path []string, command commandSpec) {
+		joined := strings.Join(path, " ")
+		if _, expected := want[joined]; !expected {
+			return
+		}
+		for _, candidate := range command.Arguments {
+			found[joined] = append(found[joined], candidate.Value)
+			if strings.Contains(candidate.Value, "SECRET") || strings.Contains(candidate.Value, "INTERNAL_") {
+				t.Errorf("%s completion exposes private key %q", joined, candidate.Value)
+			}
+		}
+	})
+
+	for path, candidates := range want {
+		if got := found[path]; !reflect.DeepEqual(got, candidates) {
+			t.Errorf("%s candidates = %q, want %q", path, got, candidates)
+		}
+	}
+}
+
 func TestCompletionOptionShellPatternsKeepInlineWildcardUnquoted(t *testing.T) {
-	options := []completionOptionSpec{{Long: "lines", Short: "n", Value: completionValueWord}}
+	options := []commandOptionSpec{{Long: "lines", Short: "n", Value: commandValueWord}}
 	if got, want := strings.Join(completionOptionShellPatterns(options, false), "|"), "'--lines'|'-n'"; got != want {
 		t.Fatalf("completionOptionShellPatterns(false) = %q, want %q", got, want)
 	}
@@ -78,6 +116,7 @@ func TestRunCompletionRendersSupportedShells(t *testing.T) {
 }
 
 func TestRunCompletionRejectsInvalidArguments(t *testing.T) {
+	completionUsage := usageForCommand("completion")
 	for _, test := range []struct {
 		name string
 		args []string
@@ -104,6 +143,7 @@ func TestRunCompletionRejectsInvalidArguments(t *testing.T) {
 }
 
 func TestRunCompletionHelp(t *testing.T) {
+	completionUsage := usageForCommand("completion")
 	var stdout, stderr bytes.Buffer
 	application := New(Options{Stdout: &stdout, Stderr: &stderr})
 	if code := application.runCompletion([]string{"--help"}); code != 0 {
@@ -228,6 +268,9 @@ func TestGeneratedBashCompletionBehavior(t *testing.T) {
 	assertBashCandidates([]string{"rnlctl", "--quiet", "logs", "--s"}, 3, "--since")
 	assertBashCandidates([]string{"rnlctl", "upgrade", "--d"}, 2, "--dry-run")
 	assertBashMissing([]string{"rnlctl", "logs", "core", "--s"}, 3, "--since")
+	assertBashCandidates([]string{"rnlctl", "logs", "--since", "15m", ""}, 4, "node")
+	assertBashMissing([]string{"rnlctl", "logs", "--since", "15m", ""}, 4, "core", "core-errors")
+	assertBashMissing([]string{"rnlctl", "logs", "--since=15m", ""}, 3, "core", "core-errors")
 	assertBashCandidates([]string{"rnlctl", "config", "set", "NODE_PORT=12345", "NODE_"}, 4, "NODE_BIND_ADDR=")
 	assertBashMissing([]string{"rnlctl", "config", "set", "NODE_PORT=12345", "NODE_"}, 4, "NODE_PORT=")
 
@@ -302,6 +345,8 @@ _rnlctl
 	assertZshCandidates("rnlctl config set NODE_", "4", "NODE_PORT=", "NODE_BIND_ADDR=")
 	assertZshCandidates("rnlctl --quiet logs --s", "4", "--since:Show entries")
 	assertZshMissing("rnlctl logs core --s", "4", "--since:Show entries")
+	assertZshCandidates("rnlctl logs --since 15m ''", "5", "node:remnanode-lite")
+	assertZshMissing("rnlctl logs --since 15m ''", "5", "core:rw-core", "core-errors:rw-core")
 	assertZshCandidates("rnlctl config set NODE_PORT=12345 NODE_", "5", "NODE_BIND_ADDR=")
 	assertZshMissing("rnlctl config set NODE_PORT=12345 NODE_", "5", "NODE_PORT=")
 }
@@ -352,6 +397,8 @@ func TestGeneratedFishCompletionBehavior(t *testing.T) {
 	assertFishCandidates("rnlctl config set NODE_PORT=12345 ", "NODE_BIND_ADDR=")
 	assertFishMissing("rnlctl config set NODE_PORT=12345 ", "NODE_PORT=")
 	assertFishMissing("rnlctl logs core --", "--since")
+	assertFishCandidates("rnlctl logs --since 15m ", "node\tremnanode-lite")
+	assertFishMissing("rnlctl logs --since 15m ", "core\trw-core", "core-errors\trw-core")
 	assertFishMissing("rnlctl install --bundle-root config ", "show\t", "set\t")
 
 	directoryRoot := t.TempDir()

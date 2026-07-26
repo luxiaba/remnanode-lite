@@ -42,7 +42,7 @@ func (m *Manager) BeginMutation(ctx context.Context) (context.Context, func(), e
 	m.mu.RLock()
 	process := m.process
 	eligible := m.state == lifecycleRunning && process != nil &&
-		m.runtimeProcessEpoch == process.epoch
+		m.runtime.runtimeProcessEpoch == process.epoch
 	m.mu.RUnlock()
 	if !eligible {
 		return nil, nil, errXrayOffline
@@ -53,7 +53,7 @@ func (m *Manager) BeginMutation(ctx context.Context) (context.Context, func(), e
 	process.mutationGate.RLock()
 	m.mu.RLock()
 	valid := m.state == lifecycleRunning && m.process == process &&
-		m.runtimeProcessEpoch == process.epoch
+		m.runtime.runtimeProcessEpoch == process.epoch
 	m.mu.RUnlock()
 	if !valid {
 		process.mutationGate.RUnlock()
@@ -104,7 +104,7 @@ func (m *Manager) mutationToken(ctx context.Context) (*mutationToken, context.Co
 
 func (m *Manager) mutationTokenCurrentLocked(token *mutationToken) bool {
 	return token != nil && token.manager == m && token.active.Load() && m.process == token.process &&
-		m.runtimeProcessEpoch == token.epoch
+		m.runtime.runtimeProcessEpoch == token.epoch
 }
 
 func (m *Manager) processForRPC(ctx context.Context, requireOnline bool) (*processState, error) {
@@ -120,7 +120,7 @@ func (m *Manager) processForRPC(ctx context.Context, requireOnline bool) (*proce
 	m.mu.RLock()
 	process := m.process
 	online := m.state == lifecycleRunning && process != nil &&
-		m.runtimeProcessEpoch == process.epoch
+		m.runtime.runtimeProcessEpoch == process.epoch
 	m.mu.RUnlock()
 	if requireOnline && !online {
 		return nil, errXrayOffline

@@ -24,7 +24,7 @@ Go deeper only when the change requires it: read the [current contract baseline]
 - Bash 4 or later; Bash 5 is recommended for CI parity and installer work. The Bash 3.2 bundled with macOS does not support syntax used by the scripts, including `${var,,}`.
 - The exact Go version selected by the `toolchain` directive in `go.mod`, currently Go `1.26.5`.
 - `gofmt`, included with the Go toolchain.
-- A C compiler and working CGO environment. `check-go.sh` always runs the race detector. Install Xcode Command Line Tools on macOS or the appropriate build toolchain on Linux.
+- A C compiler and working CGO environment. `check-go.sh` runs the race detector over `./internal/...` and the daemon command. Install Xcode Command Line Tools on macOS or the appropriate build toolchain on Linux.
 - GNU `timeout`, called directly by supply-chain and installer checks. On macOS, install Homebrew `coreutils` and add `$(brew --prefix coreutils)/libexec/gnubin` to `PATH`.
 
 Use the same Go patch release as CI whenever possible. A normal `go test` may allow Go to download another toolchain automatically, but release builds set `GOTOOLCHAIN=local` and reject a mismatched local version.
@@ -144,14 +144,14 @@ Keep the official repository outside this repository. `.official-source/` is ign
 | `internal/stats` | Statistics use cases; does not own the rw-core process |
 | `internal/nodehandler` | User add/remove, query, and connection-cleanup use cases |
 | `internal/plugin` | Plugin snapshots, plans, torrent reports, nftables, and the operation gate |
-| `internal/xray` | Sole owner of the rw-core process, configuration, hashes, logs, and lifecycle |
+| `internal/xray` | Sole owner of the rw-core process, configuration, hashes, logs, and lifecycle; `version.go` keeps throttled version recovery separate from the process lifecycle file without creating another owner |
 | `internal/xrayrpc` | Minimal protobuf/gRPC client for rw-core |
 | `internal/xrayrpc/wire` | Generated minimal protobuf wire types used by `internal/xrayrpc` |
 | `internal/unixconfig` | Internal Unix-socket service through which rw-core reads configuration and sends webhooks |
 | `internal/connections`, `internal/netadmin` | User/IP connection resolution and Linux socket destruction |
 | `internal/system`, `internal/asn` | System metrics, network monitoring, and compact ASN lookup |
 | `internal/contract` | Executable behavioral contract and differential semantics for the pinned official version |
-| `internal/rnlctl` | Native bundle verification, durable transactions, filesystem layout, service-manager adapters, and recovery |
+| `internal/rnlctl` | Native bundle verification, durable transactions, filesystem layout, service-manager adapters, recovery, and the shared command/help/completion specification |
 | `internal/version` | Project version and official contract version; see the versioning policy for their distinct meanings |
 
 ### Engineering and Delivery Paths
@@ -235,11 +235,21 @@ without rebuilding.
 | Linux system capability | `*_linux.go` and corresponding `*_stub.go` | Non-Linux builds must compile; Linux behavior must be tested on Linux |
 | Docker image | `Dockerfile`, `compose*.yaml`, `.dockerignore`, candidate workflow | Pinned asset digests, multiple architectures, resource limits, and ephemeral logs |
 | Native install, upgrade, rollback, repair, or uninstall | `internal/rnlctl`, `cmd/rnlctl`, `release/native/install.sh`, `deploy/` | Exact bundle identity, durable journal, atomic generation selection, service intent, permissions, and recovery |
+| `rnlctl` command, help, or completion | `internal/rnlctl/command_spec.go`, explicit parser and request mapping, command-surface tests | The specification owns public metadata; parsing and independent expected-output tests stay explicit |
 | Runtime asset or Native bundle format | `release/runtime-assets.lock.json`, `cmd/release-tool`, `scripts/build-native-bundle.sh` | Docker/Native parity, deterministic archive, architecture checks, manifest/SBOM integrity, source and license provenance |
 | Project version | `internal/version`, installers, Compose, release workflow | Do not recouple the project version to the contract version |
 | Official contract upgrade | `internal/version/contract.version`, `internal/contract`, source manifest, pinned CI ref, contract documentation | Pin the source commit, extract and review the diff, then implement; never infer complete Zod equivalence automatically |
 
 The minimum test set for each category is in [Selecting Tests by Change](testing.md#selecting-tests-by-change).
+
+### Maintaining the `rnlctl` Command Surface
+
+`internal/rnlctl/command_spec.go` is the production source for command names,
+options, help text, and shell-completion metadata. Keep parsing, typed request
+construction, and execution explicit in `app.go`; that makes validation and
+error paths straightforward to inspect. When a command changes, update the
+specification and parser together, then run the independent command-surface and
+golden tests. Those tests must not be generated from the same specification.
 
 ## Engineering Constraints
 
