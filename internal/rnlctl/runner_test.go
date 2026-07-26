@@ -184,6 +184,41 @@ func TestProcessRunnerContextCancellationTerminatesChild(t *testing.T) {
 	}
 }
 
+func TestProcessRunnerForwardsSignalCancellationCause(t *testing.T) {
+	t.Setenv(processRunnerHelperEnv, "wait-for-signal")
+	runner := &ProcessRunner{signals: make(chan os.Signal)}
+	ready := newReadyWriter()
+	var stderr bytes.Buffer
+	ctx, cancel := context.WithCancelCause(context.Background())
+	result := make(chan int, 1)
+
+	go func() {
+		result <- runner.Run(ctx, Command{
+			Name:   os.Args[0],
+			Args:   []string{"-test.run=^TestProcessRunnerHelper$"},
+			Stdout: ready,
+			Stderr: &stderr,
+		})
+	}()
+
+	select {
+	case <-ready.ready:
+	case <-time.After(5 * time.Second):
+		cancel(context.DeadlineExceeded)
+		t.Fatal("child did not become ready")
+	}
+	cancel(&processSignalCause{signal: syscall.SIGINT})
+
+	select {
+	case code := <-result:
+		if code != 128+int(syscall.SIGINT) {
+			t.Fatalf("Run() = %d, want %d; stderr = %q", code, 128+int(syscall.SIGINT), stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("signal cancellation was not forwarded to the child")
+	}
+}
+
 func TestProcessRunnerContextCancellationKillsUnresponsiveChild(t *testing.T) {
 	t.Setenv(processRunnerHelperEnv, "ignore-termination")
 	runner := &ProcessRunner{

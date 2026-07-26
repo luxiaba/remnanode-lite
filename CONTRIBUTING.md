@@ -118,6 +118,13 @@ CLI framework simply to remove a few declarations. Public-surface and golden
 tests must state their expectations independently of the specification so they
 can detect metadata drift.
 
+Long-running commands report structured lifecycle and transfer events; the
+progress renderer alone owns terminal formatting. Keep final data on stdout and
+progress on stderr, preserve `auto|plain|never`, quiet, JSON, color, and
+non-TTY behavior, and never emit Secret material. Cancellation must propagate
+through the active operation while required compensation uses a separate,
+bounded context.
+
 ### Contract and HTTP boundaries
 
 The `/node` API is not an open-ended design surface. Panel may depend on the
@@ -231,6 +238,9 @@ The exact commands are in the
 - `release/native/install.sh` is only the bootstrap. Durable lifecycle and
   generation behavior belongs in `internal/rnlctl`; do not reimplement it in
   shell.
+- Keep the installer's `auto|plain|never` progress contract aligned with
+  `rnlctl`, write bootstrap stages to stderr, and pass the effective mode to the
+  bundled controller.
 - Native installation and upgrade accept complete, verified bundles. Do not
   add a path that updates Node, rw-core, geo data, or ASN data independently.
 - Preserve exact-version resolution, outer archive SHA-256 verification,

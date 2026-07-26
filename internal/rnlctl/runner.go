@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"syscall"
 	"time"
 )
@@ -59,7 +58,11 @@ func (r *ProcessRunner) Run(ctx context.Context, command Command) int {
 
 	child := exec.CommandContext(ctx, command.Name, command.Args...)
 	child.Cancel = func() error {
-		err := child.Process.Signal(syscall.SIGTERM)
+		terminationSignal := os.Signal(syscall.SIGTERM)
+		if received := signalFromContext(ctx); received != nil {
+			terminationSignal = received
+		}
+		err := child.Process.Signal(terminationSignal)
 		if errors.Is(err, os.ErrProcessDone) {
 			return os.ErrProcessDone
 		}
@@ -100,15 +103,7 @@ func (r *ProcessRunner) signalSource() (<-chan os.Signal, func()) {
 	if r.signals != nil {
 		return r.signals, func() {}
 	}
-	signals := make(chan os.Signal, 4)
-	signal.Notify(
-		signals,
-		os.Interrupt,
-		syscall.SIGHUP,
-		syscall.SIGTERM,
-		syscall.SIGQUIT,
-	)
-	return signals, func() { signal.Stop(signals) }
+	return nil, func() {}
 }
 
 func forwardSignals(

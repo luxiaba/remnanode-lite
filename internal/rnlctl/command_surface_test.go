@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-const expectedRootHelp = `Usage: rnlctl [--quiet|-q] [--no-color] <command>
+const expectedRootHelp = `Usage: rnlctl [--quiet|-q] [--no-color] [--progress MODE] <command>
 
 Commands:
   version                         Show the rnlctl version
@@ -29,8 +29,9 @@ Commands:
   completion <bash|zsh|fish>      Generate shell completion
 
 Global options:
-  --quiet, -q                     Hide confirmations and human status reports
-  --no-color                      Disable color in human diagnostic output
+  --quiet, -q                     Suppress routine success and health summaries
+  --no-color                      Disable color in human-readable output
+  --progress MODE                 Progress output: auto, plain, or never (default: auto)
 
 Log options:
   --follow, -f                    Continue following new log entries
@@ -184,6 +185,7 @@ type publicOptionSurface struct {
 	Long            string
 	Short           string
 	Value           string
+	ValueCandidates []string
 	UnavailableWith []string
 }
 
@@ -197,6 +199,7 @@ func expectedPublicCommandSurface() []publicCommandSurface {
 		{Path: "", Options: []publicOptionSurface{
 			{Long: "quiet", Short: "q", Value: "none"},
 			{Long: "no-color", Value: "none"},
+			{Long: "progress", Value: "word", ValueCandidates: []string{"auto", "plain", "never"}},
 		}},
 		{Path: "version"},
 		{Path: "install", Options: []publicOptionSurface{
@@ -290,10 +293,18 @@ func publicOptionsFromCommandSpec(options []commandOptionSpec) []publicOptionSur
 	}
 	result := make([]publicOptionSurface, 0, len(options))
 	for _, option := range options {
+		var valueCandidates []string
+		if len(option.ValueCandidates) != 0 {
+			valueCandidates = make([]string, 0, len(option.ValueCandidates))
+		}
+		for _, candidate := range option.ValueCandidates {
+			valueCandidates = append(valueCandidates, candidate.Value)
+		}
 		result = append(result, publicOptionSurface{
 			Long:            option.Long,
 			Short:           option.Short,
 			Value:           commandValueNameForSurfaceTest(option.Value),
+			ValueCandidates: valueCandidates,
 			UnavailableWith: append([]string(nil), option.UnavailableWith...),
 		})
 	}

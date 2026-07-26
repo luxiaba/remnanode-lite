@@ -4,6 +4,26 @@
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and focuses on changes that matter to users and operators. GitHub Releases provide the full diff for each published version.
 
+## [Unreleased]
+
+### Added
+
+- Added adaptive progress for Native installation and `rnlctl` lifecycle
+  operations. Interactive terminals receive live transfer and phase feedback;
+  redirected output receives stable lines, with explicit
+  `--progress auto|plain|never` control.
+
+### Changed
+
+- Kept progress on stderr and final results on stdout, disabled progress for
+  quiet and JSON output, and applied color and terminal capability checks per
+  output stream.
+- Process signals now request graceful cancellation first. Required rollback
+  and cleanup use a bounded compensation window, Ctrl-C returns `130`, and a
+  repeated signal can force termination through the operating-system default.
+  Recovery reasserts and verifies the previous service-manager state before it
+  clears the transaction journal.
+
 ## [2.8.0-rnl.1] - 2026-07-25
 
 This preview keeps the verified official Node `2.8.0` contract and focuses on

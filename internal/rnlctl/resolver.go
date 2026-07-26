@@ -49,6 +49,7 @@ func NewGitHubResolver(options GitHubResolverOptions) *GitHubResolver {
 }
 
 func (resolver *GitHubResolver) Resolve(ctx context.Context, version, architecture, destinationDir string) (string, error) {
+	emitProgressPhase(ctx, phaseResolveRelease)
 	if !projectVersionRE.MatchString(version) {
 		return "", fmt.Errorf("--to requires an exact version such as 2.8.0 or 2.8.0-rnl.1")
 	}
@@ -62,7 +63,9 @@ func (resolver *GitHubResolver) Resolve(ctx context.Context, version, architectu
 		return "", err
 	}
 	base := "https://github.com/" + resolver.repository + "/releases/download/" + version + "/"
-	checksumData, err := resolver.downloadBytes(ctx, base+"SHA256SUMS", 1<<20)
+	completeProgressPhase(ctx, phaseResolveRelease, true)
+	emitProgressPhase(ctx, phaseDownloadChecksums)
+	checksumData, err := resolver.downloadBytes(ctx, base+"SHA256SUMS", 1<<20, phaseDownloadChecksums)
 	if err != nil {
 		return "", fmt.Errorf("download SHA256SUMS for %s: %w", version, err)
 	}
@@ -71,10 +74,13 @@ func (resolver *GitHubResolver) Resolve(ctx context.Context, version, architectu
 	if err != nil {
 		return "", err
 	}
+	completeProgressPhase(ctx, phaseDownloadChecksums, true)
 	destination := filepath.Join(destinationDir, name)
-	if err := resolver.downloadFile(ctx, base+url.PathEscape(name), destination, expected, maxBundleArchive); err != nil {
+	emitProgressPhase(ctx, phaseDownloadBundle)
+	if err := resolver.downloadFile(ctx, base+url.PathEscape(name), destination, expected, maxBundleArchive, phaseDownloadBundle); err != nil {
 		return "", fmt.Errorf("download %s: %w", name, err)
 	}
+	completeProgressPhase(ctx, phaseDownloadBundle, true)
 	return destination, nil
 }
 
@@ -95,7 +101,7 @@ func validateRepository(repository string) error {
 	return nil
 }
 
-func (resolver *GitHubResolver) downloadBytes(ctx context.Context, address string, limit int64) ([]byte, error) {
+func (resolver *GitHubResolver) downloadBytes(ctx context.Context, address string, limit int64, phase operationPhase) ([]byte, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return nil, err
@@ -109,7 +115,8 @@ func (resolver *GitHubResolver) downloadBytes(ctx context.Context, address strin
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP %s", response.Status)
 	}
-	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
+	reader := newProgressReader(ctx, phase, io.LimitReader(response.Body, limit+1), response.ContentLength)
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +126,7 @@ func (resolver *GitHubResolver) downloadBytes(ctx context.Context, address strin
 	return data, nil
 }
 
-func (resolver *GitHubResolver) downloadFile(ctx context.Context, address, destination, expected string, limit int64) error {
+func (resolver *GitHubResolver) downloadFile(ctx context.Context, address, destination, expected string, limit int64, phase operationPhase) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return err
@@ -149,7 +156,8 @@ func (resolver *GitHubResolver) downloadFile(ctx context.Context, address, desti
 		return err
 	}
 	hasher := sha256.New()
-	written, err := io.Copy(io.MultiWriter(temporary, hasher), io.LimitReader(response.Body, limit+1))
+	reader := newProgressReader(ctx, phase, io.LimitReader(response.Body, limit+1), response.ContentLength)
+	written, err := io.Copy(io.MultiWriter(temporary, hasher), reader)
 	if err != nil {
 		return err
 	}
@@ -170,6 +178,33 @@ func (resolver *GitHubResolver) downloadFile(ctx context.Context, address, desti
 	}
 	committed = true
 	return syncDirectory(filepath.Dir(destination))
+}
+
+type progressReader struct {
+	ctx     context.Context
+	reader  io.Reader
+	phase   operationPhase
+	current int64
+	total   int64
+}
+
+func newProgressReader(ctx context.Context, phase operationPhase, reader io.Reader, contentLength int64) *progressReader {
+	total := contentLength
+	if total < 0 {
+		total = 0
+	}
+	progress := &progressReader{ctx: ctx, reader: reader, phase: phase, total: total}
+	emitProgressTransfer(ctx, phase, 0, total)
+	return progress
+}
+
+func (reader *progressReader) Read(buffer []byte) (int, error) {
+	read, err := reader.reader.Read(buffer)
+	if read > 0 {
+		reader.current += int64(read)
+		emitProgressTransfer(reader.ctx, reader.phase, reader.current, reader.total)
+	}
+	return read, err
 }
 
 func checksumForAsset(data []byte, asset string) (string, error) {

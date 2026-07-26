@@ -135,6 +135,7 @@ fi
 if [ -n "${TEST_HOST_WRITE_MARKER:-}" ]; then
 	: >"$TEST_HOST_WRITE_MARKER"
 fi
+printf 'fixture installation complete\n'
 EOF
 	chmod 0755 "$tree/remnanode-lite/bin/rnlctl"
 }
@@ -158,17 +159,26 @@ secret_file=$temporary_directory/input-secret.key
 printf 'fixture-secret-that-must-not-be-logged\n' >"$secret_file"
 chmod 0600 "$secret_file"
 
+help_output=$(sh "$installer" --help)
+assert_contains "$help_output" '--progress MODE'
+assert_contains "$help_output" 'auto, plain, or never'
+
 fixture_path=$temporary_directory/fake-bin:$PATH
 installer_tmp=$temporary_directory/installer-tmp
 mkdir -m 0700 "$installer_tmp"
 export TMPDIR="$installer_tmp"
+offline_stderr=$temporary_directory/offline.stderr
 offline_output=$(TMPDIR=$installer_tmp PATH=$fixture_path sh "$installer" \
 	--bundle "$good_archive" \
 	--port 12345 \
 	--secret-file "$secret_file" \
 	--prepare-only \
-	--yes)
+	--yes \
+	--progress plain 2>"$offline_stderr")
+offline_progress=$(cat "$offline_stderr")
 assert_contains "$offline_output" '<install>'
+assert_contains "$offline_output" '<--progress>'
+assert_contains "$offline_output" '<plain>'
 assert_contains "$offline_output" '<--bundle>'
 assert_contains "$offline_output" '<--sha256>'
 assert_contains "$offline_output" "<$archive_checksum>"
@@ -181,23 +191,47 @@ assert_contains "$offline_output" "<$secret_file>"
 assert_contains "$offline_output" '<--prepare-only>'
 assert_not_contains "$offline_output" '<--yes>'
 assert_not_contains "$offline_output" 'fixture-secret-that-must-not-be-logged'
+assert_contains "$offline_progress" 'install.sh: Verify local linux/amd64 Native bundle'
+assert_contains "$offline_progress" 'install.sh: Install verified linux/amd64 Native bundle'
+assert_not_contains "$offline_progress" 'fixture-secret-that-must-not-be-logged'
 [ -z "$(find "$installer_tmp" -mindepth 1 -print -quit)" ] \
 	|| fail "installer did not clean its TMPDIR workspace"
 
+prepare_stderr=$temporary_directory/prepare.stderr
 prepare_output=$(PATH=$fixture_path sh "$installer" \
-	--bundle "$good_archive" --prepare-only --yes </dev/null)
+	--bundle "$good_archive" --prepare-only --yes --progress never \
+	</dev/null 2>"$prepare_stderr")
 assert_contains "$prepare_output" '<install>'
+assert_contains "$prepare_output" '<--progress>'
+assert_contains "$prepare_output" '<never>'
 assert_contains "$prepare_output" '<--prepare-only>'
 assert_not_contains "$prepare_output" '<--secret-file>'
 assert_not_contains "$prepare_output" 'Panel Secret:'
+assert_contains "$prepare_output" 'fixture installation complete'
+[ ! -s "$prepare_stderr" ] \
+	|| fail "--progress never emitted bootstrap progress"
 
 cp "$installer" "$temporary_directory/good-tree/remnanode-lite/install.sh"
 chmod 0755 "$temporary_directory/good-tree/remnanode-lite/install.sh"
+embedded_stderr=$temporary_directory/embedded.stderr
 embedded_output=$(PATH=$fixture_path sh "$temporary_directory/good-tree/remnanode-lite/install.sh" \
-	--secret-file "$secret_file" --yes)
+	--secret-file "$secret_file" --yes --progress=never 2>"$embedded_stderr")
 assert_contains "$embedded_output" '<install>'
+assert_contains "$embedded_output" '<--progress>'
+assert_contains "$embedded_output" '<never>'
 assert_contains "$embedded_output" "<$temporary_directory/good-tree/remnanode-lite>"
 assert_not_contains "$embedded_output" '<--expected-version>'
+assert_contains "$embedded_output" 'fixture installation complete'
+[ ! -s "$embedded_stderr" ] \
+	|| fail "--progress=never emitted bootstrap progress"
+
+dumb_stderr=$temporary_directory/dumb.stderr
+dumb_output=$(TERM=dumb PATH=$fixture_path sh "$installer" \
+	--bundle "$good_archive" --prepare-only --yes --progress auto \
+	2>"$dumb_stderr")
+assert_contains "$dumb_output" '<--progress>'
+assert_contains "$dumb_output" '<plain>'
+assert_contains "$(cat "$dumb_stderr")" 'install.sh: Verify local linux/amd64 Native bundle'
 
 if invalid_output=$(sh "$installer" --version latest 2>&1); then
 	fail "invalid version unexpectedly succeeded"
@@ -223,6 +257,27 @@ if duplicate_yes_output=$(sh "$installer" --yes --yes 2>&1); then
 	fail "duplicate --yes unexpectedly succeeded"
 fi
 assert_contains "$duplicate_yes_output" '--yes may be specified only once'
+
+if missing_progress_output=$(sh "$installer" --progress 2>&1); then
+	fail "missing --progress value unexpectedly succeeded"
+fi
+assert_contains "$missing_progress_output" '--progress requires auto, plain, or never'
+
+if invalid_progress_output=$(sh "$installer" --progress animated 2>&1); then
+	fail "invalid --progress value unexpectedly succeeded"
+fi
+assert_contains "$invalid_progress_output" '--progress must be auto, plain, or never'
+
+if empty_progress_output=$(sh "$installer" --progress= 2>&1); then
+	fail "empty --progress value unexpectedly succeeded"
+fi
+assert_contains "$empty_progress_output" '--progress must be auto, plain, or never'
+
+if duplicate_progress_output=$(sh "$installer" \
+	--progress plain --progress=never 2>&1); then
+	fail "duplicate --progress unexpectedly succeeded"
+fi
+assert_contains "$duplicate_progress_output" '--progress may be specified only once'
 
 mkdir -p "$temporary_directory/no-checksum"
 no_checksum_archive=$temporary_directory/no-checksum/$(basename -- "$good_archive")
@@ -278,6 +333,15 @@ cat >"$temporary_directory/fake-bin/curl" <<'EOF'
 #!/bin/sh
 destination=
 url=
+if [ -n "${TEST_DOWNLOAD_ARGUMENTS:-}" ]; then
+	for argument do
+		printf '<%s>\n' "$argument"
+	done >>"$TEST_DOWNLOAD_ARGUMENTS"
+fi
+if [ "${TEST_DOWNLOAD_FAILURE:-0}" = 1 ]; then
+	printf 'curl fixture failure\n' >&2
+	exit 22
+fi
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--output)
@@ -296,14 +360,40 @@ cp "$TEST_DOWNLOAD_DIRECTORY/${url##*/}" "$destination"
 EOF
 chmod 0755 "$temporary_directory/fake-bin/curl"
 
+online_stderr=$temporary_directory/online.stderr
+online_download_arguments=$temporary_directory/online-download.arguments
 online_output=$(TEST_DOWNLOAD_DIRECTORY=$temporary_directory/downloads \
+	TEST_DOWNLOAD_ARGUMENTS=$online_download_arguments \
 	PATH=$fixture_path sh "$installer" \
-	--version 9.8.7-rnl.3 --secret-file "$secret_file" --yes)
-assert_contains "$online_output" 'Downloading Remnanode Lite 9.8.7-rnl.3 for linux/amd64'
+	--version 9.8.7-rnl.3 --secret-file "$secret_file" --yes \
+	--progress plain 2>"$online_stderr")
+online_progress=$(cat "$online_stderr")
+assert_contains "$online_progress" 'install.sh: Download release checksums'
+assert_contains "$online_progress" 'install.sh: Download Remnanode Lite 9.8.7-rnl.3 for linux/amd64'
+assert_contains "$online_progress" 'install.sh: Verify downloaded linux/amd64 Native bundle'
+assert_contains "$online_progress" 'install.sh: Install verified linux/amd64 Native bundle'
+assert_contains "$(cat "$online_download_arguments")" '<--silent>'
+assert_not_contains "$(cat "$online_download_arguments")" '<--progress-bar>'
 assert_contains "$online_output" '<install>'
+assert_contains "$online_output" '<--progress>'
+assert_contains "$online_output" '<plain>'
 assert_contains "$online_output" '<--expected-version>'
 assert_contains "$online_output" '<9.8.7-rnl.3>'
 assert_not_contains "$online_output" '<--yes>'
+
+never_failure_stderr=$temporary_directory/never-failure.stderr
+if never_failure_output=$(TEST_DOWNLOAD_DIRECTORY=$temporary_directory/downloads \
+	TEST_DOWNLOAD_FAILURE=1 PATH=$fixture_path sh "$installer" \
+	--version 9.8.7-rnl.3 --secret-file "$secret_file" --yes \
+	--progress never 2>"$never_failure_stderr"); then
+	fail "failed download with --progress never unexpectedly succeeded"
+fi
+never_failure_error=$(cat "$never_failure_stderr")
+assert_contains "$never_failure_error" 'curl fixture failure'
+assert_contains "$never_failure_error" 'install.sh: download failed:'
+assert_not_contains "$never_failure_error" 'install.sh: Download release checksums'
+assert_not_contains "$never_failure_error" 'fixture-secret-that-must-not-be-logged'
+assert_not_contains "$never_failure_output" 'fixture-secret-that-must-not-be-logged'
 
 mkdir -p "$temporary_directory/mismatched-tree"
 make_bundle_tree "$temporary_directory/mismatched-tree" 9.8.7-rnl.2

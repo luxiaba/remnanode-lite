@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=677c3ee233af2a465ca8508cd60c6cdf9496f87e618ec9c668afbb850275a974 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=6d3288143ca5ecc8d336d55c83744c32d875ad4d53e89e345e942cb1b48a7e0c -->
 
 # 原生 Linux 部署
 
@@ -37,7 +37,7 @@ Docker 容器和没有 init 的镜像不属于受支持的 Alpine Native 主机�
 - systemd，或上面所述且符合条件的 Alpine/OpenRC 环境；
 - `nft`（nftables）和 `ss`（iproute2）；
 - 当专用 `remnanode-lite` 账号尚不存在时，提供 `useradd` 和 `groupadd`；
-- 可信 CA、`curl` 或 `wget`；
+- 可信 CA，以及 `curl` 或支持 `--https-only` 的 GNU Wget；
 - GNU tar 和 gzip；
 - Panel 可访问的 Node 端口，以及 Panel 配置的代理入站端口。
 
@@ -85,6 +85,11 @@ sudo sh ./install.sh --version "$VERSION" --port 2222
 ```
 
 把 `2222` 换成 Panel 为该 Node 配置的端口。如果主机上没有有效 Secret，安装器会在终端中无回显地读取它，并在写入系统前请求确认。在线 installer 只下载当前架构对应的精确 `${VERSION}` 归档，不会跟随 GitHub Latest 或容器移动通道。
+
+`install.sh` 接受 `--progress auto|plain|never`，并把最终生效的模式传给 bundle
+中的 `rnlctl`。默认的 `auto` 会在 stderr 连接交互终端时使用下载工具的实时进度，
+否则输出稳定的阶段行。需要固定的逐行日志时使用 `--progress plain`，完全隐藏进度时
+使用 `--progress never`；这两个选项都不会隐藏错误或最终安装结果。
 
 ### 自动化安装
 
@@ -221,11 +226,36 @@ status 会检查 generation、配置、服务、权限、修复缓存和内部 h
 ```bash
 sudo rnlctl --quiet config set LOW_MEMORY=1
 sudo rnlctl status --no-color
+sudo rnlctl upgrade --to "$VERSION" --progress plain
 ```
 
-`--quiet`（或 `-q`）会隐藏成功的生命周期/配置变更提示、`config check` 的 `configuration ok`，以及 human `status`/`doctor` 输出。它不会隐藏 help、version、`config show`/`get`、日志、补全脚本、升级 dry-run 计划、JSON 或错误。
+进度写入 stderr，最终结果和命令数据写入 stdout，因此 stdout 可以安全地重定向或用于
+机器读取。面向人的进度显示不是可解析接口。
 
-status 和 doctor 只在 stdout 连接 TTY 时使用克制的颜色。输出被重定向、指定 `--no-color`、`NO_COLOR` 为非空值或 `TERM=dumb` 时，都不会出现 ANSI 转义序列。
+| 模式 | 行为 |
+| --- | --- |
+| `auto` | 默认模式。stderr 是 TTY 时使用实时显示，否则输出稳定的逐阶段文本；`TERM=dumb` 也会选择 plain 输出。 |
+| `plain` | 每个实际生命周期阶段输出一行，下载期间偶尔报告进度，不重写光标。 |
+| `never` | 只隐藏进度，最终结果和错误仍会显示。 |
+
+只有能够确定总大小的下载才显示百分比、速率和预计剩余时间。无法确定大小时只报告
+已传输字节，不虚构百分比；生命周期阶段也不会伪装成整体完成百分比。
+
+`--quiet`（或 `-q`）会隐藏进度、成功的生命周期/配置变更提示、`config check` 的
+`configuration ok`，以及 human `status`/`doctor` 输出。它优先于显式指定的进度模式，
+但不会隐藏 help、version、`config show`/`get`、日志、补全脚本、升级 dry-run 计划、
+JSON 或错误。
+
+面向人的输出只在对应输出流是 TTY 时使用克制的颜色：status 和 doctor 检查 stdout，
+进度检查 stderr。指定 `--no-color`、`NO_COLOR` 为非空值或 `TERM=dumb` 时，两个输出流
+都不使用颜色；被重定向的输出流也不会包含颜色转义序列。JSON 输出会
+完全关闭进度。
+
+第一次收到 `SIGINT`、`SIGTERM`、`SIGHUP` 或 `SIGQUIT` 时，当前操作会尝试安全取消；
+清理或回滚所需的主机命令和健康检查受一分钟恢复期限约束。本地文件操作可能会先完成
+当前这个有界步骤再退出。Ctrl-C 会在这次尝试结束后按惯例返回 `130`。收到第一个信号
+后，处理方式会恢复为操作系统默认值，因此再次发送信号可以立即强制终止；如果强制
+退出留下 recovery journal，请运行 `sudo rnlctl status --json` 和 `sudo rnlctl repair`。
 
 退出码通常为：成功 `0`，运行失败或检查结果不健康 `1`，用法错误 `2`。`absent` 是 status 的有效状态，会返回 `0`；要求必须已安装的自动化还要检查 JSON 中的 `installed` 或 `deployment`。`logs` 启动 `journalctl` 或 `tail` 后，会透传该读取器的退出码；被信号终止时也可能返回 `128 + signal`。
 
@@ -310,6 +340,10 @@ dry-run 会使用临时磁盘，但不会预留或保证真实升级所需的空
 ```bash
 sudo rnlctl upgrade --to "$VERSION"
 ```
+
+在线预检和升级会先报告精确 Release 选择、下载和校验，再输出实际执行的生命周期阶段，
+例如准备 generation、停止活动服务、切换 generation、恢复服务状态、等待 health 和
+提交状态；没有发生的阶段不会显示。JSON dry-run 始终不输出进度。
 
 在线升级从对应 GitHub Release 下载归档和摘要，验证全部文件后创建新 generation；离线升级可传入已验证归档：
 

@@ -71,9 +71,34 @@ Use these service-manager commands when you need their full low-level output. Sc
 
 ## `rnlctl` output and automation
 
-`--quiet`/`-q` and `--no-color` are global and may appear anywhere in the command. Quiet mode suppresses successful mutation output, `config check` success, and human `status`/`doctor`. It does not suppress help, version, `config show`/`get`, logs, completion, dry-run plans, JSON, or errors.
+`--quiet`/`-q`, `--no-color`, and `--progress auto|plain|never` are global and
+may appear anywhere in an `rnlctl` command. Progress goes to stderr; final
+results and command data go to stdout. Errors also go to stderr.
 
-Human status and doctor output use restrained color only on a TTY. `--no-color`, a non-empty `NO_COLOR`, `TERM=dumb`, or redirected output disables ANSI sequences.
+`auto` is the default. It uses a live display when stderr is a TTY and stable,
+line-oriented stages otherwise; `TERM=dumb` also selects plain output. `plain`
+forces line-oriented progress without cursor rewriting. `never` suppresses only
+progress. Only transfers with a known total size show percentages, rates, and
+estimated time. Lifecycle phases describe real work and are not an overall
+percentage or a stable parsing interface.
+
+Quiet mode overrides the progress choice and suppresses successful mutation
+output, `config check` success, and human `status`/`doctor`. It does not suppress
+help, version, `config show`/`get`, logs, completion, dry-run plans, JSON, or
+errors. JSON output disables progress.
+
+Human output uses restrained color only when its own stream is a TTY. Status
+and doctor inspect stdout; progress inspects stderr. `--no-color`, a non-empty
+`NO_COLOR`, or `TERM=dumb` disables color on both streams. A redirected stream
+does not contain color sequences.
+
+The first `SIGINT`, `SIGTERM`, `SIGHUP`, or `SIGQUIT` requests graceful
+cancellation. Context-aware host commands and health checks used for required
+cleanup or rollback run under a one-minute recovery deadline. Local filesystem
+work may finish its current bounded step before exit. Ctrl-C returns `130` after
+that attempt. The signal returns to its default behavior after the first
+delivery, so a second signal can force the process to exit immediately; inspect
+`status --json` and run `repair` afterward if recovery is required.
 
 Exit codes are normally `0` for success, `1` for runtime failure or an unhealthy result, and `2` for usage errors. An `absent` status is valid and returns `0`; scripts that require an installation must inspect `installed` or `deployment` in JSON. `logs` passes through the exit code from `journalctl` or `tail` once the reader starts, including `128 + signal` when signaled.
 
@@ -198,6 +223,11 @@ sudo rnlctl upgrade --to 2.8.0-rnl.2
 Dry-run requires root, an existing clean installation, and no pending lifecycle journal. With `--to`, it downloads and statically verifies the complete candidate, then briefly holds the lifecycle lock while checking current state and known host preconditions. It does not create a generation, cache, or transaction journal; change the service; execute the candidate binary; run target health checks; or keep the bundle. `--json` is valid only with `--dry-run`. The check uses temporary disk but does not reserve or guarantee space for the real upgrade, and a successful plan does not guarantee that the later upgrade will succeed. Local `--bundle` plus `--sha256` and `--bundle-root` candidates support the same dry-run.
 
 The complete Node/runtime bundle becomes a new generation. The transaction preserves the service's enabled and active state, validates the selected binary, and waits for internal health before committing. It retains the former generation as `previous`.
+
+Human preflight and upgrade commands report exact-release resolution, download,
+verification, and the lifecycle stages they actually perform. Percentage and
+ETA are limited to downloads whose total size is known. JSON dry-runs never
+include progress output.
 
 Rollback is one command:
 

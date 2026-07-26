@@ -11,11 +11,13 @@ import (
 )
 
 func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Result, error) {
+	emitProgressPhase(ctx, phaseVerifyBundle)
 	bundle, err := openBundle(request.Bundle, engine.architecture)
 	if err != nil {
 		return Result{}, err
 	}
 	defer bundle.Close()
+	completeProgressPhase(ctx, phaseVerifyBundle, true)
 
 	if err := engine.requirePrivileges(); err != nil {
 		return Result{}, err
@@ -51,9 +53,11 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	if !request.PrepareOnly && len(secretData) == 0 {
 		return Result{}, fmt.Errorf("a valid Secret Key is required")
 	}
+	emitProgressPhase(ctx, phaseValidateHost)
 	if err := engine.host.Preflight(ctx, !request.PrepareOnly, engine.paths); err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	retained, err := loadRetained(engine.paths)
 	if err != nil {
 		return Result{}, err
@@ -74,6 +78,7 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	if err != nil {
 		return Result{}, err
 	}
+	emitProgressPhase(ctx, phasePrepareGeneration)
 	cache, cacheCreated, err := cacheBundle(bundle, engine.paths.BundleCache)
 	if err != nil {
 		return Result{}, err
@@ -101,10 +106,12 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	transactionAccount := ManagedAccount{}
 	servicePrepared := false
 	rollback := func(cause error) (Result, error) {
-		rollbackErr := engine.rollbackFailedInstall(ctx, record, cacheCreated, generationCreated, transactionAccount, servicePrepared, environmentSnapshot, secretSnapshot)
-		if rollbackErr == nil {
-			_ = clearJournal(engine.paths)
-		}
+		rollbackErr := runRecoveryPhase(ctx, func(recoveryCtx context.Context) error {
+			if err := engine.rollbackFailedInstall(recoveryCtx, record, cacheCreated, generationCreated, transactionAccount, servicePrepared, environmentSnapshot, secretSnapshot); err != nil {
+				return err
+			}
+			return clearJournal(engine.paths)
+		})
 		return Result{}, errors.Join(cause, rollbackErr)
 	}
 
@@ -120,6 +127,8 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	if err := engine.checkpoint("install-after-generation"); err != nil {
 		return rollback(err)
 	}
+	completeProgressPhase(ctx, phasePrepareGeneration, true)
+	emitProgressPhase(ctx, phaseWriteConfiguration)
 	if err := engine.ensureRuntimeDirectories(); err != nil {
 		return rollback(err)
 	}
@@ -131,12 +140,16 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 			return rollback(fmt.Errorf("write Secret Key: %w", err))
 		}
 	}
+	completeProgressPhase(ctx, phaseWriteConfiguration, true)
+	emitProgressPhase(ctx, phaseSwitchGeneration)
 	if err := engine.selectGeneration(record.ID, ""); err != nil {
 		return rollback(err)
 	}
 	if err := engine.checkpoint("install-after-current-link"); err != nil {
 		return rollback(err)
 	}
+	completeProgressPhase(ctx, phaseSwitchGeneration, true)
+	emitProgressPhase(ctx, phasePrepareService)
 	account, err = engine.host.Prepare(ctx, generationRoot, engine.paths)
 	// Prepare may create the managed account before a later host step fails.
 	// Preserve the returned ownership metadata even when Prepare reports that
@@ -156,6 +169,7 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	if err := saveJournal(engine.paths, journal); err != nil {
 		return rollback(err)
 	}
+	completeProgressPhase(ctx, phasePrepareService, true)
 	if err := engine.applyServiceState(ctx, desired); err != nil {
 		return rollback(err)
 	}
@@ -165,6 +179,7 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	if err := engine.checkpoint("install-after-service"); err != nil {
 		return rollback(err)
 	}
+	emitProgressPhase(ctx, phaseCommitState)
 	state = &persistentState{
 		SchemaVersion: stateSchemaVersion, Current: record.ID,
 		CorePolicy: managedCorePolicy, Prepared: request.PrepareOnly, Desired: desired, Account: account,
@@ -183,9 +198,12 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	if err := clearJournal(engine.paths); err != nil {
 		return Result{}, fmt.Errorf("installation committed but journal cleanup failed: %w; run rnlctl repair", err)
 	}
+	completeProgressPhase(ctx, phaseCommitState, true)
+	emitProgressPhase(ctx, phaseCleanUp)
 	if err := removeAndSync(engine.paths.RetainedFile); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Result{}, fmt.Errorf("installation committed but retained metadata cleanup failed: %w", err)
 	}
+	completeProgressPhase(ctx, phaseCleanUp, true)
 	return Result{
 		Operation: "install", Changed: true, Generation: record.ID,
 		Version: record.Version, PreparedOnly: request.PrepareOnly,
@@ -197,9 +215,11 @@ func (engine *Engine) Activate(ctx context.Context, request ActivateRequest) (Re
 	if err != nil {
 		return Result{}, err
 	}
+	emitProgressPhase(ctx, phaseValidateHost)
 	if err := engine.host.Preflight(ctx, true, engine.paths); err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	if err := engine.requirePrivileges(); err != nil {
 		return Result{}, err
 	}
@@ -213,9 +233,11 @@ func (engine *Engine) Activate(ctx context.Context, request ActivateRequest) (Re
 		return Result{}, err
 	}
 	current := state.Generations[state.Current]
+	emitProgressPhase(ctx, phaseVerifyBundle)
 	if err := engine.verifyGeneration(current); err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseVerifyBundle, true)
 	secretSnapshot, err := snapshotFile(engine.paths.SecretFile, maxEnvironmentBytes)
 	if err != nil {
 		return Result{}, err
@@ -238,27 +260,32 @@ func (engine *Engine) Activate(ctx context.Context, request ActivateRequest) (Re
 		return Result{}, err
 	}
 	rollback := func(cause error) (Result, error) {
-		rollbackErr := secretSnapshot.restore()
-		if journal.RestartRequired {
-			rollbackErr = errors.Join(rollbackErr, engine.applyServiceState(ctx, desiredServiceState{Enabled: serviceBefore.Enabled, Active: serviceBefore.Active}))
-			if rollbackErr == nil {
-				rollbackErr = engine.host.Restart(ctx)
+		rollbackErr := runRecoveryPhase(ctx, func(recoveryCtx context.Context) error {
+			restoreErr := secretSnapshot.restore()
+			if journal.RestartRequired {
+				restoreErr = errors.Join(restoreErr, engine.reassertServiceState(recoveryCtx, desiredServiceState{Enabled: serviceBefore.Enabled, Active: serviceBefore.Active}))
+				if restoreErr == nil {
+					restoreErr = engine.host.Restart(recoveryCtx)
+				}
+				if restoreErr == nil {
+					restoreErr = engine.host.WaitHealthy(recoveryCtx, engine.paths.NodeBinaryLink, engine.internalSocketPath(), 25*time.Second)
+				}
+			} else {
+				restoreErr = errors.Join(restoreErr, engine.reassertServiceState(recoveryCtx, desiredServiceState{Enabled: serviceBefore.Enabled, Active: serviceBefore.Active}))
 			}
-			if rollbackErr == nil {
-				rollbackErr = engine.host.WaitHealthy(ctx, engine.paths.NodeBinaryLink, engine.internalSocketPath(), 25*time.Second)
+			if restoreErr != nil {
+				return restoreErr
 			}
-		} else {
-			rollbackErr = errors.Join(rollbackErr, engine.applyServiceState(ctx, desiredServiceState{Enabled: serviceBefore.Enabled, Active: serviceBefore.Active}))
-		}
-		if rollbackErr == nil {
-			rollbackErr = clearJournal(engine.paths)
-		}
+			return clearJournal(engine.paths)
+		})
 		return Result{}, errors.Join(cause, rollbackErr)
 	}
 	if request.SecretFile != "" {
+		emitProgressPhase(ctx, phaseWriteConfiguration)
 		if err := atomicWriteFile(engine.paths.SecretFile, secretData, 0o640); err != nil {
 			return rollback(err)
 		}
+		completeProgressPhase(ctx, phaseWriteConfiguration, true)
 	}
 	if err := validateRuntimeConfiguration(engine.paths); err != nil {
 		return rollback(err)
@@ -267,12 +294,20 @@ func (engine *Engine) Activate(ctx context.Context, request ActivateRequest) (Re
 		return rollback(err)
 	}
 	generationRoot := filepath.Join(engine.paths.Generations, current.ID)
+	emitProgressPhase(ctx, phasePrepareService)
 	account, err := engine.host.Prepare(ctx, generationRoot, engine.paths)
+	if err == nil {
+		completeProgressPhase(ctx, phasePrepareService, true)
+	}
 	if err == nil {
 		err = engine.applyServiceState(ctx, journal.Desired)
 	}
 	if err == nil && journal.RestartRequired {
+		emitProgressPhase(ctx, phaseRestartService)
 		err = engine.host.Restart(ctx)
+		if err == nil {
+			completeProgressPhase(ctx, phaseRestartService, true)
+		}
 	}
 	if err == nil {
 		err = engine.verifyTransitionOutcome(ctx, current, journal.Desired)
@@ -283,12 +318,14 @@ func (engine *Engine) Activate(ctx context.Context, request ActivateRequest) (Re
 	state.Desired = journal.Desired
 	state.Prepared = false
 	state.Account = mergeAccountOwnership(state.Account, account)
+	emitProgressPhase(ctx, phaseCommitState)
 	if err := saveState(engine.paths, *state); err != nil {
 		return rollback(err)
 	}
 	if err := clearJournal(engine.paths); err != nil {
 		return Result{}, fmt.Errorf("activation committed but journal cleanup failed: %w", err)
 	}
+	completeProgressPhase(ctx, phaseCommitState, true)
 	return Result{Operation: "activate", Changed: true, Generation: current.ID, Version: current.Version}, nil
 }
 
@@ -303,10 +340,12 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 		return Result{}, err
 	}
 	defer lock.Close()
+	emitProgressPhase(ctx, phaseValidateHost)
 	inspection, err := engine.inspectUpgrade(ctx, bundle)
 	if err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	state := inspection.state
 	oldRecord := inspection.current
 	superseded, hasSuperseded := inspection.superseded, inspection.hasPrevious
@@ -315,6 +354,7 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	}
 	serviceBefore := inspection.plan.Service
 	desired := desiredServiceState{Enabled: serviceBefore.Enabled, Active: serviceBefore.Active}
+	emitProgressPhase(ctx, phasePrepareGeneration)
 	cache, cacheCreated, err := cacheBundle(bundle, engine.paths.BundleCache)
 	if err != nil {
 		return Result{}, err
@@ -332,15 +372,18 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	generationCreated := false
 	transitionStarted := false
 	rollback := func(cause error) (Result, error) {
-		var rollbackErr error
-		if transitionStarted {
-			rollbackErr = engine.rollbackTransition(ctx, *state, desired, record, cacheCreated, generationCreated)
-		} else {
-			rollbackErr = engine.discardStagedUpgrade(record, cacheCreated, generationCreated)
-		}
-		if rollbackErr == nil {
-			rollbackErr = clearJournal(engine.paths)
-		}
+		rollbackErr := runRecoveryPhase(ctx, func(recoveryCtx context.Context) error {
+			var err error
+			if transitionStarted {
+				err = engine.rollbackTransition(recoveryCtx, *state, desired, record, cacheCreated, generationCreated)
+			} else {
+				err = engine.discardStagedUpgrade(record, cacheCreated, generationCreated)
+			}
+			if err != nil {
+				return err
+			}
+			return clearJournal(engine.paths)
+		})
 		return Result{}, errors.Join(cause, rollbackErr)
 	}
 	targetRoot, created, err := copyBundleToGeneration(bundle, engine.paths.Generations)
@@ -360,11 +403,14 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	); err != nil {
 		return rollback(err)
 	}
+	completeProgressPhase(ctx, phasePrepareGeneration, true)
 	if serviceBefore.Active {
 		transitionStarted = true
+		emitProgressPhase(ctx, phaseStopService)
 		if err := engine.host.SetActive(ctx, false); err != nil {
 			return rollback(err)
 		}
+		completeProgressPhase(ctx, phaseStopService, true)
 	}
 	if err := engine.checkpoint("upgrade-after-stop"); err != nil {
 		return rollback(err)
@@ -373,16 +419,20 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 		return rollback(err)
 	}
 	transitionStarted = true
+	emitProgressPhase(ctx, phaseSwitchGeneration)
 	if err := engine.selectGeneration(record.ID, oldRecord.ID); err != nil {
 		return rollback(err)
 	}
 	if err := engine.checkpoint("upgrade-after-current-link"); err != nil {
 		return rollback(err)
 	}
+	completeProgressPhase(ctx, phaseSwitchGeneration, true)
+	emitProgressPhase(ctx, phasePrepareService)
 	account, err := engine.host.Prepare(ctx, targetRoot, engine.paths)
 	if err != nil {
 		return rollback(err)
 	}
+	completeProgressPhase(ctx, phasePrepareService, true)
 	if err := engine.applyServiceState(ctx, desired); err != nil {
 		return rollback(err)
 	}
@@ -396,6 +446,7 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	if err := engine.checkpoint("upgrade-after-service"); err != nil {
 		return rollback(err)
 	}
+	emitProgressPhase(ctx, phaseCommitState)
 	newState := persistentState{
 		SchemaVersion: stateSchemaVersion, Current: record.ID, Previous: oldRecord.ID,
 		CorePolicy: managedCorePolicy, Prepared: state.Prepared, Desired: desired,
@@ -415,10 +466,13 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	if err := clearJournal(engine.paths); err != nil {
 		return Result{}, fmt.Errorf("upgrade committed but journal cleanup failed: %w; run rnlctl repair", err)
 	}
+	completeProgressPhase(ctx, phaseCommitState, true)
 	if hasSuperseded {
+		emitProgressPhase(ctx, phaseCleanUp)
 		if err := engine.removeSuperseded(superseded, newState); err != nil {
 			return Result{}, fmt.Errorf("upgrade committed but superseded payload cleanup failed: %w", err)
 		}
+		completeProgressPhase(ctx, phaseCleanUp, true)
 	}
 	return Result{Operation: "upgrade", Changed: true, Generation: record.ID, Version: record.Version}, nil
 }
@@ -441,6 +495,7 @@ func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Re
 	if targetID != preState.Previous && targetID != preState.Current {
 		return Result{}, fmt.Errorf("generation %q is not the retained previous generation", targetID)
 	}
+	emitProgressPhase(ctx, phaseValidateHost)
 	serviceBefore, err := engine.host.ServiceStatus(ctx)
 	if err != nil {
 		return Result{}, err
@@ -448,6 +503,7 @@ func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Re
 	if err := engine.host.Preflight(ctx, serviceBefore.Active, engine.paths); err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	if err := engine.requirePrivileges(); err != nil {
 		return Result{}, err
 	}
@@ -472,9 +528,11 @@ func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Re
 		return Result{}, fmt.Errorf("generation %q is not the retained previous generation", targetID)
 	}
 	target := state.Generations[targetID]
+	emitProgressPhase(ctx, phaseVerifyBundle)
 	if err := engine.verifyGeneration(target); err != nil {
 		return Result{}, fmt.Errorf("target generation is invalid; run rnlctl repair: %w", err)
 	}
+	completeProgressPhase(ctx, phaseVerifyBundle, true)
 	serviceBefore, err = engine.host.ServiceStatus(ctx)
 	if err != nil {
 		return Result{}, err
@@ -491,34 +549,43 @@ func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Re
 		return Result{}, err
 	}
 	rollbackFailure := func(cause error) (Result, error) {
-		restoreErr := engine.rollbackTransition(ctx, oldState, desired, target, false, false)
-		if restoreErr == nil {
-			_ = clearJournal(engine.paths)
-		}
+		restoreErr := runRecoveryPhase(ctx, func(recoveryCtx context.Context) error {
+			if err := engine.rollbackTransition(recoveryCtx, oldState, desired, target, false, false); err != nil {
+				return err
+			}
+			return clearJournal(engine.paths)
+		})
 		return Result{}, errors.Join(cause, restoreErr)
 	}
 	if serviceBefore.Active {
+		emitProgressPhase(ctx, phaseStopService)
 		if err := engine.host.SetActive(ctx, false); err != nil {
 			return rollbackFailure(err)
 		}
+		completeProgressPhase(ctx, phaseStopService, true)
 	}
 	if err := engine.ensureRuntimeDirectories(); err != nil {
 		return rollbackFailure(err)
 	}
+	emitProgressPhase(ctx, phaseSwitchGeneration)
 	if err := engine.selectGeneration(target.ID, current.ID); err != nil {
 		return rollbackFailure(err)
 	}
+	completeProgressPhase(ctx, phaseSwitchGeneration, true)
 	targetRoot := filepath.Join(engine.paths.Generations, target.ID)
+	emitProgressPhase(ctx, phasePrepareService)
 	account, err := engine.host.Prepare(ctx, targetRoot, engine.paths)
 	if err != nil {
 		return rollbackFailure(err)
 	}
+	completeProgressPhase(ctx, phasePrepareService, true)
 	if err := engine.applyServiceState(ctx, desired); err != nil {
 		return rollbackFailure(err)
 	}
 	if err := engine.verifyTransitionOutcome(ctx, target, desired); err != nil {
 		return rollbackFailure(err)
 	}
+	emitProgressPhase(ctx, phaseCommitState)
 	newState := persistentState{
 		SchemaVersion: stateSchemaVersion, Current: target.ID, Previous: current.ID,
 		CorePolicy: managedCorePolicy, Prepared: state.Prepared, Desired: desired,
@@ -531,6 +598,7 @@ func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Re
 	if err := clearJournal(engine.paths); err != nil {
 		return Result{}, fmt.Errorf("rollback committed but journal cleanup failed: %w", err)
 	}
+	completeProgressPhase(ctx, phaseCommitState, true)
 	return Result{Operation: "rollback", Changed: true, Generation: target.ID, Version: target.Version}, nil
 }
 
@@ -642,9 +710,11 @@ func (engine *Engine) applyServiceState(ctx context.Context, desired desiredServ
 		return err
 	}
 	if actual.Active && !desired.Active {
+		emitProgressPhase(ctx, phaseStopService)
 		if err := engine.host.SetActive(ctx, false); err != nil {
 			return err
 		}
+		completeProgressPhase(ctx, phaseStopService, true)
 		actual.Active = false
 	}
 	if actual.Enabled != desired.Enabled {
@@ -653,11 +723,37 @@ func (engine *Engine) applyServiceState(ctx context.Context, desired desiredServ
 		}
 	}
 	if !actual.Active && desired.Active {
+		emitProgressPhase(ctx, phaseStartService)
 		if err := engine.host.SetActive(ctx, true); err != nil {
 			return err
 		}
+		completeProgressPhase(ctx, phaseStartService, true)
 	}
 	return nil
+}
+
+// reassertServiceState is used only during recovery. A canceled service-manager
+// client does not prove that the manager canceled the job it already accepted,
+// so recovery must issue the previous intent again instead of trusting a
+// transient status snapshot.
+func (engine *Engine) reassertServiceState(ctx context.Context, desired desiredServiceState) error {
+	var errs []error
+	if desired.Enabled {
+		errs = appendIf(errs, engine.host.SetEnabled(ctx, true))
+	}
+	errs = appendIf(errs, engine.host.SetActive(ctx, desired.Active))
+	if !desired.Enabled {
+		errs = appendIf(errs, engine.host.SetEnabled(ctx, false))
+	}
+	actual, err := engine.host.ServiceStatus(ctx)
+	errs = appendIf(errs, err)
+	if err == nil && (actual.Enabled != desired.Enabled || actual.Active != desired.Active) {
+		errs = append(errs, fmt.Errorf(
+			"service recovery state is enabled=%t active=%t; want enabled=%t active=%t",
+			actual.Enabled, actual.Active, desired.Enabled, desired.Active,
+		))
+	}
+	return errors.Join(errs...)
 }
 
 func (engine *Engine) verifyGeneration(record generationRecord) error {
@@ -678,7 +774,11 @@ func (engine *Engine) verifyTransitionOutcome(ctx context.Context, record genera
 		return err
 	}
 	if desired.Active {
-		return engine.host.WaitHealthy(ctx, engine.paths.NodeBinaryLink, engine.internalSocketPath(), 25*time.Second)
+		emitProgressPhase(ctx, phaseWaitHealthy)
+		if err := engine.host.WaitHealthy(ctx, engine.paths.NodeBinaryLink, engine.internalSocketPath(), 25*time.Second); err != nil {
+			return err
+		}
+		completeProgressPhase(ctx, phaseWaitHealthy, true)
 	}
 	return nil
 }

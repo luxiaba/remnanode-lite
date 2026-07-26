@@ -100,7 +100,7 @@ func TestRunCompletionRendersSupportedShells(t *testing.T) {
 			output := stdout.String()
 			for _, required := range []string{
 				test.registered, "config", "NODE_PORT", "core-errors",
-				"quiet", "no-color", "dry-run", "since",
+				"quiet", "no-color", "progress", "auto", "plain", "never", "dry-run", "since",
 			} {
 				if !strings.Contains(output, required) {
 					t.Errorf("%s completion is missing %q", test.shell, required)
@@ -262,7 +262,12 @@ func TestGeneratedBashCompletionBehavior(t *testing.T) {
 
 	assertBashCandidates([]string{"rnlctl", "con"}, 1, "config")
 	assertBashCandidates([]string{"rnlctl", "--quiet", "con"}, 2, "config")
+	assertBashCandidates([]string{"rnlctl", "--progress", "a"}, 2, "auto")
+	assertBashCandidates([]string{"rnlctl", "--progress=a"}, 1, "--progress=auto")
+	assertBashCandidates([]string{"rnlctl", "--progress", "plain", "con"}, 3, "config")
 	assertBashCandidates([]string{"rnlctl", "config", "--no-color", "se"}, 3, "set")
+	assertBashCandidates([]string{"rnlctl", "config", "--progress", "plain", "se"}, 4, "set")
+	assertBashCandidates([]string{"rnlctl", "config", "--progress=plain", "se"}, 3, "set")
 	assertBashCandidates([]string{"rnlctl", "config", "set", "NODE_"}, 3, "NODE_PORT=", "NODE_BIND_ADDR=")
 	assertBashCandidates([]string{"rnlctl", "logs", "--l"}, 2, "--lines")
 	assertBashCandidates([]string{"rnlctl", "--quiet", "logs", "--s"}, 3, "--since")
@@ -342,6 +347,11 @@ _rnlctl
 	}
 
 	assertZshCandidates("rnlctl --quiet config --no-color se", "5", "set:Set and validate")
+	assertZshCandidates("rnlctl --progress a", "3", "auto:Use terminal progress")
+	assertZshCandidates("rnlctl '--progress=a'", "2", "--progress=auto:Use terminal progress")
+	assertZshCandidates("rnlctl --progress plain config --no-color se", "6", "set:Set and validate")
+	assertZshCandidates("rnlctl config --progress plain se", "5", "set:Set and validate")
+	assertZshCandidates("rnlctl config '--progress=plain' se", "4", "set:Set and validate")
 	assertZshCandidates("rnlctl config set NODE_", "4", "NODE_PORT=", "NODE_BIND_ADDR=")
 	assertZshCandidates("rnlctl --quiet logs --s", "4", "--since:Show entries")
 	assertZshMissing("rnlctl logs core --s", "4", "--since:Show entries")
@@ -394,6 +404,11 @@ func TestGeneratedFishCompletionBehavior(t *testing.T) {
 	}
 
 	assertFishCandidates("rnlctl config ", "set\tSet and validate")
+	assertFishCandidates("rnlctl --progress a", "auto")
+	assertFishCandidates("rnlctl --progress=au", "auto")
+	assertFishCandidates("rnlctl --progress plain config ", "set\tSet and validate")
+	assertFishCandidates("rnlctl config --progress plain ", "set\tSet and validate")
+	assertFishCandidates("rnlctl config --progress=plain ", "set\tSet and validate")
 	assertFishCandidates("rnlctl config set NODE_PORT=12345 ", "NODE_BIND_ADDR=")
 	assertFishMissing("rnlctl config set NODE_PORT=12345 ", "NODE_PORT=")
 	assertFishMissing("rnlctl logs core --", "--since")

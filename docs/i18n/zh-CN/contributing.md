@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=c43cb0774ac9c8dbb09e08f63a5022413bad903ecd11fdd60dfe834c7096963d -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=0cf928c3ed72a95b4994b2d169fec4d1d5d622909f413bbd70e07fc96349e100 -->
 
 # 贡献指南
 
@@ -85,6 +85,11 @@ git switch -c fix/short-description
 解析器、类型化请求映射与执行路径保持显式；不要为了减少几处声明就引入反射驱动的 CLI
 框架。public-surface 与 golden 测试必须独立写出预期，才能发现命令定义漂移。
 
+长时间命令由生命周期和下载层发送结构化事件，终端排版只由 progress renderer 负责。
+最终数据留在 stdout，进度写入 stderr；`auto|plain|never`、quiet、JSON、颜色和非 TTY
+行为都必须保持一致，任何输出都不得包含 Secret。取消信号要传入正在执行的操作，必要的
+补偿处理则使用独立且有时间上限的 context。
+
 ### 契约与 HTTP 边界
 
 `/node` API 不是自由设计面。method/path、请求 shape、联合类型、默认值、成功响应、
@@ -169,6 +174,8 @@ netlink、capability 或进程组成功。
 - 所有 shell/service 文件保持 LF；`.gitattributes` 已固定行尾。
 - 文件替换使用受限临时目录、校验后原子 rename，并保留清晰回滚点。
 - installer 的共享锁、信任根、下载预算、路径验证和 Secret 迁移不可绕过。
+- installer 的 `auto|plain|never` 契约必须与 `rnlctl` 一致；bootstrap 阶段写入
+  stderr，并把最终生效的模式传给 bundle 中的 controller。
 - systemd 与 Alpine/OpenRC 的用户、capability、资源上限、停止和卸载语义应保持对称。OpenRC 支持仅限持久化的 Alpine Linux 3.22.x `sys` 安装：发行版 OpenRC 必须作为 PID 1 运行，内核不低于 Linux 5.14，并满足统一 cgroup v2 契约。不得据此宣称泛化的 OpenRC 支持，也不要加入自动修复宿主机 cgroup delegation 的代码。
 - 安装器或生命周期有变化时，需要运行 bootstrap fixture、相关 `internal/rnlctl` 测试、受影响状态的 race test、bundle 篡改测试，以及相应的 systemd 或 Alpine/OpenRC 宿主 controller 测试。在首次把 Alpine 平台纳入支持范围时，每个声明支持的架构都必须使用持久化完整虚拟机验证；后续变更只复验受影响的平台或架构路径。容器或没有 init 的 guest 不足以完成资格验证。
 - 修改安装器必须运行离线操作测试，不要用真实主机安装代替失败注入覆盖。

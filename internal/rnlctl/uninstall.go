@@ -28,10 +28,11 @@ func (engine *Engine) Uninstall(ctx context.Context, request UninstallRequest) (
 	if journal != nil {
 		return Result{}, fmt.Errorf("an interrupted %s operation requires rnlctl repair", journal.Operation)
 	}
+	if state == nil && (!request.Purge || retained == nil) {
+		return Result{Operation: "uninstall"}, nil
+	}
+	emitProgressPhase(ctx, phaseValidateHost)
 	if state == nil {
-		if !request.Purge || retained == nil {
-			return Result{Operation: "uninstall"}, nil
-		}
 		if err := engine.host.PreflightRemoveAccount(ctx, retained.Account); err != nil {
 			return Result{}, err
 		}
@@ -45,6 +46,7 @@ func (engine *Engine) Uninstall(ctx context.Context, request UninstallRequest) (
 			}
 		}
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	if err := engine.requirePrivileges(); err != nil {
 		return Result{}, err
 	}
@@ -111,6 +113,7 @@ func (engine *Engine) finishUninstall(ctx context.Context, account ManagedAccoun
 			return err
 		}
 	}
+	emitProgressPhase(ctx, phaseRemoveInstallation)
 	if err := engine.removeRuntimeFiles(purge); err != nil {
 		return err
 	}
@@ -128,6 +131,8 @@ func (engine *Engine) finishUninstall(ctx context.Context, account ManagedAccoun
 	if err := os.RemoveAll(engine.paths.BundleCache); err != nil {
 		return err
 	}
+	completeProgressPhase(ctx, phaseRemoveInstallation, true)
+	emitProgressPhase(ctx, phaseCleanUp)
 	if purge {
 		if err := removeAndSync(engine.paths.RetainedFile); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -143,9 +148,17 @@ func (engine *Engine) finishUninstall(ctx context.Context, account ManagedAccoun
 		if err := os.RemoveAll(engine.paths.InstallerState); err != nil {
 			return err
 		}
-		return syncDirectory(filepath.Dir(engine.paths.InstallerState))
+		if err := syncDirectory(filepath.Dir(engine.paths.InstallerState)); err != nil {
+			return err
+		}
+		completeProgressPhase(ctx, phaseCleanUp, true)
+		return nil
 	}
-	return clearJournal(engine.paths)
+	if err := clearJournal(engine.paths); err != nil {
+		return err
+	}
+	completeProgressPhase(ctx, phaseCleanUp, true)
+	return nil
 }
 
 func (engine *Engine) removeRuntimeFiles(purge bool) error {

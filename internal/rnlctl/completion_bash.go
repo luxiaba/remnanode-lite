@@ -51,6 +51,7 @@ _rnlctl_completion() {
   current=${COMP_WORDS[COMP_CWORD]:-}
   previous=
 `)
+	writeBashGlobalOptionValues(&output, root.Options)
 	writeBashGlobalScan(&output, root.Options)
 	writeBashCandidates(&output, "    ", append(rootCommandCandidates(root), append(optionCandidates(root.Options),
 		commandArgumentSpec{Value: "--version", Description: "Show version"},
@@ -61,7 +62,7 @@ _rnlctl_completion() {
 			continue
 		}
 		fmt.Fprintf(&output, "  if [[ $command == %s ]]; then\n", shellQuote(command.Name))
-		output.WriteString("    for (( i=command_index+1; i<COMP_CWORD; i++ )); do\n      token=${COMP_WORDS[i]}\n      if _rnlctl_completion_is_global_option \"$token\"; then\n        continue\n      fi\n      subcommand=$token\n      subcommand_index=$i\n      break\n    done\n    if [[ -z $subcommand ]]; then\n")
+		output.WriteString("    expect_value=0\n    for (( i=command_index+1; i<COMP_CWORD; i++ )); do\n      token=${COMP_WORDS[i]}\n      if (( expect_value )); then\n        if [[ $token == = ]]; then\n          continue\n        fi\n        expect_value=0\n        continue\n      fi\n      if _rnlctl_completion_is_global_option \"$token\"; then\n        if _rnlctl_completion_global_option_takes_value \"$token\"; then\n          expect_value=1\n        fi\n        continue\n      fi\n      subcommand=$token\n      subcommand_index=$i\n      break\n    done\n    if [[ -z $subcommand ]]; then\n")
 		writeBashCandidates(&output, "      ", append(commandCommandCandidates(command), optionCandidates(root.Options)...))
 		output.WriteString("      return\n    fi\n  fi\n")
 	}
@@ -100,10 +101,35 @@ func writeBashGlobalScan(output *strings.Builder, options []commandOptionSpec) {
     esac
   }
 
+  _rnlctl_completion_global_option_takes_value() {
+    case $1 in
+      `)
+	valuePatterns := completionOptionShellPatterns(completionValueOptions(options), false)
+	if len(valuePatterns) == 0 {
+		output.WriteString("__rnlctl_no_global_value_options__")
+	} else {
+		output.WriteString(strings.Join(valuePatterns, "|"))
+	}
+	output.WriteString(`) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+
   command=
+  expect_value=0
   for (( i=1; i<COMP_CWORD; i++ )); do
     token=${COMP_WORDS[i]}
+    if (( expect_value )); then
+      if [[ $token == = ]]; then
+        continue
+      fi
+      expect_value=0
+      continue
+    fi
     if _rnlctl_completion_is_global_option "$token"; then
+      if _rnlctl_completion_global_option_takes_value "$token"; then
+        expect_value=1
+      fi
       continue
     fi
     command=$token
@@ -115,6 +141,14 @@ func writeBashGlobalScan(output *strings.Builder, options []commandOptionSpec) {
     if _rnlctl_completion_is_global_option "$token"; then
       continue
     fi
+    if (( i > 1 )) && _rnlctl_completion_global_option_takes_value "${COMP_WORDS[i-1]}"; then
+      (( i-- ))
+      continue
+    fi
+    if (( i > 2 )) && [[ ${COMP_WORDS[i-1]} == = ]] && _rnlctl_completion_global_option_takes_value "${COMP_WORDS[i-2]}"; then
+      (( i-=2 ))
+      continue
+    fi
     previous=$token
     break
   done
@@ -122,13 +156,45 @@ func writeBashGlobalScan(output *strings.Builder, options []commandOptionSpec) {
 `)
 }
 
-func writeBashOptionValues(output *strings.Builder, command commandSpec) {
-	var valueOptions []commandOptionSpec
-	for _, option := range command.Options {
-		if option.Value != commandValueNone {
-			valueOptions = append(valueOptions, option)
+func writeBashGlobalOptionValues(output *strings.Builder, options []commandOptionSpec) {
+	valueOptions := completionValueOptions(options)
+	if len(valueOptions) == 0 {
+		return
+	}
+	output.WriteString("  case ${COMP_WORDS[COMP_CWORD-1]:-} in\n")
+	for _, option := range valueOptions {
+		patterns := []string{shellQuote("--" + option.Long)}
+		if option.Short != "" {
+			patterns = append(patterns, shellQuote("-"+option.Short))
+		}
+		fmt.Fprintf(output, "    %s)\n", strings.Join(patterns, "|"))
+		writeBashOptionValueAction(output, "      ", option, "", false)
+		output.WriteString("      return\n      ;;\n")
+	}
+	output.WriteString("  esac\n  if [[ ${COMP_WORDS[COMP_CWORD-1]:-} == = && $COMP_CWORD -ge 2 ]]; then\n    case ${COMP_WORDS[COMP_CWORD-2]} in\n")
+	for _, option := range valueOptions {
+		patterns := []string{shellQuote("--" + option.Long)}
+		if option.Short != "" {
+			patterns = append(patterns, shellQuote("-"+option.Short))
+		}
+		fmt.Fprintf(output, "      %s)\n", strings.Join(patterns, "|"))
+		writeBashOptionValueAction(output, "        ", option, "", false)
+		output.WriteString("        return\n        ;;\n")
+	}
+	output.WriteString("    esac\n  fi\n  case $current in\n")
+	for _, option := range valueOptions {
+		for _, name := range completionOptionNames(option) {
+			prefix := name + "="
+			fmt.Fprintf(output, "    %s*)\n", shellQuote(prefix))
+			writeBashOptionValueAction(output, "      ", option, prefix, true)
+			output.WriteString("      return\n      ;;\n")
 		}
 	}
+	output.WriteString("  esac\n")
+}
+
+func writeBashOptionValues(output *strings.Builder, command commandSpec) {
+	valueOptions := completionValueOptions(command.Options)
 	if len(valueOptions) == 0 {
 		return
 	}
@@ -139,12 +205,7 @@ func writeBashOptionValues(output *strings.Builder, command commandSpec) {
 			patterns = append(patterns, shellQuote("-"+option.Short))
 		}
 		fmt.Fprintf(output, "        %s)\n", strings.Join(patterns, "|"))
-		switch option.Value {
-		case commandValueFile:
-			output.WriteString("          _rnlctl_completion_path \"$current\" \"\" 0\n")
-		case commandValueDirectory:
-			output.WriteString("          _rnlctl_completion_path \"$current\" \"\" 1\n")
-		}
+		writeBashOptionValueAction(output, "          ", option, "", false)
 		output.WriteString("          return\n          ;;\n")
 	}
 	output.WriteString("      esac\n      if [[ $previous == = && $COMP_CWORD -ge 2 ]]; then\n        case ${COMP_WORDS[COMP_CWORD-2]} in\n")
@@ -154,34 +215,43 @@ func writeBashOptionValues(output *strings.Builder, command commandSpec) {
 			patterns = append(patterns, shellQuote("-"+option.Short))
 		}
 		fmt.Fprintf(output, "          %s)\n", strings.Join(patterns, "|"))
-		switch option.Value {
-		case commandValueFile:
-			output.WriteString("            _rnlctl_completion_path \"$current\" \"\" 0\n")
-		case commandValueDirectory:
-			output.WriteString("            _rnlctl_completion_path \"$current\" \"\" 1\n")
-		}
+		writeBashOptionValueAction(output, "            ", option, "", false)
 		output.WriteString("            return\n            ;;\n")
 	}
 	output.WriteString("        esac\n      fi\n      case $current in\n")
 	for _, option := range valueOptions {
-		long := "--" + option.Long + "="
-		fmt.Fprintf(output, "        %s*)\n", shellQuote(long))
-		switch option.Value {
-		case commandValueFile:
-			fmt.Fprintf(output, "          _rnlctl_completion_path \"${current#%s}\" %s 0\n", long, shellQuote(long))
-		case commandValueDirectory:
-			fmt.Fprintf(output, "          _rnlctl_completion_path \"${current#%s}\" %s 1\n", long, shellQuote(long))
+		for _, name := range completionOptionNames(option) {
+			prefix := name + "="
+			fmt.Fprintf(output, "        %s*)\n", shellQuote(prefix))
+			writeBashOptionValueAction(output, "          ", option, prefix, true)
+			output.WriteString("          return\n          ;;\n")
 		}
-		output.WriteString("          return\n          ;;\n")
 	}
 	output.WriteString("      esac\n")
+}
+
+func writeBashOptionValueAction(output *strings.Builder, indent string, option commandOptionSpec, prefix string, inline bool) {
+	if len(option.ValueCandidates) != 0 {
+		writeBashCandidates(output, indent, completionOptionValueCandidates(option, prefix))
+		return
+	}
+	current := "\"$current\""
+	if inline {
+		current = fmt.Sprintf("\"${current#%s}\"", prefix)
+	}
+	switch option.Value {
+	case commandValueFile:
+		fmt.Fprintf(output, "%s_rnlctl_completion_path %s %s 0\n", indent, current, shellQuote(prefix))
+	case commandValueDirectory:
+		fmt.Fprintf(output, "%s_rnlctl_completion_path %s %s 1\n", indent, current, shellQuote(prefix))
+	}
 }
 
 func writeBashArgumentScan(output *strings.Builder, command commandSpec) {
 	if len(command.Arguments) == 0 {
 		return
 	}
-	output.WriteString("      used_arguments=()\n      used_options=()\n      expect_value=0\n      for (( i=argument_start; i<COMP_CWORD; i++ )); do\n        token=${COMP_WORDS[i]}\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          continue\n        fi\n        if (( expect_value )); then\n          if [[ $token == = ]]; then\n            continue\n          fi\n          expect_value=0\n          continue\n        fi\n        case $token in\n")
+	output.WriteString("      used_arguments=()\n      used_options=()\n      expect_value=0\n      for (( i=argument_start; i<COMP_CWORD; i++ )); do\n        token=${COMP_WORDS[i]}\n        if (( expect_value )); then\n          if [[ $token == = ]]; then\n            continue\n          fi\n          expect_value=0\n          continue\n        fi\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          if _rnlctl_completion_global_option_takes_value \"$token\"; then\n            expect_value=1\n          fi\n          continue\n        fi\n        case $token in\n")
 	for _, option := range command.Options {
 		patterns := completionOptionShellPatterns([]commandOptionSpec{option}, false)
 		fmt.Fprintf(output, "          %s)\n            used_options+=(%s)\n", strings.Join(patterns, "|"), shellQuote("--"+option.Long))

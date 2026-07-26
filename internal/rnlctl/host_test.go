@@ -37,6 +37,14 @@ type recordingExecutor struct {
 	handler func(string, []string) ([]byte, error)
 }
 
+type hostProgressSink struct {
+	events []progressEvent
+}
+
+func (sink *hostProgressSink) Emit(event progressEvent) {
+	sink.events = append(sink.events, event)
+}
+
 func TestOSCommandExecutorIncludesBoundedFailureDiagnostics(t *testing.T) {
 	t.Setenv(hostExecutorHelperEnv, "failure")
 	output, err := (OSCommandExecutor{}).Run(
@@ -660,6 +668,35 @@ func TestLinuxHostWaitHealthyRequiresConsecutiveSuccesses(t *testing.T) {
 	}
 	if healthChecks != 4 {
 		t.Fatalf("healthcheck probes = %d, want success, failure, success, success", healthChecks)
+	}
+}
+
+func TestLinuxHostWaitHealthyReportsParentCancellationAndEmitsHeartbeat(t *testing.T) {
+	executor := &recordingExecutor{}
+	host := NewLinuxHost(LinuxHostOptions{
+		Executor: executor,
+		LookPath: executableFinder(map[string]string{"systemctl": "/usr/bin/systemctl"}),
+		PathExists: func(path string) bool {
+			return path == systemdRuntime
+		},
+	})
+	sink := &hostProgressSink{}
+	parent, cancel := context.WithCancel(withProgressSink(context.Background(), "restart", sink))
+	cancel()
+
+	err := host.WaitHealthy(parent, "/usr/local/bin/remnanode-lite", "/run/remnanode-lite/internal.sock", 25*time.Second)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("WaitHealthy() error = %v, want context.Canceled", err)
+	}
+	if strings.Contains(err.Error(), "did not become healthy within") {
+		t.Fatalf("WaitHealthy() misreported cancellation as health timeout: %v", err)
+	}
+	if len(sink.events) != 1 {
+		t.Fatalf("progress events = %#v, want one polling heartbeat", sink.events)
+	}
+	want := progressEvent{Kind: progressPhaseHeartbeat, Operation: "restart", Phase: phaseWaitHealthy}
+	if sink.events[0] != want {
+		t.Fatalf("progress heartbeat = %#v, want %#v", sink.events[0], want)
 	}
 }
 

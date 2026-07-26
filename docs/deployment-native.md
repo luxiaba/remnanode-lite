@@ -37,7 +37,7 @@ Run the installer as root on Linux. Before an active installation, the host need
 - systemd, or the qualified Alpine/OpenRC environment described above;
 - `nft` from nftables and `ss` from iproute2;
 - `useradd` and `groupadd` when the dedicated `remnanode-lite` account does not already exist;
-- a trusted CA store and either `curl` or `wget` for an online install;
+- a trusted CA store and either `curl` or GNU Wget with `--https-only` support for an online install;
 - GNU tar and gzip to unpack a release bundle;
 - the Node port open from the Panel, plus any proxy inbound ports sent by the Panel.
 
@@ -83,6 +83,13 @@ sudo sh ./install.sh --version "$VERSION" --port 2222
 Replace `2222` with the port configured for this Node in the Panel. If no valid Secret already exists, the installer reads it from the terminal without echoing it. It then asks for a separate installation confirmation.
 
 The online installer downloads only the exact `${VERSION}` archive for the machine architecture. It never follows GitHub Latest and never resolves a moving container channel.
+
+`install.sh` accepts `--progress auto|plain|never` and passes the effective mode
+to the bundled `rnlctl`. The default `auto` mode uses the downloader's live
+transfer display when stderr is an interactive terminal; otherwise it writes
+stable stage lines. Use `--progress plain` to force line-oriented logs or
+`--progress never` to hide progress. These modes do not hide errors or the
+final installation result.
 
 ### Unattended install
 
@@ -234,11 +241,39 @@ The global options may appear before or after the command or subcommand:
 ```bash
 sudo rnlctl --quiet config set LOW_MEMORY=1
 sudo rnlctl status --no-color
+sudo rnlctl upgrade --to "$VERSION" --progress plain
 ```
 
-`--quiet` (or `-q`) hides successful lifecycle/configuration mutation messages, the `configuration ok` line from `config check`, and human `status`/`doctor` output. It never hides help, version, `config show`/`get`, logs, completion scripts, upgrade dry-run plans, JSON, or errors.
+Progress is written to stderr; final results and command data are written to
+stdout. This keeps stdout suitable for redirection and machine-readable output.
+Human progress is not a parsing contract.
 
-Human status and doctor output use restrained color only when stdout is a TTY. Output has no ANSI sequences when redirected, when `--no-color` is present, when `NO_COLOR` is set to a non-empty value, or when `TERM=dumb`.
+| Mode | Behavior |
+| --- | --- |
+| `auto` | Default. Use a live display when stderr is a TTY; otherwise emit stable, line-oriented stages. `TERM=dumb` also selects plain output. |
+| `plain` | Emit one line per real lifecycle stage, with occasional transfer updates and no cursor rewriting. |
+| `never` | Suppress progress only. Final results and errors remain visible. |
+
+Only a download with a known total size shows a percentage, transfer rate, and
+estimated time. Unknown-size downloads show transferred bytes without inventing
+a percentage, and lifecycle stages never pretend to be an overall completion
+percentage.
+
+`--quiet` (or `-q`) hides progress, successful lifecycle/configuration mutation messages, the `configuration ok` line from `config check`, and human `status`/`doctor` output. It overrides an explicit progress mode, but never hides help, version, `config show`/`get`, logs, completion scripts, upgrade dry-run plans, JSON, or errors.
+
+Human output uses restrained color only when its destination is a TTY. Status
+and doctor inspect stdout, while progress inspects stderr. `--no-color`, a
+non-empty `NO_COLOR`, or `TERM=dumb` disables color on both streams; redirected
+streams contain no color sequences. JSON output disables progress completely.
+
+The first `SIGINT`, `SIGTERM`, `SIGHUP`, or `SIGQUIT` asks the active operation
+to stop cleanly. Context-aware host commands and health checks used for required
+cleanup or rollback run under a one-minute recovery deadline. Local filesystem
+work may finish its current bounded step before exit. Ctrl-C therefore returns
+the conventional exit code `130` after that attempt. Signal handling returns to
+the operating-system default after the first signal, so sending it again can
+force immediate termination; run `sudo rnlctl status --json` and
+`sudo rnlctl repair` if a forced exit leaves a recovery journal.
 
 Exit codes are normally `0` for success, `1` for a runtime failure or unhealthy result, and `2` for invalid usage. `status` treats `absent` as a valid state and returns `0`; automation that requires an installation must also inspect the JSON `installed` or `deployment` field. Once `logs` starts `journalctl` or `tail`, it passes through that reader's exit code, including `128 + signal` when terminated by a signal.
 
@@ -327,6 +362,12 @@ sudo rnlctl upgrade --to "$VERSION"
 ```
 
 `rnlctl` downloads the matching archive and checksum from the exact GitHub Release, validates every bundled file, and builds a new generation. It preserves whether the service was enabled and running before the operation. If the service was active, the transaction stops it, selects the new generation, restores the service state, validates the binary version, and waits for internal health before committing.
+
+Online preflight and upgrade report exact-release resolution, download, and
+verification before any applicable lifecycle stages. The command then reports
+only the work it actually performs, such as preparing a generation, stopping an
+active service, switching generations, restoring service state, waiting for
+health, and committing state. A JSON dry-run remains progress-free.
 
 Only the current and previous generations are retained. A successful later upgrade removes the superseded third generation and its cache. Runtime assets are part of the generation, so Node, rw-core, GeoIP, GeoSite, ASN data, notices, and service material move together.
 

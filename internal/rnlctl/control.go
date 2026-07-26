@@ -2,6 +2,7 @@ package rnlctl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -29,6 +30,7 @@ func (engine *Engine) controlService(ctx context.Context, operation string) (Res
 	if (operation == "start" || operation == "restart") && preState.Prepared {
 		return Result{}, fmt.Errorf("prepared installations must be enabled with rnlctl activate")
 	}
+	emitProgressPhase(ctx, phaseValidateHost)
 	activating := operation == "start" || operation == "restart"
 	if activating {
 		if err := validateRuntimeConfiguration(engine.paths); err != nil {
@@ -38,6 +40,7 @@ func (engine *Engine) controlService(ctx context.Context, operation string) (Res
 	if err := engine.host.Preflight(ctx, activating, engine.paths); err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	if err := engine.requirePrivileges(); err != nil {
 		return Result{}, err
 	}
@@ -76,34 +79,71 @@ func (engine *Engine) controlService(ctx context.Context, operation string) (Res
 	if err := saveJournal(engine.paths, journal); err != nil {
 		return Result{}, err
 	}
+	restoreAfterCancellation := func(cause error) (Result, error) {
+		restoreErr := runRecoveryPhase(ctx, func(recoveryCtx context.Context) error {
+			previous := desiredServiceState{Enabled: actual.Enabled, Active: actual.Active}
+			if err := engine.reassertServiceState(recoveryCtx, previous); err != nil {
+				return err
+			}
+			if previous.Active {
+				if err := engine.verifyTransitionOutcome(recoveryCtx, current, previous); err != nil {
+					return err
+				}
+			}
+			return clearJournal(engine.paths)
+		})
+		return Result{}, errors.Join(cause, restoreErr)
+	}
 	switch operation {
 	case "start":
+		emitProgressPhase(ctx, phaseStartService)
 		err = engine.host.SetActive(ctx, true)
 		if err == nil {
+			completeProgressPhase(ctx, phaseStartService, true)
+			emitProgressPhase(ctx, phaseWaitHealthy)
 			err = engine.host.WaitHealthy(ctx, engine.paths.NodeBinaryLink, engine.internalSocketPath(), 25*time.Second)
+			if err == nil {
+				completeProgressPhase(ctx, phaseWaitHealthy, true)
+			}
 		}
 		if err == nil {
 			state.Desired.Active = true
 		}
 	case "stop":
+		emitProgressPhase(ctx, phaseStopService)
 		err = engine.host.SetActive(ctx, false)
 		if err == nil {
+			completeProgressPhase(ctx, phaseStopService, true)
 			state.Desired.Active = false
 		}
 	case "restart":
+		emitProgressPhase(ctx, phaseRestartService)
 		err = engine.host.Restart(ctx)
 		if err == nil {
+			completeProgressPhase(ctx, phaseRestartService, true)
+			emitProgressPhase(ctx, phaseWaitHealthy)
 			err = engine.host.WaitHealthy(ctx, engine.paths.NodeBinaryLink, engine.internalSocketPath(), 25*time.Second)
+			if err == nil {
+				completeProgressPhase(ctx, phaseWaitHealthy, true)
+			}
 		}
 	}
 	if err != nil {
+		if ctx.Err() != nil {
+			return restoreAfterCancellation(ctx.Err())
+		}
 		return Result{}, err
 	}
+	if ctx.Err() != nil {
+		return restoreAfterCancellation(ctx.Err())
+	}
+	emitProgressPhase(ctx, phaseCommitState)
 	if err := saveState(engine.paths, *state); err != nil {
 		return Result{}, err
 	}
 	if err := clearJournal(engine.paths); err != nil {
 		return Result{}, fmt.Errorf("%s committed but journal cleanup failed: %w", operation, err)
 	}
+	completeProgressPhase(ctx, phaseCommitState, true)
 	return Result{Operation: operation, Changed: true, Generation: current.ID, Version: current.Version}, nil
 }

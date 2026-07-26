@@ -91,9 +91,11 @@ func (engine *Engine) UpdateConfiguration(ctx context.Context, request Configura
 		return Result{}, err
 	}
 	if request.Apply {
+		emitProgressPhase(ctx, phaseValidateHost)
 		if err := engine.host.Preflight(ctx, true, engine.paths); err != nil {
 			return Result{}, err
 		}
+		completeProgressPhase(ctx, phaseValidateHost, true)
 	}
 	lock, err := acquireOperationLock(engine.paths)
 	if err != nil {
@@ -124,6 +126,7 @@ func (engine *Engine) UpdateConfiguration(ctx context.Context, request Configura
 
 	fileChanged := !bytes.Equal(snapshot.data, candidate)
 	if fileChanged {
+		emitProgressPhase(ctx, phaseWriteConfiguration)
 		if err := atomicWriteFile(engine.paths.EnvironmentFile, candidate, 0o640); err != nil {
 			return Result{}, fmt.Errorf("write node.env: %w", err)
 		}
@@ -131,6 +134,7 @@ func (engine *Engine) UpdateConfiguration(ctx context.Context, request Configura
 			rollbackErr := engine.restoreManagedFile(ctx, snapshot, false)
 			return Result{}, errors.Join(fmt.Errorf("set managed ownership after writing node.env: %w", err), rollbackErr)
 		}
+		completeProgressPhase(ctx, phaseWriteConfiguration, true)
 	}
 	if request.Apply {
 		if err := engine.checkConfigurationPermissions(*state); err != nil {
@@ -142,7 +146,7 @@ func (engine *Engine) UpdateConfiguration(ctx context.Context, request Configura
 		}
 		if err := engine.restartManagedConfiguration(ctx); err != nil {
 			if !fileChanged {
-				return Result{}, err
+				return Result{}, errors.Join(err, engine.recoverCanceledConfigurationRestart(ctx))
 			}
 			rollbackErr := engine.restoreManagedFile(ctx, snapshot, true)
 			return Result{}, errors.Join(err, rollbackErr)
@@ -161,9 +165,11 @@ func (engine *Engine) ApplyConfiguration(ctx context.Context) (Result, error) {
 	if err := engine.requirePrivileges(); err != nil {
 		return Result{}, err
 	}
+	emitProgressPhase(ctx, phaseValidateHost)
 	if err := engine.host.Preflight(ctx, true, engine.paths); err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	lock, err := acquireOperationLock(engine.paths)
 	if err != nil {
 		return Result{}, err
@@ -183,7 +189,7 @@ func (engine *Engine) ApplyConfiguration(ctx context.Context) (Result, error) {
 		return Result{}, err
 	}
 	if err := engine.restartManagedConfiguration(ctx); err != nil {
-		return Result{}, err
+		return Result{}, errors.Join(err, engine.recoverCanceledConfigurationRestart(ctx))
 	}
 	current := state.Generations[state.Current]
 	return Result{Operation: "config-apply", Changed: true, Generation: current.ID, Version: current.Version}, nil
@@ -197,9 +203,11 @@ func (engine *Engine) SetSecret(ctx context.Context, request SecretUpdateRequest
 		return Result{}, err
 	}
 	if request.Apply {
+		emitProgressPhase(ctx, phaseValidateHost)
 		if err := engine.host.Preflight(ctx, true, engine.paths); err != nil {
 			return Result{}, err
 		}
+		completeProgressPhase(ctx, phaseValidateHost, true)
 	}
 	lock, err := acquireOperationLock(engine.paths)
 	if err != nil {
@@ -225,6 +233,7 @@ func (engine *Engine) SetSecret(ctx context.Context, request SecretUpdateRequest
 	}
 	fileChanged := !snapshot.exists || !bytes.Equal(snapshot.data, secretData)
 	if fileChanged {
+		emitProgressPhase(ctx, phaseWriteConfiguration)
 		if err := atomicWriteFile(engine.paths.SecretFile, secretData, 0o640); err != nil {
 			return Result{}, fmt.Errorf("write Secret Key: %w", err)
 		}
@@ -232,6 +241,7 @@ func (engine *Engine) SetSecret(ctx context.Context, request SecretUpdateRequest
 			rollbackErr := engine.restoreManagedFile(ctx, snapshot, false)
 			return Result{}, errors.Join(fmt.Errorf("set managed ownership after writing Secret Key: %w", err), rollbackErr)
 		}
+		completeProgressPhase(ctx, phaseWriteConfiguration, true)
 	}
 	if fileChanged || request.Apply {
 		if err := engine.validateConfigurationForState(state); err != nil {
@@ -252,7 +262,7 @@ func (engine *Engine) SetSecret(ctx context.Context, request SecretUpdateRequest
 		}
 		if err := engine.restartManagedConfiguration(ctx); err != nil {
 			if !fileChanged {
-				return Result{}, err
+				return Result{}, errors.Join(err, engine.recoverCanceledConfigurationRestart(ctx))
 			}
 			rollbackErr := engine.restoreManagedFile(ctx, snapshot, true)
 			return Result{}, errors.Join(err, rollbackErr)
@@ -289,28 +299,41 @@ func (engine *Engine) requireActiveConfigurationTarget(ctx context.Context, stat
 }
 
 func (engine *Engine) restartManagedConfiguration(ctx context.Context) error {
+	emitProgressPhase(ctx, phaseRestartService)
 	if err := engine.host.Restart(ctx); err != nil {
 		return fmt.Errorf("restart service: %w", err)
 	}
+	completeProgressPhase(ctx, phaseRestartService, true)
+	emitProgressPhase(ctx, phaseWaitHealthy)
 	if err := engine.host.WaitHealthy(ctx, engine.paths.NodeBinaryLink, engine.internalSocketPath(), 25*time.Second); err != nil {
 		return fmt.Errorf("verify restarted service: %w", err)
 	}
+	completeProgressPhase(ctx, phaseWaitHealthy, true)
 	return nil
 }
 
+func (engine *Engine) recoverCanceledConfigurationRestart(ctx context.Context) error {
+	if ctx == nil || ctx.Err() == nil {
+		return nil
+	}
+	return runRecoveryPhase(ctx, engine.restartManagedConfiguration)
+}
+
 func (engine *Engine) restoreManagedFile(ctx context.Context, snapshot fileSnapshot, restart bool) error {
-	if err := snapshot.restore(); err != nil {
-		return fmt.Errorf("restore previous %s: %w", snapshot.path, err)
-	}
-	if err := engine.host.ApplyOwnership(ctx, engine.paths); err != nil {
-		return fmt.Errorf("restore managed ownership: %w", err)
-	}
-	if restart {
-		if err := engine.restartManagedConfiguration(ctx); err != nil {
-			return fmt.Errorf("restore service with previous configuration: %w", err)
+	return runRecoveryPhase(ctx, func(recoveryCtx context.Context) error {
+		if err := snapshot.restore(); err != nil {
+			return fmt.Errorf("restore previous %s: %w", snapshot.path, err)
 		}
-	}
-	return nil
+		if err := engine.host.ApplyOwnership(recoveryCtx, engine.paths); err != nil {
+			return fmt.Errorf("restore managed ownership: %w", err)
+		}
+		if restart {
+			if err := engine.restartManagedConfiguration(recoveryCtx); err != nil {
+				return fmt.Errorf("restore service with previous configuration: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func validateConfigurationUpdate(request ConfigurationUpdateRequest) error {

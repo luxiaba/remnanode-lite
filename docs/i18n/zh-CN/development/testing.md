@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=3c1fe3bdfaf744bc2d1febd853654d0fad1f3e3e4c217ff05ddf97ad4d223866 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=5b21ff8b32602eeb57d3cc40d9e5f54afa7dfed6433c03488a4a2d0a8e89240b -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -29,7 +29,7 @@
 | Shell、Docker、workflow 或供应链 | `bash scripts/check-repository.sh` | 中至高 |
 | Native bootstrap 或 bundle 格式 | `sh release/native/install_test.sh`、`go test ./cmd/release-tool` | 中至高 |
 | Native 生命周期或 service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | 高 |
-| `rnlctl` 命令、帮助或补全接口 | `go test ./internal/rnlctl` | 低 |
+| `rnlctl` 命令、进度、帮助或补全接口 | `go test ./internal/rnlctl` | 低 |
 | Alpine/OpenRC 宿主机资格验证 | 持久化 Alpine 3.22.x 完整虚拟机的全生命周期与重启测试 | Linux/root |
 | 完整仓库门禁 | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | 高 |
 | Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
@@ -241,13 +241,22 @@ go test -count=1 ./cmd/release-tool ./internal/rnlctl ./cmd/rnlctl
 go test -race -count=1 ./internal/rnlctl
 ```
 
-bootstrap fixtures 覆盖精确版本下载、本地归档摘要、`--yes`、`--prepare-only`、Secret 文件和移动通道拒绝。`internal/rnlctl` 使用临时 root 与 service fake，覆盖严格 manifest、锁和 journal、generation 原子选择、服务状态恢复、回滚、repair、账号所有权及 purge 安全；不会写入真实 `/etc/remnanode-lite` 或启动宿主服务。
+bootstrap fixtures 覆盖精确版本下载、本地归档摘要、`--yes`、`--prepare-only`、
+`auto|plain|never` 进度及转发、Secret 文件和移动通道拒绝。`internal/rnlctl` 使用临时
+root 与 service fake，覆盖严格 manifest、锁和 journal、generation 原子选择、服务状态
+恢复、回滚、repair、账号所有权及 purge 安全；不会写入真实
+`/etc/remnanode-lite` 或启动宿主服务。
 
 `--prepare-only` 只能证明 bundle 校验和宿主文件准备正确；它不会启动服务、应用 cgroup 限制或确认 Alpine/OpenRC 主机符合条件。这些检查在 `rnlctl activate` 时才第一次真正生效。
 
 若改动只涉及命令名称、选项、帮助或补全，先运行
 `go test -count=1 ./internal/rnlctl`。命令定义驱动帮助与补全，但解析器行为和公开输出预期
 仍由独立测试覆盖；不要用同一份定义生成这些测试。
+
+修改进度或信号处理时，要分别覆盖 TTY 与非 TTY stderr、三种进度模式、quiet 和 JSON
+抑制、`NO_COLOR`、`TERM=dumb`、已知和未知传输大小、窄终端、写入失败与操作中断。
+还要验证第一个信号通过活动 context 取消操作、必要的补偿处理有时间上限、Ctrl-C 映射为
+`130`，以及重复信号可以回到操作系统默认处理。
 
 当归档结构、runtime assets 或 release 脚本发生变化时，还要构建并验证真实 bundle：
 
@@ -406,7 +415,7 @@ release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance�
 | 配置/Secret/JWT | `config`、`secret`、`auth`、server security | installer Secret 流程 |
 | Native bootstrap | `sh release/native/install_test.sh` | 在目标主机安装精确 Release |
 | Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`、`go test -race ./internal/rnlctl` | 改动 Native runtime 行为时实测 systemd 或符合条件的 Alpine/OpenRC 主机 |
-| `rnlctl` 命令接口 | `go test ./internal/rnlctl` | shell 补全语法检查和命令接口回归套件 |
+| `rnlctl` 命令与进度接口 | `go test ./internal/rnlctl` | shell 补全语法、输出模式、信号和命令接口回归套件 |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | 多架构镜像构建，以及严格容器限制下的真实候选验证 |
 | 依赖或下载资产 | `go mod tidy -diff`、供应链检查、govulncheck | 双架构构建、SBOM/attestation |
 | 项目版本 | `bash scripts/check-version.sh` | release preflight |

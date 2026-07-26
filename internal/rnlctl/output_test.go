@@ -10,19 +10,28 @@ import (
 )
 
 func TestParseGlobalOptions(t *testing.T) {
-	args, quiet, noColor, err := parseGlobalOptions([]string{
-		"upgrade", "--to", "2.8.0-rnl.1", "--quiet", "GOMEMLIMIT=--quiet", "--no-color",
+	args, options, err := parseGlobalOptions([]string{
+		"upgrade", "--to", "2.8.0-rnl.1", "--quiet", "GOMEMLIMIT=--quiet", "--no-color", "--progress=plain",
 	})
 	if err != nil {
 		t.Fatalf("parseGlobalOptions() error = %v", err)
 	}
 	want := []string{"upgrade", "--to", "2.8.0-rnl.1", "GOMEMLIMIT=--quiet"}
-	if !reflect.DeepEqual(args, want) || !quiet || !noColor {
-		t.Fatalf("parseGlobalOptions() = %q, %t, %t; want %q, true, true", args, quiet, noColor, want)
+	if !reflect.DeepEqual(args, want) || !options.quiet || !options.noColor || options.progress != progressPlain {
+		t.Fatalf("parseGlobalOptions() = %q, %#v; want %q with quiet, no-color, and plain progress", args, options, want)
 	}
-	for _, input := range [][]string{{"--quiet", "-q", "status"}, {"--no-color", "status", "--no-color"}} {
-		if _, _, _, err := parseGlobalOptions(input); err == nil {
+	for _, input := range [][]string{
+		{"--quiet", "-q", "status"},
+		{"--no-color", "status", "--no-color"},
+		{"--progress=plain", "status", "--progress", "auto"},
+	} {
+		if _, _, err := parseGlobalOptions(input); err == nil {
 			t.Fatalf("parseGlobalOptions(%q) accepted a duplicate global option", input)
+		}
+	}
+	for _, input := range [][]string{{"--progress"}, {"--progress=animated", "status"}} {
+		if _, _, err := parseGlobalOptions(input); err == nil {
+			t.Fatalf("parseGlobalOptions(%q) accepted an invalid progress mode", input)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +40,9 @@ type LookupEnvFunc func(string) (string, bool)
 // values produce deterministic journalctl arguments.
 type NowFunc func() time.Time
 
+// TerminalWidthFunc reports the current width of one terminal writer.
+type TerminalWidthFunc func(io.Writer) int
+
 // Options contains the process and I/O dependencies used by App.
 type Options struct {
 	Runner        Runner
@@ -50,6 +54,7 @@ type Options struct {
 	VersionString string
 	Lifecycle     Lifecycle
 	IsTerminal    IsTerminalFunc
+	TerminalWidth TerminalWidthFunc
 	LookupEnv     LookupEnvFunc
 	Now           NowFunc
 }
@@ -65,10 +70,13 @@ type App struct {
 	versionString string
 	lifecycle     Lifecycle
 	isTerminal    IsTerminalFunc
+	terminalWidth TerminalWidthFunc
 	lookupEnv     LookupEnvFunc
 	now           NowFunc
 	quiet         bool
 	noColor       bool
+	progressMode  progressMode
+	progress      *progressRenderer
 }
 
 // New creates an rnlctl application with production defaults for omitted
@@ -108,6 +116,9 @@ func New(options Options) *App {
 	if options.LookupEnv == nil {
 		options.LookupEnv = os.LookupEnv
 	}
+	if options.TerminalWidth == nil {
+		options.TerminalWidth = terminalWidth
+	}
 	if options.Now == nil {
 		options.Now = time.Now
 	}
@@ -121,6 +132,7 @@ func New(options Options) *App {
 		versionString: options.VersionString,
 		lifecycle:     options.Lifecycle,
 		isTerminal:    options.IsTerminal,
+		terminalWidth: options.TerminalWidth,
 		lookupEnv:     options.LookupEnv,
 		now:           options.Now,
 	}
@@ -131,14 +143,32 @@ func (a *App) Run(ctx context.Context, args []string) int {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	commandArgs, quiet, noColor, err := parseGlobalOptions(args)
+	commandArgs, global, err := parseGlobalOptions(args)
 	if err != nil {
 		return a.usageError("", err.Error(), usageForCommand())
 	}
 	scoped := *a
-	scoped.quiet = quiet
-	scoped.noColor = noColor
-	return scoped.run(ctx, commandArgs)
+	scoped.quiet = global.quiet
+	scoped.noColor = global.noColor
+	scoped.progressMode = global.progress
+	if scoped.quiet {
+		scoped.progressMode = progressNever
+	} else if booleanArgumentEnabled(commandArgs, "--json") {
+		scoped.progressMode = progressNever
+	} else if scoped.progressMode == progressAuto {
+		if value, ok := scoped.lookupEnv("TERM"); ok && value == "dumb" {
+			scoped.progressMode = progressPlain
+		}
+	}
+	scoped.progress = newProgressRenderer(progressRendererOptions{
+		Writer: scoped.stderr, Mode: scoped.progressMode,
+		Color: scoped.colorEnabledFor(scoped.stderr), IsTerminal: scoped.isTerminal,
+		TerminalWidth: scoped.terminalWidth, Now: scoped.now,
+	})
+	ctx = withProgressSink(ctx, progressOperation(commandArgs), scoped.progress)
+	code := scoped.run(ctx, commandArgs)
+	scoped.progress.Finish(code == exitOK)
+	return code
 }
 
 func (a *App) run(ctx context.Context, args []string) int {
@@ -201,27 +231,106 @@ func (a *App) run(ctx context.Context, args []string) int {
 	}
 }
 
-func parseGlobalOptions(args []string) ([]string, bool, bool, error) {
+type globalOptions struct {
+	quiet    bool
+	noColor  bool
+	progress progressMode
+}
+
+func parseGlobalOptions(args []string) ([]string, globalOptions, error) {
 	commandArgs := make([]string, 0, len(args))
-	quiet := false
-	noColor := false
-	for _, argument := range args {
+	options := globalOptions{progress: progressAuto}
+	progressSet := false
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
 		switch argument {
 		case "--quiet", "-q":
-			if quiet {
-				return nil, false, false, fmt.Errorf("global option --quiet may be specified only once")
+			if options.quiet {
+				return nil, globalOptions{}, fmt.Errorf("global option --quiet may be specified only once")
 			}
-			quiet = true
+			options.quiet = true
 		case "--no-color":
-			if noColor {
-				return nil, false, false, fmt.Errorf("global option --no-color may be specified only once")
+			if options.noColor {
+				return nil, globalOptions{}, fmt.Errorf("global option --no-color may be specified only once")
 			}
-			noColor = true
+			options.noColor = true
+		case "--progress":
+			if progressSet {
+				return nil, globalOptions{}, fmt.Errorf("global option --progress may be specified only once")
+			}
+			index++
+			if index >= len(args) {
+				return nil, globalOptions{}, fmt.Errorf("global option --progress requires auto, plain, or never")
+			}
+			mode, err := parseProgressMode(args[index])
+			if err != nil {
+				return nil, globalOptions{}, err
+			}
+			options.progress = mode
+			progressSet = true
 		default:
+			if strings.HasPrefix(argument, "--progress=") {
+				if progressSet {
+					return nil, globalOptions{}, fmt.Errorf("global option --progress may be specified only once")
+				}
+				mode, err := parseProgressMode(strings.TrimPrefix(argument, "--progress="))
+				if err != nil {
+					return nil, globalOptions{}, err
+				}
+				options.progress = mode
+				progressSet = true
+				continue
+			}
 			commandArgs = append(commandArgs, argument)
 		}
 	}
-	return commandArgs, quiet, noColor, nil
+	return commandArgs, options, nil
+}
+
+func parseProgressMode(raw string) (progressMode, error) {
+	mode := progressMode(raw)
+	switch mode {
+	case progressAuto, progressPlain, progressNever:
+		return mode, nil
+	default:
+		return "", fmt.Errorf("global option --progress must be auto, plain, or never")
+	}
+}
+
+func progressOperation(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	switch args[0] {
+	case "install", "activate", "upgrade", "rollback", "repair", "uninstall", "start", "stop", "restart":
+		return args[0]
+	case "config":
+		if len(args) > 1 && (args[1] == "set" || args[1] == "unset" || args[1] == "apply") {
+			return args[0] + " " + args[1]
+		}
+	case "secret":
+		if len(args) > 1 && args[1] == "set" {
+			return args[0] + " " + args[1]
+		}
+	}
+	return ""
+}
+
+func booleanArgumentEnabled(args []string, name string) bool {
+	for _, argument := range args {
+		if argument == name {
+			return true
+		}
+		value, found := strings.CutPrefix(argument, name+"=")
+		if !found {
+			continue
+		}
+		enabled, err := strconv.ParseBool(value)
+		if err == nil && enabled {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) runInstall(ctx context.Context, args []string) int {
@@ -434,6 +543,7 @@ func (a *App) lifecycleResult(command string, result Result, err error) int {
 }
 
 func (a *App) writeJSON(value any) error {
+	a.finishProgress(true)
 	encoder := json.NewEncoder(a.stdout)
 	encoder.SetEscapeHTML(false)
 	return encoder.Encode(value)
@@ -450,6 +560,7 @@ func (a *App) commandHelpOrReject(args []string, commandUsage string) (int, bool
 }
 
 func (a *App) runExternal(ctx context.Context, name string, args []string) int {
+	a.finishProgress(true)
 	return a.runner.Run(ctx, Command{
 		Name:   name,
 		Args:   append([]string(nil), args...),
@@ -485,6 +596,7 @@ func isHelp(argument string) bool {
 }
 
 func (a *App) usageError(command, message, commandUsage string) int {
+	a.finishProgress(false)
 	if message != "" {
 		prefix := "rnlctl"
 		if command != "" {
@@ -497,6 +609,7 @@ func (a *App) usageError(command, message, commandUsage string) int {
 }
 
 func (a *App) runtimeError(command string, err error) int {
+	a.finishProgress(false)
 	prefix := "rnlctl"
 	if command != "" {
 		prefix += ": " + command
@@ -506,9 +619,16 @@ func (a *App) runtimeError(command string, err error) int {
 }
 
 func (a *App) write(writer io.Writer, content string) int {
+	a.finishProgress(true)
 	if _, err := io.WriteString(writer, content); err != nil {
 		fmt.Fprintf(a.stderr, "rnlctl: write output: %v\n", err)
 		return exitFailure
 	}
 	return exitOK
+}
+
+func (a *App) finishProgress(success bool) {
+	if a.progress != nil {
+		a.progress.Finish(success)
+	}
 }

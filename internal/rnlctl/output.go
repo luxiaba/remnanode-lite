@@ -22,8 +22,24 @@ func isTerminalWriter(writer io.Writer) bool {
 	return ok && term.IsTerminal(int(file.Fd()))
 }
 
+func terminalWidth(writer io.Writer) int {
+	file, ok := writer.(*os.File)
+	if !ok {
+		return defaultTerminalWidth
+	}
+	width, _, err := term.GetSize(int(file.Fd()))
+	if err != nil || width < 1 {
+		return defaultTerminalWidth
+	}
+	return width
+}
+
 func (a *App) colorEnabled() bool {
-	if a.noColor || a.quiet || a.isTerminal == nil || !a.isTerminal(a.stdout) {
+	return a.colorEnabledFor(a.stdout)
+}
+
+func (a *App) colorEnabledFor(writer io.Writer) bool {
+	if a.noColor || a.quiet || a.isTerminal == nil || !a.isTerminal(writer) {
 		return false
 	}
 	if value, ok := a.lookupEnv("NO_COLOR"); ok && value != "" {
