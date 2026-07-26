@@ -581,7 +581,7 @@ At the HTTP boundary, start takes a shared lease. Stop, Plugin mutations, user m
 
 - The public API may bind all addresses by default. Deployment firewall policy controls the exposed port range.
 - mTLS proves that the client certificate was signed by the CA in the Panel Secret.
-- JWT accepts only RS256, verifies the signature, and validates `exp` and `nbf` when those claims are present.
+- JWT accepts only RS256, requires the header and claims set to be JSON objects, verifies the signature, and validates `exp` and `nbf` when those claims are present.
 - The current daemon uses empty issuer, audience, and subject expectations. Documentation must not claim that those claims are enforced.
 - Invalid authentication and unknown routes close the connection directly, reducing the enumerable API surface.
 

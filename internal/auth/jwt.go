@@ -85,14 +85,25 @@ func (v *JWTValidator) Validate(token string) error {
 		return fmt.Errorf("verify JWT signature: %w", err)
 	}
 
-	var claims map[string]any
-	if err := decodeJWTJSON(parts[1], &claims); err != nil {
+	claims, err := decodeJWTClaims(parts[1])
+	if err != nil {
 		return fmt.Errorf("decode JWT claims: %w", err)
 	}
 	if err := v.validateTimeClaims(claims); err != nil {
 		return err
 	}
 	return v.validateIdentityClaims(claims)
+}
+
+func decodeJWTClaims(segment string) (map[string]any, error) {
+	var claims map[string]any
+	if err := decodeJWTJSON(segment, &claims); err != nil {
+		return nil, err
+	}
+	if claims == nil {
+		return nil, errors.New("JWT claims must be a JSON object")
+	}
+	return claims, nil
 }
 
 func (v *JWTValidator) validateIdentityClaims(claims map[string]any) error {

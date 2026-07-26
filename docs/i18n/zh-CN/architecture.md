@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=56574bfc1ef1a4263f9a6779fb18410a182ecd94af736787917ab5c90707a2dc -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=e12aa428f4f1d200ab97ed7924bb0561d7262ce2abb80d424d63b7e2915cc550 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -577,7 +577,7 @@ HTTP Xray lifecycle lease -> Plugin operation gate / nodehandler mutation gate -
 
 - 公网 API 默认可能绑定所有地址；端口暴露范围由部署防火墙控制。
 - mTLS 证明客户端证书由 Panel Secret 中 CA 签发。
-- JWT 只允许 RS256，校验签名，并在 claim 存在时校验 `exp`/`nbf`。
+- JWT 只允许 RS256，要求 header 和 claims set 均为 JSON object，校验签名，并在 claim 存在时校验 `exp`/`nbf`。
 - 当前 daemon 使用空的 issuer/audience/subject expectations，不应在文档中宣称已强制这些 claim。
 - 无效认证和未知路由直接断开，降低接口枚举面。
 
