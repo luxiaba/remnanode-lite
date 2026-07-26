@@ -164,7 +164,7 @@ mkdir -m 0700 "$installer_tmp"
 export TMPDIR="$installer_tmp"
 offline_output=$(TMPDIR=$installer_tmp PATH=$fixture_path sh "$installer" \
 	--bundle "$good_archive" \
-	--port 38329 \
+	--port 12345 \
 	--secret-file "$secret_file" \
 	--prepare-only \
 	--yes)
@@ -175,7 +175,7 @@ assert_contains "$offline_output" "<$archive_checksum>"
 assert_not_contains "$offline_output" "<$good_archive>"
 assert_not_contains "$offline_output" '<--expected-version>'
 assert_contains "$offline_output" '<--port>'
-assert_contains "$offline_output" '<38329>'
+assert_contains "$offline_output" '<12345>'
 assert_contains "$offline_output" '<--secret-file>'
 assert_contains "$offline_output" "<$secret_file>"
 assert_contains "$offline_output" '<--prepare-only>'

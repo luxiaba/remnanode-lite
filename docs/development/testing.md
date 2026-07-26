@@ -11,7 +11,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 - Changes to officially observable behavior require the pinned-source contract tests.
 - Only Linux tests can support claims about capabilities, netlink, nftables, process groups, or cgroups.
 - Before dispatching a release, verify the immutable `sha-<40-character-main-commit>` candidate with a real Panel and real proxy traffic under the production limits. This is a manual release decision; runtime observations are not committed to the repository.
-- The exact whole-host 512 MiB target, native installation paths, arm64 runtime, large-user load, long soak, and fault injection remain useful follow-up checks. Unit tests must not be presented as substitutes for an environment they do not exercise.
+- The exact whole-host 512 MiB target, untested Native distribution/architecture combinations, large-user load, long soak, and fault injection remain useful follow-up checks. Unit tests must not be presented as substitutes for an environment they do not exercise.
 - Test data must not contain real Secrets, JWTs, certificates, private keys, node IPs, hostnames, or raw responses.
 
 ## Quick Selection
@@ -25,6 +25,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Shell, Docker, workflow, or supply chain | `bash scripts/check-repository.sh` | Medium to high |
 | Native bootstrap or bundle format | `sh release/native/install_test.sh`, `go test ./cmd/release-tool` | Medium to high |
 | Native lifecycle state or service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | High |
+| Alpine/OpenRC host qualification | Full persistent Alpine 3.22.x VM lifecycle and reboot | Linux/root |
 | Complete repository gate | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | High |
 | Linux network management | Two network-namespace integration tests | Linux/root |
 | Low-memory budget | `scripts/test-low-memory.sh --rw-core ...` | Docker/real core |
@@ -221,6 +222,10 @@ service-state restoration, rollback, repair, account ownership, and purge
 safety. They never write the real `/etc/remnanode-lite` tree or start a host
 service.
 
+`--prepare-only` proves bundle verification and host-file preparation only. It
+does not start the service, apply cgroup limits, or qualify an Alpine/OpenRC
+host. Those checks first become authoritative during `rnlctl activate`.
+
 Build and verify real bundles when the archive shape, runtime assets, or
 release scripts change:
 
@@ -236,8 +241,43 @@ The build requires the exact Go toolchain and the pinned runtime asset cache.
 Use `RNL_OFFLINE_BUILD=1` only with a complete cache. The bundle smoke test
 opens the generated archive with real `rnlctl` lifecycle code, installs it into
 a temporary test root with a restrictive `umask`, and keeps the service-manager
-boundary fake. It does not replace a real systemd/OpenRC check when
+boundary fake. It does not replace a real systemd or qualified Alpine/OpenRC check when
 service-manager behavior changed.
+
+### Native distribution qualification
+
+Initial promotion of a Native platform requires a full, persistent VM for every
+claimed architecture. Repeat the relevant platform or architecture checks when
+a later change affects that service-manager path, native binary shape, or
+architecture-specific assets; unrelated releases do not require a full
+requalification. Containers and init-less guests are useful for portable
+installer tests, and constrained nested guests are useful for testing rejection,
+but neither qualifies a distribution.
+
+For Alpine, use a persistent Alpine Linux 3.22.x `sys` installation on the
+claimed `amd64` or `arm64` architecture. Distribution OpenRC must be PID 1, the
+kernel must be Linux 5.14 or newer, and unified cgroup v2 must expose usable
+`cpu`, `memory`, and `pids` controllers, `memory.swap.max`, writable parent
+`cgroup.procs`, and writable service `cgroup.kill`. Exercise at least:
+
+1. dependency installation and boot-time `cgroups` enablement;
+2. exact-bundle prepare and activation with non-production test credentials;
+3. `rnlctl status`, `doctor`, and `config check`;
+4. the expected memory, swap, CPU, and PID limits, plus the two documented
+   capabilities and `NoNewPrivs` on the managed Node process;
+5. an exact-version upgrade followed by rollback, with the service returning to
+   health after each transition;
+6. repair from the retained verified cache and one intentional interrupted or
+   damaged-state recovery case;
+7. stop cleanup of the exact service cgroup, followed by start and restart;
+8. a full VM reboot, automatic service return, health, and unchanged limits;
+   and
+9. normal uninstall plus `--purge --yes`, confirming that unrelated accounts,
+   processes, files, and firewall state remain untouched.
+
+Local health does not prove Panel connectivity or proxy traffic. Record those
+as separate release acceptance when they were actually tested, and keep host
+details, credentials, logs, and smoke output outside the repository.
 
 ## Linux Network-Management Integration Tests
 
@@ -383,7 +423,7 @@ See the [versioning policy](../versioning.md) for tag, version, and channel sema
 | nftables/socket destruction | Corresponding Linux unit test | Both namespace integration tests |
 | Configuration/Secret/JWT | `config`, `secret`, `auth`, server security | Installer Secret flow |
 | Native bootstrap | `sh release/native/install_test.sh` | Exact-release install on the target host |
-| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`, `go test -race ./internal/rnlctl` | Real systemd/OpenRC when the change affects Native runtime behavior |
+| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`, `go test -race ./internal/rnlctl` | Real systemd or qualified Alpine/OpenRC host when the change affects Native runtime behavior |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build plus risk-driven real-environment verification |
 | Dependency or downloadable asset | `go mod tidy -diff`, supply-chain checks, govulncheck | Dual-architecture build, SBOM, and attestation |
 | Project version | `bash scripts/check-version.sh` | Release preflight |

@@ -34,6 +34,12 @@ type fakeBundleResolver struct {
 	calls   []string
 }
 
+type failureInjectorFunc func(string) error
+
+func (inject failureInjectorFunc) Fail(checkpoint string) error {
+	return inject(checkpoint)
+}
+
 func (resolver *fakeBundleResolver) Resolve(_ context.Context, version, architecture, destination string) (string, error) {
 	resolver.calls = append(resolver.calls, version+":"+architecture+":"+filepath.Base(destination))
 	return resolver.archive, resolver.err
@@ -222,7 +228,7 @@ func TestExternalNativeBundleInstallSmoke(t *testing.T) {
 
 	result, err := engine.Install(context.Background(), InstallRequest{
 		Bundle: BundleInput{Archive: archive, SHA256: digest},
-		Port:   38329, SecretFile: secret, PrepareOnly: true,
+		Port:   2222, SecretFile: secret, PrepareOnly: true,
 	})
 	if err != nil {
 		t.Fatalf("Install(external bundle) error = %v", err)
@@ -762,6 +768,77 @@ func TestEngineFailedRollbackRestoresCommittedGeneration(t *testing.T) {
 	assertSymlinkTarget(t, harness.paths.CurrentLink, filepath.Join(harness.paths.Generations, upgraded.Generation))
 	if journal, err := loadJournal(harness.paths); err != nil || journal != nil {
 		t.Fatalf("journal after restored rollback = %#v, %v", journal, err)
+	}
+}
+
+func TestEngineFailedUpgradeRollbackPreservesCommittedTargetForRepair(t *testing.T) {
+	harness := newLifecycleHarness(t, "2.8.0-rnl.1")
+	installed := harness.install(t, false)
+	secondBundle := writeTestBundle(t, filepath.Join(t.TempDir(), "bundle-v2"), "2.8.0-rnl.2")
+	originalStateFile := harness.engine.paths.StateFile
+	blockedParent := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blockedParent, []byte("block state writes\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	harness.engine.failure = failureInjectorFunc(func(checkpoint string) error {
+		if checkpoint != "upgrade-after-state" {
+			return nil
+		}
+		harness.engine.paths.StateFile = filepath.Join(blockedParent, "state.json")
+		return errors.New("fail after committing target state")
+	})
+
+	_, upgradeErr := harness.engine.Upgrade(context.Background(), UpgradeRequest{
+		Bundle: BundleInput{Root: secondBundle},
+	})
+	harness.engine.paths.StateFile = originalStateFile
+	harness.engine.failure = nil
+	if upgradeErr == nil || !strings.Contains(upgradeErr.Error(), "fail after committing target state") {
+		t.Fatalf("Upgrade() error = %v", upgradeErr)
+	}
+
+	committed, err := loadState(harness.paths)
+	if err != nil || committed == nil {
+		t.Fatalf("loadState() after failed rollback = %#v, %v", committed, err)
+	}
+	if committed.Current == installed.Generation || committed.Previous != installed.Generation {
+		t.Fatalf("committed state after failed rollback = %#v", committed)
+	}
+	target, exists := committed.Generations[committed.Current]
+	if !exists || target.Version != "2.8.0-rnl.2" {
+		t.Fatalf("committed target = %#v, exists=%t", target, exists)
+	}
+	if err := harness.engine.verifyGeneration(target); err != nil {
+		t.Fatalf("committed target generation was removed: %v", err)
+	}
+	if _, err := os.Lstat(target.CacheFile); err != nil {
+		t.Fatalf("committed target repair cache was removed: %v", err)
+	}
+	journal, err := loadJournal(harness.paths)
+	if err != nil || journal == nil || journal.Operation != "upgrade" || journal.Phase != "state-committed" || journal.Target.ID != target.ID {
+		t.Fatalf("journal after failed rollback = %#v, %v", journal, err)
+	}
+	brokenBinary := filepath.Join(harness.paths.Generations, target.ID, "bin", "remnanode-lite")
+	if err := os.WriteFile(brokenBinary, []byte("tampered\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	repaired, err := harness.engine.Repair(context.Background(), RepairRequest{})
+	if err != nil {
+		t.Fatalf("Repair() using committed local material = %v", err)
+	}
+	if repaired.Generation != target.ID || repaired.Version != target.Version {
+		t.Fatalf("Repair() = %#v, want target %#v", repaired, target)
+	}
+	repairedState, err := loadState(harness.paths)
+	if err != nil || repairedState == nil || repairedState.Current != target.ID {
+		t.Fatalf("state after Repair() = %#v, %v", repairedState, err)
+	}
+	if err := harness.engine.verifyGeneration(repairedState.Generations[target.ID]); err != nil {
+		t.Fatalf("verify repaired target generation: %v", err)
+	}
+	if journal, err := loadJournal(harness.paths); err != nil || journal != nil {
+		t.Fatalf("journal after Repair() = %#v, %v", journal, err)
 	}
 }
 

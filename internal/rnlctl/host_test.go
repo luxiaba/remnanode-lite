@@ -5,12 +5,27 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+const hostExecutorHelperEnv = "GO_WANT_RNLCTL_HOST_EXECUTOR_HELPER"
+
+func TestOSCommandExecutorHelper(_ *testing.T) {
+	switch os.Getenv(hostExecutorHelperEnv) {
+	case "failure":
+		_, _ = fmt.Fprintln(os.Stdout, "OpenRC failed to start remnanode-lite")
+		_, _ = fmt.Fprintln(os.Stderr, "missing cgroup controller memory.max")
+		os.Exit(19)
+	case "large-failure":
+		_, _ = fmt.Fprint(os.Stderr, strings.Repeat("x", maxHostCommandOutput+1024))
+		os.Exit(23)
+	}
+}
 
 type executorCall struct {
 	name string
@@ -20,6 +35,39 @@ type executorCall struct {
 type recordingExecutor struct {
 	calls   []executorCall
 	handler func(string, []string) ([]byte, error)
+}
+
+func TestOSCommandExecutorIncludesBoundedFailureDiagnostics(t *testing.T) {
+	t.Setenv(hostExecutorHelperEnv, "failure")
+	output, err := (OSCommandExecutor{}).Run(
+		context.Background(), os.Args[0], "-test.run=^TestOSCommandExecutorHelper$",
+	)
+	if err == nil {
+		t.Fatal("Run() accepted a failing command")
+	}
+	for _, want := range []string{filepath.Base(os.Args[0]), "exit status 19", "OpenRC failed", "missing cgroup controller memory.max"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Run() error does not contain %q: %v", want, err)
+		}
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 19 {
+		t.Fatalf("Run() error does not preserve ExitError: %T, %v", err, err)
+	}
+	if len(output) == 0 || len(output) > maxHostCommandOutput {
+		t.Fatalf("Run() output length = %d", len(output))
+	}
+
+	t.Setenv(hostExecutorHelperEnv, "large-failure")
+	output, err = (OSCommandExecutor{}).Run(
+		context.Background(), os.Args[0], "-test.run=^TestOSCommandExecutorHelper$",
+	)
+	if err == nil {
+		t.Fatal("Run() accepted a failing command with large output")
+	}
+	if len(output) != maxHostCommandOutput {
+		t.Fatalf("bounded Run() output length = %d, want %d", len(output), maxHostCommandOutput)
+	}
 }
 
 func (executor *recordingExecutor) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -107,6 +155,199 @@ func TestLinuxHostOpenRCServiceMutations(t *testing.T) {
 	}
 }
 
+func TestLinuxHostOpenRCPreflightDoesNotRequireOpenRCRunShellHelpers(t *testing.T) {
+	host := NewLinuxHost(LinuxHostOptions{
+		LookPath: executableFinder(map[string]string{
+			"rc-update":        "/sbin/rc-update",
+			"rc-service":       "/sbin/rc-service",
+			"supervise-daemon": "/sbin/supervise-daemon",
+			"useradd":          "/usr/sbin/useradd",
+			"userdel":          "/usr/sbin/userdel",
+			"groupadd":         "/usr/sbin/groupadd",
+			"groupdel":         "/usr/sbin/groupdel",
+		}),
+	})
+
+	// Alpine exposes its internal checkpath helper only while openrc-run
+	// evaluates a service. It is intentionally absent from the normal PATH.
+	if err := host.Preflight(context.Background(), false, PathsAt(t.TempDir())); err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+}
+
+func TestLinuxHostOpenRCPreflightNamesAlpineRuntimePackages(t *testing.T) {
+	host := NewLinuxHost(LinuxHostOptions{
+		LookPath: executableFinder(map[string]string{
+			"rc-update":        "/sbin/rc-update",
+			"rc-service":       "/sbin/rc-service",
+			"supervise-daemon": "/sbin/supervise-daemon",
+			"useradd":          "/usr/sbin/useradd",
+			"userdel":          "/usr/sbin/userdel",
+			"groupadd":         "/usr/sbin/groupadd",
+			"groupdel":         "/usr/sbin/groupdel",
+		}),
+		PathExists: func(path string) bool {
+			return path == "/sys/fs/cgroup/cgroup.controllers"
+		},
+	})
+
+	err := host.Preflight(context.Background(), true, PathsAt(t.TempDir()))
+	if err == nil || !strings.Contains(err.Error(), "Alpine: apk add nftables iproute2") {
+		t.Fatalf("Preflight() error = %v, want Alpine runtime package guidance", err)
+	}
+}
+
+func TestLinuxHostRemoveServiceRemovesOnlyManagedSystemdFiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		prepare func(t *testing.T, dropInDirectory string)
+		verify  func(t *testing.T, dropInDirectory string)
+	}{
+		{
+			name: "empty managed drop-in directory is removed",
+			prepare: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				if err := os.MkdirAll(dropInDirectory, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+			verify: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				if _, err := os.Lstat(dropInDirectory); !errors.Is(err, os.ErrNotExist) {
+					t.Errorf("empty managed drop-in directory remains: %v", err)
+				}
+			},
+		},
+		{
+			name: "local drop-in is retained",
+			prepare: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				if err := os.MkdirAll(dropInDirectory, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(dropInDirectory, "90-local.conf"), []byte("[Service]\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			verify: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				data, err := os.ReadFile(filepath.Join(dropInDirectory, "90-local.conf"))
+				if err != nil || string(data) != "[Service]\n" {
+					t.Fatalf("local drop-in = %q, %v", data, err)
+				}
+			},
+		},
+		{
+			name: "symlinked drop-in parent is retained without touching target",
+			prepare: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				target := filepath.Join(filepath.Dir(dropInDirectory), "external-drop-ins")
+				if err := os.MkdirAll(target, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				for name, content := range map[string]string{
+					"20-remnanode-lite-hardening.conf": "managed-looking\n",
+					"sentinel.conf":                    "leave me\n",
+				} {
+					if err := os.WriteFile(filepath.Join(target, name), []byte(content), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				if err := os.Symlink(target, dropInDirectory); err != nil {
+					t.Fatal(err)
+				}
+			},
+			verify: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				info, err := os.Lstat(dropInDirectory)
+				if err != nil || info.Mode()&os.ModeSymlink == 0 {
+					t.Fatalf("drop-in parent = %#v, %v", info, err)
+				}
+				target, err := os.Readlink(dropInDirectory)
+				if err != nil {
+					t.Fatal(err)
+				}
+				for name, want := range map[string]string{
+					"20-remnanode-lite-hardening.conf": "managed-looking\n",
+					"sentinel.conf":                    "leave me\n",
+				} {
+					data, readErr := os.ReadFile(filepath.Join(target, name))
+					if readErr != nil || string(data) != want {
+						t.Fatalf("symlink target %s = %q, %v", name, data, readErr)
+					}
+				}
+			},
+		},
+		{
+			name: "regular-file drop-in parent is retained",
+			prepare: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				if err := os.WriteFile(dropInDirectory, []byte("administrator-owned\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			verify: func(t *testing.T, dropInDirectory string) {
+				t.Helper()
+				data, err := os.ReadFile(dropInDirectory)
+				if err != nil || string(data) != "administrator-owned\n" {
+					t.Fatalf("drop-in parent = %q, %v", data, err)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			paths := PathsAt(t.TempDir())
+			if err := os.MkdirAll(filepath.Dir(paths.SystemdUnit), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(paths.SystemdUnit, []byte("managed\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			dropInDirectory := filepath.Dir(paths.SystemdDropIn)
+			if err := os.MkdirAll(filepath.Dir(dropInDirectory), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			test.prepare(t, dropInDirectory)
+			if info, err := os.Lstat(dropInDirectory); err == nil && info.IsDir() && info.Mode()&os.ModeSymlink == 0 {
+				if err := os.WriteFile(paths.SystemdDropIn, []byte("managed\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			executor := &recordingExecutor{}
+			host := NewLinuxHost(LinuxHostOptions{
+				Executor: executor,
+				LookPath: executableFinder(map[string]string{"systemctl": "/usr/bin/systemctl"}),
+				PathExists: func(path string) bool {
+					return path == systemdRuntime
+				},
+			})
+			for attempt := 0; attempt < 2; attempt++ {
+				if err := host.RemoveService(context.Background(), paths); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			for _, path := range []string{paths.SystemdUnit} {
+				if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+					t.Errorf("managed path %s remains: %v", path, err)
+				}
+			}
+			test.verify(t, dropInDirectory)
+
+			want := []executorCall{
+				{name: "/usr/bin/systemctl", args: []string{"daemon-reload"}},
+				{name: "/usr/bin/systemctl", args: []string{"daemon-reload"}},
+			}
+			if !reflect.DeepEqual(executor.calls, want) {
+				t.Fatalf("commands = %#v, want %#v", executor.calls, want)
+			}
+		})
+	}
+}
+
 func TestLinuxHostQueriesServiceStatus(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -168,7 +409,7 @@ func TestLinuxHostChoosesRunningServiceManager(t *testing.T) {
 		name   string
 		paths  map[string]string
 		exists PathExistsFunc
-		want   serviceManagerKind
+		want   serviceManager
 	}{
 		{
 			name:  "systemd runtime wins",
@@ -176,19 +417,19 @@ func TestLinuxHostChoosesRunningServiceManager(t *testing.T) {
 			exists: func(path string) bool {
 				return path == systemdRuntime
 			},
-			want: serviceManagerSystemd,
+			want: serviceManager{kind: serviceManagerSystemd, executable: "/usr/bin/systemctl"},
 		},
 		{
 			name:   "openrc wins without systemd runtime",
 			paths:  map[string]string{"systemctl": "/usr/bin/systemctl", "rc-update": "/sbin/rc-update"},
 			exists: func(string) bool { return false },
-			want:   serviceManagerOpenRC,
+			want:   serviceManager{kind: serviceManagerOpenRC, executable: "/sbin/rc-update"},
 		},
 		{
 			name:   "standalone systemctl remains supported",
 			paths:  map[string]string{"systemctl": "/usr/bin/systemctl"},
 			exists: func(string) bool { return false },
-			want:   serviceManagerSystemd,
+			want:   serviceManager{kind: serviceManagerSystemd, executable: "/usr/bin/systemctl"},
 		},
 	}
 
@@ -199,8 +440,8 @@ func TestLinuxHostChoosesRunningServiceManager(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if manager.kind != test.want {
-				t.Fatalf("manager = %#v, want kind %v", manager, test.want)
+			if manager != test.want {
+				t.Fatalf("manager = %#v, want %#v", manager, test.want)
 			}
 		})
 	}
@@ -307,6 +548,7 @@ func TestNativeServiceTemplatesUseManagedAccount(t *testing.T) {
 			name: "openrc",
 			file: "remnanode-lite.openrc",
 			required: []string{
+				"need cgroups net",
 				"command_user=\"" + managedAccountName + ":" + managedAccountName + "\"",
 				"USER=" + managedAccountName,
 				"LOGNAME=" + managedAccountName,

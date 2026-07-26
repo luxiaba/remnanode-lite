@@ -76,8 +76,8 @@ installer, rebooting the host, or recreating the container as appropriate.
    source and SDK evidence, with executable checks for code and artifacts.
 7. **Release preparation:** run tests, race detection, vet, static analysis,
    and both architecture builds before tagging. The original plan then called
-   for systemd, OpenRC, Panel 2.8.1, real rw-core, 50,000-user, and 24-hour soak
-   tests.
+   for systemd, OpenRC, a real compatible Panel, real rw-core, 50,000-user, and
+   24-hour soak tests.
 
 ## Commit Strategy Used at the Time
 

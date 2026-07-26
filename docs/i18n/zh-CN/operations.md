@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=5016f5e4ec1b7e7e3197d194941dea06af2efa3b719be96dbe6e3aa17aeb2e68 -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=afdf11acd5a52ee8c407a0ecd5ffe7c47edcbc4c0bb6e007b09a3bf22733b29a -->
 
 # 运维与故障排查
 
@@ -28,20 +28,23 @@ docker compose logs --tail=100 remnanode-lite
 docker inspect remnanode-lite --format \
   'image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
 docker exec remnanode-lite remnanode-lite version
-ss -H -lntp 'sport = :38329'
+ss -H -lntp 'sport = :2222'
 ```
 
 Native：
 
 ```bash
+sudo rnlctl status
 sudo rnlctl status --json
 sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 sudo rnlctl logs core-errors --lines 100
-ss -H -lntp 'sport = :38329'
+ss -H -lntp 'sport = :2222'
 ```
 
-`status --json` 会给出 current/previous generation、版本、服务管理器、启用与活动状态、repair 能力和待处理操作。状态为 degraded 或 recovery-required 时返回非零。 `doctor` 会校验 manifest、文件摘要、链接、配置、Secret、服务、内部 health 和修复缓存，但不会连接 Panel 或制造代理流量。
+直接运行 `rnlctl status` 现在会输出一致、便于阅读的生命周期摘要，不再转发服务管理器的原始输出；human 排版不是解析接口。`status --json` 保持原有 schema，包含 current/previous generation、版本、服务管理器、启用与活动状态、repair 能力和待处理操作。状态为 degraded 或 recovery-required 时，两种形式都会返回非零。
+
+`doctor` 会校验 manifest、文件摘要、链接、配置、Secret、服务、内部 health 和修复缓存。human 输出最后包含汇总以及针对已知故障的确定性 `Next` 建议；`doctor --json` 的 schema 保持不变。它不会连接 Panel 或制造代理流量。
 
 底层服务视图：
 
@@ -50,9 +53,21 @@ sudo systemctl --no-pager --full status remnanode-lite.service
 sudo systemctl show remnanode-lite.service \
   --property=ActiveState,SubState,MainPID,MemoryCurrent,MemoryPeak,TasksCurrent
 
-# OpenRC（实验性）
+# Alpine/OpenRC
 sudo rc-service remnanode-lite status
 ```
+
+需要完整的底层详情时直接使用这些服务管理器命令。此前解析裸 `rnlctl status` 输出的脚本应改用 `rnlctl status --json`。
+
+## `rnlctl` 输出与自动化
+
+`--quiet`/`-q` 和 `--no-color` 是全局选项，可以放在命令中的任意位置。quiet 会隐藏成功的变更提示、`config check` 成功提示和 human `status`/`doctor`；不会隐藏 help、version、`config show`/`get`、日志、补全、dry-run 计划、JSON 或错误。
+
+human status 和 doctor 只在 TTY 上使用克制的颜色。指定 `--no-color`、`NO_COLOR` 为非空值、`TERM=dumb` 或重定向输出时，不会出现 ANSI 转义序列。
+
+退出码通常为：成功 `0`，运行失败或结果不健康 `1`，用法错误 `2`。`absent` 是有效的 status，会返回 `0`；要求必须已安装的脚本还要检查 JSON 的 `installed` 或 `deployment`。`logs` 启动 `journalctl` 或 `tail` 后会透传其退出码，被信号终止时也可能返回 `128 + signal`。
+
+Bash、Zsh 和 Fish 补全由 `rnlctl completion <shell>` 生成，用户级安装步骤见 [Native 部署指南](deployment-native.md#shell-补全)。命令只向 stdout 输出脚本，不会修改补全目录或 shell 启动文件。
 
 ## 日志
 
@@ -60,7 +75,7 @@ sudo rc-service remnanode-lite status
 | --- | --- | --- |
 | Docker | `docker compose logs -f remnanode-lite` | Docker `json-file`，维护模板为 `2 MiB x 2` |
 | Native systemd | `sudo rnlctl logs node --follow` | 宿主 journald 策略 |
-| Native OpenRC | `sudo rnlctl logs node --follow` | `/var/log/remnanode-lite/openrc.log` 与 `.err.log` |
+| Native Alpine/OpenRC | `sudo rnlctl logs node --follow` | `/var/log/remnanode-lite/openrc.log` 与 `.err.log` |
 
 小型 systemd 主机应为 journald 设置合理的宿主机配额，并监控 `journalctl --disk-usage` 与 `df -h`。
 
@@ -74,11 +89,14 @@ docker exec -it remnanode-lite \
 Native 使用：
 
 ```bash
+sudo rnlctl logs node --since 15m --lines 100
 sudo rnlctl logs core --follow
 sudo rnlctl logs core-errors --follow
 ```
 
-Native 文件位于 `/var/log/remnanode-lite/xray.out.log` 和 `xray.err.log`。每条流保留当前文件和一个 `.1`，阈值为 4 MiB。Docker 把 core 日志目录放在 28 MiB tmpfs，重建容器即可清空。
+`--lines` 默认 `50`，范围为 `1..100000`。`--since` 接受 `15m`、`2h` 这类正数 Go duration，不接受绝对日期或 `1d`；它可以与 `--lines`、`--follow` 组合，但只支持 systemd 的 `node` 日志。OpenRC Node 日志和文件型 `core`/`core-errors` 会拒绝该选项。
+
+systemd 将 `--lines N` 应用于整个 unit；OpenRC 从 `openrc.log` 与 `openrc.err.log` 各读 N 行，core source 各读取一个当前文件。Native core 文件位于 `/var/log/remnanode-lite/xray.out.log` 和 `xray.err.log`，每条流保留当前文件和一个 `.1`，阈值为 4 MiB，但普通读取不会从 `.1` 回补。`--follow` 使用 `tail -F`，可继续跟随后续轮转。Docker 把 core 日志目录放在 28 MiB tmpfs，重建容器即可清空。
 
 ## 启停
 
@@ -136,9 +154,13 @@ docker compose logs --tail=100 remnanode-lite
 Native 只接受精确版本：
 
 ```bash
+sudo rnlctl upgrade --to 2.8.0-rnl.2 --dry-run
+sudo rnlctl upgrade --to 2.8.0-rnl.2 --dry-run --json
 sudo rnlctl upgrade --to 2.8.0-rnl.2
 sudo rnlctl rollback
 ```
+
+dry-run 需要 root、已有且状态干净的安装，并且不能存在待处理的生命周期 journal。使用 `--to` 时，它会完整下载并静态校验候选，然后短暂持有生命周期锁，检查当前状态和已知宿主机前置条件。它不会创建 generation、cache 或事务 journal，不会修改服务、执行候选二进制、运行目标健康检查或保留 bundle。`--json` 只能与 `--dry-run` 同时使用。检查会使用临时磁盘，但不会预留或保证真实升级的空间；预检成功也不代表后续升级一定成功。本地 `--bundle` 加 `--sha256` 和 `--bundle-root` 同样支持 dry-run。
 
 升级把完整 Node/runtime bundle 作为新 generation，并把旧 generation 保留为 previous。若状态显示 `recovery-required`：
 
@@ -152,14 +174,27 @@ repair 使用已验证的缓存恢复已提交版本，绝不会自动升级。�
 
 ## 修改配置
 
-Docker 修改 `.env` 或 Compose mapping 后重新校验并创建容器。Native 保持 `/etc/remnanode-lite/node.env` 与 `secret.key` 为 `root:remnanode-lite`、服务不可写，然后运行：
+Docker 修改 `.env` 或 Compose mapping 后重新校验并创建容器。Native 的运行参数只以 `/etc/remnanode-lite/node.env` 为准；`rnlctl config` 直接读取和修改它，只显示 6 个不含 Secret 的管理员字段，不会显示 Secret 或内部受管字段。
+
+查看、校验和修改 active 安装：
 
 ```bash
-sudo rnlctl doctor
-sudo rnlctl restart
+sudo rnlctl config show
+sudo rnlctl config check
+sudo rnlctl config set NODE_PORT=2222 --apply
 ```
 
-Secret 轮换要原子替换 `/etc/remnanode-lite/secret.key`，见 [Native 部署](deployment-native.md#修改端口或-secret)。修改 `NODE_PORT` 时同步更新 Panel 与宿主机防火墙。两种部署都使用 host networking，没有端口转换层。
+`config show` 和 `get` 展示的是 `node.env` 中保存的值，不是程序计算后的默认值。`config check` 只读，并检查受管 `node.env`/`secret.key` 的权限。`set` 和 `unset` 会先校验完整候选配置再写入；加上 `--apply` 后会重启 active 服务并等待内部健康。如果修改后失败，命令会尽力尝试恢复旧文件和服务；这不是持久化或崩溃安全的事务。stopped 或 prepared 安装会在写文件前拒绝 `--apply`，此时先不带 `--apply` 修改，再分别运行 `rnlctl start` 或 `rnlctl activate`。
+
+手工编辑仍受支持：保持 `root:remnanode-lite 0640`，运行 `rnlctl config check`，active 服务再运行 `rnlctl config apply`。由于没有保存手工编辑前的快照，`config apply` 无法回滚手工改动。
+
+Secret 只从受保护的普通文件轮换，不接受直接把值作为参数，也不会打印：
+
+```bash
+sudo rnlctl secret set --file /root/new-node-secret.key --apply
+```
+
+操作后自行删除源文件。Secret 修改与 `config set --apply` 有相同的 active 状态限制和尽力恢复行为。完整步骤见 [Native 部署](deployment-native.md#修改端口或-secret)。`config check` 与 `config apply` 都不会连接 Panel 或测试代理流量，仍需另外确认 Panel 状态和代表性流量。修改 `NODE_PORT` 时同步更新 Panel 与宿主机防火墙。两种部署都使用 host networking，没有端口转换层。
 
 ## 资源检查
 
@@ -184,7 +219,7 @@ journalctl --disk-usage
 df -h
 ```
 
-OpenRC 的 cgroup 为 `/sys/fs/cgroup/openrc.remnanode-lite`（位于检测到的 cgroup v2 root 下），启动时校验 memory、swap、CPU 和 PID 限制。不要在只有 2 GB 磁盘的生产主机上构建项目。
+在受支持的 Alpine/OpenRC 主机上，服务会在检测到的统一 cgroup v2 根目录下创建 `openrc.remnanode-lite`。启动前会核验 `memory.max=469762048`、`memory.swap.max=0`、`cpu.max=100000 100000`、`pids.max=256`、自身的 cgroup 成员关系、可写的父级 `cgroup.procs`，以及可写的服务 `cgroup.kill`。不要在只有 2 GB 磁盘的生产主机上构建项目。
 
 ## 网络与安全边界
 
@@ -210,7 +245,7 @@ Secret 不是有效 base64/base64url、被截断、含空白，或 Compose list 
 ### `address already in use`
 
 ```bash
-ss -H -lntp 'sport = :38329'
+ss -H -lntp 'sport = :2222'
 ```
 
 停止冲突服务，或同时修改 Panel、主机配置和防火墙。不要让官方容器与 Lite 使用同一宿主端口。
@@ -231,9 +266,9 @@ ss -H -lntp 'sport = :38329'
 
 Node 继续运行，但 `asList` 为空。Docker 和 Native bundle 都包含锁定版本的数据库；重建已验证镜像，或执行 `rnlctl repair`/精确版本升级，不要向当前 generation 下载未固定的数据。
 
-### OpenRC cgroup 检查失败
+### Alpine/OpenRC 宿主机资格检查失败
 
-修复 cgroup v2 delegation，或改用受支持的 systemd/Docker。不要跳过资源检查。
+Native Alpine 支持要求持久化安装的 Alpine Linux 3.22.x `sys` 系统、作为 PID 1 运行的发行版 OpenRC、不低于 5.14 的 Linux 内核，以及可用的统一 cgroup v2 CPU、memory、PID、swap 限制、父级成员迁移和服务级清理控制。`--prepare-only` 不会启动服务，因此成功安装并不能证明这些运行条件已经满足。如果 `activate` 或 `start` 拒绝当前主机，应换用能够提供完整契约的环境，或改用受支持的 systemd/Docker 部署。不要绕过检查，否则文档中的资源限制和清理行为都无法成立。
 
 ### Native 提示需要 repair
 

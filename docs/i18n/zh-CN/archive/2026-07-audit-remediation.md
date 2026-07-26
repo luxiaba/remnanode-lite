@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=12ec09bf351a2cd085b89e6a5bc0f1c49b02fafac0f94f7e1bcb50ae830d3c2c -->
+<!-- translation: locale=zh-CN; source=docs/archive/2026-07-audit-remediation.md; source-sha256=93036991e5a44bc0187904974a53ac53da9349e8a7f7037f1b59447e0c60818f -->
 # 2026-07 静态审计整改记录（归档）
 
 > 这是中文译文；涉及历史记录和规则时，请以[英文原文](../../../archive/2026-07-audit-remediation.md)为准。
@@ -47,7 +47,7 @@
 5. **资源边界**：补齐 OpenRC cgroup、低内存升级迁移、磁盘和归档预检、可靠停止与回滚，
    以及进程身份健康检查。
 6. **可信测试链**：从固定的官方源码和 SDK 证据生成静态契约，并通过可执行检查验证代码和产物。
-7. **发布准备**：打 tag 前运行测试、race detection、vet、static analysis 和双架构构建。原计划随后执行 systemd、OpenRC、Panel 2.8.1、真实 rw-core、50,000 用户和 24 小时 soak。
+7. **发布准备**：打 tag 前运行测试、race detection、vet、static analysis 和双架构构建。原计划随后执行 systemd、OpenRC、真实兼容 Panel、真实 rw-core、50,000 用户和 24 小时 soak。
 
 ## 当时采用的提交策略
 

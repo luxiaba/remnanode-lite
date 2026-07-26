@@ -9,13 +9,15 @@ This repository maintains an independent Go implementation with its own release 
 The first release line starts at `2.8.0` with these goals:
 
 - Behavioral compatibility with official Node `2.8.0@596f015`.
-- Real integration validation against Panel `2.8.1`.
+- Real integration validation against a compatible Panel.
 - Resolution of known lifecycle, plugin, firewall, contract, and installation supply-chain defects.
 - Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk` as an engineering target.
 - Linux `amd64` and `arm64` artifacts, with real Panel and traffic verification before release.
 - Keep Rocky Linux 9/systemd as the primary Native target, with Rocky Linux 8
-  and Debian 12 as compatible targets. OpenRC remains an explicitly
-  experimental cgroup v2 path.
+  and Debian 12 as compatible targets. Support Alpine Linux 3.22.x on `amd64`
+  and `arm64` only for persistent `sys` installations with distribution OpenRC
+  as PID 1 and the documented Linux 5.14+ unified cgroup v2 contract; this is
+  not generic OpenRC support.
 
 The project version and official contract version move independently. `X.Y.Z-rnl.N` identifies a project-specific iteration, whether it develops the next version line early or improves an existing official baseline. A plain `X.Y.Z` release is allowed only after alignment with that official contract is complete. Monitoring a new official release creates an issue; it never changes the contract or publishes anything automatically. See the [versioning model](../versioning.md).
 
@@ -51,30 +53,31 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M6 512 MiB resource work | Complete |
 | M7 System integration and supply chain | Complete |
 | M8 Release preparation | Complete |
-| M9 Self-contained Native distribution | Ready for publication |
+| M9 Self-contained Native distribution | Complete |
 
 The M6 50,000-user measurement from 2026-07-15 and the M7
 init/distribution snapshots from 2026-07-19 remain useful engineering
 baselines. They document the resource work and give later changes a stable
 comparison point; they are not claims about every future build.
 
-The clean stable `2.8.0` release is the official-contract baseline and includes
-the first self-contained Native bundle. Its Release publishes exact Docker and
-Native assets and advances the GHCR `latest` channel. Runtime observations stay
-outside the source repository, and GitHub generates the Release notes.
+The published stable `2.8.0` release is the official-contract baseline and
+includes the first self-contained Native bundle. The `2.8.0-rnl.1` line keeps
+that contract while improving Native administration, lifecycle recovery, and
+qualified Alpine support. Runtime observations stay outside the source
+repository, and GitHub generates the Release notes.
 
 ## Current focus
 
-- **Now:** Publish the clean stable `2.8.0` release after its exact candidate
-  image and Native bundles have passed maintainer acceptance and the release workflow.
+- **Now:** Complete release acceptance for the `2.8.0-rnl.1` Native operator
+  experience and qualified Alpine lifecycle.
 - **Next:** Evaluate the next official release detected by automation. Pin its
   source and review the contract diff before selecting a project version line.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
-The following are accepted limitations or later enhancements and do not block
-the `2.8.0` stable release:
+The following are accepted limitations or later enhancements. Release decisions
+apply the risk-based verification rules in the testing and release guides:
 
-- More whole-host 512 MiB, arm64 runtime, native-install, large-user, soak, and fault-injection coverage can be added when it answers a concrete risk.
+- More whole-host 512 MiB, cross-distribution/architecture, native-install, large-user, soak, and fault-injection coverage can be added when it answers a concrete risk.
 - The Native journal cannot recover a host power loss that leaves an abnormal
   OpenRC cgroup populated. Stop the residual process or reboot that host, then
   run `rnlctl repair`; recreate a container when its runtime state is not
@@ -145,9 +148,10 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Pin every Release, rw-core, ASN, and helper-script asset and verify its digest.
 - Ensure installation, upgrade, rollback, and uninstall do not affect processes or nftables tables outside this project.
 - Ubuntu 24.04/systemd and Alpine 3.22/OpenRC snapshots remain historical
-  engineering baselines for predecessor installer work. The supported Native
-  lifecycle is now `rnlctl`; systemd is the maintained path and OpenRC remains
-  experimental until the target host is checked.
+  engineering baselines for predecessor installer work. They do not qualify a
+  current platform. The supported Native lifecycle is now `rnlctl`; current
+  Alpine support is limited to the full-VM and host contract documented in the
+  Native deployment and testing guides.
 - Both non-root service processes retain only effective and ambient `NET_ADMIN` and `NET_BIND_SERVICE`.
 - Pinned rw-core, ASN, and release archives are verified before installation.
 - Fault-injection tests cover post-write failures and per-file digest restoration for rw-core assets and Node upgrade transactions.
@@ -173,11 +177,13 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Replace distribution-specific shell mutation logic with the tested Go
   lifecycle engine and its durable generation journal.
 - Support systemd on Rocky Linux 9 as the primary Native target, Rocky Linux 8
-  and Debian 12 as compatible targets, and OpenRC as an explicitly experimental
-  cgroup v2 path.
+  and Debian 12 as compatible targets, plus Alpine Linux 3.22.x `sys` installs
+  on `amd64` and `arm64` when distribution OpenRC is PID 1 and the exact cgroup
+  v2 host checks pass.
 - Exercise exact install, prepare/activate, upgrade, rollback, repair,
   uninstall, tamper refusal, account isolation, and interrupted-operation
-  recovery before publishing `2.8.0`.
+  recovery for the initial stable publication, then repeat the paths affected
+  by each later Native change.
 
 ## Development and release rules
 

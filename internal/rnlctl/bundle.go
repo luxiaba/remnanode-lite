@@ -744,7 +744,17 @@ func cacheBundle(bundle *validatedBundle, cacheDirectory string) (cacheInfo, boo
 	if err := ensureDirectory(cacheDirectory, 0o700); err != nil {
 		return cacheInfo{}, false, err
 	}
-	destination := filepath.Join(cacheDirectory, bundle.Identity+".tar.gz")
+	// A verified archive may package the same manifest differently from a
+	// retained root snapshot. Key it by the outer digest so staging never
+	// overwrites cache material still referenced by lifecycle state.
+	cacheKey := bundle.Identity
+	if bundle.CacheKind == "verified-archive" {
+		if !hexDigestRE.MatchString(bundle.ArchiveSHA256) {
+			return cacheInfo{}, false, fmt.Errorf("verified bundle has invalid archive digest")
+		}
+		cacheKey = bundle.ArchiveSHA256
+	}
+	destination := filepath.Join(cacheDirectory, cacheKey+".tar.gz")
 	if _, err := os.Lstat(destination); err == nil {
 		digest, _, digestErr := digestFile(destination, maxBundleArchive)
 		if digestErr != nil {
@@ -759,14 +769,7 @@ func cacheBundle(bundle *validatedBundle, cacheDirectory string) (cacheInfo, boo
 			return cacheInfo{}, false, fmt.Errorf("cached bundle identity mismatch")
 		}
 		if bundle.CacheKind == "verified-archive" && digest != bundle.ArchiveSHA256 {
-			cached.Close()
-			if err := removeAndSync(destination); err != nil {
-				return cacheInfo{}, false, err
-			}
-			if err := atomicCopyStreaming(bundle.Archive, destination, 0o600, maxBundleArchive, bundle.ArchiveSHA256); err != nil {
-				return cacheInfo{}, false, err
-			}
-			return cacheInfo{Path: destination, SHA256: bundle.ArchiveSHA256, Kind: "verified-archive"}, true, nil
+			return cacheInfo{}, false, fmt.Errorf("cached bundle digest does not match verified archive")
 		}
 		kind := "root-snapshot"
 		if bundle.CacheKind == "verified-archive" && digest == bundle.ArchiveSHA256 {

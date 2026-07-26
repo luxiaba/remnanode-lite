@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/luxiaba/remnanode-lite/internal/bodylimit"
+	runtimeconfig "github.com/luxiaba/remnanode-lite/internal/config"
 	"github.com/luxiaba/remnanode-lite/internal/secret"
 )
 
@@ -55,23 +57,21 @@ func readSecretSource(source string) ([]byte, error) {
 	if source == "" {
 		return nil, nil
 	}
-	data, err := readRegularFile(source, secret.MaxEncodedBytes+1)
+	value, err := runtimeconfig.ReadSecretFile(source)
 	if err != nil {
-		return nil, fmt.Errorf("read --secret-file: %w", err)
+		return nil, fmt.Errorf("read Secret file: %w", err)
 	}
-	value := strings.TrimSpace(string(data))
 	if _, err := secret.Parse(value); err != nil {
-		return nil, fmt.Errorf("validate --secret-file: %w", err)
+		return nil, fmt.Errorf("validate Secret file: %w", err)
 	}
 	return append([]byte(value), '\n'), nil
 }
 
 func readExistingSecret(path string) ([]byte, error) {
-	data, err := readRegularFile(path, secret.MaxEncodedBytes+1)
+	value, err := runtimeconfig.ReadSecretFile(path)
 	if err != nil {
 		return nil, err
 	}
-	value := strings.TrimSpace(string(data))
 	if _, err := secret.Parse(value); err != nil {
 		return nil, fmt.Errorf("validate existing secret: %w", err)
 	}
@@ -252,6 +252,10 @@ func validateManagedConfiguration(paths Paths, requireSecret bool) error {
 	if err != nil {
 		return fmt.Errorf("read node.env: %w", err)
 	}
+	return validateManagedConfigurationData(environment, paths, requireSecret)
+}
+
+func validateManagedConfigurationData(environment []byte, paths Paths, requireSecret bool) error {
 	values, err := parseEnvironmentAssignments(environment)
 	if err != nil {
 		return err
@@ -270,9 +274,17 @@ func validateManagedConfiguration(paths Paths, requireSecret bool) error {
 	}
 	if _, err := readExistingSecret(paths.SecretFile); err != nil {
 		if !requireSecret && errors.Is(err, os.ErrNotExist) {
-			return nil
+			// Prepared installations may receive their Secret during activation.
+		} else {
+			return err
 		}
-		return err
+	}
+	runtime, err := runtimeconfig.ParseData(environment, requireSecret)
+	if err != nil {
+		return fmt.Errorf("validate node.env: %w", err)
+	}
+	if _, err := bodylimit.New(runtime.LowMemory, runtime.BodyLimitMB); err != nil {
+		return fmt.Errorf("validate node.env: %w", err)
 	}
 	return nil
 }

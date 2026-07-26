@@ -80,7 +80,12 @@ M7 added two snapshots from real distribution layouts:
 | Environment | Runtime memory | Project/whole-system disk | Notes |
 | --- | ---: | ---: | --- |
 | Ubuntu 24.04 arm64 / systemd | Node RSS `11.9 MiB` | Project files about `74 MiB` | Fresh installation with real rw-core, geo, and ASN assets; Panel had not yet started the core |
-| Alpine 3.22 arm64 / OpenRC container | Whole container `44.1 MiB` | Entire rootfs `150.2 MiB` | Container limited to `512 MiB / 1 CPU / 256 PIDs`, with real installation dependencies and service |
+| Alpine 3.22 arm64 / OpenRC container (historical) | Whole container `44.1 MiB` | Entire rootfs `150.2 MiB` | Container limited to `512 MiB / 1 CPU / 256 PIDs`, with real installation dependencies and service; not a supported-host qualification |
+
+The historical Alpine container measurement is useful for comparing resource
+shape, but it does not prove distribution support. Current Alpine support
+requires a persistent 3.22.x `sys` installation with distribution OpenRC as PID
+1 and the full host qualification in the [testing guide](testing.md#native-distribution-qualification).
 
 Project files use roughly `12 MiB` for Node, `34 MiB` for rw-core and support files, and `28 MiB` for geo/ASN assets.
 
@@ -94,19 +99,21 @@ that directive. Byte usage and long-term growth remain subject to the host's
 journald quota in both cases; rate limiting is not a disk quota.
 
 Native lifecycle state and cached archives live in root-only
-`/var/lib/remnanode-lite-installer`. Every mutating `rnlctl` operation holds
-`/run/remnanode-lite-installer/operation.lock`, and a durable `journal.json` records the
-transaction boundary. A crash therefore becomes an explicit
+`/var/lib/remnanode-lite-installer`. Every lifecycle or configuration mutation
+holds `/run/remnanode-lite-installer/operation.lock`. Generation and service
+lifecycle transactions also record their boundary in a durable `journal.json`,
+so a crash during one of those transitions becomes an explicit
 `recovery-required` state instead of an implicit half-install. `rnlctl repair`
 restores the committed generation and intended service state from verified
-cached material.
+cached material. Configuration and Secret mutations are atomic file operations
+with within-process recovery, not journaled crash-safe transactions.
 
 The active and previous releases are complete generations under
 `/usr/local/lib/remnanode-lite/generations`; their matching repair archives are
-also retained. A third successful upgrade removes the superseded generation
-and cache. This deliberately spends bounded disk space to provide one local
-rollback. Operators on unusually small disks should check free space before an
-upgrade and keep the 2 GB whole-host target in mind.
+also retained. After a new generation commits, any generation and cache older
+than those two are removed. This deliberately spends bounded disk space to
+provide one local rollback. Operators on unusually small disks should check
+free space before an upgrade and keep the 2 GB whole-host target in mind.
 
 Root lifecycle operations use private mode-`0700` workspaces and remove them
 after the operation. A safe, absolute `TMPDIR` supplied by the operator takes
@@ -143,12 +150,12 @@ Both `node.env` and `SECRET_KEY_FILE` are opened once with `O_NOFOLLOW|O_NONBLOC
 - The torrent-report ring retains at most the newest `1024` entries.
 - Once Xray is ready, the decoded configuration tree and canonical JSON are released; only hashes and runtime state remain.
 - The maintained Docker and Native templates set `LOW_MEMORY=1` by default.
-- OpenRC verifies cgroup v2 limits of `448 MiB` memory, zero swap, 1 CPU, and 256 PIDs, plus the startup shell's actual cgroup membership. It refuses to start if a controller is unavailable or a write does not take effect. Shutdown does not depend on OpenRC 0.62.6 removing the path: `stop_post` first moves itself out, kills the exact service cgroup through `cgroup.kill`, waits up to 5 seconds for `populated=0`, and then removes the directory.
+- Alpine/OpenRC verifies cgroup v2 limits of `448 MiB` memory, zero swap, 1 CPU, and 256 PIDs, plus the startup shell's actual cgroup membership. It also requires usable `cpu`, `memory`, and `pids` controllers, `memory.swap.max`, writable parent `cgroup.procs`, and writable service `cgroup.kill`. It refuses to start if a control is unavailable or a write does not take effect. Shutdown does not depend on OpenRC 0.62.6 removing the path: `stop_post` first moves itself out, kills the exact service cgroup through `cgroup.kill`, waits up to 5 seconds for `populated=0`, and then removes the directory.
 
-The OpenRC cleanup above covers a normal stop in which init runs `stop_post`.
+The Alpine/OpenRC cleanup above covers a normal stop in which init runs `stop_post`.
 The lifecycle journal covers host file and service intent, but it cannot make
 an abnormal `supervise-daemon` exit remove a residual kernel cgroup. Stop the
-remaining service processes or reboot that experimental host, then use
+remaining service processes or reboot that host, then use
 `rnlctl repair` if lifecycle status reports an interrupted operation.
 
 Any change to request decoding, the Xray configuration lifecycle, RPC messages, report queues, or the dependency graph should rerun this engineering gate and compare stage peaks. That comparison is a maintenance guardrail, not release paperwork.
@@ -163,7 +170,7 @@ Any change to request decoding, the Xray configuration lifecycle, RPC messages, 
 | Unix server | `5s` | Shut down after root-context cancellation; force-close on failure |
 | HTTPS server | Remaining overall budget | Force-close after the deadline |
 | systemd | `30s` | `TimeoutStopSec`, leaving about 5 seconds outside the application's 25-second budget |
-| OpenRC | `TERM/30/KILL/5` | Outer `supervise-daemon` fallback |
+| Alpine/OpenRC | `TERM/30/KILL/5` | Outer `supervise-daemon` fallback |
 
 When the overall deadline expires, shutdown returns an aggregate error; the outer service manager may then force-kill the process. This does not prove that every fault path shuts down gracefully within 25 seconds.
 

@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/README.md; source-sha256=503490e28364b35e72c1225d79ffde8ed5621fee281bd38e79480736a5cd3723 -->
+<!-- translation: locale=ru; source=docs/README.md; source-sha256=182c1a24c9a33094d3625a3fa6e46025377fd8deb100bd685ac73ed06c24c1b1 -->
 # Документация Remnanode Lite
 
 Содержание и правила задаёт [английский индекс документации](../../README.md). Русский перевод подготовлен для операторов и иногда может обновляться с задержкой. Порядок перевода описан в [политике локализации (на английском)](../README.md).
@@ -14,12 +14,14 @@
 ### Развернуть новый узел
 
 1. Прочитайте [обзор проекта](project.md), чтобы проверить границы поддержки и нецели.
-2. Выберите [Docker Compose](deployment-docker.md) либо [Native Linux](deployment-native.md) для Rocky/Debian с systemd; OpenRC пока экспериментален.
+2. Выберите [Docker Compose](deployment-docker.md) либо [Native Linux](deployment-native.md) для Rocky/Debian с systemd или подходящего хоста Alpine 3.22.x с OpenRC.
 3. Заполните параметры и Secret по [справочнику конфигурации](configuration.md).
 4. Перед выбором артефакта изучите [политику версий и тегов](versioning.md): stable, preview, точные версии и движущиеся каналы имеют разные назначения.
 5. После запуска проверьте состояние health, связь с Panel и журналы rw-core по [руководству по эксплуатации](operations.md).
 
 На хосте с `512 MiB RAM / 1 vCPU / 2 GB disk` сохраняйте заданные проектом лимиты памяти, CPU, PID, tmpfs и журналов. Не собирайте проект из исходного кода на таком рабочем узле.
+
+Поддержка Native привязана к конкретным дистрибутивам. Основная цель — Rocky Linux 9 с systemd; Rocky Linux 8 и Debian 12 совместимы. Alpine Linux 3.22.x поддерживается только как постоянная установка типа `sys`, в которой штатный OpenRC работает как PID 1, используется Linux 5.14 или новее, а единая иерархия cgroup v2 соответствует требованиям из руководства по Native. Это не означает поддержку любого OpenRC, контейнеров или окружений без init.
 
 ### Обслуживать работающие узлы
 
@@ -37,7 +39,7 @@
 | [Версионирование и теги](versioning.md) | Версия проекта, версия контракта, стабильные и кандидатные каналы GHCR |
 | [Конфигурация](configuration.md) | Параметры Node, контейнера и установщика, значения по умолчанию и безопасность |
 | [Docker Compose](deployment-docker.md) | Однофайловое развертывание, ресурсы, образы, журналы, обновление и откат |
-| [Нативный Linux](deployment-native.md) | Rocky/Debian systemd и экспериментальный OpenRC: install, upgrade, rollback, repair и uninstall |
+| [Нативный Linux](deployment-native.md) | Установка, обновление, откат, восстановление и удаление на Rocky/Debian с systemd и подходящих хостах Alpine 3.22.x с OpenRC |
 | [Эксплуатация](operations.md) | Состояние health, журналы, обновление, откат, диск и диагностика |
 | [Безопасность](security.md) | Конфиденциальные сообщения, поддерживаемые версии, Secrets и границы доверия |
 

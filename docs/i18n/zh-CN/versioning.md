@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=d4b26b248b395c36314c449fd2e4757dcfe4549af2a31c96fb8994e387b1eb88 -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=955b65a17ad16617db4308fd47d0f8d4295a620e095775e924f61d7e73df6473 -->
 
 # 版本与镜像标签
 
@@ -22,11 +22,11 @@ release workflow 是发布行为的可执行真相源。它调用 `release-tool 
 例如：
 
 ```text
-Version:         2.8.0
+Version:         2.8.0-rnl.1
 ContractVersion: 2.8.0
 ```
 
-这表示与官方 Node `2.8.0` 契约对齐的稳定发布线。对应 GitHub Release 公开后，才会附带 Native Linux 发行包。未来的 `rnl.N` 后缀属于本项目，不是官方发布的修订号。仅改变 `Version` 不会扩大项目声明的兼容范围。
+这表示一个继续实现官方 Node `2.8.0` 契约、同时完善 Native 交付的 Remnanode Lite 预发布版。对应 GitHub Release 公开后，才会附带 Native Linux 发行包。`rnl.N` 后缀属于本项目，不是官方发布的修订号。仅改变 `Version` 不会扩大项目声明的兼容范围。
 
 改变 `ContractVersion` 前，必须固定官方源码、审查契约差异、更新实现和测试，并完成兼容性验证。只改项目版本从不等于新增兼容性。
 
@@ -64,7 +64,8 @@ GitHub 也会将该 Release 标记为 Latest。它既是不可变的对齐点，
 
 | 发布线 | 契约 | 类别 | 状态 |
 | --- | --- | --- | --- |
-| `2.8.0` | `2.8.0` | 稳定版 | 当前契约对齐的发布线；只有已公开 Release 才有 Native bundle |
+| `2.8.0` | `2.8.0` | 稳定版 | 已发布的契约对齐基线和当前 `latest` 版本线 |
+| `2.8.0-rnl.1` | `2.8.0` | 预发布版 | Native 管理和 Alpine 支持改进；公开 Release 后才有精确资产 |
 
 SemVer 会将 `X.Y.Z-rnl.N` 排在对应的 `X.Y.Z` 稳定版之前。不要据此推断发布顺序或通道选择；workflow 会根据版本格式明确选择 `preview` 或 `latest`。
 

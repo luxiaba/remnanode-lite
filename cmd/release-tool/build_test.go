@@ -389,7 +389,7 @@ func newBuildFixture(t *testing.T) buildFixture {
 	writeFixtureFile(t, filepath.Join(support, "deploy", "remnanode-lite.service"), []byte("service"), 0o644)
 	writeFixtureFile(t, filepath.Join(support, "deploy", "remnanode-lite-hardening.conf"), []byte("hardening"), 0o644)
 	writeFixtureFile(t, filepath.Join(support, "deploy", "remnanode-lite.openrc"), []byte("openrc"), 0o755)
-	writeFixtureFile(t, filepath.Join(support, "deploy", "node.env.example"), []byte("NODE_PORT=38329\n"), 0o644)
+	writeFixtureFile(t, filepath.Join(support, "deploy", "node.env.example"), []byte("NODE_PORT=2222\n"), 0o644)
 
 	return buildFixture{options: buildOptions{
 		lockPath: lockPath, architecture: "amd64", version: "1.2.3-rnl.1",

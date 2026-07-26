@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=582e5070d7205cf174d908889aa6f507454764db27e43819cf3376b8cc7600ea -->
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=058752507be2a502430a68c9eae4f66cc47892a3274a98ceec94a765c6d70ac5 -->
 # 512 MiB 资源预算与工程基准
 
 > 这是中文译文；资源数字和边界以[英文原文](../../../development/resource-budget.md)为准。
@@ -9,9 +9,9 @@
 
 ## 生产边界
 
-生产目标是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。标准容器为宿主预留空间，把 Node 与 rw-core 合计限制为 `448 MiB` 内存、`448 MiB` 内存与 swap 合计上限、`1 CPU` 和 `256` 个 PID。内存与 swap 合计上限等于内存上限，因此即使宿主有 swap，容器也没有额外 swap 配额。
+生产目标是整机 `512 MiB RAM / 1 vCPU / 2 GB disk`。Docker Compose 和 Native 服务都会为宿主机预留资源，把 Node 与 rw-core 合计限制为 `448 MiB` 内存，不允许服务或容器使用额外 swap，并限制为 `1 CPU` 和 `256` 个 PID/任务。容器的内存上限与内存加 swap 上限相同，因此即使宿主机有 swap，容器也不会获得额外 swap 配额。
 
-发起 release 前，维护者会在这些限制下使用真实 Panel 和真实代理流量验证不可变的 `sha-<main-commit>` 镜像。该人工发布判断不以运行数据文件的形式存入仓库。带日期的 M6 工程门禁使用相同的核心 cgroup 限制完成了可复现的资源测试：
+发起 release 前，维护者会在这些限制下使用真实 Panel 和真实代理流量验证不可变的 `sha-<40-character-main-commit>` 镜像。该运维验证不存入仓库。带日期的 M6 工程门禁使用相同的核心 cgroup 限制完成了可复现的资源测试：
 
 - `448 MiB` hard memory limit，为宿主机内核与基础服务保留至少 `64 MiB`。
 - `1 CPU`、`256` 个 PID、禁用 swap 与外部网络。
@@ -69,12 +69,14 @@ scripts/test-low-memory.sh \
 
 ## M7 Init 快照（2026-07-19 工程基线）
 
-M7 使用最终安装布局补充了两类真实发行环境快照：
+M7 增加了两份来自真实发行版布局的快照：
 
 | 环境 | 运行内存 | 项目/整机磁盘 | 说明 |
 | --- | ---: | ---: | --- |
 | Ubuntu 24.04 arm64 / systemd | Node RSS `11.9 MiB` | 项目文件约 `74 MiB` | 全新安装，真实 rw-core/geo/ASN，core 尚未由 Panel 拉起 |
-| Alpine 3.22 arm64 / OpenRC 容器 | 整容器 `44.1 MiB` | 整个 rootfs `150.2 MiB` | 容器限制 `512 MiB / 1 CPU / 256 PIDs`，真实安装依赖与服务 |
+| Alpine 3.22 arm64 / OpenRC 容器（历史数据） | 整容器 `44.1 MiB` | 整个 rootfs `150.2 MiB` | 容器限制 `512 MiB / 1 CPU / 256 PIDs`，包含真实安装依赖与服务；不能作为受支持宿主机的资格证明 |
+
+这份 Alpine 容器历史测量仍可用于比较资源形态，但不能证明发行版受到支持。当前 Alpine 支持要求持久化的 3.22.x `sys` 安装、作为 PID 1 运行的发行版 OpenRC，以及[测试指南](testing.md#native-发行版资格验证)规定的完整宿主机资格检查。
 
 项目文件约有 `12 MiB` 属于 Node，`34 MiB` 属于 rw-core 和支持文件，另有 `28 MiB` 的 geo/ASN 资产。
 
@@ -82,17 +84,17 @@ M7 使用最终安装布局补充了两类真实发行环境快照：
 
 OpenRC 还会通过 supervisor 写入 `openrc.log` 和 `openrc.err.log`，每 10 秒检查并 copy-truncate。成功检查后，每个 `.1` 文件的阈值为 `4 MiB`；但当前文件可能在下一次轮询前继续增长，因此这不是严格的字节上限。四组当前文件加 `.1` 文件的阈值预算为 `32 MiB`。如果四个固定临时文件全部残留，总量约为 `48 MiB`，还要加上两个当前文件在一次轮询间隔内的额外增长。
 
-systemd journal 每 30 秒最多接收 200 条服务日志，但字节用量和长期增长仍由宿主机 journald 配额决定。后续扩展验证应在 `2 GB` 整机磁盘上测量日志故障风暴和长期增长；上述阈值不能代替该结果。
+在 systemd 247 或更新版本上，项目管理的加固 drop-in 每 30 秒最多接收 200 条服务日志；更早的 systemd 使用不含该指令的基础 unit。两种情况下，字节用量和长期增长都仍由宿主机的 journald 配额决定；速率限制并不是磁盘配额。
 
-安装和升级把大资产放在仅 root 可访问的 `/var/lib/remnanode-lite-installer`，不使用可能映射到内存的 `/tmp`。五个变更入口都持有 `/run/remnanode-lite-installer/operation.lock`。嵌套安装器会复用并验证同一个打开的文件描述，锁路径不由环境变量覆盖，也没有退出路径会删除锁 inode。
+Native 生命周期状态和缓存归档存放在仅 root 可访问的 `/var/lib/remnanode-lite-installer`。生命周期和配置变更都会持有 `/run/remnanode-lite-installer/operation.lock`。generation 与服务生命周期事务还会由持久化的 `journal.json` 记录边界，因此这类切换在崩溃后会进入明确的 `recovery-required` 状态，而不是留下无法判断的半安装状态。`rnlctl repair` 会使用经过校验的缓存材料，恢复已提交的 generation 和预期的服务状态。配置和 Secret 变更采用原子文件操作及进程内恢复，不属于带 journal 的崩溃安全事务。
 
-修改包、文件或服务的同步子进程会继承这把锁。即使父安装器意外退出，其他变更也会等当前操作结束。下载、归档检查、Node/rw-core 自检、状态查询和 OpenRC 启动链则会先关闭自己的锁描述符，避免短命工具或常驻 supervisor 在安装器完成后继续持锁。
+当前版本和上一版本都是位于 `/usr/local/lib/remnanode-lite/generations` 下的完整 generation，并保留各自对应的修复归档。新的 generation 提交后，比这两者更旧的 generation 及其缓存会被清理。这项设计以有界的磁盘开销换取一次本地回滚能力。磁盘特别小的主机应在升级前检查可用空间，并以 2 GB 整机目标为参考。
 
-Release 归档的上限是 `64 MiB` 压缩体积、`128 MiB` 解压体积和 `64` 个条目。rw-core zip、自定义 core、geo 与 ASN 都有各自的下载和流式解压硬上限。`GEO_ZAPRET_FILE` 与 `IP_ZAPRET_FILE` 本地输入各限制为 `64 MiB`，并在目标目录中原子暂存。单次下载最长 `300s`，另有连接和低速超时；tar 与 unzip 操作最长 `120s`。
+root 生命周期操作使用权限为 `0700` 的私有工作目录，并在操作结束后删除。运维人员提供的安全绝对路径 `TMPDIR` 优先使用，不安全的值会被忽略。否则，bootstrap 和生命周期控制器优先使用 `/var/lib/remnanode-lite-installer/tmp`，再回退到 `/var/tmp`。只有这两个常规位置都不可用时，Go 控制器才会为兼容性最后尝试平台临时目录。正常的 root 操作不会在小型主机可能位于内存中的 `/tmp` 解压临时内容。
 
-升级首先为“现有备份 + `512 MiB`”预留空间。rw-core 下载通过 zip 结构检查后，再分别计算 installer、core、geo 与 ASN 所在文件系统的需求，包括真实归档条目、可选 custom core/ASN、备份、目标暂存和每个文件系统 `64 MiB` 的安全余量。
+bootstrap、生命周期引擎和 release 校验器都将 Native 归档限制为 `512 MiB`。校验最多允许 512 个归档条目、总计 `512 MiB` 的解压后载荷，以及单个不超过 `256 MiB` 的载荷。manifest 和生命周期状态另有各自的小型上限。归档会先复制到仅 root 可访问的私有工作目录再解析，调用方无法在安装期间替换已经检查过的路径。
 
-upgrade 调用 rw-core 安装器时，外层事务是唯一的备份所有者，不会再复制一份相同资产。独立安装器无法完整回滚时，会保留仅 root 可访问的事务目录并返回失败，而不会删除唯一备份。
+Node、`rnlctl`、rw-core、GeoIP、GeoSite、ASN 数据、第三方声明、SBOM 和服务文件共同组成一个 bundle。Native 不存在独立的 core/data 更新器，也不提供自定义运行时资产 URL；磁盘峰值与回滚身份因此始终绑定到同一个 release generation。
 
 生产 `node.env` 必须是普通的非符号链接文件。Go 在设置内存软上限前最多读取 `1 MiB`，并接受最多 `4096` 行和 `256` 个赋值。单行上限也是 `1 MiB`，因此可以迁移旧版最多 `256 KiB` 的内联 Secret。
 
@@ -107,10 +109,10 @@ upgrade 调用 rw-core 安装器时，外层事务是唯一的备份所有者，
 - 解码后的 webhook 使用 `64` 条有界队列和单 worker；队列满时最多等待内部请求的 `30s` deadline，容量未恢复、请求取消或服务关闭时明确返回 `503 + Retry-After`，不会把未接纳事件伪报为成功。
 - torrent report 环形队列最多保留最新 `1024` 条。
 - Xray ready 后释放解码配置树和规范 JSON，仅保留 hash 与运行状态。
-- Debian 与 Alpine 安装器在 `MemTotal <= 512 MiB` 时自动写入 `LOW_MEMORY=1`。
-- OpenRC 校验 cgroup v2 的 `448 MiB` memory、零 swap、1 CPU、256 PID 以及启动 shell 的实际 cgroup 成员关系；controller 缺失或写入未生效时拒绝启动。停止后不依赖 OpenRC 0.62.6 的路径清理，而是将 `stop_post` 自身迁出、通过 `cgroup.kill` 清理精确 service cgroup、最多等待 5 秒确认 `populated=0` 后删除该目录。
+- 受维护的 Docker 和 Native 模板默认设置 `LOW_MEMORY=1`。
+- Alpine/OpenRC 会校验 cgroup v2 的 `448 MiB` memory、零 swap、1 CPU、256 PID 以及启动 shell 的实际 cgroup 成员关系；同时要求可用的 `cpu`、`memory`、`pids` controller、`memory.swap.max`、可写的父级 `cgroup.procs` 与服务 `cgroup.kill`。控制项缺失或写入未生效时拒绝启动。停止后不依赖 OpenRC 0.62.6 的路径清理，而是将 `stop_post` 自身迁出、通过 `cgroup.kill` 清理精确 service cgroup、最多等待 5 秒确认 `populated=0` 后删除该目录。
 
-上述 OpenRC 清理覆盖 init 正常执行 `stop_post` 的停止路径。安装器共享锁可以避免并发写入，但不提供应对 SIGKILL 或掉电的持久化阶段日志（phase journal）；`supervise-daemon` 异常退出后，项目也不承诺自动清理残留 cgroup。原生部署可重新运行安装器或重启主机，容器部署可重新创建容器。
+上述 Alpine/OpenRC 清理适用于 init 正常执行 `stop_post` 的停止路径。生命周期 journal 会记录宿主机文件和服务意图，但无法让异常退出的 `supervise-daemon` 自动移除残留的内核 cgroup。此时应先停止服务的残留进程或重启主机；如果生命周期状态报告操作曾被中断，再运行 `rnlctl repair`。
 
 任何修改请求解码、Xray 配置生命周期、RPC 消息、报告队列或依赖图的提交，都应重新执行该工程门禁并比较阶段峰值。该比较是维护约束，不是发布资料。
 
@@ -124,7 +126,7 @@ upgrade 调用 rw-core 安装器时，外层事务是唯一的备份所有者，
 | Unix server | `5s` | 收到根 context 取消后关闭，失败则 force close |
 | HTTPS server | 整体剩余预算 | deadline 后 force close |
 | systemd | `30s` | `TimeoutStopSec`，为 25 秒应用预算保留约 5 秒外层余量 |
-| OpenRC | `TERM/30/KILL/5` | supervise-daemon 的外层兜底 |
+| Alpine/OpenRC | `TERM/30/KILL/5` | supervise-daemon 的外层兜底 |
 
 整体 deadline 到期会返回聚合错误；外层 service manager 随后可以强杀，不能据此声称所有故障路径都在 25 秒内优雅完成。
 

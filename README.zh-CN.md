@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=18908111338dd91a84e897009e1978ffd93af96f6009ee4b396bd5c4fa56a7bf -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=9a38091f456cbecff27783ed75b08dff854bd8ab1c1727196d63d36f5a6e4b0c -->
 <div align="center">
 
 # Remnanode Lite
@@ -43,7 +43,7 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 | 适用场景 | 已经具备 Docker Engine 与 Compose v2；这是默认方案。 | 无法安装 Docker，或机器不适合承担 Docker daemon 与容器运行时的常驻开销。 |
 | 安装入口 | 下载 Release 附带的 Compose 文件，在 `.env` 或明确的内联 mapping 中填写 Panel Secret。 | 下载并校验一个精确 Release 的 `install.sh`，以 root 运行安装器。 |
 | 更新与回滚 | 选择精确镜像 tag 或 digest，pull 后重建；切回原镜像引用即可回滚。 | 使用 `rnlctl upgrade --to VERSION` 和 `rnlctl rollback`；系统保留一个经过校验的 previous generation。 |
-| 宿主服务 | 需要 Docker Engine daemon 及其容器运行时。 | 不需要 Docker Engine daemon 或容器运行时，但 `remnanode-lite` 仍会作为 systemd 或 OpenRC 后台服务运行。 |
+| 宿主服务 | 需要 Docker Engine daemon 及其容器运行时。 | 不需要 Docker Engine daemon 或容器运行时，但 `remnanode-lite` 仍会作为 systemd 服务运行；符合条件的 Alpine 主机则由 OpenRC 运行。 |
 | 版本选择 | 推荐精确 tag 或 manifest digest；`latest` 与 `preview` 是主动选择的移动通道。 | 只接受精确 `X.Y.Z` 或 `X.Y.Z-rnl.N` Release，不会解析移动镜像通道。 |
 
 两种方式都使用 host networking 并需要 `NET_ADMIN`。不要与使用相同 Panel 或代理端口的其他 Node 同时运行。
@@ -74,19 +74,19 @@ chmod 600 docker-compose.yaml .env
 Compose CLI 会自动读取同目录中的 `.env`。下载的两个文件都选择了该 Release 的精确镜像版本。在 `.env` 中填写 Panel 的节点端口和完整 Secret：
 
 ```env
-NODE_PORT=38329
+NODE_PORT=2222
 SECRET_KEY=PASTE_THE_COMPLETE_PANEL_SECRET_KEY
 ```
 
-Compose 为 `NODE_PORT` 提供的回退值是 `2222`；`38329` 只是示例。无论选择哪个端口，都必须与 Panel 中该节点的端口一致。
+Compose 为 `NODE_PORT` 提供的官方默认值是 `2222`。只有 Panel 中该节点配置了其他端口时才修改它。
 
 已有部署可以继续使用原来的自定义目录，升级时不要求迁移目录。
 
-如果希望保持真正的单文件部署而不创建 `.env`，可以在 `docker-compose.yaml` 中直接用完整值替换 `SECRET_KEY` 插值。下面的示例同时把端口回退值改为 `38329`：
+如果希望保持真正的单文件部署而不创建 `.env`，可以在 `docker-compose.yaml` 中直接用完整值替换 `SECRET_KEY` 插值。下面的示例保留默认节点端口：
 
 ```yaml
 environment:
-  NODE_PORT: "${NODE_PORT:-38329}"
+  NODE_PORT: "${NODE_PORT:-2222}"
   SECRET_KEY: "PASTE_THE_COMPLETE_PANEL_SECRET_KEY"
 ```
 
@@ -107,7 +107,7 @@ docker compose logs --tail=100 remnanode-lite
 
 ## 原生 Linux
 
-当机器无法安装 Docker Engine，或不适合承担 Docker daemon 与容器运行时的开销时，使用 Native bundle。Native 并不表示没有后台服务：`remnanode-lite` 会直接由 systemd 或 OpenRC 运行。以 systemd 的 Rocky Linux 9 为主目标；Rocky Linux 8 和 Debian 12 兼容。OpenRC 为实验性路径，需要可用的 cgroup v2。
+当机器无法安装 Docker Engine，或不适合承担 Docker daemon 与容器运行时的开销时，使用 Native bundle。Native 并不表示没有后台服务：`remnanode-lite` 仍由宿主机的服务管理器运行。以 systemd 的 Rocky Linux 9 为主要目标；Rocky Linux 8 和 Debian 12 兼容。Alpine Linux 3.22.x 也支持 `amd64` 和 `arm64`，但必须是持久化的 `sys` 安装、由发行版 OpenRC 作为 PID 1 运行，并通过文档规定的内核与 cgroup v2 检查。这里并不泛指所有 OpenRC 环境：容器和没有 init 的环境不受支持；以完整系统运行的嵌套或虚拟化环境只有通过同一套宿主机契约后才符合条件。
 
 Native 安装永远不跟随移动通道。先在 GitHub Releases 页面选择一个已经发布的版本，再从同一个精确 Release 下载 `install.sh` 与 `SHA256SUMS`，校验安装器，并明确指定版本：
 
@@ -117,18 +117,37 @@ BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 curl -fLO "${BASE}/install.sh"
 curl -fLO "${BASE}/SHA256SUMS"
-grep '  install.sh$' SHA256SUMS | sha256sum --check --strict -
+grep '  install.sh$' SHA256SUMS | sha256sum -c -
 
-sudo sh ./install.sh --version "$VERSION" --port 38329
+sudo sh ./install.sh --version "$VERSION" --port 2222
 ```
 
 没有已安装的 Secret 时，安装器会安全地在终端中读取 Panel Secret。它会校验并安装一个完整 generation：Node、`rnlctl`、rw-core、GeoIP、GeoSite、ASN 数据和服务定义。启动后执行：
 
 ```bash
-sudo rnlctl status --json
+sudo rnlctl status
 sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
+
+`status` 默认输出便于阅读的生命周期摘要；自动化脚本继续使用 schema 不变的
+`status --json`。`doctor` 在发现问题时会给出汇总和明确的后续命令。全局选项
+`--quiet`/`-q` 与 `--no-color` 可以放在命令中的任意位置。Shell 补全、systemd
+日志时间筛选和升级 dry-run 见 [Native Linux 部署指南](docs/i18n/zh-CN/deployment-native.md#命令行体验)。
+
+Native 的运行参数统一保存在 `/etc/remnanode-lite/node.env`。`rnlctl config`
+直接读取和修改这个文件，并不会维护第二份配置；它只显示允许管理员修改且不含
+Secret 的字段。例如：
+
+```bash
+sudo rnlctl config show
+sudo rnlctl config set NODE_PORT=2222 --apply
+sudo rnlctl secret set --file /root/new-node-secret.key --apply
+```
+
+Secret 命令只从受保护的文件读取，不接受把 Secret 值直接写进命令行。修改端口时，
+还要同步更新 Panel 和宿主机防火墙。校验、停止或 prepared 状态下的操作方式以及
+失败回退规则见[配置说明](docs/i18n/zh-CN/configuration.md#native-配置命令)。
 
 Native bundle 与其对应 Release 使用相同的契约。批量上线前请阅读 [Native Linux 部署指南](docs/i18n/zh-CN/deployment-native.md)，其中包含前置依赖、无人值守与离线安装、精确版本升级、回滚、修复和卸载。
 
@@ -202,6 +221,7 @@ docker compose up -d --no-build --force-recreate
 | 项目 | 当前基线 |
 | --- | --- |
 | Native Linux bundle | 已发布的精确 Release |
+| Native 主机 | 使用 systemd 的 Rocky Linux 8/9 与 Debian 12；使用发行版 OpenRC 且符合条件的 Alpine Linux 3.22.x `sys` 安装 |
 | Node 契约 | `2.8.0` |
 | rw-core | `v26.6.27` |
 | 平台 | `linux/amd64`、`linux/arm64` |

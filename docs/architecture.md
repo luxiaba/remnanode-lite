@@ -72,6 +72,8 @@ Docker and Native Linux deliver the same Node and pinned runtime assets, but the
 
 `rnlctl` is a host administration process, not part of the resident Node. Its transaction engine verifies a complete release bundle, prepares the service definition, changes `current` and `previous` generation links, preserves enabled/running state, and commits only after the selected binary and private health socket pass. A durable journal makes an interrupted mutation visible to `status --json` and recoverable through `repair`. The independent `/usr/local/sbin/rnlctl` binary is never a symlink into the generation being repaired.
 
+`/etc/remnanode-lite/node.env` remains the sole Native runtime-settings source. `rnlctl config` is a deliberately narrow editing layer over that file: it exposes only the six non-secret administrator settings, preserves lifecycle-owned paths, validates the complete candidate, and can restart an active service with a private health check. The Panel Secret is a separate managed file. A failed `--apply` operation makes a best-effort restoration of the changed file and service; it is not a second durable configuration store or a replacement for the lifecycle journal.
+
 This delivery state is separate from the in-memory Xray lifecycle described below. Native generations persist software and service intent; they never persist the complete Panel-provided Xray configuration.
 
 ## 3. Packages and Dependency Direction

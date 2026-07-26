@@ -11,7 +11,7 @@ This document and `internal/contract` jointly define the project's compatibility
 - Repository: `https://github.com/remnawave/node.git`
 - Version: `2.8.0`
 - Commit: `596f015a5c8f876dc9a9d61b6cb78d35bd8e379b`
-- Panel version used for integration verification: `2.8.1` (independent of the project version)
+- Integration verification: a real compatible Panel connection and representative proxy traffic (not a project version or compatibility promise)
 
 Route methods come from the four official controllers. Request and response shapes come from the Zod schemas under `libs/contract/commands`; application errors come from `libs/contract/constants/errors` and `HttpExceptionFilter`. `internal/contract/official-source-manifest.json` records the SHA-256 of every evidence blob and the 26 method/path/controller-decorator entries extracted from the source.
 
@@ -112,7 +112,13 @@ The real-rw-core `v26.6.27` gate at 1 CPU, 448 MiB, and no swap covers a 1k-user
 
 The public server requires TLS 1.3 or later and disables Go's automatic HTTP/2 negotiation to preserve the official connection-handling model. An invalid JWT, unknown route, or wrong HTTP method closes the underlying connection instead of returning an enumerable 401/404/405 body. Request headers are limited to 64 KiB. Real TLS client tests cover normal connection reuse and connection closure after authentication or unknown-request failures.
 
-systemd and OpenRC run under the dedicated `remnanode-lite:remnanode-lite` account. Configuration is `root:remnanode-lite 0640`; state and log directories are `remnanode-lite:remnanode-lite 0750`. The service receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd also narrows the bounding set to those capabilities and enables `NoNewPrivileges`, read-only system paths, namespace/syscall/address-family restrictions, `448 MiB` memory, zero swap, 1 CPU, and 256 tasks. Alpine 3.22 measurements for `supervise-daemon` showed `CapInh/Prm/Eff/Amb=0x1400` and `NoNewPrivs=1`; an `nft` child launched by the service could create the private table.
+systemd and Alpine/OpenRC run the managed Node process under the dedicated `remnanode-lite:remnanode-lite` account. Configuration is `root:remnanode-lite 0640`; state and log directories are `remnanode-lite:remnanode-lite 0750`. The Node process receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd also narrows its bounding set to those capabilities and enables `NoNewPrivileges`, read-only system paths, namespace/syscall/address-family restrictions, `448 MiB` memory, zero swap, 1 CPU, and 256 tasks. On Alpine/OpenRC, `supervise-daemon` remains a root service-manager process; the Node child is launched with `CapInh/Prm/Eff/Amb=0x1400` and `NoNewPrivs=1`, and an `nft` child launched by the Node can create the private table.
+
+Native Alpine support is limited to persistent Alpine Linux 3.22.x `sys`
+installations on `amd64` and `arm64`, with distribution OpenRC as PID 1, Linux
+5.14 or newer, and unified cgroup v2 exposing the exact controls required by the
+service. This is not generic OpenRC support. Preparation alone does not qualify
+a host; activation must pass the fail-closed service check.
 
 Native project assets live in verified generations under `/usr/local/lib/remnanode-lite`; Docker uses container-private image paths under the same project name. Neither deployment takes ownership of generic system Xray paths. One release bundle contains Node, `rnlctl`, rw-core, geo data, ASN data, notices, and service material. The outer archive, strict manifest, architecture, versions, and every payload digest are verified before installation.
 
@@ -175,10 +181,10 @@ The previously recorded TLS/socket and system supply-chain differences are close
 
 A `2.8.0` candidate must be verified as the immutable
 `sha-<40-character-main-commit>` image with the production Compose template on
-native `x86_64`/`amd64`, including its version, a real Panel 2.8.1 connection,
-and real proxy traffic. This operational confirmation stays outside the source
-repository. The container remains bounded to 448 MiB memory, no additional
-container swap, 1 CPU, and 256 PIDs.
+native `x86_64`/`amd64`, including its version, a real compatible Panel
+connection, and representative proxy traffic. This operational confirmation
+stays outside the source repository. The container remains bounded to 448 MiB
+memory, no additional container swap, 1 CPU, and 256 PIDs.
 
 The release workflow runs only from the current `main` HEAD. It resolves that
 commit's `sha-*` candidate, verifies its two runnable Linux manifests and
@@ -188,12 +194,12 @@ promotes the same digest before publication, then verifies the immutable
 Release and reconfirms the exact tag without rebuilding. A plain stable version
 advances `latest`; an `rnl.N` prerelease advances `preview` only.
 
-Additional Native `arm64` runtime coverage, distribution-specific systemd and
-OpenRC installation, repeated 50,000-user load, long soak, and fault injection
+Additional whole-host Native distribution and architecture coverage, repeated
+50,000-user load, long soak, and fault injection
 remain useful follow-up validation. They must not be described as completed
 unless they were actually run.
 
-Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd is the maintained Native service path; OpenRC is experimental and requires verified cgroup v2 controllers.
+Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd is the primary Native service path; Alpine Linux 3.22.x/OpenRC is supported only under the qualified host contract above.
 
 Both maintained production Compose templates use `remnanode-lite` for the
 service, container, and hostname. They interpolate the same explicit runtime
@@ -216,7 +222,7 @@ Verify the pinned official source evidence as well with:
 
 ```bash
 go run ./cmd/contract-source-check \
-  -source /tmp/remnawave-node-official-2.8.0-codex
+  -source /tmp/remnawave-node-official-2.8.0
 ```
 
 To update a pinned contract, confirm `OfficialNodeCommit` and the evidence-directory inventory, then pass `-write` explicitly to regenerate the manifest. Review the manifest diff and rerun the normal contract tests. The checkout may be dirty or point `HEAD` elsewhere because the pinned commit object is the only input; verification fails if the repository does not contain that object.

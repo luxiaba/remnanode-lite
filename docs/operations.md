@@ -27,10 +27,10 @@ docker compose ps
 docker compose logs --tail=100 remnanode-lite
 docker inspect remnanode-lite --format \
   'image={{.Config.Image}} status={{.State.Status}} health={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}'
-ss -H -lntp 'sport = :38329'
+ss -H -lntp 'sport = :2222'
 ```
 
-Replace `38329` with the effective `NODE_PORT`. The Compose healthcheck runs `remnanode-lite healthcheck` inside the container. It connects to the private Unix socket with a short deadline; it does not contact Panel.
+Replace `2222` with the effective `NODE_PORT`. The Compose healthcheck runs `remnanode-lite healthcheck` inside the container. It connects to the private Unix socket with a short deadline; it does not contact Panel.
 
 Check the running identity:
 
@@ -43,16 +43,17 @@ docker exec remnanode-lite remnanode-lite version
 Use the lifecycle view first:
 
 ```bash
+sudo rnlctl status
 sudo rnlctl status --json
 sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 sudo rnlctl logs core-errors --lines 100
-ss -H -lntp 'sport = :38329'
+ss -H -lntp 'sport = :2222'
 ```
 
-`status --json` returns a stable machine-readable model with the deployment state, current and previous generation IDs, version, service manager, enabled/active flags, repair capability, pending operation, and problems. It exits non-zero for a degraded or recovery-required installation.
+Bare `rnlctl status` now returns a consistent human-readable lifecycle summary instead of proxying raw service-manager output. Its layout is not a parsing interface. `status --json` retains its existing machine-readable schema with deployment state, current and previous generation IDs, version, service manager, enabled/active flags, repair capability, pending operation, and problems. Both exit non-zero for a degraded or recovery-required installation.
 
-`doctor` verifies lifecycle state, generation manifests and file digests, generation links, configuration, the Secret, service state, internal health, and cached repair material. It does not connect to Panel or generate proxy traffic.
+`doctor` verifies lifecycle state, generation manifests and file digests, generation links, configuration, the Secret, service state, internal health, and cached repair material. Human output ends with a summary and deterministic `Next` suggestions for known failures; `doctor --json` keeps its existing schema. It does not connect to Panel or generate proxy traffic.
 
 Low-level service-manager views remain useful:
 
@@ -62,9 +63,21 @@ sudo systemctl --no-pager --full status remnanode-lite.service
 sudo systemctl show remnanode-lite.service \
   --property=ActiveState,SubState,MainPID,MemoryCurrent,MemoryPeak,TasksCurrent
 
-# OpenRC (experimental)
+# Alpine/OpenRC
 sudo rc-service remnanode-lite status
 ```
+
+Use these service-manager commands when you need their full low-level output. Scripts that previously parsed bare `rnlctl status` should move to `rnlctl status --json`.
+
+## `rnlctl` output and automation
+
+`--quiet`/`-q` and `--no-color` are global and may appear anywhere in the command. Quiet mode suppresses successful mutation output, `config check` success, and human `status`/`doctor`. It does not suppress help, version, `config show`/`get`, logs, completion, dry-run plans, JSON, or errors.
+
+Human status and doctor output use restrained color only on a TTY. `--no-color`, a non-empty `NO_COLOR`, `TERM=dumb`, or redirected output disables ANSI sequences.
+
+Exit codes are normally `0` for success, `1` for runtime failure or an unhealthy result, and `2` for usage errors. An `absent` status is valid and returns `0`; scripts that require an installation must inspect `installed` or `deployment` in JSON. `logs` passes through the exit code from `journalctl` or `tail` once the reader starts, including `128 + signal` when signaled.
+
+For Bash, Zsh, and Fish completion, run `rnlctl completion <shell>` and install the emitted script as described in the [Native deployment guide](deployment-native.md#shell-completion). The command only writes the script to stdout; it does not modify completion directories or shell startup files.
 
 ## Logs
 
@@ -74,7 +87,7 @@ sudo rc-service remnanode-lite status
 | --- | --- | --- |
 | Docker | `docker compose logs -f remnanode-lite` | Docker `json-file`, `2 MiB x 2` in maintained Compose |
 | Native systemd | `sudo rnlctl logs node --follow` | Host journald policy |
-| Native OpenRC | `sudo rnlctl logs node --follow` | `/var/log/remnanode-lite/openrc.log` and `.err.log` |
+| Native Alpine/OpenRC | `sudo rnlctl logs node --follow` | `/var/log/remnanode-lite/openrc.log` and `.err.log` |
 
 On a small systemd host, set an appropriate host-wide journald quota and monitor it:
 
@@ -97,11 +110,14 @@ docker exec -it remnanode-lite \
 Native deployment uses `rnlctl`:
 
 ```bash
+sudo rnlctl logs node --since 15m --lines 100
 sudo rnlctl logs core --follow
 sudo rnlctl logs core-errors --follow
 ```
 
-The Native files are `/var/log/remnanode-lite/xray.out.log` and `xray.err.log`. Each stream keeps one current file and one `.1` file with a 4 MiB rotation threshold. Docker places its core log directory on a 28 MiB tmpfs, so recreating the container clears those logs and consumes no persistent disk.
+`--lines` defaults to `50` and accepts `1..100000`. `--since` accepts a positive Go-style duration such as `15m` or `2h`, not an absolute date or `1d`. It can be combined with `--lines` and `--follow`, and is available only for `node` on systemd. OpenRC Node logs and the file-backed `core`/`core-errors` sources reject it.
+
+Systemd applies `--lines N` to the unit as a whole. OpenRC reads N lines from each of `openrc.log` and `openrc.err.log`; core sources read one current file each. The Native core files are `/var/log/remnanode-lite/xray.out.log` and `xray.err.log`. Each stream keeps one current file and one `.1` file with a 4 MiB rotation threshold, but a normal read does not backfill from `.1`. `--follow` uses `tail -F` and continues across later rotation. Docker places its core log directory on a 28 MiB tmpfs, so recreating the container clears those logs and consumes no persistent disk.
 
 ## Start and stop
 
@@ -174,8 +190,12 @@ The command above removes dangling images by default. Avoid broad prune options 
 Native upgrades accept exact versions only:
 
 ```bash
+sudo rnlctl upgrade --to 2.8.0-rnl.2 --dry-run
+sudo rnlctl upgrade --to 2.8.0-rnl.2 --dry-run --json
 sudo rnlctl upgrade --to 2.8.0-rnl.2
 ```
+
+Dry-run requires root, an existing clean installation, and no pending lifecycle journal. With `--to`, it downloads and statically verifies the complete candidate, then briefly holds the lifecycle lock while checking current state and known host preconditions. It does not create a generation, cache, or transaction journal; change the service; execute the candidate binary; run target health checks; or keep the bundle. `--json` is valid only with `--dry-run`. The check uses temporary disk but does not reserve or guarantee space for the real upgrade, and a successful plan does not guarantee that the later upgrade will succeed. Local `--bundle` plus `--sha256` and `--bundle-root` candidates support the same dry-run.
 
 The complete Node/runtime bundle becomes a new generation. The transaction preserves the service's enabled and active state, validates the selected binary, and waits for internal health before committing. It retains the former generation as `previous`.
 
@@ -209,14 +229,29 @@ docker compose config --quiet
 docker compose up -d --no-build --force-recreate
 ```
 
-For Native Linux, keep `/etc/remnanode-lite/node.env` and `secret.key` owned by `root:remnanode-lite` and not writable by the service. Validate before restarting:
+For Native Linux, `/etc/remnanode-lite/node.env` is the only runtime-settings source. `rnlctl config` reads and updates it directly and shows only six non-secret administrator keys. It never displays the Secret or managed internal fields.
+
+Inspect, validate, and change an active installation with:
 
 ```bash
-sudo rnlctl doctor
-sudo rnlctl restart
+sudo rnlctl config show
+sudo rnlctl config check
+sudo rnlctl config set NODE_PORT=2222 --apply
 ```
 
-Secret rotation requires an atomic replacement of `/etc/remnanode-lite/secret.key`; see [Native deployment](deployment-native.md#change-the-port-or-secret). A non-empty inline `SECRET_KEY` is not allowed in a managed Native configuration.
+`config show` and `get` report the values stored in `node.env`, not defaults computed by the daemon. `config check` is read-only and includes managed `node.env`/`secret.key` permissions. `set` and `unset` validate the complete candidate before writing. With `--apply`, they restart the active service and wait for internal health; a failure after a change triggers a best-effort attempt to restore the previous file and service. This is not a durable or crash-safe transaction. A stopped or prepared installation rejects `--apply` before writing, so change it without `--apply` and then use `rnlctl start` or `rnlctl activate`.
+
+Manual edits are still supported: preserve `root:remnanode-lite 0640`, run `rnlctl config check`, then run `rnlctl config apply` on an active service. `config apply` cannot roll back a manual edit because it did not capture the previous file.
+
+Rotate the Secret from a protected regular file; it is never accepted as a value argument or printed:
+
+```bash
+sudo rnlctl secret set --file /root/new-node-secret.key --apply
+```
+
+Remove the source file afterward. Secret replacement has the same active-service restriction and best-effort recovery behavior as `config set --apply`. A non-empty inline `SECRET_KEY` is not allowed in a managed Native configuration. See [Native deployment](deployment-native.md#change-the-port-or-secret) for the complete procedure.
+
+`config check` and `config apply` do not contact Panel or test proxy traffic. Confirm Panel state and representative traffic separately.
 
 When changing `NODE_PORT`, update the Panel record and host firewall to the same value. Both deployment methods use host networking; there is no port translation layer to compensate for a mismatch.
 
@@ -243,7 +278,7 @@ journalctl --disk-usage
 df -h
 ```
 
-OpenRC uses `/sys/fs/cgroup/openrc.remnanode-lite` under the detected cgroup v2 root. The service checks `memory.max=469762048`, `memory.swap.max=0`, `cpu.max=100000 100000`, and `pids.max=256` before starting.
+On a supported Alpine/OpenRC host, the service creates `openrc.remnanode-lite` under the detected unified cgroup v2 root. Before starting, it checks `memory.max=469762048`, `memory.swap.max=0`, `cpu.max=100000 100000`, `pids.max=256`, its own cgroup membership, writable parent `cgroup.procs`, and writable service `cgroup.kill`.
 
 Do not build the project on a production host constrained to 2 GB of disk. The Go toolchain, module cache, BuildKit cache, and intermediate assets can exceed the runtime budget.
 
@@ -273,7 +308,7 @@ The value decodes, but it is not the complete Secret for this Node. A JWT, publi
 Another host process owns the configured port:
 
 ```bash
-ss -H -lntp 'sport = :38329'
+ss -H -lntp 'sport = :2222'
 ```
 
 Stop the conflicting service or change the Node port in Panel, host configuration, and firewall together. Do not run the official and Lite containers on the same host ports.
@@ -303,9 +338,9 @@ Restore the repository-supplied Compose capabilities or repair the managed Nativ
 
 The Node continues, but plugin `asList` resolves to an empty list. Docker and Native release bundles include one pinned database. Recreate the container from a verified image, or run `rnlctl repair`/an exact Native upgrade; do not download an unpinned database into the active generation.
 
-### OpenRC cgroup check fails
+### Alpine/OpenRC host qualification fails
 
-The experimental OpenRC service requires writable cgroup v2 memory, CPU, and PID controllers plus `cgroup.kill`. Repair the host delegation or use a supported systemd/Docker deployment. Do not bypass the start check because the documented resource and cleanup behavior would no longer hold.
+Native Alpine support requires a persistent Alpine Linux 3.22.x `sys` installation, distribution OpenRC as PID 1, Linux 5.14 or newer, and unified cgroup v2 with usable CPU, memory, PID, swap-limit, parent-membership, and service-kill controls. A successful `--prepare-only` install does not prove these runtime conditions because it does not start the service. If `activate` or `start` rejects the host, use an environment that exposes the complete contract or choose a supported systemd/Docker deployment. Do not bypass the check; the documented resource and cleanup behavior would no longer hold.
 
 ### Native mutation says repair is required
 

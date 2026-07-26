@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+
+	projectversion "github.com/luxiaba/remnanode-lite/internal/version"
 )
 
 func TestClassifyRelease(t *testing.T) {
@@ -42,17 +45,24 @@ func TestClassifyRelease(t *testing.T) {
 
 func TestRunMetadata(t *testing.T) {
 	var stdout, stderr strings.Builder
-	if err := runMetadata([]string{"--version", "2.8.0"}, &stdout, &stderr); err != nil {
+	if err := runMetadata([]string{"--version", projectversion.Version}, &stdout, &stderr); err != nil {
 		t.Fatalf("runMetadata(): %v; stderr=%s", err, stderr.String())
 	}
-	want := "version=2.8.0\ntag=2.8.0\nchannel=latest\nprerelease=false\nmake_latest=true\n"
+	metadata, err := classifyRelease(projectversion.Version, projectversion.ContractVersion)
+	if err != nil {
+		t.Fatalf("classify source release: %v", err)
+	}
+	want := fmt.Sprintf(
+		"version=%s\ntag=%s\nchannel=%s\nprerelease=%t\nmake_latest=%t\n",
+		metadata.Version, metadata.Tag, metadata.Channel, metadata.Prerelease, metadata.MakeLatest,
+	)
 	if stdout.String() != want {
 		t.Fatalf("runMetadata() output = %q, want %q", stdout.String(), want)
 	}
 
 	stdout.Reset()
 	stderr.Reset()
-	if err := runMetadata([]string{"--version", "2.8.1-rnl.1"}, &stdout, &stderr); err == nil {
+	if err := runMetadata([]string{"--version", projectversion.Version + "-mismatch"}, &stdout, &stderr); err == nil {
 		t.Fatal("runMetadata() accepted a version that differs from source")
 	}
 

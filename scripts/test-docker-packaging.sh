@@ -223,7 +223,7 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
   compose_env="${packaging_tmp_dir}/compose.env"
   printf '%s\n' \
     "REMNANODE_IMAGE=${production_image}" \
-    'NODE_PORT=38329' \
+    'NODE_PORT=12345' \
     'NODE_BIND_ADDR=127.0.0.1' \
     'SECRET_KEY=packaging-check' \
     'LOW_MEMORY=1' \

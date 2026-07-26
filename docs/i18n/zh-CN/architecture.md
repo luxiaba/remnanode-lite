@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=3b7c301a777aabe5446730ace4b0e66cf51d480f088d6646ffd752dd18aab886 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d5e10e04646ff547899040110f434fc87dcedea9cba8e44993246690c0a09e91 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -69,6 +69,16 @@ flowchart LR
 
 控制流通常从 Panel 进入，数据流量则直接由 rw-core 在宿主网络中处理。nftables 与 socket destroy 是内核副作用，只有在 Linux 且具备 `CAP_NET_ADMIN` 时可用。
 
+### 2.1 部署与 Native 生命周期边界
+
+Docker 与 Native Linux 交付相同的 Node 和锁定版本的运行时资产，但它们管理宿主机生命周期的方式不同。容器是可丢弃的：Compose 选择一个镜像，重建后由 Panel 重新下发运行状态。Native Linux 则通过 `rnlctl` 在 `/usr/local/lib/remnanode-lite` 下选择一个经过验证的 generation，并将生命周期状态记录在 `/var/lib/remnanode-lite-installer`。
+
+`rnlctl` 是宿主机管理进程，不属于常驻 Node 本身。它的事务引擎会校验完整 Release bundle、准备服务定义、切换 `current` 和 `previous` generation 链接、保留启用与运行状态，并且只有在选中的二进制文件和私有 health socket 都通过后才提交。持久 journal 会让中断的操作显示在 `status --json` 中，并可通过 `repair` 恢复。独立的 `/usr/local/sbin/rnlctl` 是 root 所有的普通文件，不会作为待修复 generation 的符号链接。
+
+`/etc/remnanode-lite/node.env` 仍是 Native 运行参数的唯一事实源。`rnlctl config` 只是其上受限的编辑层：它只开放 6 个不含 Secret 的管理员字段，保留生命周期管理的路径，校验完整候选配置，并可以重启 active 服务后检查私有 health。Panel Secret 由单独的受管文件保存。带 `--apply` 的操作失败时会尽力恢复改动的文件和服务；它不是第二份持久化配置存储，也不能替代生命周期 journal。
+
+这套交付状态与下文的内存中 Xray 生命周期彼此独立。Native generation 保存的是软件与服务意图，不会持久化 Panel 下发的完整 Xray 配置。
+
 ## 3. 包与依赖方向
 
 组合根位于 [`cmd/remnanode-lite/main.go`](../../../cmd/remnanode-lite/main.go)。它创建具体组件并把小接口连接起来。运行时包之间没有全局 service locator，也没有插件式动态装载。
@@ -78,6 +88,8 @@ flowchart LR
 | `cmd/remnanode-lite` | 生产 CLI、依赖装配、daemon 启动与整体关闭 |
 | `cmd/asn-builder` | 离线构建低内存 ASN 二进制索引 |
 | `cmd/contract-probe` | 对官方和候选 Node 做受控黑盒契约比较 |
+| `cmd/rnlctl` | Native 宿主机生命周期管理 CLI |
+| `cmd/release-tool` | 确定性运行时资产物化、Native bundle/SBOM 构建与校验 |
 | `internal/config` | 有界配置读取、环境覆盖、默认值和 Secret 文件读取 |
 | `internal/secret` | 解码 Panel `SECRET_KEY`，提取 CA、JWT 公钥和 Node 证书/私钥 |
 | `internal/auth` | RS256 JWT 签名、`exp`/`nbf` 和可选身份 claim 校验 |
@@ -98,6 +110,7 @@ flowchart LR
 | `internal/bodylimit` | 原始及解压后请求体上限、压缩解码器容量控制 |
 | `internal/executil` | 带 context、输出上限和可靠收尾的外部命令执行器 |
 | `internal/doctor` | 原生部署的配置、资产、capability 与工具自检 |
+| `internal/rnlctl` | Native generation、事务 journal、服务管理器、配置操作、修复与卸载引擎 |
 | `internal/version` | 项目发行版本与向 Panel 报告的契约版本 |
 | `internal/contract` | 独立的官方契约证据模型，不参与 daemon 运行路径 |
 

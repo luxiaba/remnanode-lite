@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=1c1ff677242a16c576b98fe7a4d402abc5b135bc1b7e5c8a9942e32e4602cb6f -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=e5016d305e4b3c3f86435781d855509ad4eb53d1958decdb726fc19b94d65171 -->
 
 # 发布 Remnanode Lite
 
@@ -108,25 +108,26 @@ ghcr.io/luxiaba/remnanode-lite:sha-<完整 40 位 main commit>
 - 用户、插件、统计和生命周期操作符合本次变更；
 - 没有非预期重启、OOM 或关闭异常。
 
-若 Native 交付有改动，还应在受影响的 systemd 或 OpenRC 平台测试候选 bundle。请明确实际验证过的架构和发行版；一台机器不能代表全部 Linux 目标。
+若 Native 交付有改动，还应在受影响的 systemd 或符合条件的 Alpine/OpenRC 平台测试候选 bundle。请明确实际验证过的架构、发行版、init 系统和生命周期路径；一台机器不能代表全部 Linux 目标。Alpine 支持结论必须来自持久化的 `sys` 安装、作为 PID 1 运行的发行版 OpenRC，以及完整通过的文档 cgroup v2 契约。容器、没有 init 的环境和受限嵌套环境可以证明拒绝行为，但不能用于确认主机受到支持。
 
 验收记录属于运维数据。不要把主机清单、地址、Panel 信息、Secret、日志、容器标识或 smoke 输出提交到仓库。
 
 ## 4. 运行 Release Workflow
 
-打开 **Actions -> release -> Run workflow**，选择 `main`，填写精确的源码版本。例如：
+打开 **Actions -> release -> Run workflow**，选择 `main`，填写精确的源码版本。预发布版的输入形式如下：
 
 ```text
-version: 2.8.0
+version: X.Y.Z-rnl.N
 ```
 
 等价的 GitHub CLI 命令为：
 
 ```bash
+VERSION="<prepared-source-version>"
 gh workflow run release.yml \
   --repo luxiaba/remnanode-lite \
   --ref main \
-  -f version=2.8.0
+  -f "version=${VERSION}"
 ```
 
 workflow 会依次完成：
@@ -212,7 +213,7 @@ Native 安装保留一个已验证的上一代，可使用 `rnlctl rollback`。�
 - [ ] `dev -> main` pull request 已通过必需检查并完成审查。
 - [ ] 当前 `main` 提交的 `ci` 和 `candidate` 均成功。
 - [ ] 精确 `sha-<commit>` 镜像已通过真实 Panel 与流量验收。
-- [ ] Native 交付有改动时已完成相应测试。
+- [ ] Native 变更已在受影响的服务管理器和架构路径上完成测试；首次确认 Alpine 支持时使用了持久化完整虚拟机。
 - [ ] 从 `main` 以精确源码版本发起了 release workflow。
 - [ ] 已发布 Release 显示 **Immutable**，且 `gh release verify` 成功。
 - [ ] 精确镜像标签指向 immutable Release 的 `release-index.json` 中记录的 digest。

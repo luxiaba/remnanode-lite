@@ -98,7 +98,23 @@ func Load(dotenvPath string) (Config, error) {
 			values[key] = value
 		}
 	}
+	return configFromValues(values, true, true)
+}
 
+// ParseData validates environment-style configuration data without consulting
+// the caller's process environment. Native lifecycle tools use it so an
+// administrator's exported variables cannot change what is being checked.
+// When requireSecret is false, an otherwise valid prepared installation may
+// omit its Secret until activation.
+func ParseData(data []byte, requireSecret bool) (Config, error) {
+	values, err := parseDotEnvData("node.env", data)
+	if err != nil {
+		return Config{}, err
+	}
+	return configFromValues(values, requireSecret, false)
+}
+
+func configFromValues(values map[string]string, requireSecret, generateInternalToken bool) (Config, error) {
 	nodePort, err := requiredInt(values, "NODE_PORT")
 	if err != nil {
 		return Config{}, err
@@ -110,18 +126,21 @@ func Load(dotenvPath string) (Config, error) {
 	secretKey := strings.TrimSpace(values["SECRET_KEY"])
 	if secretKey == "" {
 		secretKey, err = loadSecretFromFile(values)
-		if err != nil {
+		if err != nil && (requireSecret || !errors.Is(err, os.ErrNotExist)) {
 			return Config{}, err
 		}
+		if err != nil {
+			secretKey = ""
+		}
 	}
-	if secretKey == "" {
+	if secretKey == "" && requireSecret {
 		return Config{}, errors.New("SECRET_KEY or SECRET_KEY_FILE is required")
 	}
 
 	internalSocketPath := optionalString(values, "INTERNAL_SOCKET_PATH", DefaultInternalSocketPath)
 
 	internalRESTToken := optionalString(values, "INTERNAL_REST_TOKEN", "")
-	if internalRESTToken == "" {
+	if internalRESTToken == "" && generateInternalToken {
 		internalRESTToken, err = randomToken(48)
 		if err != nil {
 			return Config{}, err
@@ -189,6 +208,13 @@ func parseDotEnv(path string) (map[string]string, error) {
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 
+	return parseDotEnvData(path, raw)
+}
+
+func parseDotEnvData(path string, raw []byte) (map[string]string, error) {
+	if len(raw) > maxDotEnvBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", path, maxDotEnvBytes)
+	}
 	values := make(map[string]string, 32)
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
 	scanner.Buffer(make([]byte, 64<<10), maxDotEnvBytes)

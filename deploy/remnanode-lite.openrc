@@ -39,7 +39,7 @@ pids.max 256
 "
 
 depend() {
-	need net
+	need cgroups net
 	after firewall
 }
 

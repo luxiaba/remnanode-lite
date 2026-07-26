@@ -4,6 +4,65 @@
 
 This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and focuses on changes that matter to users and operators. GitHub Releases provide the full diff for each published version.
 
+## [2.8.0-rnl.1] - 2026-07-25
+
+This preview keeps the verified official Node `2.8.0` contract and focuses on
+Native Linux administration, lifecycle recovery, and qualified Alpine support.
+
+### Added
+
+- Added `rnlctl config show|get|set|unset|check|apply` for validated edits to the
+  six administrator-controlled Native settings. `rnlctl secret set --file`
+  rotates the Panel Secret without placing it in command arguments or output.
+- Added exact-release upgrade preflight with human and JSON plans through
+  `rnlctl upgrade --to VERSION --dry-run`. It verifies the complete candidate
+  and current host state without changing generations or service state.
+- Added Bash, Zsh, and Fish completion, global `--quiet`/`-q` and `--no-color`
+  controls, and support for the standard `NO_COLOR` convention.
+- Added systemd Node-log filtering with `rnlctl logs node --since DURATION`.
+- Added qualified Native support for persistent Alpine Linux 3.22.x `sys`
+  installations on `amd64` and `arm64`, with distribution OpenRC as PID 1,
+  Linux 5.14 or newer, and the documented unified cgroup v2 controls.
+
+### Changed
+
+- Bare `rnlctl status` now prints a stable human-oriented lifecycle summary
+  instead of proxying raw service-manager output. Automation must continue to
+  use the unchanged `status --json` contract.
+- `rnlctl doctor` now ends with a concise result summary and deterministic next
+  steps for known failures. Node and rw-core logs share one documented command
+  surface across systemd and OpenRC.
+- Configuration and Secret changes validate the full candidate, preserve the
+  lifecycle lock, use atomic file replacement, and attempt to restore the prior
+  file and active service when `--apply` fails.
+- Upgrade validates the staged Node binary before stopping an active service.
+  Uninstall removes only the managed systemd hardening drop-in and preserves
+  local override files or unusual directory objects.
+
+### Fixed
+
+- Prevented a failed upgrade to a retained generation from overwriting or
+  deleting the repair cache still referenced by committed lifecycle state.
+- Preserved a committed upgrade generation, its verified repair cache, and the
+  recovery journal when rollback cannot durably restore the previous state.
+- Rejected invalid UTF-8, whitespace, control characters, and literal `\n` in
+  `rnlctl config set` values so CLI validation and daemon dotenv parsing cannot
+  disagree or emit terminal control data.
+- OpenRC now waits for the Alpine `cgroups` service and no longer treats the
+  OpenRC-internal `checkpath` helper as a command in the administrator's
+  normal `PATH`.
+- Failed host commands now include genuinely bounded diagnostic output, so
+  OpenRC and systemd startup errors retain the underlying service failure
+  reason without allowing command output to grow memory without limit.
+- Lifecycle operations and `logs node` now use the same service-manager
+  selection policy when systemd and OpenRC client tools coexist on a recovery
+  host without runtime markers.
+- Release validation now rejects an existing exact tag that targets another
+  source commit while preserving idempotent reruns from the tagged commit.
+- Aligned Native configuration, lifecycle recovery, CLI help, release state,
+  and their English, Chinese, and Russian documentation with the implemented
+  behavior. CI now installs both non-default completion runtimes it tests.
+
 ## [2.8.0] - 2026-07-22
 
 This stable release implements the official Node `2.8.0` contract and adds the
@@ -65,13 +124,14 @@ and bundles and advances the stable GHCR and GitHub `latest` channels.
 ## Pre-release implementation history
 
 This entry covers the first independent release line of
-`luxiaba/remnanode-lite`. It implements the official Node 2.8.0 contract.
-Panel 2.8.1 is used for integration testing but does not determine the project
-version.
+`luxiaba/remnanode-lite`. It implements the official Node 2.8.0 contract. Real
+Panel integration is a release acceptance step, but no particular Panel
+version defines the project version or compatibility promise.
 
 The release candidate passed GitHub CI, multi-architecture image and
-attestation checks, and maintainer verification with a real Panel 2.8.1
-connection and real proxy traffic under the maintained Compose limits.
+attestation checks, and maintainer verification with a real compatible Panel
+connection and representative proxy traffic under the maintained Compose
+limits.
 Operational test data is intentionally not stored in the source repository.
 
 ### Added
