@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=9a38091f456cbecff27783ed75b08dff854bd8ab1c1727196d63d36f5a6e4b0c -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=ea3dd4693680b4b251091ee84bdc848207a96cc09bbeebafafc37c95e966bfe5 -->
 <div align="center">
 
 # Remnanode Lite
@@ -131,9 +131,11 @@ sudo rnlctl logs node --lines 100
 ```
 
 `status` 默认输出便于阅读的生命周期摘要；自动化脚本继续使用 schema 不变的
-`status --json`。`doctor` 在发现问题时会给出汇总和明确的后续命令。全局选项
-`--quiet`/`-q` 与 `--no-color` 可以放在命令中的任意位置。Shell 补全、systemd
-日志时间筛选和升级 dry-run 见 [Native Linux 部署指南](docs/i18n/zh-CN/deployment-native.md#命令行体验)。
+`status --json`。`doctor` 在发现问题时会给出汇总和明确的后续命令。长时间操作会
+根据交互终端或重定向日志自动调整进度显示。全局选项 `--quiet`/`-q`、
+`--no-color` 与 `--progress auto|plain|never` 可以放在 `rnlctl` 命令中的任意位置；
+`install.sh` 也接受相同的进度模式。Shell 补全、输出规则、信号处理、systemd 日志
+时间筛选和升级 dry-run 见 [Native Linux 部署指南](docs/i18n/zh-CN/deployment-native.md#命令行体验)。
 
 Native 的运行参数统一保存在 `/etc/remnanode-lite/node.env`。`rnlctl config`
 直接读取和修改这个文件，并不会维护第二份配置；它只显示允许管理员修改且不含

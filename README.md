@@ -132,11 +132,14 @@ sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
 
-`status` now prints a compact lifecycle summary for people; scripts should keep
+`status` prints a compact lifecycle summary for people; scripts should keep
 using the unchanged `status --json` model. `doctor` ends with a summary and
-specific next commands when it finds a problem. Global `--quiet`/`-q` and
-`--no-color` options may appear anywhere in a command. Shell completion,
-systemd log time filters, and upgrade dry-runs are covered in the
+specific next commands when it finds a problem. Long operations adapt their
+progress to interactive terminals or redirected logs. Global `--quiet`/`-q`,
+`--no-color`, and `--progress auto|plain|never` options may appear anywhere in
+an `rnlctl` command; `install.sh` accepts the same progress modes. Shell
+completion, output behavior, signal handling, systemd log time filters, and
+upgrade dry-runs are covered in the
 [Native Linux guide](docs/deployment-native.md#command-line-experience).
 
 Native runtime settings live in `/etc/remnanode-lite/node.env`; `rnlctl config`

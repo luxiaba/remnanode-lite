@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=afdf11acd5a52ee8c407a0ecd5ffe7c47edcbc4c0bb6e007b09a3bf22733b29a -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=4c31702eebc5690cfd7353a760d6b0021b1090cf656a10c280abd57ff3a96a1f -->
 
 # 运维与故障排查
 
@@ -61,9 +61,28 @@ sudo rc-service remnanode-lite status
 
 ## `rnlctl` 输出与自动化
 
-`--quiet`/`-q` 和 `--no-color` 是全局选项，可以放在命令中的任意位置。quiet 会隐藏成功的变更提示、`config check` 成功提示和 human `status`/`doctor`；不会隐藏 help、version、`config show`/`get`、日志、补全、dry-run 计划、JSON 或错误。
+`--quiet`/`-q`、`--no-color` 和 `--progress auto|plain|never` 都是全局选项，
+可以放在 `rnlctl` 命令中的任意位置。进度写入 stderr，最终结果和命令数据写入 stdout；
+错误也写入 stderr。
 
-human status 和 doctor 只在 TTY 上使用克制的颜色。指定 `--no-color`、`NO_COLOR` 为非空值、`TERM=dumb` 或重定向输出时，不会出现 ANSI 转义序列。
+`auto` 是默认模式：stderr 是 TTY 时实时刷新，否则输出稳定的逐阶段文本；
+`TERM=dumb` 也会选择 plain 输出。`plain` 强制使用不重写光标的逐行进度，`never`
+只隐藏进度。只有能够确定总大小的传输才显示百分比、速率和预计剩余时间。生命周期阶段
+只说明实际工作，不表示整体完成百分比，也不是稳定的解析接口。
+
+quiet 会覆盖显式选择的进度模式，并隐藏成功的变更提示、`config check` 成功提示和
+human `status`/`doctor`；不会隐藏 help、version、`config show`/`get`、日志、补全、
+dry-run 计划、JSON 或错误。JSON 输出会关闭进度。
+
+面向人的输出只在对应输出流是 TTY 时使用克制的颜色：status 和 doctor 检查 stdout，
+进度检查 stderr。指定 `--no-color`、`NO_COLOR` 为非空值或 `TERM=dumb` 时，两个输出流
+都不使用颜色；被重定向的输出流也不会包含颜色转义序列。
+
+第一次收到 `SIGINT`、`SIGTERM`、`SIGHUP` 或 `SIGQUIT` 时，当前操作会尝试安全取消，
+清理或回滚所需的主机命令和健康检查受一分钟恢复期限约束。本地文件操作可能会先完成
+当前这个有界步骤再退出。Ctrl-C 会在这次尝试后返回 `130`。第一个信号送达后会恢复
+操作系统的默认处理方式，因此第二次信号可以立即强制退出；如有必要，随后检查
+`status --json` 并运行 `repair`。
 
 退出码通常为：成功 `0`，运行失败或结果不健康 `1`，用法错误 `2`。`absent` 是有效的 status，会返回 `0`；要求必须已安装的脚本还要检查 JSON 的 `installed` 或 `deployment`。`logs` 启动 `journalctl` 或 `tail` 后会透传其退出码，被信号终止时也可能返回 `128 + signal`。
 
@@ -161,6 +180,9 @@ sudo rnlctl rollback
 ```
 
 dry-run 需要 root、已有且状态干净的安装，并且不能存在待处理的生命周期 journal。使用 `--to` 时，它会完整下载并静态校验候选，然后短暂持有生命周期锁，检查当前状态和已知宿主机前置条件。它不会创建 generation、cache 或事务 journal，不会修改服务、执行候选二进制、运行目标健康检查或保留 bundle。`--json` 只能与 `--dry-run` 同时使用。检查会使用临时磁盘，但不会预留或保证真实升级的空间；预检成功也不代表后续升级一定成功。本地 `--bundle` 加 `--sha256` 和 `--bundle-root` 同样支持 dry-run。
+
+普通文本模式的预检和升级会报告精确 Release 选择、下载、校验以及实际执行的生命周期阶段。
+只有总大小已知的下载才显示百分比和 ETA；JSON dry-run 从不包含进度输出。
 
 升级把完整 Node/runtime bundle 作为新 generation，并把旧 generation 保留为 previous。若状态显示 `recovery-required`：
 
