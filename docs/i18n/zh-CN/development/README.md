@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=881e1540a4f1afcbff85ba69f218e680f41bb17f26666e18ccb8d95ea887d91f -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=bd2603c30dc34c89013b52f0099d7119bb7be819957c80bc7d0f03f9dbb12046 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -28,7 +28,7 @@
 - Bash 4 或更高版本；CI 与安装脚本建议 Bash 5。macOS 自带 Bash 3.2 不支持脚本使用的 `${var,,}` 等语法。
 - `go.mod` 中 `toolchain` 指定的完整 Go 版本，当前为 Go `1.26.5`。
 - `gofmt`，随 Go 工具链安装。
-- C 编译器与可用的 CGO；`check-go.sh` 无条件运行 race detector。macOS 安装 Xcode Command Line Tools，Linux 安装对应 build toolchain。
+- C 编译器与可用的 CGO；`check-go.sh` 会对 `./internal/...` 和 daemon 命令运行 race detector。macOS 安装 Xcode Command Line Tools，Linux 安装对应 build toolchain。
 - GNU `timeout`；供应链和安装器检查会直接调用该命令。macOS 可安装 Homebrew `coreutils` 并把 `$(brew --prefix coreutils)/libexec/gnubin` 加入 `PATH`。
 
 推荐使用与 CI 完全相同的 Go patch 版本。普通 `go test` 可能允许 Go 自动下载

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=e12aa428f4f1d200ab97ed7924bb0561d7262ce2abb80d424d63b7e2915cc550 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=3394860dbc826c12536d504c926ee9afa7bd424e5e40d866ebf9a0fe58174f3a -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -648,7 +648,7 @@ Node 只拥有固定的项目表和自己创建的 rw-core 进程组，不应修
 架构约束主要由可执行测试而不是文档自证：
 
 - 常规：`go test ./...`
-- 并发：`go test -race ./...`
+- 并发：`go test -race ./internal/... ./cmd/remnanode-lite`
 - 静态：`go vet ./...`、`gofmt`、`go mod tidy -diff`
 - 官方源码证据：`go run ./cmd/contract-source-check -source <official-git-repository>`
 - nftables 集成：`REMNANODE_NFT_INTEGRATION=1`

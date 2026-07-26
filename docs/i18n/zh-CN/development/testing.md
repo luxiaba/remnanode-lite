@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=7561148599f28ecb92cdc5866150450ad7fc8f1b379231771514aedf849984f0 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=3c1fe3bdfaf744bc2d1febd853654d0fad1f3e3e4c217ff05ddf97ad4d223866 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -35,7 +35,7 @@
 | Linux 网络管理 | 两条 network namespace 集成测试 | Linux/root |
 | 低内存预算 | `scripts/test-low-memory.sh --rw-core ...` | Docker/真实 core |
 | 官方与候选行为比较 | `go run ./cmd/contract-probe ...` | 隔离验收环境 |
-| 正式发布 | `bash scripts/release-check.sh` | 仅用于当前准备发布的 `main` 提交 |
+| 正式发布 | `bash scripts/release-check.sh` | 仅用于已准备好的发布源码 |
 
 ## Go 测试
 
@@ -91,8 +91,13 @@ bash scripts/check-go.sh
 3. 项目版本格式、契约版本格式、跨文件同步和正式对齐版本约束检查。
 4. `go mod verify` 与 `go mod tidy -diff`。
 5. 普通全量测试。
-6. 全量 race test。
+6. 对 `./internal/...` 和 `./cmd/remnanode-lite` 运行带 race detector 的运行时测试。
 7. `go vet ./...`。
+
+普通测试仍覆盖所有包。race detector 覆盖全部 `internal` 包和 daemon 命令，但不覆盖
+`release-tool`、`docs-check` 等其他 `cmd/*` 辅助命令。这个稳定的包根边界会包含少量
+低成本纯逻辑包，同时避免反复检测不持有生产并发状态、构建成本较高的离线工具。
+每个主要阶段都会输出耗时，方便从 job 日志直接定位慢测试、漏洞扫描或冷构建。
 
 脚本不会自动准备官方源码。未设置 `REMNANODE_OFFICIAL_SOURCE` 时，固定 Git object
 重建会跳过，但已提交 source manifest 与本地 Go 路由契约的离线对照始终执行；因此
@@ -215,8 +220,12 @@ REQUIRE_GOVULNCHECK=1 \
   bash scripts/check.sh
 ```
 
-`check.sh` 组合 Go 门禁、仓库门禁和离线 installer 测试。漏洞扫描只由
-`check-repository.sh` 调用一次，完整门禁和 release 门禁不会再次重复扫描。若未设置
+`check.sh` 组合 Go 门禁、仓库门禁和离线 installer 测试，也是完整检查的顶层入口。
+不要在同一个 checkout 上先运行 `check-go.sh` 或 `check-repository.sh`，随后再运行
+`check.sh`，因为这些工作已经包含在其中。
+
+漏洞扫描只由 `check-repository.sh` 调用一次，完整门禁和 release 门禁不会在内部
+再次扫描。若未设置
 `REQUIRE_GOVULNCHECK=1` 且本机没有 govulncheck，仓库门禁会跳过漏洞扫描；必需 CI
 会显式设置该开关，因此发布只能使用已经执行扫描器的候选。
 
@@ -229,7 +238,7 @@ REQUIRE_GOVULNCHECK=1 \
 ```bash
 sh release/native/install_test.sh
 go test -count=1 ./cmd/release-tool ./internal/rnlctl ./cmd/rnlctl
-go test -race -count=1 ./cmd/release-tool ./internal/rnlctl
+go test -race -count=1 ./internal/rnlctl
 ```
 
 bootstrap fixtures 覆盖精确版本下载、本地归档摘要、`--yes`、`--prepare-only`、Secret 文件和移动通道拒绝。`internal/rnlctl` 使用临时 root 与 service fake，覆盖严格 manifest、锁和 journal、generation 原子选择、服务状态恢复、回滚、repair、账号所有权及 purge 安全；不会写入真实 `/etc/remnanode-lite` 或启动宿主服务。
@@ -370,13 +379,12 @@ go run ./cmd/contract-probe \
 ## 发布门禁
 
 ```bash
-RELEASE_TAG=<tag> \
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-`release-check.sh` 用于当前 `main` 的正式发布准备。它要求工作区干净、版本与带日期的 `CHANGELOG.md` 一致、固定官方源码可验证，并运行完整仓库检查。它在 release workflow 创建 draft Release、随后公开其 tag 前运行。运行时验证不由该脚本读取：维护者应在发起 release workflow 前人工确认同一 `sha-<commit>` 候选能够连接真实 Panel、承载真实代理流量且没有意外生命周期或资源故障，不把运行数据提交到仓库。
+`release-check.sh` 是发布源码的最终预检。它要求工作区干净、存在带日期的 `CHANGELOG.md` 条目、固定官方源码可验证，并运行完整仓库检查。未显式设置 `RELEASE_TAG` 时，它会从项目版本推导发布标签，并始终校验两者一致。准备发布时用它替代 `check.sh`，不要在同一个 checkout 上先运行 `check.sh`。它在 release workflow 创建 draft Release、随后公开其 tag 前运行。运行时验证不由该脚本读取：维护者应在发起 release workflow 前人工确认同一 `sha-<commit>` 候选能够连接真实 Panel、承载真实代理流量且没有意外生命周期或资源故障，不把运行数据提交到仓库。
 
 release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance、Native 资产及其 `release-index.json` digest 绑定；它先创建并校验 draft、晋升精确镜像，再公开并确认 immutable Release，重新确认精确标签后才推进移动通道。若公开成功但 registry 晋升失败，`reconcile-release` 会重新校验 Release 及其已 attestation 的 digest 记录，再恢复精确标签和符合条件的通道，不会重新构建。
 
@@ -389,7 +397,7 @@ release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance�
 | --- | --- | --- |
 | 纯文档 | `go run ./cmd/docs-check`、`git diff --check`；人工复核命令事实 | 涉及发布/部署时运行对应脚本 |
 | 普通 Go 逻辑 | 目标包普通测试 | `bash scripts/check-go.sh` |
-| 锁、状态、worker、关闭 | 目标包 race test | 全量 race 与相关生命周期测试 |
+| 锁、状态、worker、关闭 | 目标包 race test | 运行时 race 与相关生命周期测试 |
 | HTTP/API/schema | `nodeapi`、`httpserver`、`contract` | 固定源码契约与黑盒差分 |
 | Xray 生命周期 | `xray`、`httpserver` race | 真实候选运行验证；风险需要时运行资源测试 |
 | 用户与 stats | `nodehandler`、`stats`、`xrayrpc` | contract response 与 Panel 差分 |
@@ -416,7 +424,7 @@ release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance�
 | --- | --- |
 | `go` | 固定官方源码 + `scripts/check-go.sh` |
 | `repository` | 安装固定静态工具 + `scripts/check-repository.sh` |
-| `native` | `sh release/native/install_test.sh`、runtime lock 校验 |
+| `native` | `sh release/native/install_test.sh` |
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
 

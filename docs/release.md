@@ -90,15 +90,18 @@ Check at least the following:
 - Compose defaults and Native documentation name the same version.
 - Runtime asset changes are pinned in `release/runtime-assets.lock.json`.
 
-Run the complete local gate when the pinned official source is available:
+Run the release-source gate when the pinned official source is available:
 
 ```bash
 export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned/remnawave-node
 export REQUIRE_GOVULNCHECK=1
-bash scripts/check.sh
+bash scripts/release-check.sh
 ```
 
-Local checks shorten feedback. GitHub CI remains the publication record.
+`release-check.sh` already includes the complete Go, repository, and offline
+Native gates. Do not run `check.sh` first on the same checkout. Local checks
+shorten feedback; GitHub CI remains the publication record for the exact merged
+`main` commit.
 
 ## 2. Merge and Wait for Candidates
 

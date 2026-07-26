@@ -32,7 +32,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Linux network management | Two network-namespace integration tests | Linux/root |
 | Low-memory budget | `scripts/test-low-memory.sh --rw-core ...` | Docker/real core |
 | Official-versus-candidate behavior | `go run ./cmd/contract-probe ...` | Isolated test environment |
-| Formal release | `bash scripts/release-check.sh` | Current release-candidate `main` commit only |
+| Formal release | `bash scripts/release-check.sh` | Prepared release source only |
 
 ## Go Tests
 
@@ -86,8 +86,17 @@ The script performs, in order:
 3. Project-version format, contract-version format, cross-file synchronization, and official-alignment version checks.
 4. `go mod verify` and `go mod tidy -diff`.
 5. The normal full test suite.
-6. The full race test suite.
+6. The race-instrumented runtime suite: `./internal/...` and
+   `./cmd/remnanode-lite`.
 7. `go vet ./...`.
+
+The ordinary suite still covers every package. Race instrumentation covers all
+`internal` packages and the daemon command, while excluding the other `cmd/*`
+helper commands such as `release-tool` and `docs-check`. This stable package-root
+boundary includes a few inexpensive pure-logic packages but avoids repeatedly
+instrumenting build-heavy offline tools that own no production concurrency.
+Each material stage prints its elapsed time so a slow test, scanner, or cold
+build is visible in the job log.
 
 The script does not prepare official source automatically. Without `REMNANODE_OFFICIAL_SOURCE`, regeneration from the pinned Git object is skipped, but the checked-in source manifest is still compared offline with the local Go route contract. A change that aligns official behavior should therefore prepare the official Git repository as described below.
 
@@ -209,8 +218,12 @@ REQUIRE_GOVULNCHECK=1 \
 ```
 
 `check.sh` combines the Go gate, repository gate, and offline Native bootstrap
-tests. `check-repository.sh` owns the single vulnerability-scan invocation, so
-the complete and release gates do not run the same scan again. If
+tests. It is the top-level entry point: do not run `check-go.sh` or
+`check-repository.sh` immediately before it on the same checkout. Doing so only
+repeats work already included by `check.sh`.
+
+`check-repository.sh` owns the single vulnerability-scan invocation, so the
+complete and release gates do not run another scan internally. If
 `REQUIRE_GOVULNCHECK=1` is not set and govulncheck is unavailable, the
 repository gate skips it. Required CI sets the flag, so a release can only
 consume a candidate whose CI ran the scanner.
@@ -226,7 +239,7 @@ uninstall requires the focused checks below:
 ```bash
 sh release/native/install_test.sh
 go test -count=1 ./cmd/release-tool ./internal/rnlctl ./cmd/rnlctl
-go test -race -count=1 ./cmd/release-tool ./internal/rnlctl
+go test -race -count=1 ./internal/rnlctl
 ```
 
 The bootstrap fixtures exercise exact-version downloads, local archive
@@ -396,16 +409,18 @@ The probe never prints the JWT or raw response bodies. If a certificate contains
 ## Release Gate
 
 ```bash
-RELEASE_TAG=<tag> \
 REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 REQUIRE_GOVULNCHECK=1 \
   bash scripts/release-check.sh
 ```
 
-This script is the final source preflight. It expects a clean worktree, a
-project version matching `RELEASE_TAG`, a dated `CHANGELOG.md` entry, the pinned
-official source, and the complete repository checks. It runs before the
-release workflow creates a draft Release and later publishes its tag.
+This script is the final source preflight. It expects a clean worktree, a dated
+`CHANGELOG.md` entry, the pinned official source, and the complete repository
+checks. It derives the release tag from the project version unless
+`RELEASE_TAG` is explicitly set, and always verifies that they match. Use it instead of
+`check.sh` when preparing release source; never run `check.sh` first on the same
+checkout. It runs before the release workflow creates a draft Release and later
+publishes its tag.
 
 The container released for that version is not rebuilt. Every `main` commit
 first publishes `sha-<40-character-commit>`. Before dispatching the release
@@ -436,7 +451,7 @@ See the [versioning policy](../versioning.md) for tag, version, and channel sema
 | --- | --- | --- |
 | Documentation only | `go run ./cmd/docs-check`, `git diff --check`; manually verify command facts | Run the relevant script for release/deployment documentation |
 | Ordinary Go logic | Owning package tests | `bash scripts/check-go.sh` |
-| Locks, state, workers, shutdown | Owning package race test | Full race suite and related lifecycle tests |
+| Locks, state, workers, shutdown | Owning package race test | Runtime race suite and related lifecycle tests |
 | HTTP/API/schema | `nodeapi`, `httpserver`, `contract` | Pinned-source contract tests and black-box comparison |
 | Xray lifecycle | `xray` and `httpserver` race tests | Real Panel/container check; resource test when risk requires it |
 | Users and statistics | `nodehandler`, `stats`, `xrayrpc` | Contract response tests and Panel differential testing |
@@ -463,7 +478,7 @@ The required gate in `.github/workflows/ci.yml` aggregates four parallel jobs:
 | --- | --- |
 | `go` | Pinned official source plus `scripts/check-go.sh` |
 | `repository` | Install pinned static tools plus `scripts/check-repository.sh` |
-| `native` | `sh release/native/install_test.sh`, runtime-lock validation |
+| `native` | `sh release/native/install_test.sh` |
 | `netadmin` | Both Linux namespace integration tests |
 | `gate` | Requires every job above to report success |
 

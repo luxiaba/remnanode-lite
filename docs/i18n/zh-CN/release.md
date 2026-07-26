@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=e5016d305e4b3c3f86435781d855509ad4eb53d1958decdb726fc19b94d65171 -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=b45e41d2d2f03d77aee3a2e3f4325a39601204129b0d647025e5de5ed53388d0 -->
 
 # 发布 Remnanode Lite
 
@@ -71,15 +71,17 @@ dev -> pull request -> main
 - Compose 默认值和 Native 文档使用同一个版本。
 - 运行时资产变更固定在 `release/runtime-assets.lock.json`。
 
-当本地有已固定的官方源码时，可执行完整本地门禁：
+本地有固定官方源码时，执行发布源码门禁：
 
 ```bash
 export REMNANODE_OFFICIAL_SOURCE=/path/to/pinned/remnawave-node
 export REQUIRE_GOVULNCHECK=1
-bash scripts/check.sh
+bash scripts/release-check.sh
 ```
 
-本地检查用于缩短反馈周期；GitHub CI 才是发布的正式记录。
+`release-check.sh` 已包含完整 Go、仓库和离线 Native 门禁，不要在同一个 checkout 上
+先运行 `check.sh`。本地检查用于缩短反馈周期；合并后的精确 `main` 提交仍以 GitHub CI
+为正式发布记录。
 
 ## 2. 合并并等待候选
 

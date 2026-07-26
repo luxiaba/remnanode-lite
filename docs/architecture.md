@@ -652,7 +652,7 @@ Socket destruction matches connected TCP sockets in the same network namespace b
 Architecture constraints are primarily enforced by executable tests, not asserted by documentation:
 
 - Regular: `go test ./...`
-- Concurrency: `go test -race ./...`
+- Concurrency: `go test -race ./internal/... ./cmd/remnanode-lite`
 - Static: `go vet ./...`, `gofmt`, and `go mod tidy -diff`
 - Official source evidence: `go run ./cmd/contract-source-check -source <official-git-repository>`
 - nftables integration: `REMNANODE_NFT_INTEGRATION=1`
