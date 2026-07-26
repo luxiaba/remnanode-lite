@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=a2dea1856ee23f4d85d6a6277e601276210a6a1301c9c5c1d8bb2ea7cc512a0b -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=56574bfc1ef1a4263f9a6779fb18410a182ecd94af736787917ab5c90707a2dc -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -246,7 +246,7 @@ JSON DTO 边界具备以下行为：
 - `plugin.Service`：待收集 Torrent report 数量。
 - `internal/system`：`uname`、`/proc/meminfo`、`/proc/loadavg`、`/proc/uptime`、`/proc/cpuinfo` 和默认接口速率。
 
-Manager 为每次 Handler/Stats 操作创建短生命周期 gRPC client，调用完成即关闭。普通 RPC 默认 5 秒，Ping 为 3 秒，接收消息上限为 `16 MiB`。全用户 IP 优先使用 rw-core 扩展 RPC；遇到 `Unimplemented` 后缓存 legacy 能力并用最多 8 个 worker 查询单用户 IP。
+Manager 为每次 Handler/Stats 操作创建短生命周期 gRPC client，调用完成即关闭。普通 RPC 默认 5 秒，Ping 为 3 秒，接收消息上限为 `16 MiB`。全用户 IP 优先使用 rw-core 扩展 RPC；遇到 `Unimplemented` 后缓存 legacy 能力并用最多 8 个 worker 查询单用户 IP。legacy 批次采用全有或全无语义：任一单用户查询发生意外错误时会取消其余查询，并由应用层返回与上游兼容的空列表，而不是发布部分数据。
 
 由 map 聚合的用户和 tag 统计结果没有稳定顺序保证，调用方不应依赖排序。
 

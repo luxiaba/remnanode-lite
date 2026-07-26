@@ -74,14 +74,15 @@ func TestGetUsersIPListUsesNativeBatchRPC(t *testing.T) {
 }
 
 type fakeLegacyStatsConn struct {
-	onlineUsers []string
-	nativeErr   error
-	lookupErr   error
-	nativeCalls atomic.Int64
-	allCalls    atomic.Int64
-	lookupCalls atomic.Int64
-	active      atomic.Int64
-	maxActive   atomic.Int64
+	onlineUsers      []string
+	nativeErr        error
+	lookupErr        error
+	lookupErrForUser func(context.Context, string) error
+	nativeCalls      atomic.Int64
+	allCalls         atomic.Int64
+	lookupCalls      atomic.Int64
+	active           atomic.Int64
+	maxActive        atomic.Int64
 }
 
 func (c *fakeLegacyStatsConn) Invoke(ctx context.Context, method string, args, reply any, _ ...grpc.CallOption) error {
@@ -111,6 +112,11 @@ func (c *fakeLegacyStatsConn) Invoke(ctx context.Context, method string, args, r
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(2 * time.Millisecond):
+		}
+		if c.lookupErrForUser != nil {
+			if err := c.lookupErrForUser(ctx, extractOnlineUserID(request.GetName())); err != nil {
+				return err
+			}
 		}
 		if c.lookupErr != nil {
 			return c.lookupErr
@@ -149,6 +155,106 @@ func TestGetUsersIPListLegacyUsesFixedWorkerCount(t *testing.T) {
 	}
 	if maximum := client.maxActive.Load(); maximum < 2 || maximum > legacyIPLookupWorkers {
 		t.Fatalf("maximum concurrent lookups = %d, want 2..%d", maximum, legacyIPLookupWorkers)
+	}
+}
+
+func TestGetUsersIPListLegacyRejectsPartialLookupResults(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeLegacyStatsConn{
+		onlineUsers: []string{
+			"user>>>u1>>>online",
+			"user>>>u2>>>online",
+			"user>>>u3>>>online",
+		},
+		lookupErrForUser: func(_ context.Context, userID string) error {
+			if userID == "u2" {
+				return status.Error(codes.Unavailable, "legacy lookup unavailable")
+			}
+			return nil
+		},
+	}
+	capabilities := &StatsCapabilities{}
+	capabilities.usersStats.Store(usersStatsLegacy)
+	api := NewStatsAPI(client, capabilities)
+
+	users, err := api.GetUsersIPList(context.Background())
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("error = %v, want unavailable", err)
+	}
+	if users != nil {
+		t.Fatalf("users = %#v, want no partial result", users)
+	}
+}
+
+func TestGetUsersIPListLegacyTreatsMissingUserIPListAsEmpty(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeLegacyStatsConn{
+		onlineUsers: []string{
+			"user>>>u1>>>online",
+			"user>>>u2>>>online",
+		},
+		lookupErrForUser: func(_ context.Context, userID string) error {
+			if userID == "u2" {
+				return status.Error(codes.NotFound, "online IP list not found")
+			}
+			return nil
+		},
+	}
+	capabilities := &StatsCapabilities{}
+	capabilities.usersStats.Store(usersStatsLegacy)
+	api := NewStatsAPI(client, capabilities)
+
+	users, err := api.GetUsersIPList(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(users) != 1 || users[0].UserID != "u1" || len(users[0].IPs) != 1 {
+		t.Fatalf("users = %#v, want only u1 with an IP", users)
+	}
+}
+
+func TestGetUsersIPListLegacyCancelsInFlightLookupsAfterFailure(t *testing.T) {
+	t.Parallel()
+
+	lookupStarted := make(chan struct{})
+	lookupCanceled := make(chan struct{})
+	client := &fakeLegacyStatsConn{
+		onlineUsers: []string{
+			"user>>>waiting>>>online",
+			"user>>>failing>>>online",
+		},
+		lookupErrForUser: func(ctx context.Context, userID string) error {
+			switch userID {
+			case "waiting":
+				close(lookupStarted)
+				<-ctx.Done()
+				close(lookupCanceled)
+				return ctx.Err()
+			case "failing":
+				<-lookupStarted
+				return status.Error(codes.Unavailable, "legacy lookup unavailable")
+			default:
+				return fmt.Errorf("unexpected user %q", userID)
+			}
+		},
+	}
+	capabilities := &StatsCapabilities{}
+	capabilities.usersStats.Store(usersStatsLegacy)
+	api := NewStatsAPI(client, capabilities)
+
+	users, err := api.GetUsersIPList(context.Background())
+	if status.Code(err) != codes.Unavailable {
+		t.Fatalf("error = %v, want original unavailable error", err)
+	}
+	if users != nil {
+		t.Fatalf("users = %#v, want no partial result", users)
+	}
+	select {
+	case <-lookupCanceled:
+	default:
+		t.Fatal("in-flight legacy lookup did not observe cancellation")
 	}
 }
 

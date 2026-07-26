@@ -243,7 +243,7 @@ Before deleting a user, the service retrieves that user's online IPs with `reset
 - `plugin.Service` for the number of pending Torrent reports.
 - `internal/system` for `uname`, `/proc/meminfo`, `/proc/loadavg`, `/proc/uptime`, `/proc/cpuinfo`, and the default-interface rate.
 
-The Manager creates a short-lived gRPC client for each Handler or Stats operation and closes it when the call completes. Ordinary RPCs default to 5 seconds, Ping to 3 seconds, and the receive-message limit is `16 MiB`. The all-user IP path prefers the rw-core extension RPC. After an `Unimplemented` response, it caches legacy capability and queries per-user IPs with at most 8 workers.
+The Manager creates a short-lived gRPC client for each Handler or Stats operation and closes it when the call completes. Ordinary RPCs default to 5 seconds, Ping to 3 seconds, and the receive-message limit is `16 MiB`. The all-user IP path prefers the rw-core extension RPC. After an `Unimplemented` response, it caches legacy capability and queries per-user IPs with at most 8 workers. The legacy batch is all-or-nothing: an unexpected per-user failure cancels sibling lookups, and the application returns the upstream-compatible empty list instead of publishing partial data.
 
 User and tag statistics aggregated from maps have no stable ordering guarantee. Callers must not rely on their order.
 
