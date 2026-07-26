@@ -21,6 +21,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Change one Go package | `go test -count=1 ./internal/<package>` | Low |
 | Change concurrency or shared state | `go test -race -count=1 ./internal/<package>` | Medium |
 | Normal Go regression | `go test -count=1 ./...` | Medium |
+| Targeted parser fuzzing | `go test ./internal/<package> -run '^$' -fuzz '^FuzzName$' -fuzztime=30s` | Bounded local run |
 | Go pre-commit gate | `bash scripts/check-go.sh` | Medium to high |
 | Shell, Docker, workflow, or supply chain | `bash scripts/check-repository.sh` | Medium to high |
 | Native bootstrap or bundle format | `sh release/native/install_test.sh`, `go test ./cmd/release-tool` | Medium to high |
@@ -58,6 +59,19 @@ go test -count=1 ./...
 This runs every ordinary test that compiles on the current platform. Real integration tests in the repository remain protected by environment variables and call `Skip` unless explicitly enabled.
 
 On macOS, files guarded by `//go:build linux` do not compile into the test, including Linux process, nftables, and netlink socket-destruction implementations. `go test ./...` on macOS is useful for fast regression but is not a complete Linux result. On Linux, the same command compiles Linux unit tests; network-namespace and real rw-core tests still require explicit activation.
+
+### Targeted Parser Fuzzing
+
+The repository keeps focused Go fuzz targets at external or integrity-sensitive parsing boundaries. A normal `go test` run executes their small seed corpus as ordinary regression tests; it does not start mutation fuzzing. Run one target at a time with an explicit budget when changing its parser or before accepting a release candidate:
+
+```bash
+go test ./internal/secret -run '^$' -fuzz '^FuzzParse$' -fuzztime=30s
+go test ./internal/rnlctl -run '^$' -fuzz '^FuzzDecodeReleaseManifest$' -fuzztime=30s
+```
+
+Keep fuzz harnesses deterministic, side-effect free, and bounded using explicit parser-appropriate caps. Do not invoke services, real nftables, or full Native archive extraction from a fuzz target. Long-running mutation fuzzing is deliberately absent from the required pull-request workflow; adding it there would increase cost and nondeterministic failure handling without improving the seed regression gate.
+
+Only commit a minimized `testdata/fuzz` input when it reproduces a confirmed defect that a readable unit-test fixture cannot express as well. The corpus must follow the repository's test-data policy and contain no production material.
 
 ### Standard Go Gate
 

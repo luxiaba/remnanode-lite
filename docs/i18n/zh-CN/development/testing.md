@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=b0655eaf6791b595362d3519d1a76526ddcc470654cf7a7c77aaa16670993cfd -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=7561148599f28ecb92cdc5866150450ad7fc8f1b379231771514aedf849984f0 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -24,6 +24,7 @@
 | 修改一个 Go 包 | `go test -count=1 ./internal/<package>` | 低 |
 | 修改并发或共享状态 | `go test -race -count=1 ./internal/<package>` | 中 |
 | 普通 Go 回归 | `go test -count=1 ./...` | 中 |
+| 定向解析器 fuzz | `go test ./internal/<package> -run '^$' -fuzz '^FuzzName$' -fuzztime=30s` | 有界本地运行 |
 | Go 提交前检查 | `bash scripts/check-go.sh` | 中至高 |
 | Shell、Docker、workflow 或供应链 | `bash scripts/check-repository.sh` | 中至高 |
 | Native bootstrap 或 bundle 格式 | `sh release/native/install_test.sh`、`go test ./cmd/release-tool` | 中至高 |
@@ -63,6 +64,19 @@ go test -count=1 ./...
 nftables 与 netlink socket destroy。因此 macOS 的 `go test ./...` 适合快速回归，
 但不等于 Linux 全量通过。Linux 上的普通 `go test ./...` 会编译 Linux 单元测试，
 network namespace 与真实 rw-core 测试仍需显式开启。
+
+### 定向解析器 Fuzz
+
+仓库只在外部输入或完整性敏感的解析边界保留定向 Go fuzz target。普通 `go test` 会把小型 seed corpus 当作常规回归测试执行，不会启动 mutation fuzz。修改对应解析器或验收 release candidate 时，应一次只运行一个 target，并明确限制时间：
+
+```bash
+go test ./internal/secret -run '^$' -fuzz '^FuzzParse$' -fuzztime=30s
+go test ./internal/rnlctl -run '^$' -fuzz '^FuzzDecodeReleaseManifest$' -fuzztime=30s
+```
+
+fuzz harness 必须确定、无副作用，并根据解析器特点设置明确且合适的输入上限。不得从 fuzz target 启动服务、操作真实 nftables 或完整解压 Native archive。必需的 PR workflow 不运行长时间 mutation fuzz；将其加入日常门禁只会增加成本和非确定性故障处理，并不会增强 seed 回归门禁。
+
+只有确认了真实缺陷，而且可读的普通单测 fixture 无法同样清楚地表达时，才提交最小化的 `testdata/fuzz` 输入。corpus 必须遵守仓库测试数据政策，不能包含任何生产资料。
 
 ### 标准 Go 门禁
 
