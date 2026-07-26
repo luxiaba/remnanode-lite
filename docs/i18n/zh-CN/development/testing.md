@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=5b21ff8b32602eeb57d3cc40d9e5f54afa7dfed6433c03488a4a2d0a8e89240b -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=45b5fbd77aebf1716b79694641712be37e43d720c1271d62e67e69e09fc918bf -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -436,6 +436,8 @@ release workflow 会校验双平台 manifest、各平台 SPDX SBOM、provenance�
 | `native` | `sh release/native/install_test.sh` |
 | `netadmin` | 两条 Linux namespace 集成测试 |
 | `gate` | 要求上述所有 job 都为 success |
+
+对于目标为 `main` 的 pull request，`repository` job 会获取完整 Git tag 历史，并在安装静态检查工具前运行发布元数据检查。它会在合并前拒绝复用已发布版本、倒退预发布修订号、缺少日期的变更日志或未同步的版本引用。目标为 `dev` 的普通 pull request 不运行这项发布专用预检。
 
 并非所有 PR 都会执行 candidate workflow；`main` 的每次 push 则会构建 manifest、生成证明，再发布不可移动的 `sha-<commit>` 候选。手工发起的 release workflow 会校验该候选的 OCI 结构、双平台 SPDX SBOM、attestation 和 Release digest 绑定，在公开前晋升正式标签，再要求 GitHub Release 变为 immutable 并重新确认精确标签。不要把只在部分 PR 出现的 candidate job 配成所有 PR 都必须出现的门禁。
 

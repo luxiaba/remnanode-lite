@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=b45e41d2d2f03d77aee3a2e3f4325a39601204129b0d647025e5de5ed53388d0 -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=c853ee48a0c172d9ff2e143c83e7f56f5eae9e13dc61c9e98460caf2ea9c02bb -->
 
 # 发布 Remnanode Lite
 
@@ -61,6 +61,8 @@ dev -> pull request -> main
 ## 1. 准备版本
 
 在 `dev` 完成代码、测试、部署文件、文档和变更日志。完成运行验收后不应再补一个“只改文档”的提交，因为每个新提交都会生成不同的候选。
+
+一次发布结束后，日常开发可以继续在 `dev` 的 `[Unreleased]` 下积累，此时源码仍可保留上一个项目版本，但不能把这种状态的 `dev` 推进到 `main`。下一次推进前，必须选择一个尚未发布的新版本，并把对应变更日志整理为带日期的正式条目。CI 会对每个目标为 `main` 的 pull request 执行这项元数据检查。
 
 至少检查以下项目：
 

@@ -79,6 +79,12 @@ Complete the code, tests, deployment files, documentation, and changelog on
 `dev`. A release candidate should not need a documentation-only commit after
 runtime acceptance because any new commit creates a different candidate.
 
+After a release, daily work may continue on `dev` under `[Unreleased]` while the
+source still carries the last project version. Do not promote `dev` to `main`
+in that state. Before the next promotion, select a new unpublished version and
+turn its changelog section into a dated release entry. CI applies this metadata
+check to every pull request targeting `main`.
+
 Check at least the following:
 
 - `internal/version/version.go` contains the intended project version.

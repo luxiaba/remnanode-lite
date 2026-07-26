@@ -6,6 +6,12 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [2.8.0-rnl.2] - 2026-07-26
+
+This preview keeps the verified official Node `2.8.0` contract and gives Native
+installation and `rnlctl` clearer interactive feedback, with safer interruption
+and lifecycle recovery.
+
 ### Added
 
 - Added adaptive progress for Native installation and `rnlctl` lifecycle
@@ -23,6 +29,12 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
   repeated signal can force termination through the operating-system default.
   Recovery reasserts and verifies the previous service-manager state before it
   clears the transaction journal.
+
+### Fixed
+
+- Pull requests targeting `main` now validate release metadata against the full
+  Git tag history before merge, preventing a published project version from
+  being reused for different source.
 
 ## [2.8.0-rnl.1] - 2026-07-25
 

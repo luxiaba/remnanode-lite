@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=d0d9bdd09d4a180437fef430b0f0cc5f335336ce02eaf9a247dfa3481edc7e04 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=eafa00bfc5bdc58c8d11ff75bb896d2034fbb5ac27d2cd6e8add01052e69ad06 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -59,14 +59,15 @@
 
 2026-07-15 的 M6 50,000 用户测量和 2026-07-19 的 M7 init/发行环境快照仍是有价值的工程基线。它们记录资源优化结果，为后续改动提供稳定对比，不代表所有未来构建。
 
-已经发布的稳定版 `2.8.0` 是官方契约基线，并包含首个自包含 Native bundle。
-`2.8.0-rnl.1` 在保持该契约不变的前提下，继续完善 Native 管理体验、生命周期恢复和
-符合条件的 Alpine 支持。运行观测不写入源码仓库，Release notes 由 GitHub 自动生成。
+已经发布的稳定版 `2.8.0` 是官方契约基线，并包含首个自包含 Native bundle。已发布的
+`2.8.0-rnl.1` 预发布版在保持该契约不变的前提下，继续完善 Native 管理体验、生命周期恢复
+和符合条件的 Alpine 支持。`2.8.0-rnl.2` 版本线增加更清晰的交互进度与更安全的中断恢复。
+运行观测不写入源码仓库，Release notes 由 GitHub 自动生成。
 
 ## 当前重点
 
-- **当前**：完成 `2.8.0-rnl.1` 的 Native 运维体验和 Alpine 生命周期发布验收，同时降低
-  `rnlctl` 命令接口、Xray 状态所有权和 release 验证的维护成本。
+- **当前**：完成 `2.8.0-rnl.2` 的 Native CLI 进度与中断恢复发布验收，同时降低 `rnlctl`
+  命令接口、Xray 状态所有权和 release 验证的维护成本。
 - **发布范围**：未来两个发布周期不新增发布通道、产物类型、发布状态或证明机制；可靠性、
   安全修复和删除重复检查仍在范围内。
 - **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码并审查契约

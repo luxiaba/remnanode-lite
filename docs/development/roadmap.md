@@ -61,16 +61,17 @@ baselines. They document the resource work and give later changes a stable
 comparison point; they are not claims about every future build.
 
 The published stable `2.8.0` release is the official-contract baseline and
-includes the first self-contained Native bundle. The `2.8.0-rnl.1` line keeps
-that contract while improving Native administration, lifecycle recovery, and
-qualified Alpine support. Runtime observations stay outside the source
-repository, and GitHub generates the Release notes.
+includes the first self-contained Native bundle. The published `2.8.0-rnl.1`
+preview keeps that contract while improving Native administration, lifecycle
+recovery, and qualified Alpine support. The `2.8.0-rnl.2` line adds clearer
+interactive progress and safer interruption recovery. Runtime observations stay
+outside the source repository, and GitHub generates the Release notes.
 
 ## Current focus
 
-- **Now:** Complete release acceptance for the `2.8.0-rnl.1` Native operator
-  experience and qualified Alpine lifecycle, while reducing maintenance cost in
-  the `rnlctl` command surface, Xray state ownership, and release validation.
+- **Now:** Complete release acceptance for the `2.8.0-rnl.2` Native CLI progress
+  and interruption-recovery behavior, while reducing maintenance cost in the
+  `rnlctl` command surface, Xray state ownership, and release validation.
 - **Release discipline:** For the next two release cycles, do not add release
   channels, artifact types, publication state, or proof mechanisms. Reliability
   and security fixes, and removal of redundant checks, remain in scope.
