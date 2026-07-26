@@ -407,6 +407,69 @@ func TestEngineSetSecretSupportsPreparedInstallAndRollsBackFailedApply(t *testin
 	})
 }
 
+func TestEngineConfigurationApplyCancellationUsesDetachedRecovery(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*testing.T, lifecycleHarness, context.Context) error
+	}{
+		{
+			name: "config apply",
+			run: func(_ *testing.T, harness lifecycleHarness, ctx context.Context) error {
+				_, err := harness.engine.ApplyConfiguration(ctx)
+				return err
+			},
+		},
+		{
+			name: "unchanged config set apply",
+			run: func(t *testing.T, harness lifecycleHarness, ctx context.Context) error {
+				configuration, err := harness.engine.ReadConfiguration(context.Background())
+				if err != nil {
+					t.Fatal(err)
+				}
+				_, err = harness.engine.UpdateConfiguration(ctx, ConfigurationUpdateRequest{
+					Set: map[string]string{"NODE_PORT": configuration.Values["NODE_PORT"]}, Apply: true,
+				})
+				return err
+			},
+		},
+		{
+			name: "unchanged secret set apply",
+			run: func(t *testing.T, harness lifecycleHarness, ctx context.Context) error {
+				secretData, err := os.ReadFile(harness.paths.SecretFile)
+				if err != nil {
+					t.Fatal(err)
+				}
+				source := filepath.Join(t.TempDir(), "same-secret.key")
+				if err := os.WriteFile(source, secretData, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				_, err = harness.engine.SetSecret(ctx, SecretUpdateRequest{File: source, Apply: true})
+				return err
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			harness := newLifecycleHarness(t, "2.8.0-rnl.1")
+			harness.install(t, false)
+			harness.host.calls = nil
+			harness.host.fail("restart", context.Canceled)
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			if err := test.run(t, harness, ctx); !errors.Is(err, context.Canceled) {
+				t.Fatalf("operation error = %v, want context cancellation", err)
+			}
+			if got := countCall(harness.host.calls, "restart"); got != 2 {
+				t.Fatalf("restart calls = %d, want canceled attempt plus detached recovery; calls = %q", got, harness.host.calls)
+			}
+			if !containsCall(harness.host.calls, "wait-healthy:remnanode-lite") {
+				t.Fatalf("detached recovery did not wait for health; calls = %q", harness.host.calls)
+			}
+		})
+	}
+}
+
 func TestEngineSetSecretRejectsSymlinkAndConfigurationMutationUsesLifecycleLock(t *testing.T) {
 	harness := newLifecycleHarness(t, "2.8.0-rnl.1")
 	harness.install(t, false)

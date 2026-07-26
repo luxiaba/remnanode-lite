@@ -67,6 +67,39 @@ func TestValidateCommandSpecRejectsMalformedMetadata(t *testing.T) {
 			},
 			want: "invalid help synopsis",
 		},
+		{
+			name: "finite values require word option",
+			mutate: func(root *commandSpec) {
+				root.Commands[0].Options = []commandOptionSpec{{
+					Long: "progress", Description: "Progress mode",
+					ValueCandidates: []commandArgumentSpec{{Value: "auto", Description: "Automatic"}},
+				}}
+			},
+			want: "finite values without a word value",
+		},
+		{
+			name: "invalid finite value",
+			mutate: func(root *commandSpec) {
+				root.Commands[0].Options = []commandOptionSpec{{
+					Long: "progress", Description: "Progress mode", Value: commandValueWord,
+					ValueCandidates: []commandArgumentSpec{{Value: "not valid", Description: "Invalid"}},
+				}}
+			},
+			want: "invalid finite value",
+		},
+		{
+			name: "duplicate finite value",
+			mutate: func(root *commandSpec) {
+				root.Commands[0].Options = []commandOptionSpec{{
+					Long: "progress", Description: "Progress mode", Value: commandValueWord,
+					ValueCandidates: []commandArgumentSpec{
+						{Value: "auto", Description: "Automatic"},
+						{Value: "auto", Description: "Automatic"},
+					},
+				}}
+			},
+			want: "repeats finite value",
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			spec := validRoot()

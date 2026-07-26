@@ -60,11 +60,13 @@ func (engine *Engine) prepareUpgradeCandidate(ctx context.Context, request Upgra
 	if err != nil {
 		return nil, func() {}, err
 	}
+	emitProgressPhase(ctx, phaseVerifyBundle)
 	bundle, err := openBundle(input, engine.architecture)
 	if err != nil {
 		resolveCleanup()
 		return nil, func() {}, err
 	}
+	completeProgressPhase(ctx, phaseVerifyBundle, true)
 	cleanup := func() {
 		bundle.Close()
 		resolveCleanup()

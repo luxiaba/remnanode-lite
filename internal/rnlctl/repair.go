@@ -37,6 +37,7 @@ func (engine *Engine) Repair(ctx context.Context, request RepairRequest) (Result
 		desired = preJournal.Desired
 		prepared = false
 	}
+	emitProgressPhase(ctx, phaseValidateHost)
 	if err := engine.host.Preflight(ctx, desired.Active, engine.paths); err != nil {
 		return Result{}, err
 	}
@@ -49,14 +50,17 @@ func (engine *Engine) Repair(ctx context.Context, request RepairRequest) (Result
 	if configurationErr != nil && preState != nil {
 		return Result{}, configurationErr
 	}
+	completeProgressPhase(ctx, phaseValidateHost, true)
 	var supplied *validatedBundle
 	if request.Bundle.Root != "" || request.Bundle.Archive != "" || request.Bundle.SHA256 != "" {
+		emitProgressPhase(ctx, phaseVerifyBundle)
 		bundle, err := openBundle(request.Bundle, engine.architecture)
 		if err != nil {
 			return Result{}, err
 		}
 		defer bundle.Close()
 		supplied = bundle
+		completeProgressPhase(ctx, phaseVerifyBundle, true)
 	}
 	if err := engine.requirePrivileges(); err != nil {
 		return Result{}, err
@@ -92,9 +96,11 @@ func (engine *Engine) Repair(ctx context.Context, request RepairRequest) (Result
 			return Result{}, fmt.Errorf("lifecycle state is missing and the journal cannot reconstruct an installation")
 		}
 		if configurationErr != nil {
+			emitProgressPhase(ctx, phaseCleanUp)
 			if err := engine.cleanupInterruptedInstall(ctx, *interrupted); err != nil {
 				return Result{}, errors.Join(configurationErr, err)
 			}
+			completeProgressPhase(ctx, phaseCleanUp, true)
 			return Result{Operation: "repair", Changed: true}, nil
 		}
 		state = &persistentState{
@@ -137,11 +143,14 @@ func (engine *Engine) Repair(ctx context.Context, request RepairRequest) (Result
 		return Result{}, err
 	}
 	if actual.Active {
+		emitProgressPhase(ctx, phaseStopService)
 		if err := engine.host.SetActive(ctx, false); err != nil {
 			return Result{}, err
 		}
+		completeProgressPhase(ctx, phaseStopService, true)
 	}
 	changed := interrupted != nil
+	emitProgressPhase(ctx, phaseRepairGenerations)
 	for id, record := range state.Generations {
 		repaired, recordChanged, repairErr := engine.repairGeneration(record, supplied)
 		if repairErr != nil {
@@ -150,10 +159,12 @@ func (engine *Engine) Repair(ctx context.Context, request RepairRequest) (Result
 		state.Generations[id] = repaired
 		changed = changed || recordChanged
 	}
+	completeProgressPhase(ctx, phaseRepairGenerations, true)
 	current = state.Generations[state.Current]
 	if err := engine.ensureRuntimeDirectories(); err != nil {
 		return Result{}, err
 	}
+	emitProgressPhase(ctx, phaseSwitchGeneration)
 	if err := engine.selectGeneration(state.Current, state.Previous); err != nil {
 		return Result{}, err
 	}
@@ -168,7 +179,9 @@ func (engine *Engine) Repair(ctx context.Context, request RepairRequest) (Result
 	if err := engine.checkpoint("repair-after-current-link"); err != nil {
 		return Result{}, err
 	}
+	completeProgressPhase(ctx, phaseSwitchGeneration, true)
 	root := filepath.Join(engine.paths.Generations, state.Current)
+	emitProgressPhase(ctx, phasePrepareService)
 	account, err := engine.host.Prepare(ctx, root, engine.paths)
 	if err != nil {
 		return Result{}, err
@@ -181,26 +194,33 @@ func (engine *Engine) Repair(ctx context.Context, request RepairRequest) (Result
 			return Result{}, err
 		}
 	}
+	completeProgressPhase(ctx, phasePrepareService, true)
 	if err := engine.applyServiceState(ctx, state.Desired); err != nil {
 		return Result{}, err
 	}
 	if interrupted != nil && interrupted.RestartRequired {
+		emitProgressPhase(ctx, phaseRestartService)
 		if err := engine.host.Restart(ctx); err != nil {
 			return Result{}, err
 		}
+		completeProgressPhase(ctx, phaseRestartService, true)
 	}
 	if err := engine.verifyTransitionOutcome(ctx, current, state.Desired); err != nil {
 		return Result{}, err
 	}
+	emitProgressPhase(ctx, phaseCommitState)
 	if err := saveState(engine.paths, *state); err != nil {
 		return Result{}, err
 	}
 	if err := clearJournal(engine.paths); err != nil {
 		return Result{}, fmt.Errorf("repair committed but journal cleanup failed: %w", err)
 	}
+	completeProgressPhase(ctx, phaseCommitState, true)
+	emitProgressPhase(ctx, phaseCleanUp)
 	if err := engine.garbageCollectCaches(*state); err != nil {
 		return Result{}, fmt.Errorf("repair completed but cache cleanup failed: %w", err)
 	}
+	completeProgressPhase(ctx, phaseCleanUp, true)
 	return Result{Operation: "repair", Changed: changed, Generation: current.ID, Version: current.Version, PreparedOnly: prepared}, nil
 }
 

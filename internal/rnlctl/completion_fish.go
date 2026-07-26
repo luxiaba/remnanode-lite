@@ -22,7 +22,9 @@ func renderFishCompletion(root commandSpec) string {
 		if option.Short != "" {
 			fmt.Fprintf(&output, " -s %s", shellQuote(option.Short))
 		}
-		fmt.Fprintf(&output, " -l %s -d %s\n", shellQuote(option.Long), shellQuote(option.Description))
+		fmt.Fprintf(&output, " -l %s", shellQuote(option.Long))
+		writeFishOptionValueMetadata(&output, option)
+		fmt.Fprintf(&output, " -d %s\n", shellQuote(option.Description))
 	}
 	for _, parent := range root.Commands {
 		if len(parent.Commands) == 0 {
@@ -44,15 +46,7 @@ func renderFishCompletion(root commandSpec) string {
 				fmt.Fprintf(&output, " -s %s", shellQuote(option.Short))
 			}
 			fmt.Fprintf(&output, " -l %s", shellQuote(option.Long))
-			if option.Value != commandValueNone {
-				output.WriteString(" -r")
-			}
-			switch option.Value {
-			case commandValueFile:
-				output.WriteString(" -F")
-			case commandValueDirectory:
-				output.WriteString(" -a '(__fish_complete_directories)'")
-			}
+			writeFishOptionValueMetadata(&output, option)
 			fmt.Fprintf(&output, " -d %s\n", shellQuote(option.Description))
 		}
 		for _, candidate := range command.Arguments {
@@ -62,6 +56,26 @@ func renderFishCompletion(root commandSpec) string {
 	})
 	output.WriteString("complete -c rnlctl -s h -l help -d 'Show help'\n")
 	return output.String()
+}
+
+func writeFishOptionValueMetadata(output *strings.Builder, option commandOptionSpec) {
+	if option.Value != commandValueNone {
+		output.WriteString(" -r")
+	}
+	if len(option.ValueCandidates) != 0 {
+		values := make([]string, 0, len(option.ValueCandidates))
+		for _, candidate := range option.ValueCandidates {
+			values = append(values, candidate.Value)
+		}
+		fmt.Fprintf(output, " -a %s", shellQuote(strings.Join(values, " ")))
+		return
+	}
+	switch option.Value {
+	case commandValueFile:
+		output.WriteString(" -F")
+	case commandValueDirectory:
+		output.WriteString(" -a '(__fish_complete_directories)'")
+	}
 }
 
 func fishSubcommandCondition(parent commandSpec) string {
@@ -117,14 +131,29 @@ func writeFishHelpers(output *strings.Builder, root commandSpec) {
 		}
 	}
 
+	valueOptions := completionValueOptions(root.Options)
 	output.WriteString(`function __rnlctl_completion_path
   set -l tokens (commandline -opc)
   set -l command
   set -l subcommand
+  set -l consumes_global_value 0
   for token in $tokens[2..-1]
+    if test $consumes_global_value -eq 1
+      set consumes_global_value 0
+      continue
+    end
     switch $token
-      case `)
-	output.WriteString(strings.Join(completionOptionPatterns(root.Options), " "))
+`)
+	if len(valueOptions) != 0 {
+		output.WriteString("      case ")
+		output.WriteString(strings.Join(fishCompletionOptionPatterns(valueOptions, false), " "))
+		output.WriteString(`
+        set consumes_global_value 1
+        continue
+`)
+	}
+	output.WriteString("      case ")
+	output.WriteString(strings.Join(fishGlobalFlagAndInlinePatterns(root.Options), " "))
 	output.WriteString(`
         continue
     end
@@ -194,18 +223,29 @@ function __rnlctl_completion_logs_source
       end
       continue
     end
+    if test $consumes_value -eq 1
+      set consumes_value 0
+      continue
+    end
     switch $token
-      case --quiet -q --no-color
+`)
+	if len(valueOptions) != 0 {
+		output.WriteString("      case ")
+		output.WriteString(strings.Join(fishCompletionOptionPatterns(valueOptions, false), " "))
+		output.WriteString(`
+        set consumes_value 1
+        continue
+`)
+	}
+	output.WriteString("      case ")
+	output.WriteString(strings.Join(fishGlobalFlagAndInlinePatterns(root.Options), " "))
+	output.WriteString(`
         continue
       case --lines -n --since
         set consumes_value 1
         continue
       case '-*'
         continue
-    end
-    if test $consumes_value -eq 1
-      set consumes_value 0
-      continue
     end
     printf '%s\n' "$token"
     return 0
@@ -231,4 +271,29 @@ function __rnlctl_completion_option_available
 end
 
 `)
+}
+
+func fishCompletionOptionPatterns(options []commandOptionSpec, inline bool) []string {
+	patterns := make([]string, 0, len(options)*2)
+	for _, option := range options {
+		for _, name := range completionOptionNames(option) {
+			if inline {
+				name += "=*"
+			}
+			patterns = append(patterns, shellQuote(name))
+		}
+	}
+	return patterns
+}
+
+func fishGlobalFlagAndInlinePatterns(options []commandOptionSpec) []string {
+	patterns := make([]string, 0, len(options)*2)
+	for _, option := range options {
+		if option.Value == commandValueNone {
+			patterns = append(patterns, fishCompletionOptionPatterns([]commandOptionSpec{option}, false)...)
+			continue
+		}
+		patterns = append(patterns, fishCompletionOptionPatterns([]commandOptionSpec{option}, true)...)
+	}
+	return patterns
 }

@@ -472,6 +472,7 @@ func (host *LinuxHost) WaitHealthy(ctx context.Context, binary, socketPath strin
 	var lastErr error
 	stableSuccesses := 0
 	for {
+		emitProgressHeartbeat(waitCtx, phaseWaitHealthy)
 		status, err := host.ServiceStatus(waitCtx)
 		if err != nil {
 			lastErr = err
@@ -491,6 +492,9 @@ func (host *LinuxHost) WaitHealthy(ctx context.Context, binary, socketPath strin
 		}
 		select {
 		case <-waitCtx.Done():
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("service health wait interrupted: %w", err)
+			}
 			return fmt.Errorf("service did not become healthy within %s: %w", timeout, lastErr)
 		case <-ticker.C:
 		}

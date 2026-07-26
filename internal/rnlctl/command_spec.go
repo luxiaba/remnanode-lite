@@ -25,6 +25,7 @@ type commandOptionSpec struct {
 	Short           string
 	Description     string
 	Value           commandValueKind
+	ValueCandidates []commandArgumentSpec
 	UnavailableWith []string
 	HelpLabel       string
 	HelpDescription string
@@ -209,12 +210,21 @@ func buildRNLCTLCommandSpec() commandSpec {
 
 	rootOptions := []commandOptionSpec{
 		{
-			Long: "quiet", Short: "q", Description: "Hide successful output", HelpLabel: "--quiet, -q",
-			HelpDescription: "Hide confirmations and human status reports",
+			Long: "quiet", Short: "q", Description: "Suppress routine success and health summaries", HelpLabel: "--quiet, -q",
+			HelpDescription: "Suppress routine success and health summaries",
 		},
 		{
 			Long: "no-color", Description: "Disable terminal colors", HelpLabel: "--no-color",
-			HelpDescription: "Disable color in human diagnostic output",
+			HelpDescription: "Disable color in human-readable output",
+		},
+		{
+			Long: "progress", Description: "Set progress output mode", Value: commandValueWord,
+			ValueCandidates: []commandArgumentSpec{
+				{Value: "auto", Description: "Use terminal progress or plain output automatically"},
+				{Value: "plain", Description: "Use stable line-oriented progress output"},
+				{Value: "never", Description: "Disable progress output"},
+			},
+			HelpLabel: "--progress MODE", HelpDescription: "Progress output: auto, plain, or never (default: auto)",
 		},
 	}
 	root := commandSpec{
@@ -290,7 +300,7 @@ func buildRNLCTLCommandSpec() commandSpec {
 		},
 	}
 	root.Help = commandHelpSpec{
-		Synopsis: "rnlctl [--quiet|-q] [--no-color] <command>",
+		Synopsis: "rnlctl [--quiet|-q] [--no-color] [--progress MODE] <command>",
 		Blocks: []commandHelpBlock{
 			{Heading: "Commands", DescriptionColumn: 32, Rows: commandHelpRows(root.Commands)},
 			{Heading: "Global options", DescriptionColumn: 32, Rows: optionHelpRows(root.Options)},
@@ -338,11 +348,6 @@ func validateCommandSpec(root commandSpec) error {
 	if root.Name != "rnlctl" || len(root.Commands) == 0 {
 		return fmt.Errorf("root command is incomplete")
 	}
-	for _, option := range root.Options {
-		if option.Value != commandValueNone {
-			return fmt.Errorf("global command option %q cannot accept a value", option.Long)
-		}
-	}
 	var validate func(commandSpec, string, int) error
 	validate = func(command commandSpec, parent string, depth int) error {
 		path := strings.TrimSpace(parent + " " + command.Name)
@@ -384,6 +389,19 @@ func validateCommandSpec(root commandSpec) error {
 			}
 			if option.Value > commandValueDirectory {
 				return fmt.Errorf("command %q has an invalid value kind", path)
+			}
+			if len(option.ValueCandidates) != 0 && option.Value != commandValueWord {
+				return fmt.Errorf("command %q option %q has finite values without a word value", path, option.Long)
+			}
+			values := make(map[string]struct{}, len(option.ValueCandidates))
+			for _, candidate := range option.ValueCandidates {
+				if candidate.Value == "" || candidate.Description == "" || candidate.NoSpace || strings.ContainsAny(candidate.Value, "\t\r\n ") {
+					return fmt.Errorf("command %q option %q has an invalid finite value", path, option.Long)
+				}
+				if _, exists := values[candidate.Value]; exists {
+					return fmt.Errorf("command %q option %q repeats finite value %q", path, option.Long, candidate.Value)
+				}
+				values[candidate.Value] = struct{}{}
 			}
 		}
 		arguments := make(map[string]struct{}, len(command.Arguments))

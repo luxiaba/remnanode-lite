@@ -29,6 +29,7 @@ _rnlctl() {
   current=${words[CURRENT]:-}
   previous=
 `)
+	writeZshGlobalOptionValues(&output, root.Options)
 	writeZshGlobalScan(&output, root.Options)
 	writeZshDescribe(&output, "    ", "commands", "rnlctl command", append(rootCommandCandidates(root), append(optionCandidates(root.Options),
 		commandArgumentSpec{Value: "--version", Description: "Show version"},
@@ -39,7 +40,7 @@ _rnlctl() {
 			continue
 		}
 		fmt.Fprintf(&output, "  if [[ $command == %s ]]; then\n", shellQuote(command.Name))
-		output.WriteString("    for (( i=command_index+1; i<CURRENT; i++ )); do\n      token=${words[i]}\n      if _rnlctl_completion_is_global_option \"$token\"; then\n        continue\n      fi\n      subcommand=$token\n      subcommand_index=$i\n      break\n    done\n    if [[ -z $subcommand ]]; then\n")
+		output.WriteString("    expect_value=0\n    for (( i=command_index+1; i<CURRENT; i++ )); do\n      token=${words[i]}\n      if (( expect_value )); then\n        expect_value=0\n        continue\n      fi\n      if _rnlctl_completion_is_global_option \"$token\"; then\n        if _rnlctl_completion_global_option_takes_value \"$token\"; then\n          expect_value=1\n        fi\n        continue\n      fi\n      subcommand=$token\n      subcommand_index=$i\n      break\n    done\n    if [[ -z $subcommand ]]; then\n")
 		writeZshDescribe(&output, "      ", "commands", command.Name+" command", append(commandCommandCandidates(command), optionCandidates(root.Options)...))
 		output.WriteString("      return\n    fi\n  fi\n")
 	}
@@ -79,10 +80,32 @@ func writeZshGlobalScan(output *strings.Builder, options []commandOptionSpec) {
     esac
   }
 
+  _rnlctl_completion_global_option_takes_value() {
+    case $1 in
+      `)
+	valuePatterns := completionOptionShellPatterns(completionValueOptions(options), false)
+	if len(valuePatterns) == 0 {
+		output.WriteString("__rnlctl_no_global_value_options__")
+	} else {
+		output.WriteString(strings.Join(valuePatterns, "|"))
+	}
+	output.WriteString(`) return 0 ;;
+      *) return 1 ;;
+    esac
+  }
+
   command=
+  expect_value=0
   for (( i=2; i<CURRENT; i++ )); do
     token=${words[i]}
+    if (( expect_value )); then
+      expect_value=0
+      continue
+    fi
     if _rnlctl_completion_is_global_option "$token"; then
+      if _rnlctl_completion_global_option_takes_value "$token"; then
+        expect_value=1
+      fi
       continue
     fi
     command=$token
@@ -94,6 +117,10 @@ func writeZshGlobalScan(output *strings.Builder, options []commandOptionSpec) {
     if _rnlctl_completion_is_global_option "$token"; then
       continue
     fi
+    if (( i > 2 )) && _rnlctl_completion_global_option_takes_value "${words[i-1]}"; then
+      (( i-- ))
+      continue
+    fi
     previous=$token
     break
   done
@@ -101,13 +128,35 @@ func writeZshGlobalScan(output *strings.Builder, options []commandOptionSpec) {
 `)
 }
 
-func writeZshOptionValues(output *strings.Builder, command commandSpec) {
-	var valueOptions []commandOptionSpec
-	for _, option := range command.Options {
-		if option.Value != commandValueNone {
-			valueOptions = append(valueOptions, option)
+func writeZshGlobalOptionValues(output *strings.Builder, options []commandOptionSpec) {
+	valueOptions := completionValueOptions(options)
+	if len(valueOptions) == 0 {
+		return
+	}
+	output.WriteString("  case ${words[CURRENT-1]:-} in\n")
+	for _, option := range valueOptions {
+		patterns := make([]string, 0, 2)
+		for _, name := range completionOptionNames(option) {
+			patterns = append(patterns, shellQuote(name))
+		}
+		fmt.Fprintf(output, "    %s)\n", strings.Join(patterns, "|"))
+		writeZshOptionValueAction(output, "      ", option, "", false)
+		output.WriteString("      return\n      ;;\n")
+	}
+	output.WriteString("  esac\n  case $current in\n")
+	for _, option := range valueOptions {
+		for _, name := range completionOptionNames(option) {
+			prefix := name + "="
+			fmt.Fprintf(output, "    %s*)\n", shellQuote(prefix))
+			writeZshOptionValueAction(output, "      ", option, prefix, true)
+			output.WriteString("      return\n      ;;\n")
 		}
 	}
+	output.WriteString("  esac\n")
+}
+
+func writeZshOptionValues(output *strings.Builder, command commandSpec) {
+	valueOptions := completionValueOptions(command.Options)
 	if len(valueOptions) == 0 {
 		return
 	}
@@ -118,27 +167,33 @@ func writeZshOptionValues(output *strings.Builder, command commandSpec) {
 			patterns = append(patterns, shellQuote("-"+option.Short))
 		}
 		fmt.Fprintf(output, "        %s)\n", strings.Join(patterns, "|"))
-		switch option.Value {
-		case commandValueFile:
-			output.WriteString("          _files\n")
-		case commandValueDirectory:
-			output.WriteString("          _files -/\n")
-		}
+		writeZshOptionValueAction(output, "          ", option, "", false)
 		output.WriteString("          return\n          ;;\n")
 	}
 	output.WriteString("      esac\n")
 	for _, option := range valueOptions {
-		long := "--" + option.Long + "="
-		fmt.Fprintf(output, "      if [[ $current == %s* ]]; then\n", shellQuote(long))
-		if option.Value == commandValueFile || option.Value == commandValueDirectory {
-			output.WriteString("        compset -P '*='\n")
-			if option.Value == commandValueDirectory {
-				output.WriteString("        _files -/\n")
-			} else {
-				output.WriteString("        _files\n")
-			}
+		for _, name := range completionOptionNames(option) {
+			prefix := name + "="
+			fmt.Fprintf(output, "      if [[ $current == %s* ]]; then\n", shellQuote(prefix))
+			writeZshOptionValueAction(output, "        ", option, prefix, true)
+			output.WriteString("        return\n      fi\n")
 		}
-		output.WriteString("        return\n      fi\n")
+	}
+}
+
+func writeZshOptionValueAction(output *strings.Builder, indent string, option commandOptionSpec, prefix string, inline bool) {
+	if len(option.ValueCandidates) != 0 {
+		writeZshDescribe(output, indent, "values", "value", completionOptionValueCandidates(option, prefix))
+		return
+	}
+	if inline {
+		output.WriteString(indent + "compset -P '*='\n")
+	}
+	switch option.Value {
+	case commandValueFile:
+		output.WriteString(indent + "_files\n")
+	case commandValueDirectory:
+		output.WriteString(indent + "_files -/\n")
 	}
 }
 
@@ -146,7 +201,7 @@ func writeZshArgumentScan(output *strings.Builder, command commandSpec) {
 	if len(command.Arguments) == 0 {
 		return
 	}
-	output.WriteString("      used_arguments=()\n      used_options=()\n      expect_value=0\n      for (( i=argument_start; i<CURRENT; i++ )); do\n        token=${words[i]}\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          continue\n        fi\n        if (( expect_value )); then\n          expect_value=0\n          continue\n        fi\n        case $token in\n")
+	output.WriteString("      used_arguments=()\n      used_options=()\n      expect_value=0\n      for (( i=argument_start; i<CURRENT; i++ )); do\n        token=${words[i]}\n        if (( expect_value )); then\n          expect_value=0\n          continue\n        fi\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          if _rnlctl_completion_global_option_takes_value \"$token\"; then\n            expect_value=1\n          fi\n          continue\n        fi\n        case $token in\n")
 	for _, option := range command.Options {
 		patterns := completionOptionShellPatterns([]commandOptionSpec{option}, false)
 		fmt.Fprintf(output, "          %s)\n            used_options+=(%s)\n", strings.Join(patterns, "|"), shellQuote("--"+option.Long))

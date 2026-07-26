@@ -43,14 +43,47 @@ func combinedCompletionOptions(root, command commandSpec) []commandOptionSpec {
 }
 
 func completionOptionPatterns(options []commandOptionSpec) []string {
-	patterns := make([]string, 0, len(options)*2)
+	patterns := make([]string, 0, len(options)*3)
 	for _, option := range options {
 		if option.Short != "" {
 			patterns = append(patterns, "-"+option.Short)
+			if option.Value != commandValueNone {
+				patterns = append(patterns, "-"+option.Short+"=*")
+			}
 		}
 		patterns = append(patterns, "--"+option.Long)
+		if option.Value != commandValueNone {
+			patterns = append(patterns, "--"+option.Long+"=*")
+		}
 	}
 	return patterns
+}
+
+func completionValueOptions(options []commandOptionSpec) []commandOptionSpec {
+	result := make([]commandOptionSpec, 0, len(options))
+	for _, option := range options {
+		if option.Value != commandValueNone {
+			result = append(result, option)
+		}
+	}
+	return result
+}
+
+func completionOptionValueCandidates(option commandOptionSpec, prefix string) []commandArgumentSpec {
+	result := make([]commandArgumentSpec, 0, len(option.ValueCandidates))
+	for _, candidate := range option.ValueCandidates {
+		candidate.Value = prefix + candidate.Value
+		result = append(result, candidate)
+	}
+	return result
+}
+
+func completionOptionNames(option commandOptionSpec) []string {
+	result := make([]string, 0, 2)
+	if option.Short != "" {
+		result = append(result, "-"+option.Short)
+	}
+	return append(result, "--"+option.Long)
 }
 
 // optionsUnavailableWithArgument returns the command options which make a
