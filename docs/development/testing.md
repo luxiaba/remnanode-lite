@@ -489,6 +489,12 @@ The required gate in `.github/workflows/ci.yml` aggregates four parallel jobs:
 | `netadmin` | Both Linux namespace integration tests |
 | `gate` | Requires every job above to report success |
 
+For pull requests targeting `main`, the `repository` job fetches the full Git
+tag history and runs the release-metadata check before installing the static
+tools. It rejects a reused published version, an out-of-order preview revision,
+an undated changelog, or unsynchronized version references before merge. Normal
+pull requests targeting `dev` do not run this release-only preflight.
+
 The candidate workflow remains path-filtered for pull requests, so it does not
 run on every PR. Every push to `main`, however, builds and attests the manifest
 and publishes the immutable `sha-<40-character-commit>` candidate. The manual

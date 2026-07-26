@@ -30,6 +30,12 @@ and lifecycle recovery.
   Recovery reasserts and verifies the previous service-manager state before it
   clears the transaction journal.
 
+### Fixed
+
+- Pull requests targeting `main` now validate release metadata against the full
+  Git tag history before merge, preventing a published project version from
+  being reused for different source.
+
 ## [2.8.0-rnl.1] - 2026-07-25
 
 This preview keeps the verified official Node `2.8.0` contract and focuses on

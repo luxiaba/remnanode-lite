@@ -53,11 +53,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+
+      - name: Verify release metadata for a main pull request
+        if: ${{ github.event_name == 'pull_request' && github.base_ref == 'main' }}
+        run: |
+          version="$(sed -n 's/^var Version = "\([^"]*\)"$/\1/p' internal/version/version.go)"
+          bash scripts/check-release-metadata.sh "$version"
 
       - name: Install pinned static checks
         run: bash scripts/install-ci-checks.sh
