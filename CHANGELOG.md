@@ -6,6 +6,12 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [2.8.0-rnl.2] - 2026-07-26
+
+This preview keeps the verified official Node `2.8.0` contract and gives Native
+installation and `rnlctl` clearer interactive feedback, with safer interruption
+and lifecycle recovery.
+
 ### Added
 
 - Added adaptive progress for Native installation and `rnlctl` lifecycle
