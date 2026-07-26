@@ -31,7 +31,7 @@ func normalizeFilterPrefixes(items []string) (v4, v6 []string) {
 			}
 			continue
 		}
-		if addr, err := netip.ParseAddr(item); err == nil {
+		if addr, err := netip.ParseAddr(item); err == nil && addr.Zone() == "" {
 			addr = addr.Unmap()
 			if addr.Is4() {
 				b4.Add(addr)

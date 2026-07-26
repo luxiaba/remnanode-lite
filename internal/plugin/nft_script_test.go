@@ -85,6 +85,19 @@ func TestRenderNFTBlockRejectsInvalidIP(t *testing.T) {
 	}
 }
 
+func TestNFTRenderersRejectScopedIPv6Addresses(t *testing.T) {
+	t.Parallel()
+
+	for _, address := range []string{"fe80::1%eth0", "fe80::1%eth0\nadd table ip injected"} {
+		if _, err := renderNFTBlock([]BlockIP{{IP: address, Timeout: 1}}); err == nil {
+			t.Errorf("renderNFTBlock accepted scoped address %q", address)
+		}
+		if _, err := renderNFTUnblock([]string{address}); err == nil {
+			t.Errorf("renderNFTUnblock accepted scoped address %q", address)
+		}
+	}
+}
+
 func TestRenderNFTBlockRendersZeroTimeoutAsPermanent(t *testing.T) {
 	t.Parallel()
 

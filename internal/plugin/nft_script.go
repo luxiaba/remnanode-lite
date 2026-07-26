@@ -165,7 +165,7 @@ func renderNFTBlock(items []BlockIP) (string, error) {
 	v6 := make(map[string]timedAddress)
 	for _, item := range items {
 		addr, err := netip.ParseAddr(strings.TrimSpace(item.IP))
-		if err != nil {
+		if err != nil || addr.Zone() != "" {
 			return "", fmt.Errorf("invalid ip %s", quotedForError(item.IP))
 		}
 		addr = addr.Unmap()
@@ -215,7 +215,7 @@ func renderNFTUnblock(ips []string) ([]string, error) {
 	v6 := make(map[string]struct{})
 	for _, raw := range ips {
 		addr, err := netip.ParseAddr(strings.TrimSpace(raw))
-		if err != nil {
+		if err != nil || addr.Zone() != "" {
 			return nil, fmt.Errorf("invalid ip %s", quotedForError(raw))
 		}
 		addr = addr.Unmap()

@@ -31,7 +31,7 @@ func TestNormalizeFilterPrefixes(t *testing.T) {
 		},
 		{
 			name:   "splits families and drops invalid",
-			input:  []string{"bad", "", "::1", "8.8.8.8"},
+			input:  []string{"bad", "", "fe80::1%eth0", "::1", "8.8.8.8"},
 			wantV4: []string{"8.8.8.8/32"},
 			wantV6: []string{"::1/128"},
 		},
