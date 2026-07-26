@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+source scripts/check-lib.sh
 
 for command in go git gofmt; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -24,11 +25,12 @@ if [ -n "$unformatted" ]; then
   exit 1
 fi
 
-bash scripts/check-version.sh
-go mod verify
-go mod tidy -diff
-go test -count=1 ./...
-go test -race -count=1 ./...
-go vet ./...
+run_check_step "Version policy" bash scripts/check-version.sh
+run_check_step "Go module verification" go mod verify
+run_check_step "Go module tidiness" go mod tidy -diff
+run_check_step "Go test suite" go test -count=1 ./...
+run_check_step "Runtime race suite" \
+  go test -race -count=1 ./internal/... ./cmd/remnanode-lite
+run_check_step "Go vet" go vet ./...
 
 echo "Go checks passed"

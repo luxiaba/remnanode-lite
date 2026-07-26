@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+source scripts/check-lib.sh
 
 for command in go git shellcheck actionlint; do
   command -v "$command" >/dev/null 2>&1 || {
@@ -34,7 +35,7 @@ if [ "$content_policy_failed" -ne 0 ]; then
   exit 1
 fi
 
-go run ./cmd/docs-check
+run_check_step "Documentation contracts" go run ./cmd/docs-check
 native_shell_files=()
 while IFS= read -r -d '' file; do
   native_shell_files+=("$file")
@@ -43,33 +44,46 @@ done < <(find release/native -type f -name '*.sh' -print0)
   echo "Native release scripts are missing" >&2
   exit 1
 }
-shellcheck -x scripts/*.sh deploy/remnanode-lite.openrc "${native_shell_files[@]}"
-for script in scripts/*.sh; do
-  bash -n "$script"
+run_check_step "ShellCheck" \
+  shellcheck -x scripts/*.sh deploy/remnanode-lite.openrc "${native_shell_files[@]}"
+
+check_shell_syntax() {
+  local script
+  for script in scripts/*.sh; do
+    bash -n "$script" || return $?
+  done
+  for script in "${native_shell_files[@]}"; do
+    sh -n "$script" || return $?
+  done
+  sh -n deploy/remnanode-lite.openrc || return $?
+}
+run_check_step "Shell syntax" check_shell_syntax
+run_check_step "GitHub Actions lint" actionlint
+
+repository_behavior_tests=(
+  scripts/check-lib-test.sh
+  scripts/check-version-test.sh
+  scripts/verify-release-tag-test.sh
+  scripts/verify-release-latest-test.sh
+  scripts/require-channel-owner-test.sh
+  scripts/verify-candidate-image-test.sh
+  scripts/verify-release-image-test.sh
+  scripts/verify-published-release-test.sh
+  scripts/promote-image-tag-test.sh
+  scripts/find-workflow-run-test.sh
+  scripts/release-state-test.sh
+  scripts/main-release-guard-test.sh
+  scripts/verify-release-asset-attestations-test.sh
+  scripts/verify-draft-release-test.sh
+  scripts/test-docker-packaging.sh
+  scripts/check-supply-chain.sh
+)
+for test_script in "${repository_behavior_tests[@]}"; do
+  run_check_step "${test_script##*/}" bash "$test_script"
 done
-for script in "${native_shell_files[@]}"; do
-  sh -n "$script"
-done
-sh -n deploy/remnanode-lite.openrc
-actionlint
-bash scripts/check-version-test.sh
-bash scripts/verify-release-tag-test.sh
-bash scripts/verify-release-latest-test.sh
-bash scripts/require-channel-owner-test.sh
-bash scripts/verify-candidate-image-test.sh
-bash scripts/verify-release-image-test.sh
-bash scripts/verify-published-release-test.sh
-bash scripts/promote-image-tag-test.sh
-bash scripts/find-workflow-run-test.sh
-bash scripts/release-state-test.sh
-bash scripts/main-release-guard-test.sh
-bash scripts/verify-release-asset-attestations-test.sh
-bash scripts/verify-draft-release-test.sh
-bash scripts/test-docker-packaging.sh
-bash scripts/check-supply-chain.sh
 
 if command -v govulncheck >/dev/null 2>&1; then
-  govulncheck ./...
+  run_check_step "Reachable vulnerability scan" govulncheck ./...
 elif [ "${REQUIRE_GOVULNCHECK:-0}" = "1" ]; then
   echo "govulncheck is required but not installed" >&2
   exit 1
@@ -82,6 +96,7 @@ else
   artifact_dir="$(mktemp -d)"
   trap 'rm -rf "$artifact_dir"' EXIT
 fi
-bash scripts/build-release-binaries.sh "$artifact_dir"
+run_check_step "Linux release cross-build" \
+  bash scripts/build-release-binaries.sh "$artifact_dir"
 
 echo "repository checks passed"
