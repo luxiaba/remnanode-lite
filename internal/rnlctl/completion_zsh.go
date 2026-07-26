@@ -24,8 +24,8 @@ _rnlctl_completion_argument_used() {
 
 _rnlctl() {
   local current previous command subcommand command_path token
-	local -a used_arguments
-	integer command_index=0 subcommand_index=0 argument_start=0 expect_value=0 i
+  local -a used_arguments used_options
+  integer command_index=0 subcommand_index=0 argument_start=0 expect_value=0 i
   current=${words[CURRENT]:-}
   previous=
 `)
@@ -146,11 +146,19 @@ func writeZshArgumentScan(output *strings.Builder, command commandSpec) {
 	if len(command.Arguments) == 0 {
 		return
 	}
-	valueOptions := completionValueOptions(command.Options)
-	output.WriteString("      used_arguments=()\n      expect_value=0\n      for (( i=argument_start; i<CURRENT; i++ )); do\n        token=${words[i]}\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          continue\n        fi\n        if (( expect_value )); then\n          expect_value=0\n          continue\n        fi\n        case $token in\n")
-	if len(valueOptions) != 0 {
-		fmt.Fprintf(output, "          %s)\n            expect_value=1\n            continue\n            ;;\n", strings.Join(completionOptionShellPatterns(valueOptions, false), "|"))
-		fmt.Fprintf(output, "          %s)\n            continue\n            ;;\n", strings.Join(completionOptionShellPatterns(valueOptions, true), "|"))
+	output.WriteString("      used_arguments=()\n      used_options=()\n      expect_value=0\n      for (( i=argument_start; i<CURRENT; i++ )); do\n        token=${words[i]}\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          continue\n        fi\n        if (( expect_value )); then\n          expect_value=0\n          continue\n        fi\n        case $token in\n")
+	for _, option := range command.Options {
+		patterns := completionOptionShellPatterns([]commandOptionSpec{option}, false)
+		fmt.Fprintf(output, "          %s)\n            used_options+=(%s)\n", strings.Join(patterns, "|"), shellQuote("--"+option.Long))
+		if option.Value != commandValueNone {
+			output.WriteString("            expect_value=1\n")
+		}
+		output.WriteString("            continue\n            ;;\n")
+		if option.Value == commandValueNone {
+			continue
+		}
+		inlinePatterns := completionOptionShellPatterns([]commandOptionSpec{option}, true)
+		fmt.Fprintf(output, "          %s)\n            used_options+=(%s)\n            continue\n            ;;\n", strings.Join(inlinePatterns, "|"), shellQuote("--"+option.Long))
 	}
 	output.WriteString("          -*)\n            continue\n            ;;\n          *)\n            used_arguments+=(\"$token\")\n            ;;\n        esac\n      done\n")
 }
@@ -184,13 +192,34 @@ func writeZshOptionCandidates(output *strings.Builder, indent string, options []
 func writeZshArgumentCandidates(output *strings.Builder, indent string, command commandSpec) {
 	if !command.RepeatArgs {
 		fmt.Fprintf(output, "%sif (( ${#used_arguments} == 0 )); then\n", indent)
-		writeZshCandidateValues(output, indent+"  ", command.Arguments)
+		if !hasArgumentAvailabilityConditions(command) {
+			writeZshCandidateValues(output, indent+"  ", command.Arguments)
+			output.WriteString(indent + "fi\n")
+			return
+		}
+		output.WriteString(indent + "  local -a candidates\n")
+		output.WriteString(indent + "  candidates=()\n")
+		for _, candidate := range command.Arguments {
+			condition := zshArgumentAvailableCondition(command, candidate)
+			if condition == "" {
+				fmt.Fprintf(output, "%s  candidates+=(%s)\n", indent, shellQuote(candidate.Value+":"+candidate.Description))
+				continue
+			}
+			fmt.Fprintf(output, "%s  if %s; then\n", indent, condition)
+			fmt.Fprintf(output, "%s    candidates+=(%s)\n", indent, shellQuote(candidate.Value+":"+candidate.Description))
+			output.WriteString(indent + "  fi\n")
+		}
+		output.WriteString(indent + "  (( ${#candidates} > 0 )) && _describe -t values 'value' candidates\n")
 		output.WriteString(indent + "fi\n")
 		return
 	}
 	if hasNoSpaceCandidate(command.Arguments) {
 		for _, candidate := range command.Arguments {
-			fmt.Fprintf(output, "%sif ! _rnlctl_completion_argument_used %s \"${used_arguments[@]}\"; then\n", indent, shellQuote(candidate.Value))
+			conditions := []string{"! _rnlctl_completion_argument_used " + shellQuote(candidate.Value) + " \"${used_arguments[@]}\""}
+			if condition := zshArgumentAvailableCondition(command, candidate); condition != "" {
+				conditions = append(conditions, condition)
+			}
+			fmt.Fprintf(output, "%sif %s; then\n", indent, strings.Join(conditions, " && "))
 			fmt.Fprintf(output, "%s  compadd -S '' -- %s\n", indent, shellQuote(candidate.Value))
 			output.WriteString(indent + "fi\n")
 		}
@@ -199,11 +228,33 @@ func writeZshArgumentCandidates(output *strings.Builder, indent string, command 
 	output.WriteString(indent + "local -a candidates\n")
 	output.WriteString(indent + "candidates=()\n")
 	for _, candidate := range command.Arguments {
-		fmt.Fprintf(output, "%sif ! _rnlctl_completion_argument_used %s \"${used_arguments[@]}\"; then\n", indent, shellQuote(candidate.Value))
+		conditions := []string{"! _rnlctl_completion_argument_used " + shellQuote(candidate.Value) + " \"${used_arguments[@]}\""}
+		if condition := zshArgumentAvailableCondition(command, candidate); condition != "" {
+			conditions = append(conditions, condition)
+		}
+		fmt.Fprintf(output, "%sif %s; then\n", indent, strings.Join(conditions, " && "))
 		fmt.Fprintf(output, "%s  candidates+=(%s)\n", indent, shellQuote(candidate.Value+":"+candidate.Description))
 		output.WriteString(indent + "fi\n")
 	}
 	output.WriteString(indent + "(( ${#candidates} > 0 )) && _describe -t values 'value' candidates\n")
+}
+
+func hasArgumentAvailabilityConditions(command commandSpec) bool {
+	for _, candidate := range command.Arguments {
+		if len(optionsUnavailableWithArgument(command.Options, candidate)) != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func zshArgumentAvailableCondition(command commandSpec, candidate commandArgumentSpec) string {
+	options := optionsUnavailableWithArgument(command.Options, candidate)
+	conditions := make([]string, 0, len(options))
+	for _, option := range options {
+		conditions = append(conditions, "! _rnlctl_completion_argument_used "+shellQuote("--"+option.Long)+" \"${used_options[@]}\"")
+	}
+	return strings.Join(conditions, " && ")
 }
 
 func writeZshCandidateValues(output *strings.Builder, indent string, candidates []commandArgumentSpec) {

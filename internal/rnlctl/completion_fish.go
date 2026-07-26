@@ -95,6 +95,9 @@ func fishArgumentCondition(path []string, command commandSpec, candidate command
 	if command.RepeatArgs {
 		return condition + "; and not __rnlctl_completion_argument_used " + shellQuote(candidate.Value)
 	}
+	for _, option := range optionsUnavailableWithArgument(command.Options, candidate) {
+		condition += "; and not __rnlctl_completion_option_used " + shellQuote("--"+option.Long)
+	}
 	if strings.Join(path, " ") == "logs" {
 		return condition + "; and not __rnlctl_completion_logs_source_is_set"
 	}
@@ -151,6 +154,17 @@ function __rnlctl_completion_path_is
 end
 
 function __rnlctl_completion_argument_used
+  set -l wanted (string replace -r '=.*$' '' -- $argv[1])
+  for token in (commandline -opc)
+    set -l actual (string replace -r '=.*$' '' -- $token)
+    if test "$actual" = "$wanted"
+      return 0
+    end
+  end
+  return 1
+end
+
+function __rnlctl_completion_option_used
   set -l wanted (string replace -r '=.*$' '' -- $argv[1])
   for token in (commandline -opc)
     set -l actual (string replace -r '=.*$' '' -- $token)

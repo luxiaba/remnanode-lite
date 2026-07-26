@@ -268,6 +268,9 @@ func TestGeneratedBashCompletionBehavior(t *testing.T) {
 	assertBashCandidates([]string{"rnlctl", "--quiet", "logs", "--s"}, 3, "--since")
 	assertBashCandidates([]string{"rnlctl", "upgrade", "--d"}, 2, "--dry-run")
 	assertBashMissing([]string{"rnlctl", "logs", "core", "--s"}, 3, "--since")
+	assertBashCandidates([]string{"rnlctl", "logs", "--since", "15m", ""}, 4, "node")
+	assertBashMissing([]string{"rnlctl", "logs", "--since", "15m", ""}, 4, "core", "core-errors")
+	assertBashMissing([]string{"rnlctl", "logs", "--since=15m", ""}, 3, "core", "core-errors")
 	assertBashCandidates([]string{"rnlctl", "config", "set", "NODE_PORT=12345", "NODE_"}, 4, "NODE_BIND_ADDR=")
 	assertBashMissing([]string{"rnlctl", "config", "set", "NODE_PORT=12345", "NODE_"}, 4, "NODE_PORT=")
 
@@ -342,6 +345,8 @@ _rnlctl
 	assertZshCandidates("rnlctl config set NODE_", "4", "NODE_PORT=", "NODE_BIND_ADDR=")
 	assertZshCandidates("rnlctl --quiet logs --s", "4", "--since:Show entries")
 	assertZshMissing("rnlctl logs core --s", "4", "--since:Show entries")
+	assertZshCandidates("rnlctl logs --since 15m ''", "5", "node:remnanode-lite")
+	assertZshMissing("rnlctl logs --since 15m ''", "5", "core:rw-core", "core-errors:rw-core")
 	assertZshCandidates("rnlctl config set NODE_PORT=12345 NODE_", "5", "NODE_BIND_ADDR=")
 	assertZshMissing("rnlctl config set NODE_PORT=12345 NODE_", "5", "NODE_PORT=")
 }
@@ -392,6 +397,8 @@ func TestGeneratedFishCompletionBehavior(t *testing.T) {
 	assertFishCandidates("rnlctl config set NODE_PORT=12345 ", "NODE_BIND_ADDR=")
 	assertFishMissing("rnlctl config set NODE_PORT=12345 ", "NODE_PORT=")
 	assertFishMissing("rnlctl logs core --", "--since")
+	assertFishCandidates("rnlctl logs --since 15m ", "node\tremnanode-lite")
+	assertFishMissing("rnlctl logs --since 15m ", "core\trw-core", "core-errors\trw-core")
 	assertFishMissing("rnlctl install --bundle-root config ", "show\t", "set\t")
 
 	directoryRoot := t.TempDir()

@@ -45,8 +45,8 @@ _rnlctl_completion_argument_used() {
 
 _rnlctl_completion() {
   local current previous command subcommand path token
-	local -a used_arguments=()
-	local -i command_index=0 subcommand_index=0 argument_start=0 expect_value=0 i
+  local -a used_arguments=() used_options=()
+  local -i command_index=0 subcommand_index=0 argument_start=0 expect_value=0 i
   COMPREPLY=()
   current=${COMP_WORDS[COMP_CWORD]:-}
   previous=
@@ -181,11 +181,19 @@ func writeBashArgumentScan(output *strings.Builder, command commandSpec) {
 	if len(command.Arguments) == 0 {
 		return
 	}
-	valueOptions := completionValueOptions(command.Options)
-	output.WriteString("      used_arguments=()\n      expect_value=0\n      for (( i=argument_start; i<COMP_CWORD; i++ )); do\n        token=${COMP_WORDS[i]}\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          continue\n        fi\n        if (( expect_value )); then\n          if [[ $token == = ]]; then\n            continue\n          fi\n          expect_value=0\n          continue\n        fi\n        case $token in\n")
-	if len(valueOptions) != 0 {
-		fmt.Fprintf(output, "          %s)\n            expect_value=1\n            continue\n            ;;\n", strings.Join(completionOptionShellPatterns(valueOptions, false), "|"))
-		fmt.Fprintf(output, "          %s)\n            continue\n            ;;\n", strings.Join(completionOptionShellPatterns(valueOptions, true), "|"))
+	output.WriteString("      used_arguments=()\n      used_options=()\n      expect_value=0\n      for (( i=argument_start; i<COMP_CWORD; i++ )); do\n        token=${COMP_WORDS[i]}\n        if _rnlctl_completion_is_global_option \"$token\"; then\n          continue\n        fi\n        if (( expect_value )); then\n          if [[ $token == = ]]; then\n            continue\n          fi\n          expect_value=0\n          continue\n        fi\n        case $token in\n")
+	for _, option := range command.Options {
+		patterns := completionOptionShellPatterns([]commandOptionSpec{option}, false)
+		fmt.Fprintf(output, "          %s)\n            used_options+=(%s)\n", strings.Join(patterns, "|"), shellQuote("--"+option.Long))
+		if option.Value != commandValueNone {
+			output.WriteString("            expect_value=1\n")
+		}
+		output.WriteString("            continue\n            ;;\n")
+		if option.Value == commandValueNone {
+			continue
+		}
+		inlinePatterns := completionOptionShellPatterns([]commandOptionSpec{option}, true)
+		fmt.Fprintf(output, "          %s)\n            used_options+=(%s)\n            continue\n            ;;\n", strings.Join(inlinePatterns, "|"), shellQuote("--"+option.Long))
 	}
 	output.WriteString("          -*)\n            continue\n            ;;\n          *)\n            used_arguments+=(\"$token\")\n            ;;\n        esac\n      done\n")
 }
@@ -211,15 +219,37 @@ func writeBashOptionCandidates(output *strings.Builder, indent string, options [
 func writeBashArgumentCandidates(output *strings.Builder, indent string, command commandSpec) {
 	if !command.RepeatArgs {
 		fmt.Fprintf(output, "%sif (( ${#used_arguments[@]} == 0 )); then\n", indent)
-		writeBashCandidates(output, indent+"  ", command.Arguments)
+		for _, candidate := range command.Arguments {
+			condition := bashArgumentAvailableCondition(command, candidate)
+			if condition != "" {
+				fmt.Fprintf(output, "%s  if %s; then\n", indent, condition)
+				writeBashCandidates(output, indent+"    ", []commandArgumentSpec{candidate})
+				output.WriteString(indent + "  fi\n")
+				continue
+			}
+			writeBashCandidates(output, indent+"  ", []commandArgumentSpec{candidate})
+		}
 		output.WriteString(indent + "fi\n")
 		return
 	}
 	for _, candidate := range command.Arguments {
-		fmt.Fprintf(output, "%sif ! _rnlctl_completion_argument_used %s \"${used_arguments[@]}\"; then\n", indent, shellQuote(candidate.Value))
+		conditions := []string{"! _rnlctl_completion_argument_used " + shellQuote(candidate.Value) + " \"${used_arguments[@]}\""}
+		if condition := bashArgumentAvailableCondition(command, candidate); condition != "" {
+			conditions = append(conditions, condition)
+		}
+		fmt.Fprintf(output, "%sif %s; then\n", indent, strings.Join(conditions, " && "))
 		writeBashCandidates(output, indent+"  ", []commandArgumentSpec{candidate})
 		output.WriteString(indent + "fi\n")
 	}
+}
+
+func bashArgumentAvailableCondition(command commandSpec, candidate commandArgumentSpec) string {
+	options := optionsUnavailableWithArgument(command.Options, candidate)
+	conditions := make([]string, 0, len(options))
+	for _, option := range options {
+		conditions = append(conditions, "! _rnlctl_completion_argument_used "+shellQuote("--"+option.Long)+" \"${used_options[@]}\"")
+	}
+	return strings.Join(conditions, " && ")
 }
 
 func bashOptionAvailableCondition(option commandOptionSpec) string {

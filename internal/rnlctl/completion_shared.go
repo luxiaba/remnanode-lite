@@ -53,14 +53,20 @@ func completionOptionPatterns(options []commandOptionSpec) []string {
 	return patterns
 }
 
-func completionValueOptions(options []commandOptionSpec) []commandOptionSpec {
-	values := make([]commandOptionSpec, 0, len(options))
+// optionsUnavailableWithArgument returns the command options which make a
+// positional candidate invalid. It is the reverse of the normal option-side
+// completion check, so shells do not suggest a combination the CLI rejects.
+func optionsUnavailableWithArgument(options []commandOptionSpec, argument commandArgumentSpec) []commandOptionSpec {
+	result := make([]commandOptionSpec, 0)
 	for _, option := range options {
-		if option.Value != commandValueNone {
-			values = append(values, option)
+		for _, unavailable := range option.UnavailableWith {
+			if unavailable == argument.Value {
+				result = append(result, option)
+				break
+			}
 		}
 	}
-	return values
+	return result
 }
 
 // completionOptionShellPatterns returns shell case patterns for options that
