@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=058752507be2a502430a68c9eae4f66cc47892a3274a98ceec94a765c6d70ac5 -->
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=44d03c0d2ef60a941805add030cde38290ff79732ffc700532b3cbced5767833 -->
 # 512 MiB 资源预算与工程基准
 
 > 这是中文译文；资源数字和边界以[英文原文](../../../development/resource-budget.md)为准。
@@ -76,7 +76,7 @@ M7 增加了两份来自真实发行版布局的快照：
 | Ubuntu 24.04 arm64 / systemd | Node RSS `11.9 MiB` | 项目文件约 `74 MiB` | 全新安装，真实 rw-core/geo/ASN，core 尚未由 Panel 拉起 |
 | Alpine 3.22 arm64 / OpenRC 容器（历史数据） | 整容器 `44.1 MiB` | 整个 rootfs `150.2 MiB` | 容器限制 `512 MiB / 1 CPU / 256 PIDs`，包含真实安装依赖与服务；不能作为受支持宿主机的资格证明 |
 
-这份 Alpine 容器历史测量仍可用于比较资源形态，但不能证明发行版受到支持。当前 Alpine 支持要求持久化的 3.22.x `sys` 安装、作为 PID 1 运行的发行版 OpenRC，以及[测试指南](testing.md#native-发行版资格验证)规定的完整宿主机资格检查。
+这份 Alpine 容器历史测量仍可用于比较资源形态，但不能证明发行版受到支持。当前范围以 [Native 主机矩阵](../deployment-native.md#native-主机矩阵)为准；首次纳入正式支持前，仍需通过[测试指南](testing.md#native-发行版资格验证)规定的完整系统检查。
 
 项目文件约有 `12 MiB` 属于 Node，`34 MiB` 属于 rw-core 和支持文件，另有 `28 MiB` 的 geo/ASN 资产。
 

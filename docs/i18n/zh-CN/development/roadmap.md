@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=eafa00bfc5bdc58c8d11ff75bb896d2034fbb5ac27d2cd6e8add01052e69ad06 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=c500068ea525b9d944603457e88349cfaf8cf69c76ff0c39ec59cf9d762e52f0 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -16,10 +16,9 @@
 - 修复已知生命周期、插件、防火墙、契约和安装供应链问题。
 - 以在 `512 MiB RAM / 1 vCPU / 2 GB disk` 的 Linux 节点稳定运行为工程目标。
 - 提供 Linux `amd64` 与 `arm64` 产物，发布前用真实 Panel 和真实流量验证候选。
-- 以 Rocky Linux 9/systemd 作为 Native 的主要目标，兼容 Rocky Linux 8 和
-  Debian 12。Alpine Linux 3.22.x 仅支持 `amd64` 和 `arm64` 上持久化的 `sys`
-  安装：发行版 OpenRC 必须作为 PID 1 运行，并满足文档规定的 Linux 5.14+
-  统一 cgroup v2 契约；这不表示泛化的 OpenRC 支持。
+- Native 主机支持必须明确并以证据为依据。Rocky Linux 9/systemd 仍是主要目标；
+  持续维护的主机配置、Alpine 前置条件和正在验证的发行版统一列在
+  [Native 主机矩阵](../deployment-native.md#native-主机矩阵)中。
 
 项目版本与官方契约版本彼此独立。`X.Y.Z-rnl.N` 是项目自己的迭代标识，既可以用于提前开发下一条版本线，也可以继续完善已有的官方基线。纯 `X.Y.Z` 只有在对应官方契约完成对齐后才能发布。官方发布监测只会创建同步 Issue，不会自动修改契约或发布任何内容。完整规则见[版本模型](../versioning.md)。
 
@@ -61,13 +60,17 @@
 
 已经发布的稳定版 `2.8.0` 是官方契约基线，并包含首个自包含 Native bundle。已发布的
 `2.8.0-rnl.1` 预发布版在保持该契约不变的前提下，继续完善 Native 管理体验、生命周期恢复
-和符合条件的 Alpine 支持。`2.8.0-rnl.2` 版本线增加更清晰的交互进度与更安全的中断恢复。
+和 Alpine/OpenRC 生命周期路径。已发布的 `2.8.0-rnl.2` 预发布版增加了更清晰的交互进度
+与更安全的中断恢复。`2.8.0-rnl.3` 源码候选建立了以证据为依据的 Native 主机矩阵，并在
+不改变官方 Node 契约的前提下修正 Alpine 验证说明。
 运行观测不写入源码仓库，Release notes 由 GitHub 自动生成。
 
 ## 当前重点
 
-- **当前**：完成 `2.8.0-rnl.2` 的 Native CLI 进度与中断恢复发布验收，同时降低 `rnlctl`
-  命令接口、Xray 状态所有权和 release 验证的维护成本。
+- **当前**：在持久化完整系统虚拟机中推进 Native 主机验证。先完成 Debian 13 与
+  Ubuntu 24.04 LTS 的双架构验证，再覆盖 Ubuntu 26.04 LTS 和 Rocky Linux 10。
+  Alpine 3.24 必须先完成验证，之后才会考虑用于新部署；3.22 和 3.23 只保留为有明确
+  证据边界的待验证版本。
 - **发布范围**：未来两个发布周期不新增发布通道、产物类型、发布状态或证明机制；可靠性、
   安全修复和删除重复检查仍在范围内。
 - **下一步**：根据官方 Release 监测结果评估下一份契约，先固定源码并审查契约
@@ -80,6 +83,9 @@
 - Native journal 无法自动恢复“主机断电且留下异常 OpenRC cgroup 进程”的状态。
   应先停止残留进程或重启主机，再运行 `rnlctl repair`；容器运行时状态无法恢复时，
   重新创建容器。
+- Alpine 当前使用对应 `community` 软件源中的 `shadow` 包管理账号。BusyBox
+  `deluser` 会同时删除同名组，不能直接替换；未来若支持仅启用 `main` 的主机，必须先
+  保证卸载仍只删除项目创建的账号和组。
 - OpenRC 正常执行 `stop_post` 时会清理专用 cgroup。`supervise-daemon` 异常退出后，通过重启主机或重新部署恢复。
 - 只有出现实测需求时，才重新评估活动配置常驻副本与运行时 `dump-config` 的内存取舍。
 - P3 测试补强：`runNode` 顶层失败收敛，以及 Unix server 活动 handler 取消。
@@ -145,7 +151,7 @@
 - 安装、升级、失败回滚和卸载不得影响不属于本项目的进程或 nftables 表。
 - Ubuntu 24.04/systemd 与 Alpine 3.22/OpenRC 的测试快照仅作为旧版安装器的历史
   工程基线保留，不能据此确认当前平台受到支持。当前 Native 生命周期由 `rnlctl`
-  管理；Alpine 支持仅限 Native 部署与测试指南规定的完整虚拟机和宿主机契约。
+  管理；当前 Alpine 主机声明只以 Native 主机矩阵和测试指南中的完整系统验证规则为准。
 - 两边的非 root 服务进程都只保留 `NET_ADMIN` 和 `NET_BIND_SERVICE` 的 effective 与 ambient capability。
 - 固定的 rw-core、ASN 与 Release 归档都会在安装前校验。
 - 故障注入测试覆盖写入后失败，以及 rw-core 资产和 Node 升级事务的逐文件摘要恢复。
@@ -165,9 +171,8 @@
   Geo/ASN 数据、service 文件、manifest、SPDX SBOM、第三方说明和完整来源信息。
 - 使用经过测试的 Go 生命周期引擎及其持久 generation journal，取代各发行版专用的
   Shell 状态修改逻辑。
-- 以 Rocky Linux 9/systemd 为主要 Native 目标，兼容 Rocky Linux 8 和 Debian 12；
-  Alpine Linux 3.22.x `sys` 安装仅在 `amd64` 和 `arm64` 上、由发行版 OpenRC
-  作为 PID 1 且精确通过 cgroup v2 宿主检查时受到支持。
+- 建立以证据为基础的 Native 主机矩阵：Rocky Linux 9 是主要目标，同时明确 systemd
+  兼容配置、Alpine/OpenRC 服务路径，以及尚未完成验证的发行版层级。
 - 首个稳定版发布时覆盖精确版本安装、prepare/activate、升级、回滚、修复、卸载、
   篡改拒绝、账号隔离和中断操作恢复；后续每次 Native 变更复验受影响的路径。
 

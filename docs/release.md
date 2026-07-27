@@ -150,13 +150,16 @@ the behavior relevant to the release, including:
 - release-relevant user, plugin, statistics, and lifecycle operations; and
 - no unexpected restart, OOM, or shutdown behavior.
 
-When Native delivery changed, test the candidate bundle on the affected
-systemd or qualified Alpine/OpenRC platform as well. State exactly which
-architecture, distribution, init system, and lifecycle paths were exercised;
-one host does not prove every Linux target. An Alpine support claim requires a
-persistent `sys` installation with distribution OpenRC as PID 1 and the full
-documented cgroup v2 contract. Container, init-less, and constrained nested
-tests may prove rejection behavior but cannot qualify a supported host.
+When Native delivery changed, test the candidate bundle on every affected host
+and service-manager path as well. State exactly which architecture,
+distribution, init system, security profile, and lifecycle paths were
+exercised; one host does not prove every Linux target. Initial promotion from
+Qualification candidate requires a persistent full-system VM using the
+distribution's own kernel and default security profile on every claimed
+architecture. Container, init-less, and constrained nested tests may prove
+portable behavior or fail-closed rejection, but cannot qualify a supported
+host. The current scope and Alpine prerequisites live in the
+[Native host matrix](deployment-native.md#native-host-matrix).
 
 Acceptance records are operational data. Do not commit host inventories,
 addresses, Panel details, secrets, logs, container identifiers, or smoke-test
@@ -300,7 +303,7 @@ mechanism.
 - [ ] The `dev -> main` pull request passed required checks and was reviewed.
 - [ ] `ci` and `candidate` succeeded for the current `main` commit.
 - [ ] The exact `sha-<commit>` image passed real Panel and traffic acceptance.
-- [ ] Native changes were tested on the affected service-manager and architecture paths; initial Alpine qualification used persistent full VMs.
+- [ ] Native changes were tested on the affected service-manager and architecture paths; initial host qualification used persistent full-system VMs.
 - [ ] The release workflow is dispatched from `main` with the exact source version.
 - [ ] The published Release shows **Immutable** and `gh release verify` succeeds.
 - [ ] The exact image tag resolves to the digest recorded by the immutable

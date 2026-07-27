@@ -13,11 +13,10 @@ The first release line starts at `2.8.0` with these goals:
 - Resolution of known lifecycle, plugin, firewall, contract, and installation supply-chain defects.
 - Stable operation on a Linux host with `512 MiB RAM / 1 vCPU / 2 GB disk` as an engineering target.
 - Linux `amd64` and `arm64` artifacts, with real Panel and traffic verification before release.
-- Keep Rocky Linux 9/systemd as the primary Native target, with Rocky Linux 8
-  and Debian 12 as compatible targets. Support Alpine Linux 3.22.x on `amd64`
-  and `arm64` only for persistent `sys` installations with distribution OpenRC
-  as PID 1 and the documented Linux 5.14+ unified cgroup v2 contract; this is
-  not generic OpenRC support.
+- Keep Native host support explicit and evidence-based. Rocky Linux 9/systemd
+  remains the primary target; the maintained profiles, Alpine prerequisites,
+  and qualification candidates are listed in the
+  [Native host matrix](../deployment-native.md#native-host-matrix).
 
 The project version and official contract version move independently. `X.Y.Z-rnl.N` identifies a project-specific iteration, whether it develops the next version line early or improves an existing official baseline. A plain `X.Y.Z` release is allowed only after alignment with that official contract is complete. Monitoring a new official release creates an issue; it never changes the contract or publishes anything automatically. See the [versioning model](../versioning.md).
 
@@ -63,15 +62,21 @@ comparison point; they are not claims about every future build.
 The published stable `2.8.0` release is the official-contract baseline and
 includes the first self-contained Native bundle. The published `2.8.0-rnl.1`
 preview keeps that contract while improving Native administration, lifecycle
-recovery, and qualified Alpine support. The `2.8.0-rnl.2` line adds clearer
-interactive progress and safer interruption recovery. Runtime observations stay
-outside the source repository, and GitHub generates the Release notes.
+recovery, and the Alpine/OpenRC lifecycle path. The published `2.8.0-rnl.2`
+preview adds clearer interactive progress and safer interruption recovery.
+The `2.8.0-rnl.3` source candidate establishes an evidence-based Native host
+matrix and corrects Alpine qualification guidance without changing the official
+Node contract.
+Runtime observations stay outside the source repository, and GitHub generates
+the Release notes.
 
 ## Current focus
 
-- **Now:** Complete release acceptance for the `2.8.0-rnl.2` Native CLI progress
-  and interruption-recovery behavior, while reducing maintenance cost in the
-  `rnlctl` command surface, Xray state ownership, and release validation.
+- **Now:** Advance the explicit Native qualification candidates with persistent
+  full-system VM checks. Start with Debian 13 and Ubuntu 24.04 LTS on both
+  architectures, then cover Ubuntu 26.04 LTS and Rocky Linux 10. Qualify Alpine
+  3.24 before considering it for new deployments; retain 3.22 and 3.23 only as
+  documented evidence-bound candidates.
 - **Release discipline:** For the next two release cycles, do not add release
   channels, artifact types, publication state, or proof mechanisms. Reliability
   and security fixes, and removal of redundant checks, remain in scope.
@@ -87,6 +92,11 @@ apply the risk-based verification rules in the testing and release guides:
   OpenRC cgroup populated. Stop the residual process or reboot that host, then
   run `rnlctl repair`; recreate a container when its runtime state is not
   recoverable.
+- Alpine currently uses the `shadow` package from the matching `community`
+  repository for account ownership. BusyBox `deluser` also removes a same-name
+  group and cannot replace it mechanically; any main-only fallback must first
+  preserve the existing rule that uninstall removes only project-created
+  accounts and groups.
 - OpenRC `stop_post` cleans the dedicated cgroup during a normal stop. Recover from an abnormal `supervise-daemon` failure by rebooting or redeploying.
 - Revisit the memory tradeoff of a resident active-config copy and runtime `dump-config` only with measured need.
 - P3 test additions remain for top-level `runNode` failure convergence and cancellation of active Unix-server handlers.
@@ -158,8 +168,8 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
 - Ubuntu 24.04/systemd and Alpine 3.22/OpenRC snapshots remain historical
   engineering baselines for predecessor installer work. They do not qualify a
   current platform. The supported Native lifecycle is now `rnlctl`; current
-  Alpine support is limited to the full-VM and host contract documented in the
-  Native deployment and testing guides.
+  Alpine host claims are limited to the matrix and full-system qualification
+  rules documented in the Native deployment and testing guides.
 - Both non-root service processes retain only effective and ambient `NET_ADMIN` and `NET_BIND_SERVICE`.
 - Pinned rw-core, ASN, and release archives are verified before installation.
 - Fault-injection tests cover post-write failures and per-file digest restoration for rw-core assets and Node upgrade transactions.
@@ -184,10 +194,9 @@ The historical remediation record is archived at [`docs/archive/2026-07-audit-re
   exact provenance.
 - Replace distribution-specific shell mutation logic with the tested Go
   lifecycle engine and its durable generation journal.
-- Support systemd on Rocky Linux 9 as the primary Native target, Rocky Linux 8
-  and Debian 12 as compatible targets, plus Alpine Linux 3.22.x `sys` installs
-  on `amd64` and `arm64` when distribution OpenRC is PID 1 and the exact cgroup
-  v2 host checks pass.
+- Establish the evidence-based Native host matrix with Rocky Linux 9 as the
+  primary target, compatible systemd profiles, an Alpine/OpenRC service path,
+  and an explicit candidate tier for unqualified distributions.
 - Exercise exact install, prepare/activate, upgrade, rollback, repair,
   uninstall, tamper refusal, account isolation, and interrupted-operation
   recovery for the initial stable publication, then repeat the paths affected

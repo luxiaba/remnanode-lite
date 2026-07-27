@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=0cf928c3ed72a95b4994b2d169fec4d1d5d622909f413bbd70e07fc96349e100 -->
+<!-- translation: locale=zh-CN; source=CONTRIBUTING.md; source-sha256=d52d7772ddc2a35dd0cb3e0bb0bd295589e9f28be885f9eced7381ee4b72b900 -->
 
 # 贡献指南
 
@@ -60,7 +60,7 @@ git switch -c fix/short-description
 2. 哪个组件应拥有新状态、进程、队列或后台任务？
 3. 输入、内存、磁盘、并发和外部命令输出的上限是什么？
 4. 请求取消、进程退出、部分失败和重复调用时发生什么？
-5. macOS stub、Linux 实现、Docker、systemd 和受支持的 Alpine/OpenRC 中哪些路径受影响？
+5. macOS stub、Linux 实现、Docker、systemd 和矩阵列出的 Alpine/OpenRC 服务路径中，哪些会受到影响？
 6. 哪些测试能证明行为，而不只是执行到了代码？
 
 范围较大的变更应先在 Issue 或设计说明中写清契约、所有权、迁移和验证计划。明确的
@@ -164,7 +164,7 @@ netlink、capability 或进程组成功。
 - 在 macOS/Linux 运行普通包测试。
 - 在 Linux 运行对应 unit test。
 - 涉及 nftables 或 socket destroy 时运行隔离 namespace 集成测试。
-- 涉及 service manager 时同时考虑 systemd 与符合支持条件的 Alpine/OpenRC 路径。
+- 涉及 service manager 时，同时考虑 systemd 与矩阵列出的 Alpine/OpenRC 服务路径。
 
 完整命令见[测试指南](development/testing.md#linux-网络管理集成测试)。
 
@@ -176,8 +176,8 @@ netlink、capability 或进程组成功。
 - installer 的共享锁、信任根、下载预算、路径验证和 Secret 迁移不可绕过。
 - installer 的 `auto|plain|never` 契约必须与 `rnlctl` 一致；bootstrap 阶段写入
   stderr，并把最终生效的模式传给 bundle 中的 controller。
-- systemd 与 Alpine/OpenRC 的用户、capability、资源上限、停止和卸载语义应保持对称。OpenRC 支持仅限持久化的 Alpine Linux 3.22.x `sys` 安装：发行版 OpenRC 必须作为 PID 1 运行，内核不低于 Linux 5.14，并满足统一 cgroup v2 契约。不得据此宣称泛化的 OpenRC 支持，也不要加入自动修复宿主机 cgroup delegation 的代码。
-- 安装器或生命周期有变化时，需要运行 bootstrap fixture、相关 `internal/rnlctl` 测试、受影响状态的 race test、bundle 篡改测试，以及相应的 systemd 或 Alpine/OpenRC 宿主 controller 测试。在首次把 Alpine 平台纳入支持范围时，每个声明支持的架构都必须使用持久化完整虚拟机验证；后续变更只复验受影响的平台或架构路径。容器或没有 init 的 guest 不足以完成资格验证。
+- systemd 与 Alpine/OpenRC 的用户、capability、资源上限、停止和卸载语义应保持对称。OpenRC 的适用范围以 [Native 主机矩阵](deployment-native.md#native-主机矩阵)为准。必须保留 fail-closed 的 Linux 与 cgroup 检查，不得扩大支持承诺，也不要加入自动修复宿主机 cgroup delegation 的代码。
+- 安装器或生命周期有变化时，需要运行 bootstrap fixture、相关 `internal/rnlctl` 测试、受影响状态的 race test、bundle 篡改测试，以及相应的 systemd 或 Alpine/OpenRC 宿主 controller 测试。首次把一个 Native 主机纳入支持范围时，每个声明支持的架构都必须使用持久化完整系统虚拟机验证；后续变更只复验受影响的平台或架构路径。容器或没有 init 的 guest 不足以完成资格验证。
 - 修改安装器必须运行离线操作测试，不要用真实主机安装代替失败注入覆盖。
 
 ### 生成文件、依赖与供应链

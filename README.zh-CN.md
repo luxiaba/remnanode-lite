@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=ea3dd4693680b4b251091ee84bdc848207a96cc09bbeebafafc37c95e966bfe5 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=b14afde2d752dbd1d41ec306f89094e21ec4df8f37399a1dcb220a8014ee8e70 -->
 <div align="center">
 
 # Remnanode Lite
@@ -41,9 +41,9 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 | | Docker Compose | 原生 Linux |
 | --- | --- | --- |
 | 适用场景 | 已经具备 Docker Engine 与 Compose v2；这是默认方案。 | 无法安装 Docker，或机器不适合承担 Docker daemon 与容器运行时的常驻开销。 |
-| 安装入口 | 下载 Release 附带的 Compose 文件，在 `.env` 或明确的内联 mapping 中填写 Panel Secret。 | 下载并校验一个精确 Release 的 `install.sh`，以 root 运行安装器。 |
-| 更新与回滚 | 选择精确镜像 tag 或 digest，pull 后重建；切回原镜像引用即可回滚。 | 使用 `rnlctl upgrade --to VERSION` 和 `rnlctl rollback`；系统保留一个经过校验的 previous generation。 |
-| 宿主服务 | 需要 Docker Engine daemon 及其容器运行时。 | 不需要 Docker Engine daemon 或容器运行时，但 `remnanode-lite` 仍会作为 systemd 服务运行；符合条件的 Alpine 主机则由 OpenRC 运行。 |
+| 安装入口 | 下载 Release 附带的 Compose 文件，在 `.env` 中填写 Panel Secret，或明确写入 Compose 的 `environment` 配置。 | 下载并校验一个精确 Release 的 `install.sh`，以 root 运行安装器。 |
+| 更新与回滚 | 选择精确镜像 tag 或 digest，拉取后重建；切回原镜像引用即可回滚。 | 使用 `rnlctl upgrade --to VERSION` 和 `rnlctl rollback`；系统会保留一个经过校验的上一代版本。 |
+| 宿主服务 | 需要 Docker Engine 守护进程及其容器运行时。 | 不需要 Docker Engine 守护进程或容器运行时，但 `remnanode-lite` 仍会作为 systemd 服务运行；表中列出的 Alpine 配置则由 OpenRC 运行。 |
 | 版本选择 | 推荐精确 tag 或 manifest digest；`latest` 与 `preview` 是主动选择的移动通道。 | 只接受精确 `X.Y.Z` 或 `X.Y.Z-rnl.N` Release，不会解析移动镜像通道。 |
 
 两种方式都使用 host networking 并需要 `NET_ADMIN`。不要与使用相同 Panel 或代理端口的其他 Node 同时运行。
@@ -107,7 +107,9 @@ docker compose logs --tail=100 remnanode-lite
 
 ## 原生 Linux
 
-当机器无法安装 Docker Engine，或不适合承担 Docker daemon 与容器运行时的开销时，使用 Native bundle。Native 并不表示没有后台服务：`remnanode-lite` 仍由宿主机的服务管理器运行。以 systemd 的 Rocky Linux 9 为主要目标；Rocky Linux 8 和 Debian 12 兼容。Alpine Linux 3.22.x 也支持 `amd64` 和 `arm64`，但必须是持久化的 `sys` 安装、由发行版 OpenRC 作为 PID 1 运行，并通过文档规定的内核与 cgroup v2 检查。这里并不泛指所有 OpenRC 环境：容器和没有 init 的环境不受支持；以完整系统运行的嵌套或虚拟化环境只有通过同一套宿主机契约后才符合条件。
+当机器无法安装 Docker Engine，或不适合承担 Docker daemon 与容器运行时的开销时，使用 Native bundle。Native 并不表示没有后台服务：`remnanode-lite` 仍由宿主机的服务管理器运行。以 systemd 的 Rocky Linux 9 为主要目标；其他兼容系统、Alpine 前置条件，以及正在验证的较新发行版，统一列在 [Native 主机矩阵](docs/i18n/zh-CN/deployment-native.md#native-主机矩阵)中。
+
+运行安装器前，先按[主机前置条件](docs/i18n/zh-CN/deployment-native.md#前置条件)安装系统包；安装器不会代为安装或配置这些软件包。
 
 Native 安装永远不跟随移动通道。先在 GitHub Releases 页面选择一个已经发布的版本，再从同一个精确 Release 下载 `install.sh` 与 `SHA256SUMS`，校验安装器，并明确指定版本：
 
@@ -223,7 +225,7 @@ docker compose up -d --no-build --force-recreate
 | 项目 | 当前基线 |
 | --- | --- |
 | Native Linux bundle | 已发布的精确 Release |
-| Native 主机 | 使用 systemd 的 Rocky Linux 8/9 与 Debian 12；使用发行版 OpenRC 且符合条件的 Alpine Linux 3.22.x `sys` 安装 |
+| Native 主机 | 按发行版划分，详见 [Native 主机矩阵](docs/i18n/zh-CN/deployment-native.md#native-主机矩阵) |
 | Node 契约 | `2.8.0` |
 | rw-core | `v26.6.27` |
 | 平台 | `linux/amd64`、`linux/arm64` |

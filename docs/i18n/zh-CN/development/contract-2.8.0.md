@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=b7f365b2d72108cd924c9038bc9a75d1b662181f5fa4e4fa24b8cc0549e7b228 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-2.8.0.md; source-sha256=3fe4e7345fddf92c45377af1353ba6e79c27615815f7866bd602b31253e93f04 -->
 # Remnawave Node 2.8.0 行为契约基线
 
 > 这是中文译文；涉及契约细节时，请以[英文原文](../../../development/contract-2.8.0.md)为准。
@@ -115,7 +115,7 @@ nft backend 在单个 `nft -f` 原子事务内替换 IPv4/IPv6 私有表和过�
 
 systemd 与 Alpine/OpenRC 都以专用 `remnanode-lite:remnanode-lite` 账号运行受管 Node 进程；配置为 `root:remnanode-lite 0640`，状态和日志目录为 `remnanode-lite:remnanode-lite 0750`。Node 进程只获得 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`。systemd 还会把它的 bounding set 收紧到这两项，并启用 `NoNewPrivileges`、只读系统、namespace/syscall/address-family 限制、`448 MiB` 内存、零 swap、1 CPU 和 256 tasks。Alpine/OpenRC 的 `supervise-daemon` 仍是 root 服务管理器进程；它启动的 Node 子进程具有 `CapInh/Prm/Eff/Amb=0x1400` 和 `NoNewPrivs=1`，由 Node 启动的 `nft` 子进程可以创建私有表。
 
-Native Alpine 支持仅限 `amd64` 和 `arm64` 上持久化的 Alpine Linux 3.22.x `sys` 安装：发行版 OpenRC 必须作为 PID 1 运行，内核不低于 Linux 5.14，统一 cgroup v2 必须提供服务所需的全部控制项。这不表示泛化的 OpenRC 支持。只完成 prepare 不能证明主机符合条件；activate 必须通过服务的 fail-closed 检查。
+Alpine/OpenRC 激活会在服务拿不到所需的完整 cgroup v2 控制时 fail closed。只完成 prepare 不能证明主机符合条件。当前发行版范围和其余操作者前置条件属于 [Native 主机矩阵](../deployment-native.md#native-主机矩阵)，不属于带版本的 Panel 契约。
 
 Native 项目资产位于 `/usr/local/lib/remnanode-lite` 下经过校验的 generation 中；Docker 在容器私有镜像路径中使用相同项目名称。两种部署方式都不接管系统中的通用 Xray 路径。一个 release bundle 包含 Node、`rnlctl`、rw-core、geo 数据、ASN 数据、第三方声明和服务文件。安装前会校验外层归档、严格 manifest、架构、版本以及每个载荷的摘要。
 
@@ -182,7 +182,7 @@ Release workflow 只从当前 `main` HEAD 运行。它会解析该提交的 `sha
 
 Docker Compose 与官方一样使用 host network 和 `NET_ADMIN`，同时保留低端口监听
 能力；Go Manager 直接拥有 rw-core 生命周期，因此无需复制官方双进程 s6 运行结构。
-systemd 是主要 Native 服务路径；Alpine Linux 3.22.x/OpenRC 仅在满足上述宿主机契约时受到支持。
+systemd 是主要 Native 服务路径；当前 Alpine/OpenRC 范围继续由 Native 主机矩阵定义。
 
 两份受维护的生产 Compose 模板都使用 `remnanode-lite` 作为 service、container 和
 hostname。它们从 `.env` 插值同一组显式运行变量，应用生产默认值，并在创建容器前拒绝

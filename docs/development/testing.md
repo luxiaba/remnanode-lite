@@ -27,7 +27,7 @@ This guide covers Remnanode Lite's test layers, platform boundaries, and the com
 | Native bootstrap or bundle format | `sh release/native/install_test.sh`, `go test ./cmd/release-tool` | Medium to high |
 | Native lifecycle state or service adapter | `go test ./internal/rnlctl ./cmd/rnlctl` | High |
 | `rnlctl` command, progress, help, or completion surface | `go test ./internal/rnlctl` | Low |
-| Alpine/OpenRC host qualification | Full persistent Alpine 3.22.x VM lifecycle and reboot | Linux/root |
+| Native host qualification | Full-system VM lifecycle and reboot on every claimed architecture | Linux/root |
 | Complete repository gate | `REQUIRE_GOVULNCHECK=1 bash scripts/check.sh` | High |
 | Linux network management | Two network-namespace integration tests | Linux/root |
 | Low-memory budget | `scripts/test-low-memory.sh --rw-core ...` | Docker/real core |
@@ -282,24 +282,30 @@ The build requires the exact Go toolchain and the pinned runtime asset cache.
 Use `RNL_OFFLINE_BUILD=1` only with a complete cache. The bundle smoke test
 opens the generated archive with real `rnlctl` lifecycle code, installs it into
 a temporary test root with a restrictive `umask`, and keeps the service-manager
-boundary fake. It does not replace a real systemd or qualified Alpine/OpenRC check when
-service-manager behavior changed.
+boundary fake. It does not replace a real systemd or full-system Alpine/OpenRC
+check when service-manager behavior changed.
 
 ### Native distribution qualification
 
-Initial promotion of a Native platform requires a full, persistent VM for every
+Initial promotion of a Native platform requires a persistent full-system VM
+using the distribution's own kernel and default security profile for every
 claimed architecture. Repeat the relevant platform or architecture checks when
 a later change affects that service-manager path, native binary shape, or
 architecture-specific assets; unrelated releases do not require a full
 requalification. Containers and init-less guests are useful for portable
 installer tests, and constrained nested guests are useful for testing rejection,
-but neither qualifies a distribution.
+but neither qualifies a distribution. OrbStack Linux machines are useful smoke
+environments, but their shared kernel, container boundary, and host-supplied
+systemd overrides mean that they can establish only Qualification candidate
+status.
 
-For Alpine, use a persistent Alpine Linux 3.22.x `sys` installation on the
-claimed `amd64` or `arm64` architecture. Distribution OpenRC must be PID 1, the
-kernel must be Linux 5.14 or newer, and unified cgroup v2 must expose usable
-`cpu`, `memory`, and `pids` controllers, `memory.swap.max`, writable parent
-`cgroup.procs`, and writable service `cgroup.kill`. Exercise at least:
+For an Alpine/OpenRC target listed in the
+[Native host matrix](../deployment-native.md#native-host-matrix), use a persistent
+`sys` installation on the claimed `amd64` or `arm64` architecture. It must boot
+through Alpine's normal init/OpenRC stack, use Linux 5.14 or newer, and expose
+unified cgroup v2 with usable `cpu`, `memory`, and `pids` controllers,
+`memory.swap.max`, writable parent `cgroup.procs`, and writable service
+`cgroup.kill`. Exercise at least:
 
 1. dependency installation and boot-time `cgroups` enablement;
 2. exact-bundle prepare and activation with non-production test credentials;
@@ -466,7 +472,7 @@ See the [versioning policy](../versioning.md) for tag, version, and channel sema
 | nftables/socket destruction | Corresponding Linux unit test | Both namespace integration tests |
 | Configuration/Secret/JWT | `config`, `secret`, `auth`, server security | Installer Secret flow |
 | Native bootstrap | `sh release/native/install_test.sh` | Exact-release install on the target host |
-| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`, `go test -race ./internal/rnlctl` | Real systemd or qualified Alpine/OpenRC host when the change affects Native runtime behavior |
+| Native lifecycle/service | `go test ./internal/rnlctl ./cmd/rnlctl`, `go test -race ./internal/rnlctl` | Real systemd or full-system Alpine/OpenRC host when the change affects Native runtime behavior |
 | `rnlctl` command and progress surface | `go test ./internal/rnlctl` | Shell completion syntax, output-mode, signal, and command-surface regression suites |
 | Docker/Compose | `bash scripts/test-docker-packaging.sh` | Multi-architecture image build plus risk-driven real-environment verification |
 | Dependency or downloadable asset | `go mod tidy -diff`, supply-chain checks, govulncheck | Dual-architecture build, SBOM, and attestation |

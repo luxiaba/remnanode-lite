@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=83e2f3cc294f3199cea83b2174c34ed39e208eabf530c39657702417947f40b1 -->
+<!-- translation: locale=zh-CN; source=SECURITY.md; source-sha256=d3fdd5ad23e80d0cbbbadec55c138f4f34bec57224ee1420b9a14f1af46aad61 -->
 
 # 安全策略
 
@@ -21,12 +21,13 @@
 
 ## 支持范围
 
-只有已经发布的正式版本才提供安全支持。`edge` 与 `sha-*` 都是候选构建，不承诺长期维护。当前策略如下：
+只有已经发布的 Release 才纳入安全支持。`edge` 与 `sha-*` 都是候选构建，不承诺长期维护。即使 `rnl.N` 比当前稳定版更新，它仍属于预发布版。当前策略如下：
 
 | 版本 | 安全修复策略 |
 | --- | --- |
 | `latest` 指向的稳定版本 | 接收安全修复 |
 | 同一版本线的上一个稳定版本 | 在可合理回滚或升级的范围内处理高影响问题 |
+| `preview` 指向的已发布 `rnl.N` 版本 | 在替代预发布版或稳定版可用前，尽力提供修复 |
 | `edge`、历史候选与更早版本 | 不保证修复，请升级到受支持版本 |
 
 确切支持范围会在对应 GitHub Security Advisory 和 Release note 中说明。
@@ -38,7 +39,7 @@ Remnanode Lite 是具有网络管理权限的节点软件，不是普通无特�
 - Panel 到 Node 的公开接口要求最低 TLS 1.3、双向认证和 RS256 Bearer JWT。
 - Docker 使用宿主网络；`NET_ADMIN` 允许管理本项目 nftables 表并通过 `NETLINK_SOCK_DIAG` 关闭连接，`NET_BIND_SERVICE` 允许监听低端口。
 - 当前容器以 root UID 启动，但会丢弃其它 capability，启用 `no-new-privileges` 和只读 rootfs。host network 与 `NET_ADMIN` 仍然构成明确的宿主机信任边界。
-- Native 安装中的 Node 进程以不可登录的 `remnanode-lite` 用户运行，只保留 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`。systemd 会设置 capability bounding set 和 sandbox。受支持的 Alpine 3.22.x/OpenRC 路径会保留以 root 身份运行的 `supervise-daemon` 作为服务管理器基础设施，同时启动这个受限的 Node 子进程；受管服务会应用并核验精确的资源 cgroup，所需的统一 cgroup v2 控制不可用时直接拒绝启动。
+- Native 安装中的 Node 进程以不可登录的 `remnanode-lite` 用户运行，只保留 `CAP_NET_ADMIN` 与 `CAP_NET_BIND_SERVICE`。systemd 会设置 capability bounding set 和 sandbox。在 Alpine/OpenRC 服务路径上，以 root 身份运行的 `supervise-daemon` 仍属于服务管理器基础设施，并负责启动受限的 Node 子进程；受管服务会应用并核验精确的资源 cgroup，所需的统一 cgroup v2 控制不可用时直接拒绝启动。
 - 只应运行来自本仓库、已验证的镜像。生产优先固定精确版本或 manifest digest，并验证 build attestation。
 - Node 不持久化 Panel 下发的完整 Xray 配置；重启后由 Panel 重新同步。运行日志同样可以是临时数据。
 
@@ -46,12 +47,13 @@ Remnanode Lite 是具有网络管理权限的节点软件，不是普通无特�
 
 ## Secret 处理
 
-原生 systemd 和符合条件的 Alpine/OpenRC 部署将 Secret 存放在 `/etc/remnanode-lite/secret.key`，权限为 `root:remnanode-lite 0640`。配置与 Secret 由 Go 进程使用有界、拒绝符号链接的文件读取路径加载，不会把整份 `node.env` 导出到服务环境。
+原生 systemd 和 Alpine/OpenRC 部署将 Secret 存放在 `/etc/remnanode-lite/secret.key`，权限为 `root:remnanode-lite 0640`。配置与 Secret 由 Go 进程使用有界、拒绝符号链接的文件读取路径加载，不会把整份 `node.env` 导出到服务环境。
 
-单文件 Compose 必须将 Secret 内联，因此它会出现在 `docker inspect` 可读取的容器元数据中。应执行：
+Docker 始终通过环境变量接收 Secret，无论它来自同目录的 `.env`，还是直接写在 Compose 的 `environment` 配置中。因此，Secret 会出现在具有权限的用户可通过 `docker inspect` 读取的容器元数据里。相关文件存在时都应限制权限：
 
 ```bash
 chmod 600 docker-compose.yaml
+[ ! -f .env ] || chmod 600 .env
 ```
 
 同时限制 Docker socket、备份、终端历史和主机管理员权限。Node 启动 rw-core 前会从继承环境中剥离 `SECRET_KEY`、`SECRET_KEY_FILE`、`INTERNAL_REST_TOKEN` 与 `REMNANODE_ENV`，并覆盖资源路径和内部 webhook token；该 token 默认每次启动随机生成，显式配置时使用经过 Go 配置解析的值。其它非受管环境变量仍会继承，因此不要向 Node 容器注入无关 Secret。
