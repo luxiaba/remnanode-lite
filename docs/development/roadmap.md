@@ -64,6 +64,9 @@ includes the first self-contained Native bundle. The published `2.8.0-rnl.1`
 preview keeps that contract while improving Native administration, lifecycle
 recovery, and the Alpine/OpenRC lifecycle path. The published `2.8.0-rnl.2`
 preview adds clearer interactive progress and safer interruption recovery.
+The `2.8.0-rnl.3` source candidate establishes an evidence-based Native host
+matrix and corrects Alpine qualification guidance without changing the official
+Node contract.
 Runtime observations stay outside the source repository, and GitHub generates
 the Release notes.
 

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=a8fd5b9ef027e06b8279ed98ce1b625e581757ec0a0b43e8a50c84f9170f14d3 -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=10fdc4df043cade90dc19a12444fb95c7e8970cd3b88aa2a65a64849ee8fb63d -->
 
 # 版本与镜像标签
 
@@ -22,7 +22,7 @@ release workflow 是发布行为的可执行真相源。它调用 `release-tool 
 例如：
 
 ```text
-Version:         2.8.0-rnl.2
+Version:         2.8.0-rnl.3
 ContractVersion: 2.8.0
 ```
 
@@ -67,6 +67,7 @@ GitHub 也会将该 Release 标记为 Latest。它既是不可变的对齐点，
 | `2.8.0` | `2.8.0` | 稳定版 | 契约对齐基线与首个自包含 Native bundle |
 | `2.8.0-rnl.1` | `2.8.0` | 预发布版 | Native 管理、生命周期恢复和 Alpine/OpenRC 生命周期路径 |
 | `2.8.0-rnl.2` | `2.8.0` | 预发布版 | 自适应 Native CLI 进度与可安全中断的生命周期恢复 |
+| `2.8.0-rnl.3` | `2.8.0` | 预发布版 | 以证据为依据的 Native 主机矩阵与当前发行版验证规则 |
 
 源码中的版本可能早于正式发布出现在本表中。判断精确资产是否可用时，应使用[何时才算已发布](#何时才算已发布)中的标准，而不是只看源码。
 

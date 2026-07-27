@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=df0810d279d6d7870156c384b2822e6251de72582f5345aa7371278748c37cc2 -->
+<!-- translation: locale=zh-CN; source=docs/development/roadmap.md; source-sha256=c500068ea525b9d944603457e88349cfaf8cf69c76ff0c39ec59cf9d762e52f0 -->
 # Remnanode Lite 路线图
 
 > 这是中文译文；路线和状态以[英文原文](../../../development/roadmap.md)为准。
@@ -61,7 +61,8 @@
 已经发布的稳定版 `2.8.0` 是官方契约基线，并包含首个自包含 Native bundle。已发布的
 `2.8.0-rnl.1` 预发布版在保持该契约不变的前提下，继续完善 Native 管理体验、生命周期恢复
 和 Alpine/OpenRC 生命周期路径。已发布的 `2.8.0-rnl.2` 预发布版增加了更清晰的交互进度
-与更安全的中断恢复。
+与更安全的中断恢复。`2.8.0-rnl.3` 源码候选建立了以证据为依据的 Native 主机矩阵，并在
+不改变官方 Node 契约的前提下修正 Alpine 验证说明。
 运行观测不写入源码仓库，Release notes 由 GitHub 自动生成。
 
 ## 当前重点

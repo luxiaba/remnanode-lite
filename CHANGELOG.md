@@ -6,6 +6,12 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [2.8.0-rnl.3] - 2026-07-27
+
+This preview keeps the verified official Node `2.8.0` contract while making
+Native host support claims explicit and evidence-bound across current Linux
+distribution lines.
+
 ### Changed
 
 - Expanded the Native host matrix with evidence-bound candidate status for
