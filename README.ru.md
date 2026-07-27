@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=README.md; source-sha256=ea3dd4693680b4b251091ee84bdc848207a96cc09bbeebafafc37c95e966bfe5 -->
+<!-- translation: locale=ru; source=README.md; source-sha256=b14afde2d752dbd1d41ec306f89094e21ec4df8f37399a1dcb220a8014ee8e70 -->
 <div align="center">
 
 # Remnanode Lite
@@ -43,7 +43,7 @@ Remnanode Lite работает как Remnawave-совместимый Node н�
 | Когда выбирать | Docker Engine с Compose v2 уже доступен; это вариант по умолчанию. | Docker нельзя установить либо постоянные расходы Docker daemon и container runtime для хоста не подходят. |
 | Установка | Скачайте Compose-asset Release и задайте Secret Panel в `.env` или в намеренно встроенном mapping. | Скачайте точный Release, проверьте `install.sh` и запустите installer от root. |
 | Обновление и откат | Выберите точный tag или digest образа, выполните pull и recreate; для отката верните предыдущую ссылку на образ. | Используйте `rnlctl upgrade --to VERSION` и `rnlctl rollback`; сохраняется один проверенный previous generation. |
-| Служба хоста | Нужны Docker Engine daemon и container runtime. | Docker Engine daemon и container runtime не нужны, но `remnanode-lite` всё равно работает как служба systemd, а на подходящем хосте Alpine — как служба OpenRC. |
+| Служба хоста | Нужны фоновая служба Docker Engine и контейнерная среда. | Docker Engine и контейнерная среда не нужны, но `remnanode-lite` всё равно работает как служба systemd или, в профиле Alpine из матрицы, как служба OpenRC. |
 | Выбор версии | Рекомендуются точный tag или manifest digest; `latest` и `preview` — явно выбранные движущиеся каналы. | Только точные Releases `X.Y.Z` или `X.Y.Z-rnl.N`; движущиеся каналы образов не разрешаются. |
 
 Оба варианта используют host networking и требуют `NET_ADMIN`. Не запускайте их рядом с другим Node, использующим те же Panel или proxy ports.
@@ -107,7 +107,9 @@ docker compose logs --tail=100 remnanode-lite
 
 ## Native Linux
 
-Используйте Native bundle, когда Docker Engine нельзя установить или когда постоянные расходы Docker daemon и container runtime для хоста не подходят. Native не означает, что Node работает без фоновой службы: `remnanode-lite` запускается под управлением менеджера служб хоста. Основная цель — Rocky Linux 9 с systemd; Rocky Linux 8 и Debian 12 совместимы. Alpine Linux 3.22.x также поддерживается на `amd64` и `arm64`, если это постоянная установка типа `sys`, штатный OpenRC работает как PID 1, используется Linux 5.14 или новее, а единая иерархия cgroup v2 проходит проверки из руководства по Native. Это не универсальная поддержка OpenRC: контейнеры и окружения без init не поддерживаются, а вложенная полноценная виртуальная машина подходит только в том случае, если проходит тот же набор проверок.
+Используйте пакет Native, когда Docker Engine нельзя установить или когда его постоянные накладные расходы не подходят для хоста. Native не означает работу без фоновой службы: `remnanode-lite` запускается под управлением менеджера служб хоста. Основной профиль — Rocky Linux 9 с systemd. Совместимые хосты, требования к Alpine и новые дистрибутивы, которые ещё проходят квалификацию, перечислены в [матрице хостов Native](docs/i18n/ru/deployment-native.md#матрица-хостов-native).
+
+Перед запуском установщика подготовьте [системные зависимости](docs/i18n/ru/deployment-native.md#предварительные-требования); установщик не устанавливает и не настраивает системные пакеты.
 
 Native-установка никогда не следует за движущимся каналом. Выберите опубликованную версию на странице GitHub Releases, затем скачайте `install.sh` и `SHA256SUMS` из этого точного Release, проверьте installer и явно укажите версию:
 
@@ -229,7 +231,7 @@ docker compose up -d --no-build --force-recreate
 | Компонент | Текущее значение |
 | --- | --- |
 | Native Linux bundle | Точные опубликованные Releases |
-| Хосты для Native | Rocky Linux 8/9 и Debian 12 с systemd; подходящие установки Alpine Linux 3.22.x типа `sys` со штатным OpenRC |
+| Хосты для Native | Зависит от дистрибутива; см. [матрицу хостов Native](docs/i18n/ru/deployment-native.md#матрица-хостов-native) |
 | Контракт Node | `2.8.0` |
 | rw-core | `v26.6.27` |
 | Платформы | `linux/amd64`, `linux/arm64` |

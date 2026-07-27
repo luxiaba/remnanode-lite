@@ -60,8 +60,8 @@ service:
   `NET_ADMIN` nevertheless remain an explicit host trust boundary.
 - In Native installs, the managed Node process runs as the non-login
   `remnanode-lite` user with only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`.
-  systemd applies a capability bounding set and sandboxing. On the supported
-  Alpine 3.22.x/OpenRC path, OpenRC retains a root supervisor as service-manager
+  systemd applies a capability bounding set and sandboxing. On the
+  Alpine/OpenRC service path, OpenRC retains a root supervisor as service-manager
   infrastructure while launching that restricted Node child. The managed
   service applies and verifies its exact resource cgroup and fails closed when
   the required unified cgroup v2 controls are unavailable.
@@ -79,7 +79,7 @@ them.
 
 ## Secret Handling
 
-For Native systemd and qualified Alpine/OpenRC deployments, store the Secret in
+For Native systemd and Alpine/OpenRC deployments, store the Secret in
 `/etc/remnanode-lite/secret.key` with owner and mode `root:remnanode-lite 0640`. The Go
 process reads configuration and secret files through bounded, no-symlink file
 paths; it does not export the complete `node.env` as the service environment.

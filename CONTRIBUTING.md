@@ -247,15 +247,15 @@ The exact commands are in the
   strict manifest/file verification, private snapshots, the operation lock,
   durable journal, and two-generation rollback model.
 - Keep the base systemd unit valid on systemd 239. Add newer hardening only to
-  the version-gated drop-in. OpenRC support is limited to persistent Alpine
-  Linux 3.22.x `sys` installations with distribution OpenRC as PID 1; preserve
-  its explicit Linux 5.14+ and unified cgroup v2 validation. Do not add a
-  generic OpenRC claim or code that attempts to repair host delegation.
+  the version-gated drop-in. The OpenRC host scope is defined by the
+  [Native host matrix](docs/deployment-native.md#native-host-matrix). Preserve its
+  fail-closed Linux and cgroup checks; do not broaden the claim or add code that
+  attempts to repair host delegation.
 - Installer or lifecycle changes require bootstrap fixtures, focused
   `internal/rnlctl` tests, race coverage for affected state, bundle tamper
   tests, and the relevant systemd or Alpine/OpenRC host-controller tests. A
   successful install on one real host does not replace failure-injection
-  coverage. Initial Alpine platform promotion requires a persistent full-VM
+  coverage. Initial Native host promotion requires a persistent full-system VM
   test on each claimed architecture; later changes repeat only the affected
   platform or architecture paths. A container or init-less guest is
   insufficient for qualification.

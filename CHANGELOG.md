@@ -6,6 +6,18 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+### Changed
+
+- Expanded the Native host matrix with evidence-bound candidate status for
+  Debian 13, Ubuntu 24.04 and 26.04 LTS, Rocky Linux 10, and Alpine Linux 3.23,
+  plus Alpine 3.24 as the next qualification target.
+- Reclassified Alpine 3.22 as a legacy qualification candidate because the
+  existing evidence does not meet the project's full-system VM rule and its
+  required `community/shadow` package is outside Alpine's maintained repository
+  scope for that release line.
+- Corrected the Alpine boot contract: the normal Alpine init process is PID 1,
+  while OpenRC manages services.
+
 ## [2.8.0-rnl.2] - 2026-07-26
 
 This preview keeps the verified official Node `2.8.0` contract and gives Native

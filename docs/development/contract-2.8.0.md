@@ -114,11 +114,11 @@ The public server requires TLS 1.3 or later and disables Go's automatic HTTP/2 n
 
 systemd and Alpine/OpenRC run the managed Node process under the dedicated `remnanode-lite:remnanode-lite` account. Configuration is `root:remnanode-lite 0640`; state and log directories are `remnanode-lite:remnanode-lite 0750`. The Node process receives only `CAP_NET_ADMIN` and `CAP_NET_BIND_SERVICE`. systemd also narrows its bounding set to those capabilities and enables `NoNewPrivileges`, read-only system paths, namespace/syscall/address-family restrictions, `448 MiB` memory, zero swap, 1 CPU, and 256 tasks. On Alpine/OpenRC, `supervise-daemon` remains a root service-manager process; the Node child is launched with `CapInh/Prm/Eff/Amb=0x1400` and `NoNewPrivs=1`, and an `nft` child launched by the Node can create the private table.
 
-Native Alpine support is limited to persistent Alpine Linux 3.22.x `sys`
-installations on `amd64` and `arm64`, with distribution OpenRC as PID 1, Linux
-5.14 or newer, and unified cgroup v2 exposing the exact controls required by the
-service. This is not generic OpenRC support. Preparation alone does not qualify
-a host; activation must pass the fail-closed service check.
+Alpine/OpenRC activation fails closed unless the service receives the exact
+cgroup v2 controls it requires. Preparation alone does not qualify a host. The
+current distribution scope and the remaining operator prerequisites belong to
+the [Native host matrix](../deployment-native.md#native-host-matrix), not to the
+versioned Panel contract.
 
 Native project assets live in verified generations under `/usr/local/lib/remnanode-lite`; Docker uses container-private image paths under the same project name. Neither deployment takes ownership of generic system Xray paths. One release bundle contains Node, `rnlctl`, rw-core, geo data, ASN data, notices, and service material. The outer archive, strict manifest, architecture, versions, and every payload digest are verified before installation.
 
@@ -199,7 +199,7 @@ Additional whole-host Native distribution and architecture coverage, repeated
 remain useful follow-up validation. They must not be described as completed
 unless they were actually run.
 
-Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd is the primary Native service path; Alpine Linux 3.22.x/OpenRC is supported only under the qualified host contract above.
+Like the official deployment, Docker Compose uses host networking and `NET_ADMIN`, while retaining the capability to bind low ports. Go Manager directly owns the rw-core lifecycle, so the official two-process s6 runtime structure does not need to be copied. systemd is the primary Native service path; the current Alpine/OpenRC scope remains defined by the Native host matrix.
 
 Both maintained production Compose templates use `remnanode-lite` for the
 service, container, and hostname. They interpolate the same explicit runtime

@@ -83,9 +83,10 @@ M7 added two snapshots from real distribution layouts:
 | Alpine 3.22 arm64 / OpenRC container (historical) | Whole container `44.1 MiB` | Entire rootfs `150.2 MiB` | Container limited to `512 MiB / 1 CPU / 256 PIDs`, with real installation dependencies and service; not a supported-host qualification |
 
 The historical Alpine container measurement is useful for comparing resource
-shape, but it does not prove distribution support. Current Alpine support
-requires a persistent 3.22.x `sys` installation with distribution OpenRC as PID
-1 and the full host qualification in the [testing guide](testing.md#native-distribution-qualification).
+shape, but it does not prove distribution support. Current scope is defined by
+the [Native host matrix](../deployment-native.md#native-host-matrix), and initial
+promotion still requires the full-system checks in the
+[testing guide](testing.md#native-distribution-qualification).
 
 Project files use roughly `12 MiB` for Node, `34 MiB` for rw-core and support files, and `28 MiB` for geo/ASN assets.
 

@@ -18,7 +18,7 @@ If a document disagrees with the code, a published Release asset, or observed be
 
 For a complete host with `512 MiB RAM / 1 vCPU / 2 GB disk`, preserve the repository's memory, CPU, PID, tmpfs, and log limits. Do not build from source on the production node.
 
-Native support is distribution-specific. Rocky Linux 9 is the primary systemd target; Rocky Linux 8 and Debian 12 are compatible. Alpine Linux 3.22.x is supported only as a persistent `sys` installation with distribution OpenRC as PID 1 and the exact kernel/cgroup v2 contract in the Native guide. This does not extend support to generic OpenRC, containers, or init-less environments.
+Native support is distribution-specific. The [Native host matrix](deployment-native.md#native-host-matrix) is the canonical list of maintained profiles, Alpine prerequisites, and newer qualification candidates.
 
 ### I operate deployed nodes
 
@@ -65,7 +65,7 @@ You do not need to read every design document first:
 | Document | Purpose |
 | --- | --- |
 | [Docker Compose deployment](deployment-docker.md) | Single-file deployment, resource limits, image selection, logs, updates, and rollback |
-| [Native Linux deployment](deployment-native.md) | Rocky/Debian systemd and qualified Alpine 3.22.x/OpenRC installation, upgrade, rollback, repair, and uninstall |
+| [Native Linux deployment](deployment-native.md) | Host matrix, prerequisites, exact-version installation, upgrade, rollback, repair, and uninstall |
 | [Configuration reference](configuration.md) | Runtime, container, installer, and build variables with defaults and security rules |
 | [Operations and troubleshooting](operations.md) | Health, logs, updates, rollback, disk maintenance, and fault diagnosis |
 | [Root Compose file](../compose.yaml) | Executable production container constraints |

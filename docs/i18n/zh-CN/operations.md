@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=4c31702eebc5690cfd7353a760d6b0021b1090cf656a10c280abd57ff3a96a1f -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=8d474fd56f3f5cc0911bff682239099396b8eabc446d7087d325e147292fe49d -->
 
 # 运维与故障排查
 
@@ -241,7 +241,7 @@ journalctl --disk-usage
 df -h
 ```
 
-在受支持的 Alpine/OpenRC 主机上，服务会在检测到的统一 cgroup v2 根目录下创建 `openrc.remnanode-lite`。启动前会核验 `memory.max=469762048`、`memory.swap.max=0`、`cpu.max=100000 100000`、`pids.max=256`、自身的 cgroup 成员关系、可写的父级 `cgroup.procs`，以及可写的服务 `cgroup.kill`。不要在只有 2 GB 磁盘的生产主机上构建项目。
+在 Alpine/OpenRC 服务路径上，服务会在检测到的统一 cgroup v2 根目录下创建 `openrc.remnanode-lite`。启动前会核验 `memory.max=469762048`、`memory.swap.max=0`、`cpu.max=100000 100000`、`pids.max=256`、自身的 cgroup 成员关系、可写的父级 `cgroup.procs`，以及可写的服务 `cgroup.kill`。不要在只有 2 GB 磁盘的生产主机上构建项目。
 
 ## 网络与安全边界
 
@@ -290,7 +290,7 @@ Node 继续运行，但 `asList` 为空。Docker 和 Native bundle 都包含锁�
 
 ### Alpine/OpenRC 宿主机资格检查失败
 
-Native Alpine 支持要求持久化安装的 Alpine Linux 3.22.x `sys` 系统、作为 PID 1 运行的发行版 OpenRC、不低于 5.14 的 Linux 内核，以及可用的统一 cgroup v2 CPU、memory、PID、swap 限制、父级成员迁移和服务级清理控制。`--prepare-only` 不会启动服务，因此成功安装并不能证明这些运行条件已经满足。如果 `activate` 或 `start` 拒绝当前主机，应换用能够提供完整契约的环境，或改用受支持的 systemd/Docker 部署。不要绕过检查，否则文档中的资源限制和清理行为都无法成立。
+宿主机使用的 Alpine 版本必须列在 [Native 主机矩阵](deployment-native.md#native-主机矩阵)中，并采用持久化 `sys` 安装和标准 init/OpenRC 启动栈。主机内核不得低于 Linux 5.14，统一 cgroup v2 还需提供可用的 CPU、memory、PID、swap 限制、父级成员迁移和服务级清理控制。`--prepare-only` 不会启动服务，因此成功安装并不能证明这些运行条件已经满足。如果 `activate` 或 `start` 拒绝当前主机，应换用能够提供完整契约的环境，或改用受维护的 systemd 主机或 Docker 部署。不要绕过检查，否则文档中的资源限制和清理行为都无法成立。
 
 ### Native 提示需要 repair
 

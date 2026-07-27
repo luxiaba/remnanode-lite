@@ -308,7 +308,7 @@ journalctl --disk-usage
 df -h
 ```
 
-On a supported Alpine/OpenRC host, the service creates `openrc.remnanode-lite` under the detected unified cgroup v2 root. Before starting, it checks `memory.max=469762048`, `memory.swap.max=0`, `cpu.max=100000 100000`, `pids.max=256`, its own cgroup membership, writable parent `cgroup.procs`, and writable service `cgroup.kill`.
+On the Alpine/OpenRC service path, the service creates `openrc.remnanode-lite` under the detected unified cgroup v2 root. Before starting, it checks `memory.max=469762048`, `memory.swap.max=0`, `cpu.max=100000 100000`, `pids.max=256`, its own cgroup membership, writable parent `cgroup.procs`, and writable service `cgroup.kill`.
 
 Do not build the project on a production host constrained to 2 GB of disk. The Go toolchain, module cache, BuildKit cache, and intermediate assets can exceed the runtime budget.
 
@@ -370,7 +370,7 @@ The Node continues, but plugin `asList` resolves to an empty list. Docker and Na
 
 ### Alpine/OpenRC host qualification fails
 
-Native Alpine support requires a persistent Alpine Linux 3.22.x `sys` installation, distribution OpenRC as PID 1, Linux 5.14 or newer, and unified cgroup v2 with usable CPU, memory, PID, swap-limit, parent-membership, and service-kill controls. A successful `--prepare-only` install does not prove these runtime conditions because it does not start the service. If `activate` or `start` rejects the host, use an environment that exposes the complete contract or choose a supported systemd/Docker deployment. Do not bypass the check; the documented resource and cleanup behavior would no longer hold.
+The host's Alpine release must appear in the [Native host matrix](deployment-native.md#native-host-matrix). It must be a persistent `sys` installation booted through the normal init/OpenRC stack, run Linux 5.14 or newer, and expose unified cgroup v2 with usable CPU, memory, PID, swap-limit, parent-membership, and service-kill controls. A successful `--prepare-only` install does not prove these runtime conditions because it does not start the service. If `activate` or `start` rejects the host, use an environment that exposes the complete contract or choose a maintained systemd host or Docker deployment. Do not bypass the check; the documented resource and cleanup behavior would no longer hold.
 
 ### Native mutation says repair is required
 

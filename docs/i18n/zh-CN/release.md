@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=c853ee48a0c172d9ff2e143c83e7f56f5eae9e13dc61c9e98460caf2ea9c02bb -->
+<!-- translation: locale=zh-CN; source=docs/release.md; source-sha256=b57f397595667794c91c831e46d734a4d97ce19e28d99e42b606a724af7cb776 -->
 
 # 发布 Remnanode Lite
 
@@ -112,7 +112,7 @@ ghcr.io/luxiaba/remnanode-lite:sha-<完整 40 位 main commit>
 - 用户、插件、统计和生命周期操作符合本次变更；
 - 没有非预期重启、OOM 或关闭异常。
 
-若 Native 交付有改动，还应在受影响的 systemd 或符合条件的 Alpine/OpenRC 平台测试候选 bundle。请明确实际验证过的架构、发行版、init 系统和生命周期路径；一台机器不能代表全部 Linux 目标。Alpine 支持结论必须来自持久化的 `sys` 安装、作为 PID 1 运行的发行版 OpenRC，以及完整通过的文档 cgroup v2 契约。容器、没有 init 的环境和受限嵌套环境可以证明拒绝行为，但不能用于确认主机受到支持。
+若 Native 交付有改动，还应在每条受影响的主机和服务管理器路径上测试候选 bundle。请明确实际验证过的架构、发行版、init 系统、安全配置和生命周期路径；一台机器不能代表全部 Linux 目标。要让“验证中”的主机成为正式支持项，每个声明架构都必须使用发行版自身内核和默认安全配置的持久化完整系统虚拟机。容器、没有 init 的环境和受限嵌套环境可以验证可移植行为或 fail-closed 拒绝，但不能确认主机受到支持。当前范围和 Alpine 前置条件见 [Native 主机矩阵](deployment-native.md#native-主机矩阵)。
 
 验收记录属于运维数据。不要把主机清单、地址、Panel 信息、Secret、日志、容器标识或 smoke 输出提交到仓库。
 
@@ -217,7 +217,7 @@ Native 安装保留一个已验证的上一代，可使用 `rnlctl rollback`。�
 - [ ] `dev -> main` pull request 已通过必需检查并完成审查。
 - [ ] 当前 `main` 提交的 `ci` 和 `candidate` 均成功。
 - [ ] 精确 `sha-<commit>` 镜像已通过真实 Panel 与流量验收。
-- [ ] Native 变更已在受影响的服务管理器和架构路径上完成测试；首次确认 Alpine 支持时使用了持久化完整虚拟机。
+- [ ] Native 变更已在受影响的服务管理器和架构路径上完成测试；首次确认主机支持时使用了持久化完整系统虚拟机。
 - [ ] 从 `main` 以精确源码版本发起了 release workflow。
 - [ ] 已发布 Release 显示 **Immutable**，且 `gh release verify` 成功。
 - [ ] 精确镜像标签指向 immutable Release 的 `release-index.json` 中记录的 digest。

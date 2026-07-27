@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=6d3288143ca5ecc8d336d55c83744c32d875ad4d53e89e345e942cb1b48a7e0c -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=514f76e21a614170f9654aa3895d853cfed9c841aa10d815d444906a7c4a67bb -->
 
 # 原生 Linux 部署
 
@@ -6,63 +6,65 @@
 
 [返回文档索引](README.md) · [配置参考](configuration.md) · [运维手册](operations.md) · [版本策略](versioning.md)
 
-原生部署直接由宿主机的服务管理器运行 `remnanode-lite`，适合无法安装 Docker，或不适合承担 Docker Engine daemon 与容器运行时开销的小型服务器。Native 并不表示没有后台服务：`remnanode-lite` 仍由 systemd 运行；符合条件的 Alpine 主机则由发行版 OpenRC 运行。Docker Compose 仍是大多数节点的默认方式。自包含的 Native 生命周期 bundle 会作为带精确版本号的 GitHub Release 资产发布。
+原生部署直接由宿主机的服务管理器运行 `remnanode-lite`，适合无法安装 Docker，或不适合承担 Docker Engine daemon 与容器运行时开销的小型服务器。Native 并不表示没有后台服务：`remnanode-lite` 仍由 systemd 运行；表中列出的 Alpine 配置则由发行版 OpenRC 运行。Docker Compose 仍是大多数节点的默认方式。自包含的 Native 生命周期 bundle 会作为带精确版本号的 GitHub Release 资产发布。
 
 每个已发布的 bundle 都包含 Node、`rnlctl`、rw-core、GeoIP、GeoSite、ASN 数据、服务定义、许可证与 SPDX SBOM，并用 manifest 记录每个文件的摘要。安装器会先校验归档摘要，再校验 bundle 内容，之后才修改主机。
 
-Native 安装和升级只接受包含 Native 生命周期资产的 Release 的精确版本。只有同时提供 `install.sh`、`SHA256SUMS` 和对应主机架构归档的 Release 才可用于 Native；`latest`、`preview`、`edge` 和 `sha-*` 等移动名称不能用于 Native。
+Native 安装和升级只接受包含 Native 生命周期资产的 Release 的精确版本。只有同时提供 `install.sh`、`SHA256SUMS` 和对应主机架构归档的 Release 才可用于 Native。`latest`、`preview` 和 `edge` 都是会移动的容器通道，不能用于 Native。`sha-*` 虽然对应不可变的容器候选，但没有已发布的 Native Release 资产，同样不是有效的 Native 版本。
 
-## 支持范围
+## Native 主机矩阵
 
-| 主机 | 服务管理器 | 支持级别 |
+| 主机 | 服务管理器 | 状态 |
 | --- | --- | --- |
-| Rocky Linux 9 | systemd | 主要支持目标 |
-| Rocky Linux 8 | systemd 239 | 兼容；较新的 hardening drop-in 会自动省略 |
-| Debian 12 | systemd | 兼容 |
-| 其他较新的 systemd 发行版 | systemd | 预计可用，批量部署前请先实测 |
-| Alpine Linux 3.22.x（持久化 `sys` 安装） | 发行版 OpenRC | 满足前置条件时支持 |
+| Rocky Linux 9.x | systemd | 主要支持目标 |
+| Rocky Linux 8.x | systemd 239 | 兼容；较新的 hardening drop-in 会自动省略 |
+| Debian 12.x | systemd | 兼容 |
+| Debian 13.x | systemd | 验证中（尚未正式支持） |
+| Ubuntu 24.04 LTS | systemd | 验证中（尚未正式支持） |
+| Ubuntu 26.04 LTS | systemd | 验证中（尚未正式支持） |
+| Rocky Linux 10.x | systemd | 验证中（尚未正式支持） |
+| Alpine Linux 3.22.x（持久化 `sys` 安装） | Alpine init 与 OpenRC | 历史版本验证中；不建议新部署 |
+| Alpine Linux 3.23.x（持久化 `sys` 安装） | Alpine init 与 OpenRC | 验证中（尚未正式支持）；依赖的 `community/shadow` 已不在上游维护范围 |
+| Alpine Linux 3.24.x（持久化 `sys` 安装） | Alpine init 与 OpenRC | 计划验证；尚未开始完整系统虚拟机验证 |
+
+“主要支持目标”和“兼容”表示项目持续维护这些主机配置。“验证中”表示已经完成有限的兼容性检查，但在每个声明架构上通过[完整系统验证](development/testing.md#native-发行版资格验证)前，还不能视为正式支持。“历史版本验证中”还依赖上游已不再完整维护的发行版软件源，因此不应再用于新部署。“计划验证”只表示后续工作方向，目前不作兼容性承诺。这些层级描述的是宿主机验证状态，与软件是否为预发布版无关。
+
+未列出的发行版或版本不在当前 Native 支持矩阵内，即使它的服务管理器能够解析仓库提供的 unit，也不能据此视为受支持。
 
 Native 生命周期 bundle 面向 Linux `amd64` 和 `arm64` 构建。服务默认限制为 `448 MiB RAM`、不额外使用 swap、`1 CPU`、`256 tasks`，为 `512 MiB / 1 vCPU / 2 GB` 主机保留余量。
 
-Alpine 这一行有意写得很具体，并不表示泛化的 OpenRC 支持。主机必须是 `amd64` 或 `arm64` 上持久化安装的 Alpine Linux 3.22.x `sys` 系统，由发行版 OpenRC 作为 PID 1 运行，内核不低于 Linux 5.14，并挂载统一的 cgroup v2 层级。`cpu`、`memory`、`pids` controller、`memory.swap.max`、父级 `cgroup.procs` 和服务 cgroup 的 `cgroup.kill` 都必须可用。受管服务会在 `start_pre` 中应用并核验精确的资源限制和 cgroup 成员关系；任何条件不满足都会拒绝启动。
+Alpine 各行有意写得很具体，并不表示泛化的 OpenRC 支持。主机必须是在 `amd64` 或 `arm64` 上持久化安装的表内 Alpine `sys` 系统，使用 Alpine 标准的 init/OpenRC 启动栈，内核不低于 Linux 5.14，并挂载统一的 cgroup v2 层级。`cpu`、`memory`、`pids` controller、`memory.swap.max`、父级 `cgroup.procs` 和服务 cgroup 的 `cgroup.kill` 都必须可用。受管服务会在 `start_pre` 中应用并核验精确的资源限制和 cgroup 成员关系；任何条件不满足都会拒绝启动。
 
-Docker 容器和没有 init 的镜像不属于受支持的 Alpine Native 主机。以完整系统运行的嵌套或虚拟化环境只有通过同一套运行时检查才符合条件，不能只看发行版名称。不要为了让受限环境启动而绕过或削弱服务检查。
+Docker 容器、没有 init 的镜像，以及无法提供上述 cgroup 契约的嵌套或虚拟化环境，都不符合 Native Alpine 主机条件。嵌套系统只有通过同一套运行时检查才符合条件，不能只看发行版名称。不要为了让受限环境启动而绕过或削弱服务检查。
 
 安装器不会替你修改系统软件源、sysctl、防火墙、SELinux 或时间同步。这些仍由主机管理员负责。
 
 ## 前置条件
 
-以 root 在 Linux 上运行安装器。在线安装需要：
+以 root 在 Linux 上运行安装器。在执行会激活服务的安装前，主机需要：
 
 - systemd，或上面所述且符合条件的 Alpine/OpenRC 环境；
 - `nft`（nftables）和 `ss`（iproute2）；
-- 当专用 `remnanode-lite` 账号尚不存在时，提供 `useradd` 和 `groupadd`；
+- 当专用 `remnanode-lite` 账号尚不存在时，提供 `useradd`、`userdel`、`groupadd` 和 `groupdel`；
 - 可信 CA，以及 `curl` 或支持 `--https-only` 的 GNU Wget；
 - GNU tar 和 gzip；
 - Panel 可访问的 Node 端口，以及 Panel 配置的代理入站端口。
 
-Rocky Linux 8/9：
-
 ```bash
-sudo dnf install -y ca-certificates curl nftables iproute
-```
+# Rocky Linux 8/9/10
+sudo dnf install -y ca-certificates curl nftables iproute shadow-utils tar gzip
 
-Debian 12：
-
-```bash
+# Debian 12/13 与 Ubuntu 24.04/26.04 LTS
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl nftables iproute2
-```
+sudo apt-get install -y ca-certificates curl nftables iproute2 passwd tar gzip
 
-Alpine Linux 3.22.x（root shell）：
-
-```sh
-apk add --no-cache ca-certificates curl openrc shadow nftables iproute2 tar
+# Alpine Linux 3.22/3.23/3.24（root shell）
+apk add --no-cache ca-certificates curl openrc shadow nftables iproute2 tar gzip
 rc-update add cgroups boot
 rc-service cgroups start
 ```
 
-在 Alpine 上，`shadow` 提供 `useradd` 和 `groupadd`，`tar` 包提供 GNU tar；Native bundle 的严格解压流程不能使用 BusyBox tar。`checkpath` 是 OpenRC 包内置的辅助程序，由 `openrc-run` 服务环境提供，但通常不在用户的 `PATH` 中；用户无需单独安装或检查它。
+在 Alpine 上，先启用与当前版本匹配的 `community` 软件源，再安装 `shadow`；`rnlctl` 使用该包提供的账号管理命令。Alpine 的[发行版支持表](https://alpinelinux.org/releases/)目前只维护 3.24 的 `main` 与 `community`，3.22 和 3.23 则只维护 `main`，因此依赖 `community/shadow` 的旧版本仍停留在验证阶段。`tar` 包提供 GNU tar，Native bundle 的严格解压流程不能使用 BusyBox tar。`checkpath` 由 OpenRC 在 `openrc-run` 服务环境内提供，不是单独的依赖，也无需在普通 `PATH` 中检查。
 
 请保持系统时间同步；时间错误会导致 mTLS 或 JWT 认证失败。
 
@@ -75,7 +77,6 @@ VERSION="<published-version>" # 例如：X.Y.Z 或 X.Y.Z-rnl.N
 BASE="https://github.com/luxiaba/remnanode-lite/releases/download/${VERSION}"
 
 workdir="$(mktemp -d /var/tmp/remnanode-lite-download.XXXXXX)"
-trap 'rm -rf "$workdir"' EXIT
 cd "$workdir"
 curl -fLO "${BASE}/install.sh"
 curl -fLO "${BASE}/SHA256SUMS"
@@ -121,7 +122,7 @@ sudo rnlctl activate --secret-file /root/remnanode-lite.secret
 
 准备状态不能直接用 `rnlctl start` 启动；`activate` 会校验配置、启用服务、启动服务并等待内部健康检查。
 
-`--prepare-only` 只校验并铺设 Release 文件，不会启动服务，因此即使主机不符合 Alpine/OpenRC 的 cgroup 契约也可能成功。`rnlctl activate` 是第一次对受管服务运行时 cgroup 与资源限制契约进行权威校验：OpenRC 会执行 `start_pre`，应用并核验限制；这些控制不可用时会直接失败。Alpine 版本、持久化 `sys` 安装、OpenRC 作为 PID 1 和内核版本仍需由操作者确认，并纳入发布验收；`activate` 不会代替操作者识别这些条件。
+`--prepare-only` 只校验并铺设 Release 文件，不会启动服务，因此即使主机不符合 Alpine/OpenRC 的 cgroup 契约也可能成功。`rnlctl activate` 是第一次对受管服务运行时 cgroup 与资源限制契约进行权威校验：OpenRC 会执行 `start_pre`，应用并核验限制；这些控制不可用时会直接失败。表内 Alpine 版本、持久化 `sys` 安装、标准 init/OpenRC 启动栈和内核版本仍需由操作者确认，并纳入发布验收；`activate` 不会代替操作者识别这些条件。
 
 ## 离线或分阶段安装
 
@@ -376,7 +377,19 @@ sudo rnlctl doctor
 sudo rnlctl repair
 ```
 
-缓存损坏时，可传入与记录身份一致的归档和 `--expected-version`。repair 只恢复已记录的 generation，不会悄悄升级。
+如果所需缓存缺失或损坏，可提供一个已经记录在本机的 generation 所对应的归档：
+
+```bash
+VERSION="<已安装版本>"
+ARCH="<amd64或arm64>"
+ARCHIVE="remnanode-lite_${VERSION}_linux_${ARCH}.tar.gz"
+sudo rnlctl repair \
+  --bundle "./${ARCHIVE}" \
+  --sha256 '<64位十六进制sha256>' \
+  --expected-version "$VERSION"
+```
+
+所提供的 bundle 必须与一个已安装 generation 的身份一致。修复完成后，运行 `status --json`，检查日志，确认 Panel 连接，并测试代理流量。`repair` 只恢复已记录的 generation，不会悄悄升级。
 
 ## 修改端口或 Secret
 

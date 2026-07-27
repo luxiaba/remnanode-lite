@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=182c1a24c9a33094d3625a3fa6e46025377fd8deb100bd685ac73ed06c24c1b1 -->
+<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=5a2bcc9c8b81499773ccb02a4faa9bf3198ef8578a9aa903e70b9137c8057b35 -->
 
 # Remnanode Lite 文档中心
 
@@ -15,14 +15,14 @@
 ### 我要部署一个节点
 
 1. 先阅读[项目定位与目标](project.md)，确认支持范围和非目标。
-2. Docker 用户使用 [Docker Compose 部署](deployment-docker.md)；Rocky/Debian systemd 主机和符合条件的 Alpine 3.22.x/OpenRC 主机使用[原生 Linux 部署](deployment-native.md)。
+2. 默认使用 [Docker Compose 部署](deployment-docker.md)；无法安装 Docker 时，按[原生 Linux 部署](deployment-native.md)中的主机矩阵确认环境。
 3. 按[配置参考](configuration.md)填写运行参数、Secret 和可选能力。
 4. 在选择发行物前阅读[版本与镜像标签策略](versioning.md)，区分稳定版、预览版、精确版本与移动通道。
 5. 启动后按[运维手册](operations.md)检查服务健康、Panel 连接和 rw-core 日志。
 
 目标机器是整机 `512 MiB RAM / 1 vCPU / 2 GB disk` 时，应保留仓库提供的内存、CPU、PID、tmpfs 和日志限制，不要在生产节点上进行源码构建。
 
-Native 支持按发行版和运行环境划定。Rocky Linux 9 是主要 systemd 目标，Rocky Linux 8 和 Debian 12 兼容；Alpine Linux 3.22.x 仅支持持久化 `sys` 安装、由发行版 OpenRC 作为 PID 1 运行，并满足 Native 指南中的完整内核与 cgroup v2 契约。这不表示支持任意 OpenRC、容器或没有 init 的环境。
+Native 支持按发行版划分。[Native 主机矩阵](deployment-native.md#native-主机矩阵)是受维护系统、Alpine 前置条件和正在验证的新发行版的唯一现行清单。
 
 ### 我要维护线上节点
 
@@ -68,7 +68,7 @@ Native 支持按发行版和运行环境划定。Rocky Linux 9 是主要 systemd
 | 文档 | 内容 |
 | --- | --- |
 | [Docker Compose 部署](deployment-docker.md) | 单文件部署、资源限制、镜像选择、日志、更新和回滚 |
-| [原生 Linux 部署](deployment-native.md) | Rocky/Debian systemd 与符合条件的 Alpine 3.22.x/OpenRC 安装、升级、回滚、修复和卸载 |
+| [原生 Linux 部署](deployment-native.md) | 主机矩阵、前置条件、指定版本安装、升级、回滚、修复和卸载 |
 | [配置参考](configuration.md) | runtime、容器、安装器和构建变量的作用域、默认值与安全要求 |
 | [运维手册](operations.md) | 健康检查、日志、更新、回滚、磁盘维护和故障排查 |
 | [根目录 Compose](../../../compose.yaml) | 生产容器约束的可执行配置 |

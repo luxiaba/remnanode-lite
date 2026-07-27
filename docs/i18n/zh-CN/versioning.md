@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=6f3e3a445c93780dc566fa481ad0e785b7c96cef43c732d26cd008a0ea124f7f -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=a8fd5b9ef027e06b8279ed98ce1b625e581757ec0a0b43e8a50c84f9170f14d3 -->
 
 # 版本与镜像标签
 
@@ -65,7 +65,7 @@ GitHub 也会将该 Release 标记为 Latest。它既是不可变的对齐点，
 | 版本 | 契约 | 类别 | 重点 |
 | --- | --- | --- | --- |
 | `2.8.0` | `2.8.0` | 稳定版 | 契约对齐基线与首个自包含 Native bundle |
-| `2.8.0-rnl.1` | `2.8.0` | 预发布版 | Native 管理、生命周期恢复和符合条件的 Alpine 支持 |
+| `2.8.0-rnl.1` | `2.8.0` | 预发布版 | Native 管理、生命周期恢复和 Alpine/OpenRC 生命周期路径 |
 | `2.8.0-rnl.2` | `2.8.0` | 预发布版 | 自适应 Native CLI 进度与可安全中断的生命周期恢复 |
 
 源码中的版本可能早于正式发布出现在本表中。判断精确资产是否可用时，应使用[何时才算已发布](#何时才算已发布)中的标准，而不是只看源码。

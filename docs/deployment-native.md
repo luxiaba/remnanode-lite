@@ -2,31 +2,50 @@
 
 [Documentation home](README.md) | [Configuration](configuration.md) | [Operations](operations.md) | [Versioning](versioning.md)
 
-Native deployment runs Remnanode Lite directly under the host service manager. It is useful on small servers where Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not remove the need for a background service: `remnanode-lite` runs under systemd or, on qualified Alpine hosts, distribution OpenRC. Docker Compose remains the default path for most installations. Self-contained Native lifecycle bundles are distributed as exactly tagged GitHub Release assets.
+Native deployment runs Remnanode Lite directly under the host service manager. It is useful on small servers where Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not remove the need for a background service: `remnanode-lite` runs under systemd or, on a listed Alpine profile, distribution OpenRC. Docker Compose remains the default path for most installations. Self-contained Native lifecycle bundles are distributed as exactly tagged GitHub Release assets.
 
 Each published Native bundle contains the Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, service definitions, license notices, an SPDX SBOM, and a manifest that records every file digest. The installer verifies the outer archive checksum and the bundle manifest before changing the host.
 
 Native installation and upgrade always use an exact version from a Release
 that includes the Native lifecycle assets. A Release is Native-capable only
 when it offers `install.sh`, `SHA256SUMS`, and the archive for the host
-architecture. Moving names such as `latest`, `preview`, and `edge` are not
-accepted.
+architecture. Moving channels such as `latest`, `preview`, and `edge` are not
+accepted. A `sha-*` image tag identifies an immutable container candidate, but
+it has no published Native Release assets and is not a valid Native version.
 
-## Supported hosts
+## Native host matrix
 
-| Host | Service manager | Support level |
+| Host | Service manager | Status |
 | --- | --- | --- |
-| Rocky Linux 9 | systemd | Primary Native target |
-| Rocky Linux 8 | systemd 239 | Compatible; the newer hardening drop-in is omitted automatically |
-| Debian 12 | systemd | Compatible |
-| Other current systemd distributions | systemd | Expected to work; test before fleet rollout |
-| Alpine Linux 3.22.x (persistent `sys` install) | Distribution OpenRC | Supported with prerequisites |
+| Rocky Linux 9.x | systemd | Primary Native target |
+| Rocky Linux 8.x | systemd 239 | Compatible; the newer hardening drop-in is omitted automatically |
+| Debian 12.x | systemd | Compatible |
+| Debian 13.x | systemd | Qualification candidate |
+| Ubuntu 24.04 LTS | systemd | Qualification candidate |
+| Ubuntu 26.04 LTS | systemd | Qualification candidate |
+| Rocky Linux 10.x | systemd | Qualification candidate |
+| Alpine Linux 3.22.x (persistent `sys` installation) | Alpine init and OpenRC | Legacy qualification candidate; not recommended for new deployments |
+| Alpine Linux 3.23.x (persistent `sys` installation) | Alpine init and OpenRC | Qualification candidate; required `community/shadow` is outside upstream's maintained repository scope |
+| Alpine Linux 3.24.x (persistent `sys` installation) | Alpine init and OpenRC | Qualification target; full-system testing has not started |
+
+Primary and Compatible entries are maintained host profiles. A Qualification
+candidate has passed limited compatibility checks, but still needs the
+[full-system qualification](development/testing.md#native-distribution-qualification)
+on every claimed architecture before it becomes a support commitment. A Legacy
+qualification candidate has the same evidence gap and also depends on a release
+line that no longer maintains every required repository component; do not use it
+for a new deployment. A Qualification target is planned work and does not yet
+carry a project compatibility claim. These terms describe host evidence, not
+software prereleases.
+
+A distribution or release line not listed here is outside the current Native
+support matrix, even when its service manager can parse the bundled unit.
 
 Native lifecycle bundles are built for Linux `amd64` and `arm64`. The maintained resource profile limits the service to `448 MiB RAM`, no additional service swap, `1 CPU`, and `256 tasks`, leaving room for the host on a `512 MiB / 1 vCPU / 2 GB` machine.
 
-The Alpine row is deliberately specific; it is not a claim of generic OpenRC support. The host must be a persistent Alpine Linux 3.22.x `sys` installation on `amd64` or `arm64`, run the distribution OpenRC as PID 1, use Linux 5.14 or newer, and mount a unified cgroup v2 hierarchy. The `cpu`, `memory`, and `pids` controllers, `memory.swap.max`, the parent `cgroup.procs`, and the service cgroup's `cgroup.kill` must all be usable. The managed service verifies its exact limits and cgroup membership in `start_pre` and refuses to start if any requirement is missing.
+The Alpine rows are deliberately specific; they are not a claim of generic OpenRC support. The host must use a listed Alpine release as a persistent `sys` installation on `amd64` or `arm64`, boot through Alpine's normal init/OpenRC stack, use Linux 5.14 or newer, and mount a unified cgroup v2 hierarchy. The `cpu`, `memory`, and `pids` controllers, `memory.swap.max`, the parent `cgroup.procs`, and the service cgroup's `cgroup.kill` must all be usable. The managed service verifies its exact limits and cgroup membership in `start_pre` and refuses to start if any requirement is missing.
 
-Docker containers, init-less images, and nested or virtualized environments that do not expose that cgroup contract are not supported Native Alpine hosts. A nested guest can qualify only when the same runtime checks pass; its distribution name alone is not sufficient. Do not bypass or weaken the service check to make a constrained host start.
+Docker containers, init-less images, and nested or virtualized environments that do not expose that cgroup contract do not qualify as Native Alpine hosts. A nested guest can qualify only when the same runtime checks pass; its distribution name alone is not sufficient. Do not bypass or weaken the service check to make a constrained host start.
 
 The installer does not configure repositories, sysctl, firewall rules, SELinux policy, or time synchronization. Those remain host-administration responsibilities.
 
@@ -34,30 +53,39 @@ The installer does not configure repositories, sysctl, firewall rules, SELinux p
 
 Run the installer as root on Linux. Before an active installation, the host needs:
 
-- systemd, or the qualified Alpine/OpenRC environment described above;
+- systemd, or a listed Alpine/OpenRC profile that meets the host contract above;
 - `nft` from nftables and `ss` from iproute2;
-- `useradd` and `groupadd` when the dedicated `remnanode-lite` account does not already exist;
+- `useradd`, `userdel`, `groupadd`, and `groupdel` when the dedicated
+  `remnanode-lite` account does not already exist;
 - a trusted CA store and either `curl` or GNU Wget with `--https-only` support for an online install;
 - GNU tar and gzip to unpack a release bundle;
 - the Node port open from the Panel, plus any proxy inbound ports sent by the Panel.
 
-On the primary distributions, install missing runtime commands with:
+On the listed hosts, install missing runtime commands with:
 
 ```bash
-# Rocky Linux 8/9
-sudo dnf install -y ca-certificates curl nftables iproute
+# Rocky Linux 8/9/10
+sudo dnf install -y ca-certificates curl nftables iproute shadow-utils tar gzip
 
-# Debian 12
+# Debian 12/13 and Ubuntu 24.04/26.04 LTS
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl nftables iproute2
+sudo apt-get install -y ca-certificates curl nftables iproute2 passwd tar gzip
 
-# Alpine Linux 3.22.x (root shell)
-apk add --no-cache ca-certificates curl openrc shadow nftables iproute2 tar
+# Alpine Linux 3.22/3.23/3.24 (root shell)
+apk add --no-cache ca-certificates curl openrc shadow nftables iproute2 tar gzip
 rc-update add cgroups boot
 rc-service cgroups start
 ```
 
-On Alpine, `shadow` supplies `useradd` and `groupadd`, and the `tar` package supplies GNU tar; BusyBox tar is not sufficient for the Native bundle's strict extraction path. OpenRC supplies `checkpath` as an internal helper in the `openrc-run` service environment; it is not a separate dependency or a command that must pass a normal `PATH` preflight.
+On Alpine, enable the matching `community` repository before installing
+`shadow`; the package supplies the account-management commands used by
+`rnlctl`. Alpine's [release support table](https://alpinelinux.org/releases/)
+currently maintains `community` for 3.24, but only `main` for 3.22 and 3.23;
+that dependency is why the older lines remain qualification candidates. The
+`tar` package supplies GNU tar, because BusyBox tar is not sufficient for the
+Native bundle's strict extraction path. OpenRC supplies `checkpath` inside the
+`openrc-run` service environment; it is not a separate dependency or a command
+that must pass a normal `PATH` preflight.
 
 Keep the system clock synchronized. mTLS and JWT authentication can fail when the clock is wrong.
 
@@ -130,7 +158,7 @@ sudo rnlctl activate --secret-file /root/remnanode-lite.secret
 
 Prepared installations cannot be started with `rnlctl start`; activation is the explicit transition that validates configuration, enables the service, starts it, and waits for internal health.
 
-`--prepare-only` verifies and lays out release files without starting the service, so it can succeed on a host that does not satisfy the Alpine/OpenRC cgroup contract. `rnlctl activate` is the first authoritative check of the managed service's runtime cgroup and limit contract: OpenRC runs `start_pre`, applies and verifies the limits, and fails closed when those controls are unavailable. The Alpine version, persistent `sys` installation, OpenRC PID 1, and kernel version remain operator prerequisites and release-qualification checks; `activate` does not identify them on the operator's behalf.
+`--prepare-only` verifies and lays out release files without starting the service, so it can succeed on a host that does not satisfy the Alpine/OpenRC cgroup contract. `rnlctl activate` is the first authoritative check of the managed service's runtime cgroup and limit contract: OpenRC runs `start_pre`, applies and verifies the limits, and fails closed when those controls are unavailable. The listed Alpine release, persistent `sys` installation, normal init/OpenRC boot stack, and kernel version remain operator prerequisites and release-qualification checks; `activate` does not identify them on the operator's behalf.
 
 ## Offline or staged install
 

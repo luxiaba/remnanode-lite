@@ -87,7 +87,7 @@ contract has already been implemented.
 | Version | Contract | Class | Focus |
 | --- | --- | --- | --- |
 | `2.8.0` | `2.8.0` | Stable | Contract-alignment baseline and first self-contained Native bundle |
-| `2.8.0-rnl.1` | `2.8.0` | Preview | Native administration, lifecycle recovery, and qualified Alpine support |
+| `2.8.0-rnl.1` | `2.8.0` | Preview | Native administration, lifecycle recovery, and the Alpine/OpenRC lifecycle path |
 | `2.8.0-rnl.2` | `2.8.0` | Preview | Adaptive Native CLI progress and interruption-safe lifecycle recovery |
 
 A source version can appear in this table before it is published. Use the

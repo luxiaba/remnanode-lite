@@ -41,7 +41,7 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 | Choose it when | Docker Engine with Compose v2 is already available. This is the default path. | Docker cannot be installed, or its daemon and container-runtime overhead are not appropriate for the host. |
 | Installation | Download the Release Compose asset and set the Panel Secret in `.env` or an intentional inline mapping. | Download one exact Release, verify `install.sh`, and run the installer as root. |
 | Update and rollback | Select an exact image tag or digest, then pull and recreate the container; restore the previous image reference to roll back. | Use `rnlctl upgrade --to VERSION` and `rnlctl rollback`; one verified previous generation is retained. |
-| Host service | Requires the Docker Engine daemon and its container runtime. | Does not require the Docker Engine daemon or a container runtime, but `remnanode-lite` still runs as a systemd service or, on qualified Alpine hosts, an OpenRC service. |
+| Host service | Requires the Docker Engine daemon and its container runtime. | Does not require the Docker Engine daemon or a container runtime, but `remnanode-lite` still runs as a systemd service or, on a listed Alpine profile, an OpenRC service. |
 | Version reference | Exact tag or manifest digest is recommended; moving `latest` and `preview` are opt-in channels. | Exact `X.Y.Z` or `X.Y.Z-rnl.N` Releases only; moving image channels are never resolved. |
 
 Both paths use host networking and require `NET_ADMIN`. Do not run them beside another Node that uses the same Panel or proxy ports.
@@ -107,7 +107,9 @@ The official container's `NODE_PORT` and `SECRET_KEY` can be reused when migrati
 
 ## Native Linux
 
-Use the Native bundle when Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not mean that the Node has no background service: `remnanode-lite` runs directly under the host service manager. Rocky Linux 9 with systemd is the primary target; Rocky Linux 8 and Debian 12 are compatible. Alpine Linux 3.22.x is also supported on `amd64` and `arm64` when it is a persistent `sys` installation, distribution OpenRC is PID 1, and the host passes the documented kernel and cgroup v2 checks. This is not generic OpenRC support: containers and init-less environments are unsupported, while a nested full-system guest qualifies only when the exact host contract passes.
+Use the Native bundle when Docker cannot be installed or the Docker Engine daemon and container runtime are not appropriate for the host. Native does not mean that the Node has no background service: `remnanode-lite` runs directly under the host service manager. Rocky Linux 9 with systemd is the primary target. See the [Native host matrix](docs/deployment-native.md#native-host-matrix) for compatible hosts, Alpine prerequisites, and the newer distributions currently being qualified.
+
+Install the [host prerequisites](docs/deployment-native.md#prerequisites) before running the installer; it does not install or configure system packages.
 
 Native installs never follow a moving channel. Choose a version shown on the
 GitHub Releases page, then download `install.sh` and `SHA256SUMS` from that
@@ -233,7 +235,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | Item | Current baseline |
 | --- | --- |
 | Native Linux bundles | Exact published Releases |
-| Native hosts | Rocky Linux 8/9 and Debian 12 with systemd; qualified Alpine Linux 3.22.x `sys` installs with distribution OpenRC |
+| Native hosts | Distribution-specific; see the [Native host matrix](docs/deployment-native.md#native-host-matrix) |
 | Node contract | `2.8.0` |
 | rw-core | `v26.6.27` |
 | Platforms | `linux/amd64`, `linux/arm64` |
