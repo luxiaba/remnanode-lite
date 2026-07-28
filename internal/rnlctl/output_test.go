@@ -120,7 +120,7 @@ func TestAppColorPolicy(t *testing.T) {
 
 func TestRenderDoctorAddsOnlyActionableAdvice(t *testing.T) {
 	report := DoctorReport{Checks: []Check{
-		{Name: "transaction-journal", Status: "error", Detail: "interrupted upgrade"},
+		{Name: "transaction-journal", Status: "error", Detail: pendingJournalRepairDetail},
 		{Name: "runtime-health", Status: "error", Detail: "socket unavailable"},
 		{Name: "repair-cache:generation-a", Status: "warning", Detail: "root snapshot"},
 	}}
@@ -132,5 +132,15 @@ func TestRenderDoctorAddsOnlyActionableAdvice(t *testing.T) {
 	}
 	if strings.Contains(output, "\x1b[") {
 		t.Fatalf("non-color doctor output contains ANSI: %q", output)
+	}
+}
+
+func TestDoctorAdviceDoesNotRepairUnreadableLifecycleMetadata(t *testing.T) {
+	checks := []Check{
+		{Name: "transaction-journal", Status: "error", Detail: "lifecycle metadata is unreadable"},
+		{Name: "lifecycle-state", Status: "error", Detail: "invalid state"},
+	}
+	if got := doctorAdvice(checks); len(got) != 0 {
+		t.Fatalf("doctorAdvice() = %q, want no automatic repair advice", got)
 	}
 }

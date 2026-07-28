@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/operations.md; source-sha256=8d474fd56f3f5cc0911bff682239099396b8eabc446d7087d325e147292fe49d -->
+<!-- translation: locale=ru; source=docs/operations.md; source-sha256=c90887e1b41cb78a7ec656a5872b8add62b215b70dfa29c60f155c59e8d5d28f -->
 
 # Эксплуатация и диагностика
 
@@ -193,7 +193,7 @@ sudo rnlctl rollback
 цикла. Процент и ETA появляются только при известном полном размере; JSON dry-run
 всегда остаётся без прогресса.
 
-Полный bundle Node/runtime становится новым generation, прежний сохраняется как previous. Если состояние показывает `recovery-required`:
+Полный bundle Node/runtime становится новым generation, прежний сохраняется как previous. Если состояние показывает `recovery-required`, сначала изучите проблему. Запускайте repair только когда status показывает читаемую транзакцию `pending`; в остальных случаях используйте doctor для проверки нечитаемых метаданных жизненного цикла. Не изменяйте ссылки или файлы состояния вручную:
 
 ```bash
 sudo rnlctl status --json

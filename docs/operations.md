@@ -235,7 +235,9 @@ Rollback is one command:
 sudo rnlctl rollback
 ```
 
-If `status --json` reports `recovery-required`, inspect it and run repair rather than editing links or state files:
+If `status --json` reports `recovery-required`, inspect the problem first. Run
+repair when status lists a readable `pending` transaction; otherwise use doctor
+to review unreadable lifecycle metadata. Do not edit links or state files:
 
 ```bash
 sudo rnlctl status --json

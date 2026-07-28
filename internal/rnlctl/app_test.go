@@ -263,6 +263,7 @@ func TestAppRendersHumanStatusFromLifecycle(t *testing.T) {
 		status   Status
 		wantExit int
 		want     []string
+		notWant  []string
 	}{
 		{
 			name: "healthy installed",
@@ -275,10 +276,20 @@ func TestAppRendersHumanStatusFromLifecycle(t *testing.T) {
 			want: []string{"Remnanode Lite", "State:       installed", "Health:      healthy", "Version:     2.8.0", "Service:     systemd (enabled, active)"},
 		},
 		{
-			name:     "recovery required",
+			name:     "unreadable recovery state",
 			status:   Status{SchemaVersion: 1, Deployment: "recovery-required", Installed: true, Problems: []string{"interrupted upgrade"}},
 			wantExit: 1,
-			want:     []string{"Health:      unhealthy", "Problems:", "interrupted upgrade", "Next:        sudo rnlctl repair"},
+			want:     []string{"Health:      unhealthy", "Problems:", "interrupted upgrade", "Next:        sudo rnlctl doctor"},
+			notWant:  []string{"Next:        sudo rnlctl repair"},
+		},
+		{
+			name: "pending transaction",
+			status: Status{
+				SchemaVersion: 1, Deployment: "recovery-required", Installed: true,
+				Pending: &PendingOperation{Operation: "upgrade", Phase: "planned"},
+			},
+			wantExit: 1,
+			want:     []string{"Pending:     upgrade / planned", "Next:        sudo rnlctl repair"},
 		},
 		{
 			name:   "absent",
@@ -298,6 +309,11 @@ func TestAppRendersHumanStatusFromLifecycle(t *testing.T) {
 			for _, want := range test.want {
 				if !strings.Contains(stdout.String(), want) {
 					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+				}
+			}
+			for _, notWant := range test.notWant {
+				if strings.Contains(stdout.String(), notWant) {
+					t.Fatalf("stdout = %q, do not want %q", stdout.String(), notWant)
 				}
 			}
 			if len(runner.commands) != 0 || !reflect.DeepEqual(lifecycle.called, []string{"status"}) {

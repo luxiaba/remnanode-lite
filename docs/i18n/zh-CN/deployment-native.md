@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=514f76e21a614170f9654aa3895d853cfed9c841aa10d815d444906a7c4a67bb -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=8c7b838bebd6db718022a8a625003af06ad4113d0b5414124de28d9c36518f50 -->
 
 # 原生 Linux 部署
 
@@ -31,7 +31,7 @@ Native 安装和升级只接受包含 Native 生命周期资产的 Release 的�
 
 未列出的发行版或版本不在当前 Native 支持矩阵内，即使它的服务管理器能够解析仓库提供的 unit，也不能据此视为受支持。
 
-Native 生命周期 bundle 面向 Linux `amd64` 和 `arm64` 构建。服务默认限制为 `448 MiB RAM`、不额外使用 swap、`1 CPU`、`256 tasks`，为 `512 MiB / 1 vCPU / 2 GB` 主机保留余量。
+Native 生命周期 bundle 面向 Linux `amd64` 和 `arm64` 构建。服务默认限制为 `448 MiB RAM`、`1 CPU` 和 `256 tasks`，并在 cgroup v2 上禁用额外 swap。Rocky Linux 8 默认使用 cgroup v1，此时 swap 用量遵循宿主机策略。该配置以在 `512 MiB / 1 vCPU / 2 GB` 主机上为宿主系统保留余量为设计目标。
 
 Alpine 各行有意写得很具体，并不表示泛化的 OpenRC 支持。主机必须是在 `amd64` 或 `arm64` 上持久化安装的表内 Alpine `sys` 系统，使用 Alpine 标准的 init/OpenRC 启动栈，内核不低于 Linux 5.14，并挂载统一的 cgroup v2 层级。`cpu`、`memory`、`pids` controller、`memory.swap.max`、父级 `cgroup.procs` 和服务 cgroup 的 `cgroup.kill` 都必须可用。受管服务会在 `start_pre` 中应用并核验精确的资源限制和 cgroup 成员关系；任何条件不满足都会拒绝启动。
 
@@ -218,7 +218,7 @@ status 会检查 generation、配置、服务、权限、修复缓存和内部 h
 | `prepared` | 已验证但明确禁用、停止 |
 | `installed` | 文件、服务状态和 health 一致 |
 | `degraded` | 安装存在，但至少一个检查失败 |
-| `recovery-required` | 有未完成 journal 或状态不可读，需要 repair |
+| `recovery-required` | 有未完成 journal 或生命周期状态不可读，需要恢复；运行 repair 前先检查具体问题 |
 
 ## 命令行体验
 

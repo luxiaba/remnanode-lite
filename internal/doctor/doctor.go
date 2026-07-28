@@ -158,7 +158,7 @@ func checkServiceDefinitionAt(systemdPath, openRCPath string) result {
 
 func checkSecret(cfg config.Config) []result {
 	if _, err := secret.Parse(cfg.SecretKey); err == nil {
-		return []result{{level: "OK", title: "Secret Key", detail: "configured and valid"}}
+		return []result{{level: "OK", title: "Secret Key", detail: "configured; envelope parsed and required fields are present"}}
 	}
 	detail := "invalid format (the key supplied by the Panel cannot be parsed or required fields are missing)"
 	if strings.TrimSpace(cfg.SecretKey) == "" {

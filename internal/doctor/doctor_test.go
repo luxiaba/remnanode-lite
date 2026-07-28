@@ -25,7 +25,7 @@ func TestRunMissingEnv(t *testing.T) {
 func TestCheckSecret(t *testing.T) {
 	t.Parallel()
 	valid := base64.StdEncoding.EncodeToString([]byte(`{"caCertPem":"ca","jwtPublicKey":"jwt","nodeCertPem":"cert","nodeKeyPem":"key"}`))
-	if r := checkSecret(config.Config{SecretKey: valid}); r[0].level != "OK" {
+	if r := checkSecret(config.Config{SecretKey: valid}); r[0].level != "OK" || r[0].detail != "configured; envelope parsed and required fields are present" {
 		t.Fatalf("expected OK, got %#v", r)
 	}
 	if r := checkSecret(config.Config{}); r[0].level != "ERROR" {

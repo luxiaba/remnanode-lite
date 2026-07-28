@@ -92,11 +92,11 @@ func renderStatus(status Status, color bool) string {
 		for _, problem := range status.Problems {
 			fmt.Fprintf(&output, "  - %s\n", problem)
 		}
-		if status.Deployment == "recovery-required" {
-			output.WriteString("Next:        sudo rnlctl repair\n")
-		} else {
-			output.WriteString("Next:        sudo rnlctl doctor\n")
-		}
+	}
+	if status.Deployment == "recovery-required" && status.Pending != nil {
+		output.WriteString("Next:        sudo rnlctl repair\n")
+	} else if len(status.Problems) > 0 {
+		output.WriteString("Next:        sudo rnlctl doctor\n")
 	}
 	return output.String()
 }
@@ -202,8 +202,7 @@ func doctorAdvice(checks []Check) []string {
 			command = "sudo rnlctl logs node --lines 100"
 		case check.Name == "service":
 			command = "sudo rnlctl status"
-		case check.Name == "transaction-journal",
-			check.Name == "lifecycle-state",
+		case check.Name == "transaction-journal" && check.Detail == pendingJournalRepairDetail,
 			check.Name == "generation-links",
 			check.Name == "managed-permissions",
 			strings.HasPrefix(check.Name, "generation:"),

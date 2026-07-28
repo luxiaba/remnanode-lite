@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=8d474fd56f3f5cc0911bff682239099396b8eabc446d7087d325e147292fe49d -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=c90887e1b41cb78a7ec656a5872b8add62b215b70dfa29c60f155c59e8d5d28f -->
 
 # 运维与故障排查
 
@@ -184,7 +184,7 @@ dry-run 需要 root、已有且状态干净的安装，并且不能存在待处�
 普通文本模式的预检和升级会报告精确 Release 选择、下载、校验以及实际执行的生命周期阶段。
 只有总大小已知的下载才显示百分比和 ETA；JSON dry-run 从不包含进度输出。
 
-升级把完整 Node/runtime bundle 作为新 generation，并把旧 generation 保留为 previous。若状态显示 `recovery-required`：
+升级把完整 Node/runtime bundle 作为新 generation，并把旧 generation 保留为 previous。若状态显示 `recovery-required`，先检查具体问题；仅当状态列出可读的 `pending` 事务时运行 repair，否则先用 doctor 检查不可读的生命周期元数据。不要手工修改链接或状态文件：
 
 ```bash
 sudo rnlctl status --json

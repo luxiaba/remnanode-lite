@@ -41,7 +41,7 @@ software prereleases.
 A distribution or release line not listed here is outside the current Native
 support matrix, even when its service manager can parse the bundled unit.
 
-Native lifecycle bundles are built for Linux `amd64` and `arm64`. The maintained resource profile limits the service to `448 MiB RAM`, no additional service swap, `1 CPU`, and `256 tasks`, leaving room for the host on a `512 MiB / 1 vCPU / 2 GB` machine.
+Native lifecycle bundles are built for Linux `amd64` and `arm64`. The maintained resource profile limits the service to `448 MiB RAM`, `1 CPU`, and `256 tasks`, and disables additional service swap on cgroup v2. On the default cgroup v1 configuration of Rocky Linux 8, swap usage follows host policy. The profile is designed to leave room for the host on a `512 MiB / 1 vCPU / 2 GB` machine.
 
 The Alpine rows are deliberately specific; they are not a claim of generic OpenRC support. The host must use a listed Alpine release as a persistent `sys` installation on `amd64` or `arm64`, boot through Alpine's normal init/OpenRC stack, use Linux 5.14 or newer, and mount a unified cgroup v2 hierarchy. The `cpu`, `memory`, and `pids` controllers, `memory.swap.max`, the parent `cgroup.procs`, and the service cgroup's `cgroup.kill` must all be usable. The managed service verifies its exact limits and cgroup membership in `start_pre` and refuses to start if any requirement is missing.
 
@@ -260,7 +260,7 @@ Lifecycle states reported by `status` and `status --json` are:
 | `prepared` | Installed and verified, intentionally disabled and stopped |
 | `installed` | Managed state, service state, files, and health agree |
 | `degraded` | An installation exists but one or more checks fail |
-| `recovery-required` | A transaction journal or unreadable state requires repair |
+| `recovery-required` | An unfinished journal or unreadable lifecycle state requires recovery; inspect the reported problem before running repair |
 
 ## Command-line experience
 

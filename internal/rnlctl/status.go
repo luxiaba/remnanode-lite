@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	statusSchemaVersion = 1
-	doctorSchemaVersion = 1
+	statusSchemaVersion        = 1
+	doctorSchemaVersion        = 1
+	pendingJournalRepairDetail = "an interrupted operation requires rnlctl repair"
 )
 
 func (engine *Engine) Status(ctx context.Context) (Status, error) {
@@ -119,7 +120,11 @@ func (engine *Engine) Doctor(ctx context.Context) (DoctorReport, error) {
 	}
 	if status.Pending != nil || status.Deployment == "recovery-required" {
 		report.Healthy = false
-		report.Checks = append(report.Checks, Check{Name: "transaction-journal", Status: "error", Detail: "an interrupted operation requires rnlctl repair"})
+		detail := pendingJournalRepairDetail
+		if status.Pending == nil {
+			detail = "lifecycle metadata is unreadable; inspect the problem reported by status before attempting repair"
+		}
+		report.Checks = append(report.Checks, Check{Name: "transaction-journal", Status: "error", Detail: detail})
 	} else {
 		report.Checks = append(report.Checks, Check{Name: "transaction-journal", Status: "ok"})
 	}
