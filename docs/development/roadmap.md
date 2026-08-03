@@ -33,7 +33,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 
 ## Compatibility boundary
 
-- `/node` routes follow official Node 2.8.0 HTTP methods, request and response shapes, and error semantics.
+- `/node` routes follow official Node 3.0.0 HTTP methods, request and response shapes, and error semantics.
 - Project-specific diagnostics and operations live in the CLI or a separate internal interface; they do not extend the official `/node` contract.
 - After a Node restart, the process waits for Panel to resend configuration instead of restoring a potentially stale full proxy configuration from disk.
 - Request-size and resource protections may create documented safety deviations, but they must fail explicitly rather than degrade silently.
@@ -53,6 +53,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M7 System integration and supply chain | Complete |
 | M8 Release preparation | Complete |
 | M9 Self-contained Native distribution | Complete |
+| M10 Official Node 3.0.0 alignment | Implementation complete; candidate validation pending |
 
 The M6 50,000-user measurement from 2026-07-15 and the M7
 init/distribution snapshots from 2026-07-19 remain useful engineering
@@ -66,22 +67,23 @@ recovery, and the Alpine/OpenRC lifecycle path. The published `2.8.0-rnl.2`
 preview adds clearer interactive progress and safer interruption recovery.
 The published `2.8.0-rnl.3` preview establishes an evidence-based Native host
 matrix and corrects Alpine qualification guidance without changing the official
-Node contract.
+Node contract. The published `2.8.0-rnl.4` preview improves `rnlctl` inspection
+and state-aware guidance. The `3.0.0` source line aligns the current
+official contract and awaits immutable-candidate verification before release.
 Runtime observations stay outside the source repository, and GitHub generates
 the Release notes.
 
 ## Current focus
 
-- **Now:** Advance the explicit Native qualification candidates with persistent
-  full-system VM checks. Start with Debian 13 and Ubuntu 24.04 LTS on both
-  architectures, then cover Ubuntu 26.04 LTS and Rocky Linux 10. Qualify Alpine
-  3.24 before considering it for new deployments; retain 3.22 and 3.23 only as
-  documented evidence-bound candidates.
+- **Now:** Verify the immutable `3.0.0` candidate with a compatible Panel,
+  bundled rw-core startup, and real proxy traffic. Use a release with pre-start
+  support (`3.1.0` or newer) to verify stale-socket cleanup. Keep server details
+  and runtime observations outside the repository.
 - **Release discipline:** For the next two release cycles, do not add release
   channels, artifact types, publication state, or proof mechanisms. Reliability
   and security fixes, and removal of redundant checks, remain in scope.
-- **Next:** Evaluate the next official release detected by automation. Pin its
-  source and review the contract diff before selecting a project version line.
+- **Next:** Resume the explicit Native qualification candidates after the
+  `3.0.0` release decision.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements. Release decisions

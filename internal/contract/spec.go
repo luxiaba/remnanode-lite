@@ -10,8 +10,8 @@ import (
 
 const (
 	OfficialNodeRepository = "https://github.com/remnawave/node.git"
-	OfficialNodeVersion    = "2.8.0"
-	OfficialNodeCommit     = "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b"
+	OfficialNodeVersion    = "3.0.0"
+	OfficialNodeCommit     = "46fc5d2d736ff60f6c6a9a56e2661acb95d3f559"
 )
 
 // RouteContract is one executable route contract backed by the pinned
@@ -92,12 +92,18 @@ func buildOfficialRoutes() []RouteContract {
 		route(
 			"xray.start", http.MethodPost, "/node/xray/start",
 			`{"internals":{"forceRestart":false,"hashes":{"emptyConfig":"empty-hash","inbounds":[]}},"xrayConfig":{}}`,
-			[]string{"start or replace the rw-core process", "replace active config and inbound hash state"},
+			[]string{
+				"start or replace the rw-core process",
+				"run configured pre-start cleanup after the old core stops and before its replacement starts",
+				"replace active config and inbound hash state",
+			},
 			[]string{"HTTP 200 with isStarted=false and nullable error; RN-001 is an official readiness-failure log diagnostic, not a response field"},
 			[]string{
 				controller("xray-core/xray.controller.ts"),
 				command("xray/start.command.ts"),
 				"src/modules/xray-core/xray.service.ts",
+				"src/modules/_plugin/commands/run-pre-start/run-pre-start.handler.ts",
+				"src/modules/_plugin/services/pre-start.service.ts",
 				"libs/contract/constants/errors/known-errors.ts",
 			},
 		),
@@ -229,8 +235,18 @@ func buildOfficialRoutes() []RouteContract {
 		route(
 			"plugin.sync", http.MethodPost, "/node/plugin/sync",
 			`{"plugin":{"config":{},"uuid":"00000000-0000-4000-8000-000000000001","name":"node-plugin"}}`,
-			[]string{"replace or clear plugin state", "reconcile nftables rules", "restart or reconfigure rw-core when required"}, nil,
-			[]string{controller("_plugin/plugin.controller.ts"), command("plugin/sync.command.ts")},
+			[]string{
+				"replace or clear plugin state, including pre-start cleanup settings",
+				"reconcile nftables rules",
+				"restart or reconfigure rw-core when required",
+			}, nil,
+			[]string{
+				controller("_plugin/plugin.controller.ts"),
+				command("plugin/sync.command.ts"),
+				"src/modules/_plugin/plugin.service.ts",
+				"src/modules/_plugin/services/plugin-state.service.ts",
+				"src/modules/_plugin/services/states/pre-start.state.ts",
+			},
 		),
 		route(
 			"plugin.torrent-blocker.collect", http.MethodPost, "/node/plugin/torrent-blocker/collect", "",

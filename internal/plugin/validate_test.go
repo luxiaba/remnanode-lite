@@ -36,15 +36,14 @@ func TestValidatePluginConfigAcceptsMinimalConfig(t *testing.T) {
 	}
 }
 
-func TestValidatePluginConfigAcceptsNonNegativeIntegerDurationAndExtEdges(t *testing.T) {
+func TestValidatePluginConfigAcceptsNonNegativeSafeIntegerDurationAndExtEdges(t *testing.T) {
 	t.Parallel()
 
 	for _, duration := range []any{
 		float64(0),
 		float64(1),
 		float64(31 * 24 * 60 * 60),
-		float64(1 << 53),
-		float64(1e20),
+		float64(maxJavaScriptSafeInteger),
 	} {
 		cfg := validTorrentBlocker(true)
 		cfg["blockDuration"] = duration
@@ -66,12 +65,22 @@ func TestValidatePluginConfigAcceptsNonNegativeIntegerDurationAndExtEdges(t *tes
 func TestValidatePluginConfigRejectsUnsafeBlockDuration(t *testing.T) {
 	t.Parallel()
 
-	for _, duration := range []any{float64(-1), math.Inf(1), math.NaN()} {
+	for _, duration := range []any{float64(-1), float64(1 << 53), float64(1e20), math.Inf(1), math.NaN()} {
 		cfg := validTorrentBlocker(true)
 		cfg["blockDuration"] = duration
 		if err := ValidatePluginConfig(map[string]any{"torrentBlocker": cfg}); err == nil {
 			t.Errorf("blockDuration=%v was accepted", duration)
 		}
+	}
+}
+
+func TestValidatePluginConfigRejectsUnsafeIgnoredUserID(t *testing.T) {
+	t.Parallel()
+
+	cfg := validTorrentBlocker(true)
+	cfg["ignoreLists"] = map[string]any{"userId": []any{float64(1 << 53)}}
+	if err := ValidatePluginConfig(map[string]any{"torrentBlocker": cfg}); err == nil {
+		t.Fatal("unsafe ignored user ID was accepted")
 	}
 }
 

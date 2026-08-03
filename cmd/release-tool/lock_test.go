@@ -23,7 +23,7 @@ func TestRuntimeLockRejectsUnknownAndDuplicateFields(t *testing.T) {
 	tests := map[string]string{
 		"unknown field":         strings.Replace(string(original), "\"schemaVersion\": 2,", "\"schemaVersion\": 2, \"unexpected\": true,", 1),
 		"duplicate key":         strings.Replace(string(original), "\"schemaVersion\": 2,", "\"schemaVersion\": 2, \"schemaVersion\": 2,", 1),
-		"uppercase digest":      strings.Replace(string(original), "b3e5902d", "B3e5902d", 1),
+		"uppercase digest":      strings.Replace(string(original), "8195d909", "8195D909", 1),
 		"escaped URL separator": strings.Replace(string(original), "/releases/download/", "%2Freleases/download/", 1),
 	}
 	for name, content := range tests {

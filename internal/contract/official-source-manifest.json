@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "repository": "https://github.com/remnawave/node.git",
   "packageName": "@remnawave/node",
-  "version": "2.8.0",
-  "commit": "596f015a5c8f876dc9a9d61b6cb78d35bd8e379b",
+  "version": "3.0.0",
+  "commit": "46fc5d2d736ff60f6c6a9a56e2661acb95d3f559",
   "files": [
     {
       "path": "libs/contract/api/controllers/handler.ts",
@@ -27,11 +27,11 @@
     },
     {
       "path": "libs/contract/commands/handler/add-user.command.ts",
-      "sha256": "ac85e27b485235ba84c38f094c09a14050c3e704569c6d2ed080d92e5ff7aa12"
+      "sha256": "ba3115b3387899e9870b2fda023d8cbba345dae60e023f0b24fe46f762bf0618"
     },
     {
       "path": "libs/contract/commands/handler/add-users.command.ts",
-      "sha256": "e42f7d0f287dfd2e63a30b3a5d079b067e4f002e62e0d4199d8fc1bed6527bc0"
+      "sha256": "0f8c67456d55a7c865522205d2103c8c65bb400156bff2d18cb2b1b6be1e11b1"
     },
     {
       "path": "libs/contract/commands/handler/drop-ips.command.ts",
@@ -51,15 +51,15 @@
     },
     {
       "path": "libs/contract/commands/handler/remove-user.command.ts",
-      "sha256": "2ebd08e6d2b489618d0715b3c552e829d8af0c4d53764958fc5f1a2e7fecce19"
+      "sha256": "d223018f3cab4e35fb346d0d7b8c7ac8bc177325207a57b107738506e40f1d71"
     },
     {
       "path": "libs/contract/commands/handler/remove-users.command.ts",
-      "sha256": "0b1518511ce1e395e0594a00de1d55de3ef9bd5ab3a1397100900a62af351ab3"
+      "sha256": "832df9d3a7dfa1ef99df8759f6c4dd478b02eb756569c16e26af842cb27ec030"
     },
     {
       "path": "libs/contract/commands/plugin/nftables/block-ips.schema.ts",
-      "sha256": "8ea1fd2fd630e1f1aa7ae6757f59f0357c3a380a17b11453d2917d03a11dce33"
+      "sha256": "1256daed1c54e67ffe19822cd607fdeb17ffd31a61cdb58bb35e0a1af61eec85"
     },
     {
       "path": "libs/contract/commands/plugin/nftables/recreate-tables.schema.ts",
@@ -67,11 +67,11 @@
     },
     {
       "path": "libs/contract/commands/plugin/nftables/unblock-ips.schema.ts",
-      "sha256": "a2d03c53b032b101b8e6aa2bdbf9f49c19ca41069081f058e79f5b5556e746bb"
+      "sha256": "34a5515ee0f298b2b30da214a61ab5a110398b69de5148d18d8d34fdaa94d39e"
     },
     {
       "path": "libs/contract/commands/plugin/sync.command.ts",
-      "sha256": "025e1feb29508e44367074c9f023438316e8ab7afe77ad3d73d79db052c6dcbf"
+      "sha256": "0dbdd348a7fa000aca80adf92de552a6e15c5f504e8145b2b8b09b9ec4f0a6d1"
     },
     {
       "path": "libs/contract/commands/plugin/torrent-blocker/collect-reports.schema.ts",
@@ -103,7 +103,7 @@
     },
     {
       "path": "libs/contract/commands/stats/get-user-ip-list.command.ts",
-      "sha256": "a8ac34ef06f0fe5d456ed9794c55d5f3697e29be4e81054d96b6f0ca77fdc71f"
+      "sha256": "1518ba426a2f700d8e393c548e2ecbe6f7ae0a28e261edfc2e6ca0db50dac05b"
     },
     {
       "path": "libs/contract/commands/stats/get-user-online-status.command.ts",
@@ -111,7 +111,7 @@
     },
     {
       "path": "libs/contract/commands/stats/get-users-ip-list.command.ts",
-      "sha256": "71b9182f4aaec1b6bcbb1c96b215adb909dbf6ea53099d31f876c586bdebc644"
+      "sha256": "a1dc5f0d8f11525318e8b074e7e1e6e1679a0a844dd56bdf5f053997ec548445"
     },
     {
       "path": "libs/contract/commands/stats/get-users-stats.command.ts",
@@ -123,7 +123,7 @@
     },
     {
       "path": "libs/contract/commands/xray/start.command.ts",
-      "sha256": "74f1ac60e4f81b4cd7a7c5c538cc9e8b725076b3a3eb14fa51b9243336dcd492"
+      "sha256": "0a8b284f93032db5e6cf44bc54ee48680025261c71579daf0e3488e1080e7a4a"
     },
     {
       "path": "libs/contract/commands/xray/stop.command.ts",
@@ -143,7 +143,7 @@
     },
     {
       "path": "libs/contract/models/node-system.schema.ts",
-      "sha256": "11bc9cf07e6c895866a7c1311ee97b31f52714cbc2256766667e95d2499968a3"
+      "sha256": "163a576401078c145637b23fd187beac239bbf882cd5f5bbf0a24e91c6118668"
     },
     {
       "path": "libs/contract/models/torrent-blocker.report.schema.ts",
@@ -155,11 +155,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "bb4d8825b99cdc49ad9af2d4dfaf66f8ea16bde19c51db0b3eac1459f7d4dd82"
+      "sha256": "a4fb7587c3633582fb69e99ab39ef4199831df3e27e0f5e4b1121ac2c2a89339"
     },
     {
       "path": "package.json",
-      "sha256": "026300061a6bf4a1205677d20e0d7d1d2f6d1d7597ee1da35eec10fbb9616e66"
+      "sha256": "7bfb4c916369e6238ed4e374345d03476132568ad9aad1f789c87185b0d7ddd4"
     },
     {
       "path": "src/app.module.ts",
@@ -179,7 +179,11 @@
     },
     {
       "path": "src/main.ts",
-      "sha256": "8b9ab3b2872775438116d2e8c51f01c56e16483e9af55ff506d6338278b51ae3"
+      "sha256": "19363060d7860ed2413828622fbff3594bc341eab429b6c656f170076125e5fa"
+    },
+    {
+      "path": "src/modules/_plugin/commands/run-pre-start/run-pre-start.handler.ts",
+      "sha256": "66a9e0cd2b506c39c71ad17eab10b6bd133afc9aba6ff533e2fc708f0dd11011"
     },
     {
       "path": "src/modules/_plugin/plugin.controller.ts",
@@ -187,7 +191,23 @@
     },
     {
       "path": "src/modules/_plugin/plugin.module.ts",
-      "sha256": "455e1f6626ad66460ebea3eddc97defe238926395a0f4a86d1f1093ec5dab1f8"
+      "sha256": "d969f37c22fd71eaa79d66240fa493ceca5acfb08b11f082a21da56343b86d43"
+    },
+    {
+      "path": "src/modules/_plugin/plugin.service.ts",
+      "sha256": "dac34b9586e20206fff3cacd2774358ec6d4e3cc82247bb45d74f4a35f6b94d5"
+    },
+    {
+      "path": "src/modules/_plugin/services/plugin-state.service.ts",
+      "sha256": "4eae5ebc4667dc14e11a0fe454524e1f453cb41f90401ef8bbf963eb9333f3e8"
+    },
+    {
+      "path": "src/modules/_plugin/services/pre-start.service.ts",
+      "sha256": "65859775349aedd16b2c0a62941e4c676f76c1a4ed89ea9f535e361b3f55643a"
+    },
+    {
+      "path": "src/modules/_plugin/services/states/pre-start.state.ts",
+      "sha256": "33d2bc2abd02c1edee98ae87a5c09552d811b34e2a007d671c5102baae0089db"
     },
     {
       "path": "src/modules/asn-lmdb/asn-lmdb.module.ts",
@@ -227,15 +247,15 @@
     },
     {
       "path": "src/modules/xray-core/xray.controller.ts",
-      "sha256": "a020358fa465b0009b91024479977da25c2594e50b4ecfc73a23e2ba5e0c49b5"
+      "sha256": "008e670306cf6d8ab7195fbb8c30ea913a834408a400ac7e03cd013a98eedf83"
     },
     {
       "path": "src/modules/xray-core/xray.module.ts",
-      "sha256": "e96e92886ca167a6314492173e4885b98a975dfbbd7f333ee700bdc83b0ecc37"
+      "sha256": "1aeb685c107cee562dc3b003271fc33c81a9dac5562cdb23c78198275120b58c"
     },
     {
       "path": "src/modules/xray-core/xray.service.ts",
-      "sha256": "cfc39b3301109c85bb6ab9b24493c31eb0410013d1609d9e28b460f268a953f7"
+      "sha256": "2210fca26769cb8e8e7cf61db421ee4555feb42f25f1847f7717d0a330852d38"
     }
   ],
   "routes": [

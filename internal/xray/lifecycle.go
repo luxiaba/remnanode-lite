@@ -203,6 +203,16 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 		return m.startFailure("xray start canceled", err)
 	}
 
+	m.runPreStart(ctx)
+	if err := ctx.Err(); err != nil {
+		cancel()
+		m.completeStart(operationEpoch, lifecycleStopped, func() {
+			m.process = nil
+			m.clearRuntimeLocked()
+		})
+		return m.startFailure("xray start canceled", err)
+	}
+
 	if !m.stagePendingConfig(operationEpoch, previousProcess, prepared.json) {
 		cancel()
 		m.completeStart(operationEpoch, lifecycleStopped, nil)

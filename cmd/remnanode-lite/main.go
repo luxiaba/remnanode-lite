@@ -361,6 +361,7 @@ func runNode() (runErr error) {
 		CoreVersion:        cfg.XrayCoreVersion,
 		System:             systemCollector,
 		TorrentBlocker:     pluginState,
+		PreStart:           pluginState,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize Xray manager: %w", err)

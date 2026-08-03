@@ -1,6 +1,6 @@
 services:
   remnanode-lite:
-    image: remnanode-lite:2.8.0-rnl.4
+    image: remnanode-lite:3.0.0
     build:
       context: .
       dockerfile: Dockerfile

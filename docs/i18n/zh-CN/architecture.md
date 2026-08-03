@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=3394860dbc826c12536d504c926ee9afa7bd424e5e40d866ebf9a0fe58174f3a -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=86fafae74d56f980174acaae8168514427c1a900d798da66da04068654f999c0 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -7,7 +7,7 @@
 
 本文面向第一次接触 Remnanode Lite 的维护者，描述当前代码真实采用的边界、运行流程、状态所有权和资源约束。它回答的是“系统如何工作、修改代码时应守住什么”，而不是部署参数或某个版本的发布清单。
 
-部署方式见 [Docker Compose 部署](deployment-docker.md)，外部 API 的逐路由契约见 [当前官方契约基线](development/contract-2.8.0.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
+部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.0.0 契约基线](development/contract-3.0.0.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
 
 ## 1. 系统定位
 

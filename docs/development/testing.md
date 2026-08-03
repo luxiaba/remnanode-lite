@@ -139,7 +139,7 @@ These commands do not start the official Node. Machine extraction proves pinned 
 
 ### External Plugin Schema Evidence
 
-The official Node's plugin `config` schema comes from a separate npm package and is not part of the pinned source repository. Recheck the current `@remnawave/node-plugins@0.4.5` tarball in an isolated temporary directory:
+The official Node's plugin `config` schema comes from a separate npm package and is not part of the pinned source repository. Recheck the current `@remnawave/node-plugins@0.6.0` tarball in an isolated temporary directory:
 
 ```bash
 plugin_tgz="$(mktemp)"
@@ -147,13 +147,13 @@ trap 'rm -f "$plugin_tgz"' EXIT
 
 curl --fail --location --silent --show-error \
   --proto '=https' --tlsv1.2 \
-  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.4.5.tgz \
+  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.6.0.tgz \
   -o "$plugin_tgz"
 
 test "$(openssl dgst -sha1 "$plugin_tgz" | awk '{print $NF}')" = \
-  3bfc3988278790ec40a93d6e6169f893c31bf62d
+  278e0d0e9180f22144580e1ad1589d82588bb285
 test "sha512-$(openssl dgst -sha512 -binary "$plugin_tgz" | openssl base64 -A)" = \
-  'sha512-r9Lce/l/kHQATNhWbcutApFSJ5hH/Yu6Kv0+/qjpUDIEa1+DFb54Q8IwuvqWzxxbGkG9oO0cAeN4busBzz0a5Q=='
+  'sha512-q82oHyZxqw0OdbTyC6fDs6s+Wbky9HzVL36T/nDyRA4BKdboOuOH58tET0YiO12M1kQFXqiMsEci0ZEB1ONKmQ=='
 
 tar -tzf "$plugin_tgz" \
   | grep -Fx 'package/build/backend/models/node-plugins.schema.js'

@@ -39,6 +39,7 @@ type pluginSnapshot struct {
 	firewallReady bool
 	whitelistIPs  ipMatcher
 	torrent       torrentSettings
+	preStart      preStartSettings
 	firewall      firewallConfig
 }
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Validation aligned with @remnawave/node-plugins@0.4.5 (NodePluginSchema).
+// Validation aligned with @remnawave/node-plugins@0.6.0 (NodePluginSchema).
 
 func isPlainIP(value string) bool {
 	return net.ParseIP(value) != nil
@@ -144,8 +144,8 @@ func validateTorrentBlockerSection(raw any) error {
 		return fmt.Errorf("torrentBlocker.enabled is required and must be a boolean")
 	}
 	duration, durationOK := numberValue(section["blockDuration"])
-	if !durationOK || math.Trunc(duration) != duration || duration < 0 {
-		return fmt.Errorf("torrentBlocker.blockDuration must be a non-negative integer")
+	if !durationOK || math.Trunc(duration) != duration || duration < 0 || duration > maxJavaScriptSafeInteger {
+		return fmt.Errorf("torrentBlocker.blockDuration must be a non-negative safe integer")
 	}
 	ignoreRaw, ok := section["ignoreLists"]
 	if !ok {
@@ -238,9 +238,58 @@ func validateEgressFilterSection(raw any) error {
 	return nil
 }
 
+func validatePreStartSection(raw any) error {
+	section, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("preStart must be an object")
+	}
+	if enabled, present := section["enabled"]; present {
+		if _, ok := enabled.(bool); !ok {
+			return fmt.Errorf("preStart.enabled must be a boolean")
+		}
+	}
+
+	cleanupRaw, present := section["cleanupSockets"]
+	if !present {
+		return nil
+	}
+	cleanup, ok := cleanupRaw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("preStart.cleanupSockets must be an object")
+	}
+	if _, ok := cleanup["enabled"].(bool); !ok {
+		return fmt.Errorf("preStart.cleanupSockets.enabled is required and must be a boolean")
+	}
+	files, ok := cleanup["files"].([]any)
+	if !ok {
+		return fmt.Errorf("preStart.cleanupSockets.files is required and must be an array")
+	}
+	if err := validateArrayLength("preStart.cleanupSockets.files", len(files), maxPreStartSocketFiles); err != nil {
+		return err
+	}
+	for index, item := range files {
+		path, ok := item.(string)
+		if !ok {
+			return fmt.Errorf("preStart.cleanupSockets.files[%d] must be a string", index)
+		}
+		path = strings.TrimSpace(path)
+		field := fmt.Sprintf("preStart.cleanupSockets.files[%d]", index)
+		if path == "" {
+			return fmt.Errorf("%s must not be empty", field)
+		}
+		if !strings.HasPrefix(path, "/") {
+			return fmt.Errorf("%s must be an absolute path", field)
+		}
+		if strings.ContainsRune(path, '\x00') {
+			return fmt.Errorf("%s must not contain null bytes", field)
+		}
+	}
+	return nil
+}
+
 func isIntNumber(value any) bool {
 	number, ok := numberValue(value)
-	return ok && math.Trunc(number) == number
+	return ok && math.Trunc(number) == number && math.Abs(number) <= maxJavaScriptSafeInteger
 }
 
 func numberValue(value any) (float64, bool) {

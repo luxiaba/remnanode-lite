@@ -29,6 +29,7 @@ type Options struct {
 	CoreVersion        string
 	System             SystemSnapshotter
 	TorrentBlocker     TorrentBlockerConfigProvider
+	PreStart           PreStartConfigProvider
 }
 
 type SystemSnapshotter interface {
@@ -38,6 +39,10 @@ type SystemSnapshotter interface {
 type TorrentBlockerConfigProvider interface {
 	TorrentBlockerEnabled() bool
 	TorrentBlockerIncludeRuleTags() []string
+}
+
+type PreStartConfigProvider interface {
+	PreStartCleanupSockets() (bool, []string)
 }
 
 // runtimeState is guarded by Manager.mu. It intentionally has no lock of its
@@ -89,6 +94,7 @@ type Manager struct {
 	nodeVersion      string
 	system           SystemSnapshotter
 	torrentBlocker   TorrentBlockerConfigProvider
+	preStart         PreStartConfigProvider
 
 	state            lifecycleState
 	operationEpoch   uint64
@@ -190,6 +196,7 @@ func newManager(opts Options, versionProbe func(context.Context) (string, error)
 		nodeVersion:         strings.TrimSpace(opts.NodeVersion),
 		system:              opts.System,
 		torrentBlocker:      opts.TorrentBlocker,
+		preStart:            opts.PreStart,
 		readinessInterval:   defaultReadinessInterval,
 		interruptTimeout:    defaultInterruptTimeout,
 		killTimeout:         defaultKillTimeout,

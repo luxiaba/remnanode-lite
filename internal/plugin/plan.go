@@ -82,6 +82,15 @@ func buildPluginPlanFromConfigContext(
 			ignoredUsers: make(map[string]struct{}),
 		},
 	}
+	if preStart, ok := config["preStart"].(map[string]any); ok {
+		snapshot.preStart.enabled, _ = preStart["enabled"].(bool)
+		if cleanup, ok := preStart["cleanupSockets"].(map[string]any); ok {
+			snapshot.preStart.cleanupSockets, _ = cleanup["enabled"].(bool)
+			for _, path := range toStringSlice(cleanup["files"]) {
+				snapshot.preStart.files = append(snapshot.preStart.files, strings.TrimSpace(path))
+			}
+		}
+	}
 	resolvedBudget := expansionBudget{remaining: maxResolvedIPItems}
 
 	if connectionDrop, ok := config["connectionDrop"].(map[string]any); ok {
