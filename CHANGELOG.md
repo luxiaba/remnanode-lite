@@ -6,6 +6,39 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [2.8.0-rnl.4] - 2026-08-03
+
+This preview keeps the verified official Node `2.8.0` contract while making
+Native operations easier to inspect and recover through a concise overview and
+safer, state-aware command guidance.
+
+### Added
+
+- Added `rnlctl overview` as a concise human-oriented entry point combining
+  lifecycle and service state, version and generation details, the configured
+  non-secret endpoint, reported problems, and state-specific commands without
+  contacting Panel or generating proxy traffic. Automation continues to use
+  the unchanged `status --json` schema.
+
+### Changed
+
+- Made the human `rnlctl` workflow more action-oriented: root help highlights
+  the main inspection commands, successful install, activate, upgrade,
+  rollback, and repair operations print state-aware next steps, and failed
+  lifecycle mutations suggest safe local diagnostics. Suggestions are never
+  executed automatically, are hidden by quiet mode, and are omitted after
+  cancellation.
+
+### Fixed
+
+- Stopped `status` and `doctor` from recommending repair for unreadable
+  lifecycle metadata. Repair is now suggested only for a readable pending
+  transaction; other recovery-required states direct operators to inspect the
+  reported problem.
+- Corrected Native diagnostic and resource-profile wording so a parsed Panel
+  Secret is described by its actual parsing guarantees, and Rocky Linux 8 with
+  cgroup v1 is documented as following the host swap policy.
+
 ## [2.8.0-rnl.3] - 2026-07-27
 
 This preview keeps the verified official Node `2.8.0` contract while making
