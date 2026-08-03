@@ -41,7 +41,7 @@ software prereleases.
 A distribution or release line not listed here is outside the current Native
 support matrix, even when its service manager can parse the bundled unit.
 
-Native lifecycle bundles are built for Linux `amd64` and `arm64`. The maintained resource profile limits the service to `448 MiB RAM`, no additional service swap, `1 CPU`, and `256 tasks`, leaving room for the host on a `512 MiB / 1 vCPU / 2 GB` machine.
+Native lifecycle bundles are built for Linux `amd64` and `arm64`. The maintained resource profile limits the service to `448 MiB RAM`, `1 CPU`, and `256 tasks`, and disables additional service swap on cgroup v2. On the default cgroup v1 configuration of Rocky Linux 8, swap usage follows host policy. The profile is designed to leave room for the host on a `512 MiB / 1 vCPU / 2 GB` machine.
 
 The Alpine rows are deliberately specific; they are not a claim of generic OpenRC support. The host must use a listed Alpine release as a persistent `sys` installation on `amd64` or `arm64`, boot through Alpine's normal init/OpenRC stack, use Linux 5.14 or newer, and mount a unified cgroup v2 hierarchy. The `cpu`, `memory`, and `pids` controllers, `memory.swap.max`, the parent `cgroup.procs`, and the service cgroup's `cgroup.kill` must all be usable. The managed service verifies its exact limits and cgroup membership in `start_pre` and refuses to start if any requirement is missing.
 
@@ -240,6 +240,7 @@ The base systemd unit works with systemd 239. On systemd 247 or newer, the insta
 Use `rnlctl` for the lifecycle view and the service manager for low-level detail:
 
 ```bash
+sudo rnlctl overview
 sudo rnlctl status
 sudo rnlctl status --json
 sudo rnlctl doctor
@@ -247,6 +248,12 @@ sudo rnlctl logs node --lines 100
 sudo rnlctl logs core-errors --lines 100
 remnanode-lite version
 ```
+
+`overview` is the concise human entry point. It combines lifecycle and service
+state, version and generation information, the configured non-secret listen
+endpoint, reported problems, and commands appropriate to the current state. It
+reads local status and safe configuration only; it does not contact Panel or
+generate proxy traffic. It has no JSON form and is not a parsing contract.
 
 Bare `rnlctl status` now prints a consistent human-readable lifecycle summary; it no longer proxies raw `systemctl status` or `rc-service status` output. Its layout is not a parsing contract. Existing automation should use `status --json`, whose schema is unchanged. Use the service-manager commands shown above when you need low-level detail.
 
@@ -260,7 +267,7 @@ Lifecycle states reported by `status` and `status --json` are:
 | `prepared` | Installed and verified, intentionally disabled and stopped |
 | `installed` | Managed state, service state, files, and health agree |
 | `degraded` | An installation exists but one or more checks fail |
-| `recovery-required` | A transaction journal or unreadable state requires repair |
+| `recovery-required` | An unfinished journal or unreadable lifecycle state requires recovery; inspect the reported problem before running repair |
 
 ## Command-line experience
 
@@ -287,10 +294,12 @@ estimated time. Unknown-size downloads show transferred bytes without inventing
 a percentage, and lifecycle stages never pretend to be an overall completion
 percentage.
 
-`--quiet` (or `-q`) hides progress, successful lifecycle/configuration mutation messages, the `configuration ok` line from `config check`, and human `status`/`doctor` output. It overrides an explicit progress mode, but never hides help, version, `config show`/`get`, logs, completion scripts, upgrade dry-run plans, JSON, or errors.
+Successful `install`, `activate`, `upgrade`, `rollback`, and `repair` commands append state-aware `Next` suggestions. Failed lifecycle mutations may append safe local `status`, `doctor`, or Node-log diagnostics to stderr. Suggestions are printed only; they are never executed automatically and are omitted for cancellation errors.
 
-Human output uses restrained color only when its destination is a TTY. Status
-and doctor inspect stdout, while progress inspects stderr. `--no-color`, a
+`--quiet` (or `-q`) hides progress, successful lifecycle/configuration mutation messages and their suggestions, failure suggestions, the `configuration ok` line from `config check`, and human `overview`/`status`/`doctor` output. It overrides an explicit progress mode, but never hides help, version, `config show`/`get`, logs, completion scripts, upgrade dry-run plans, JSON, or the original error line.
+
+Human output uses restrained color only when its destination is a TTY. Overview,
+status, and doctor inspect stdout, while progress inspects stderr. `--no-color`, a
 non-empty `NO_COLOR`, or `TERM=dumb` disables color on both streams; redirected
 streams contain no color sequences. JSON output disables progress completely.
 
@@ -303,7 +312,7 @@ the operating-system default after the first signal, so sending it again can
 force immediate termination; run `sudo rnlctl status --json` and
 `sudo rnlctl repair` if a forced exit leaves a recovery journal.
 
-Exit codes are normally `0` for success, `1` for a runtime failure or unhealthy result, and `2` for invalid usage. `status` treats `absent` as a valid state and returns `0`; automation that requires an installation must also inspect the JSON `installed` or `deployment` field. Once `logs` starts `journalctl` or `tail`, it passes through that reader's exit code, including `128 + signal` when terminated by a signal.
+Exit codes are normally `0` for success, `1` for a runtime failure or unhealthy result, and `2` for invalid usage. `status` and `overview` treat `absent` as a valid state and return `0`; `overview` also returns `1` when the safe configuration summary cannot be read. Automation that requires an installation must use `status --json` and inspect the `installed` or `deployment` field. Once `logs` starts `journalctl` or `tail`, it passes through that reader's exit code, including `128 + signal` when terminated by a signal.
 
 ### Shell completion
 

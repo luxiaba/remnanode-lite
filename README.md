@@ -129,14 +129,20 @@ sudo sh ./install.sh --version "$VERSION" --port 2222
 The installer securely prompts for the complete Panel Secret when one is not already installed. It verifies and installs one complete generation: Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, and service definitions. After startup:
 
 ```bash
+sudo rnlctl overview
 sudo rnlctl status
 sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
 
-`status` prints a compact lifecycle summary for people; scripts should keep
-using the unchanged `status --json` model. `doctor` ends with a summary and
-specific next commands when it finds a problem. Long operations adapt their
+`overview` is the concise human entry point. It combines lifecycle and service
+state with the configured non-secret endpoint, then shows commands appropriate
+to the current state. It does not contact Panel or generate proxy traffic, and
+it has no JSON form; scripts should keep using the unchanged `status --json`
+model. `doctor` ends with a summary and specific next commands when it finds a
+problem. Successful install, activation, upgrade, rollback, and repair commands
+also print useful next steps; failed lifecycle mutations suggest safe local
+diagnostics without running them. Long operations adapt their
 progress to interactive terminals or redirected logs. Global `--quiet`/`-q`,
 `--no-color`, and `--progress auto|plain|never` options may appear anywhere in
 an `rnlctl` command; `install.sh` accepts the same progress modes. Shell

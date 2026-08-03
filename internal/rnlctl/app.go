@@ -218,6 +218,8 @@ func (a *App) run(ctx context.Context, args []string) int {
 		return a.runConfig(ctx, args[1:])
 	case "secret":
 		return a.runSecret(ctx, args[1:])
+	case "overview":
+		return a.runOverview(ctx, args[1:])
 	case "status":
 		return a.runStatus(ctx, args[1:])
 	case "doctor":
@@ -451,6 +453,39 @@ func (a *App) runStatus(ctx context.Context, args []string) int {
 			return code
 		}
 	}
+	return statusExitCode(status)
+}
+
+func (a *App) runOverview(ctx context.Context, args []string) int {
+	overviewUsage := usageForCommand("overview")
+	if len(args) == 1 && isHelp(args[0]) {
+		return a.write(a.stdout, overviewUsage)
+	}
+	if len(args) != 0 {
+		return a.usageError("overview", "does not accept arguments", overviewUsage)
+	}
+
+	status, err := a.lifecycle.Status(ctx)
+	if err != nil {
+		return a.runtimeError("overview", err)
+	}
+	report := newOverviewReport(status, Configuration{}, nil)
+	if status.Installed {
+		configuration, configurationErr := a.lifecycle.ReadConfiguration(ctx)
+		report = newOverviewReport(status, configuration, configurationErr)
+	}
+	if !a.quiet {
+		if code := a.write(a.stdout, renderOverview(report, a.colorEnabled())); code != exitOK {
+			return code
+		}
+	}
+	if !report.healthy() && status.Deployment != "absent" {
+		return exitFailure
+	}
+	return exitOK
+}
+
+func statusExitCode(status Status) int {
 	if !status.Healthy && status.Deployment != "absent" {
 		return exitFailure
 	}
@@ -526,20 +561,12 @@ func (a *App) parseFlags(flags *flag.FlagSet, args []string, commandUsage string
 
 func (a *App) lifecycleResult(command string, result Result, err error) int {
 	if err != nil {
-		return a.runtimeError(command, err)
+		return a.runtimeErrorWithAdvice(command, err)
 	}
 	if a.quiet {
 		return exitOK
 	}
-	verb := "unchanged"
-	if result.Changed {
-		verb = "completed"
-	}
-	line := fmt.Sprintf("%s %s", result.Operation, verb)
-	if result.Version != "" {
-		line += ": " + result.Version
-	}
-	return a.write(a.stdout, line+"\n")
+	return a.write(a.stdout, renderLifecycleResult(result, lifecycleSuccessAdvice(command, result)))
 }
 
 func (a *App) writeJSON(value any) error {
@@ -609,12 +636,27 @@ func (a *App) usageError(command, message, commandUsage string) int {
 }
 
 func (a *App) runtimeError(command string, err error) int {
+	return a.runtimeErrorWithCommands(command, err, nil)
+}
+
+func (a *App) runtimeErrorWithAdvice(command string, err error) int {
+	commands := lifecycleFailureAdvice(command)
+	if a.quiet || isContextError(err) {
+		commands = nil
+	}
+	return a.runtimeErrorWithCommands(command, err, commands)
+}
+
+func (a *App) runtimeErrorWithCommands(command string, err error, commands []string) int {
 	a.finishProgress(false)
 	prefix := "rnlctl"
 	if command != "" {
 		prefix += ": " + command
 	}
 	fmt.Fprintf(a.stderr, "%s: %v\n", prefix, err)
+	if len(commands) > 0 {
+		_, _ = io.WriteString(a.stderr, renderCommandSection("Next", commands))
+	}
 	return exitFailure
 }
 

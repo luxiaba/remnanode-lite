@@ -224,14 +224,16 @@ func TestAppReadOnlyHealthHeartbeatsNeverStartProgress(t *testing.T) {
 	}{
 		{name: "status human", args: []string{"status"}},
 		{name: "status JSON", args: []string{"status", "--json"}},
+		{name: "overview", args: []string{"overview"}},
 		{name: "doctor human", args: []string{"doctor"}},
 		{name: "doctor JSON", args: []string{"doctor", "--json"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			base := &fakeLifecycle{
-				status: Status{SchemaVersion: 1, Deployment: "installed", Healthy: true},
-				doctor: DoctorReport{SchemaVersion: 1, Healthy: true},
+				status:        Status{SchemaVersion: 1, Deployment: "installed", Healthy: true},
+				doctor:        DoctorReport{SchemaVersion: 1, Healthy: true},
+				configuration: Configuration{Values: map[string]string{"NODE_PORT": "2222"}},
 			}
 			lifecycle := &progressTestLifecycle{
 				fakeLifecycle: base,
@@ -272,6 +274,7 @@ func TestProgressOperationAllowsOnlyCommandsWithVisibleWork(t *testing.T) {
 		{args: []string{"config", "apply"}, want: "config apply"},
 		{args: []string{"secret", "set"}, want: "secret set"},
 		{args: []string{"status"}},
+		{args: []string{"overview"}},
 		{args: []string{"doctor", "--json"}},
 		{args: []string{"config", "show"}},
 		{args: []string{"logs", "node"}},

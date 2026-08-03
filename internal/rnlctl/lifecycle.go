@@ -42,7 +42,10 @@ func (engine *Engine) Install(ctx context.Context, request InstallRequest) (Resu
 	if state != nil {
 		current := state.Generations[state.Current]
 		if current.Identity == bundle.Identity {
-			return Result{Operation: "install", Generation: current.ID, Version: current.Version}, nil
+			return Result{
+				Operation: "install", Generation: current.ID, Version: current.Version,
+				PreparedOnly: state.Prepared,
+			}, nil
 		}
 		return Result{}, ErrAlreadyInstalled
 	}
@@ -350,7 +353,10 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 	oldRecord := inspection.current
 	superseded, hasSuperseded := inspection.superseded, inspection.hasPrevious
 	if !inspection.plan.ChangeRequired {
-		return Result{Operation: "upgrade", Generation: oldRecord.ID, Version: oldRecord.Version}, nil
+		return Result{
+			Operation: "upgrade", Generation: oldRecord.ID, Version: oldRecord.Version,
+			PreparedOnly: state.Prepared,
+		}, nil
 	}
 	serviceBefore := inspection.plan.Service
 	desired := desiredServiceState{Enabled: serviceBefore.Enabled, Active: serviceBefore.Active}
@@ -474,7 +480,10 @@ func (engine *Engine) Upgrade(ctx context.Context, request UpgradeRequest) (Resu
 		}
 		completeProgressPhase(ctx, phaseCleanUp, true)
 	}
-	return Result{Operation: "upgrade", Changed: true, Generation: record.ID, Version: record.Version}, nil
+	return Result{
+		Operation: "upgrade", Changed: true, Generation: record.ID, Version: record.Version,
+		PreparedOnly: newState.Prepared,
+	}, nil
 }
 
 func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Result, error) {
@@ -522,7 +531,10 @@ func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Re
 	}
 	if targetID == state.Current {
 		current := state.Generations[state.Current]
-		return Result{Operation: "rollback", Generation: current.ID, Version: current.Version}, nil
+		return Result{
+			Operation: "rollback", Generation: current.ID, Version: current.Version,
+			PreparedOnly: state.Prepared,
+		}, nil
 	}
 	if targetID == "" || targetID != state.Previous {
 		return Result{}, fmt.Errorf("generation %q is not the retained previous generation", targetID)
@@ -599,7 +611,10 @@ func (engine *Engine) Rollback(ctx context.Context, request RollbackRequest) (Re
 		return Result{}, fmt.Errorf("rollback committed but journal cleanup failed: %w", err)
 	}
 	completeProgressPhase(ctx, phaseCommitState, true)
-	return Result{Operation: "rollback", Changed: true, Generation: target.ID, Version: target.Version}, nil
+	return Result{
+		Operation: "rollback", Changed: true, Generation: target.ID, Version: target.Version,
+		PreparedOnly: newState.Prepared,
+	}, nil
 }
 
 func (engine *Engine) resolveBundleInput(ctx context.Context, input BundleInput, version string) (BundleInput, func(), error) {

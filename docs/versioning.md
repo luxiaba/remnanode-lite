@@ -24,7 +24,7 @@ command derives the stable-versus-preview class from the source version.
 `Version` and `ContractVersion` move independently. For example:
 
 ```text
-Version:         2.8.0-rnl.3
+Version:         2.8.0-rnl.4
 ContractVersion: 2.8.0
 ```
 
@@ -90,6 +90,7 @@ contract has already been implemented.
 | `2.8.0-rnl.1` | `2.8.0` | Preview | Native administration, lifecycle recovery, and the Alpine/OpenRC lifecycle path |
 | `2.8.0-rnl.2` | `2.8.0` | Preview | Adaptive Native CLI progress and interruption-safe lifecycle recovery |
 | `2.8.0-rnl.3` | `2.8.0` | Preview | Evidence-based Native host matrix and current distribution qualification rules |
+| `2.8.0-rnl.4` | `2.8.0` | Preview | Concise Native operator overview and state-aware lifecycle guidance |
 
 A source version can appear in this table before it is published. Use the
 criteria in [What Counts as Published](#what-counts-as-published), rather than

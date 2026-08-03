@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=514f76e21a614170f9654aa3895d853cfed9c841aa10d815d444906a7c4a67bb -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=238d3061b8c4b809d59102ca9a4bc848ac3d6c54d4f9467a4a2fb599ca517bff -->
 
 # 原生 Linux 部署
 
@@ -31,7 +31,7 @@ Native 安装和升级只接受包含 Native 生命周期资产的 Release 的�
 
 未列出的发行版或版本不在当前 Native 支持矩阵内，即使它的服务管理器能够解析仓库提供的 unit，也不能据此视为受支持。
 
-Native 生命周期 bundle 面向 Linux `amd64` 和 `arm64` 构建。服务默认限制为 `448 MiB RAM`、不额外使用 swap、`1 CPU`、`256 tasks`，为 `512 MiB / 1 vCPU / 2 GB` 主机保留余量。
+Native 生命周期 bundle 面向 Linux `amd64` 和 `arm64` 构建。服务默认限制为 `448 MiB RAM`、`1 CPU` 和 `256 tasks`，并在 cgroup v2 上禁用额外 swap。Rocky Linux 8 默认使用 cgroup v1，此时 swap 用量遵循宿主机策略。该配置以在 `512 MiB / 1 vCPU / 2 GB` 主机上为宿主系统保留余量为设计目标。
 
 Alpine 各行有意写得很具体，并不表示泛化的 OpenRC 支持。主机必须是在 `amd64` 或 `arm64` 上持久化安装的表内 Alpine `sys` 系统，使用 Alpine 标准的 init/OpenRC 启动栈，内核不低于 Linux 5.14，并挂载统一的 cgroup v2 层级。`cpu`、`memory`、`pids` controller、`memory.swap.max`、父级 `cgroup.procs` 和服务 cgroup 的 `cgroup.kill` 都必须可用。受管服务会在 `start_pre` 中应用并核验精确的资源限制和 cgroup 成员关系；任何条件不满足都会拒绝启动。
 
@@ -198,6 +198,7 @@ rc-service remnanode-lite status
 ## 安装后检查
 
 ```bash
+sudo rnlctl overview
 sudo rnlctl status
 sudo rnlctl status --json
 sudo rnlctl doctor
@@ -205,6 +206,10 @@ sudo rnlctl logs node --lines 100
 sudo rnlctl logs core-errors --lines 100
 remnanode-lite version
 ```
+
+`overview` 是面向人工巡检的简洁入口。它汇总生命周期和服务状态、版本与 generation、
+不含 Secret 的监听端点、已报告问题，以及随当前状态变化的命令。它只读取本地状态和
+安全配置，不会连接 Panel 或制造代理流量；没有 JSON 形式，也不是解析契约。
 
 直接运行 `rnlctl status` 现在会输出一致、便于阅读的生命周期摘要，不再转发原始的 `systemctl status` 或 `rc-service status` 输出；human 排版不是可解析接口。已有自动化应使用 schema 不变的 `status --json`。需要底层细节时，直接运行前文的服务管理器命令。
 
@@ -218,7 +223,7 @@ status 会检查 generation、配置、服务、权限、修复缓存和内部 h
 | `prepared` | 已验证但明确禁用、停止 |
 | `installed` | 文件、服务状态和 health 一致 |
 | `degraded` | 安装存在，但至少一个检查失败 |
-| `recovery-required` | 有未完成 journal 或状态不可读，需要 repair |
+| `recovery-required` | 有未完成 journal 或生命周期状态不可读，需要恢复；运行 repair 前先检查具体问题 |
 
 ## 命令行体验
 
@@ -242,12 +247,16 @@ sudo rnlctl upgrade --to "$VERSION" --progress plain
 只有能够确定总大小的下载才显示百分比、速率和预计剩余时间。无法确定大小时只报告
 已传输字节，不虚构百分比；生命周期阶段也不会伪装成整体完成百分比。
 
-`--quiet`（或 `-q`）会隐藏进度、成功的生命周期/配置变更提示、`config check` 的
-`configuration ok`，以及 human `status`/`doctor` 输出。它优先于显式指定的进度模式，
-但不会隐藏 help、version、`config show`/`get`、日志、补全脚本、升级 dry-run 计划、
-JSON 或错误。
+`install`、`activate`、`upgrade`、`rollback` 和 `repair` 成功后会附带随状态变化的
+`Next` 建议；生命周期变更失败时，stderr 可能附带安全的本地 `status`、`doctor` 或
+Node 日志诊断。这些建议只会显示，绝不会自动执行；取消类错误不会附加建议。
 
-面向人的输出只在对应输出流是 TTY 时使用克制的颜色：status 和 doctor 检查 stdout，
+`--quiet`（或 `-q`）会隐藏进度、成功的生命周期/配置变更提示及其建议、失败建议、
+`config check` 的 `configuration ok`，以及 human `overview`/`status`/`doctor` 输出。它优先于
+显式指定的进度模式，但不会隐藏 help、version、`config show`/`get`、日志、补全脚本、
+升级 dry-run 计划、JSON 或原始错误行。
+
+面向人的输出只在对应输出流是 TTY 时使用克制的颜色：overview、status 和 doctor 检查 stdout，
 进度检查 stderr。指定 `--no-color`、`NO_COLOR` 为非空值或 `TERM=dumb` 时，两个输出流
 都不使用颜色；被重定向的输出流也不会包含颜色转义序列。JSON 输出会
 完全关闭进度。
@@ -258,7 +267,7 @@ JSON 或错误。
 后，处理方式会恢复为操作系统默认值，因此再次发送信号可以立即强制终止；如果强制
 退出留下 recovery journal，请运行 `sudo rnlctl status --json` 和 `sudo rnlctl repair`。
 
-退出码通常为：成功 `0`，运行失败或检查结果不健康 `1`，用法错误 `2`。`absent` 是 status 的有效状态，会返回 `0`；要求必须已安装的自动化还要检查 JSON 中的 `installed` 或 `deployment`。`logs` 启动 `journalctl` 或 `tail` 后，会透传该读取器的退出码；被信号终止时也可能返回 `128 + signal`。
+退出码通常为：成功 `0`，运行失败或检查结果不健康 `1`，用法错误 `2`。`status` 和 `overview` 都把 `absent` 视为有效状态并返回 `0`；安全配置摘要无法读取时，`overview` 返回 `1`。要求必须已安装的自动化应使用 `status --json`，并检查其中的 `installed` 或 `deployment`。`logs` 启动 `journalctl` 或 `tail` 后，会透传该读取器的退出码；被信号终止时也可能返回 `128 + signal`。
 
 ### Shell 补全
 

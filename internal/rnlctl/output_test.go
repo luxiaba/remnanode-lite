@@ -120,7 +120,7 @@ func TestAppColorPolicy(t *testing.T) {
 
 func TestRenderDoctorAddsOnlyActionableAdvice(t *testing.T) {
 	report := DoctorReport{Checks: []Check{
-		{Name: "transaction-journal", Status: "error", Detail: "interrupted upgrade"},
+		{Name: "transaction-journal", Status: "error", Detail: pendingJournalRepairDetail},
 		{Name: "runtime-health", Status: "error", Detail: "socket unavailable"},
 		{Name: "repair-cache:generation-a", Status: "warning", Detail: "root snapshot"},
 	}}
@@ -132,5 +132,62 @@ func TestRenderDoctorAddsOnlyActionableAdvice(t *testing.T) {
 	}
 	if strings.Contains(output, "\x1b[") {
 		t.Fatalf("non-color doctor output contains ANSI: %q", output)
+	}
+}
+
+func TestDoctorAdviceDoesNotRepairUnreadableLifecycleMetadata(t *testing.T) {
+	checks := []Check{
+		{Name: "transaction-journal", Status: "error", Detail: "lifecycle metadata is unreadable"},
+		{Name: "lifecycle-state", Status: "error", Detail: "invalid state"},
+	}
+	if got := doctorAdvice(checks); len(got) != 0 {
+		t.Fatalf("doctorAdvice() = %q, want no automatic repair advice", got)
+	}
+}
+
+func TestLifecycleGuidanceIsLimitedToSelectedMutations(t *testing.T) {
+	result := Result{PreparedOnly: true}
+	if got := lifecycleSuccessAdvice("install", result); !reflect.DeepEqual(got, []string{
+		"sudo rnlctl activate --help", "sudo rnlctl overview",
+	}) {
+		t.Fatalf("prepared install advice = %q", got)
+	}
+	if got := lifecycleSuccessAdvice("repair", result); !reflect.DeepEqual(got, []string{
+		"sudo rnlctl activate --help", "sudo rnlctl overview",
+	}) {
+		t.Fatalf("prepared repair advice = %q", got)
+	}
+	if got := lifecycleSuccessAdvice("repair", Result{}); !reflect.DeepEqual(got, []string{
+		"sudo rnlctl overview", "rnlctl install --help",
+	}) {
+		t.Fatalf("absent repair advice = %q", got)
+	}
+	if got := lifecycleSuccessAdvice("restart", Result{}); got != nil {
+		t.Fatalf("restart success advice = %q, want nil", got)
+	}
+	if got := lifecycleFailureAdvice("config set"); got != nil {
+		t.Fatalf("config set failure advice = %q, want nil", got)
+	}
+}
+
+func TestConfigurationEndpointNormalizesIPv6Brackets(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		host string
+		want string
+	}{
+		{name: "wildcard", want: "*:2222"},
+		{name: "IPv4", host: "127.0.0.1", want: "127.0.0.1:2222"},
+		{name: "IPv6", host: "::1", want: "[::1]:2222"},
+		{name: "bracketed IPv6", host: "[::1]", want: "[::1]:2222"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			configuration := Configuration{Values: map[string]string{
+				"NODE_PORT": "2222", "NODE_BIND_ADDR": test.host,
+			}}
+			if got := configurationEndpoint(configuration); got != test.want {
+				t.Fatalf("configurationEndpoint() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }

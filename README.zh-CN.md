@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=b14afde2d752dbd1d41ec306f89094e21ec4df8f37399a1dcb220a8014ee8e70 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=e55326e430a757545d6b06cea12d91dc007898e579508b680179ed9a5a3e7d77 -->
 <div align="center">
 
 # Remnanode Lite
@@ -127,13 +127,17 @@ sudo sh ./install.sh --version "$VERSION" --port 2222
 没有已安装的 Secret 时，安装器会安全地在终端中读取 Panel Secret。它会校验并安装一个完整 generation：Node、`rnlctl`、rw-core、GeoIP、GeoSite、ASN 数据和服务定义。启动后执行：
 
 ```bash
+sudo rnlctl overview
 sudo rnlctl status
 sudo rnlctl doctor
 sudo rnlctl logs node --lines 100
 ```
 
-`status` 默认输出便于阅读的生命周期摘要；自动化脚本继续使用 schema 不变的
-`status --json`。`doctor` 在发现问题时会给出汇总和明确的后续命令。长时间操作会
+`overview` 是面向人工巡检的简洁入口：它汇总生命周期、服务状态和不含 Secret 的
+监听端点，并根据当前状态列出合适的命令。它不会连接 Panel 或制造代理流量，也没有
+JSON 形式；自动化脚本继续使用 schema 不变的 `status --json`。`doctor` 在发现问题时
+会给出汇总和明确的后续命令。安装、激活、升级、回滚和修复成功后也会显示有用的下一步；
+生命周期变更失败时只建议安全的本地诊断命令，不会自动执行。长时间操作会
 根据交互终端或重定向日志自动调整进度显示。全局选项 `--quiet`/`-q`、
 `--no-color` 与 `--progress auto|plain|never` 可以放在 `rnlctl` 命令中的任意位置；
 `install.sh` 也接受相同的进度模式。Shell 补全、输出规则、信号处理、systemd 日志

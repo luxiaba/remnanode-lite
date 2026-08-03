@@ -34,6 +34,7 @@ type fakeLifecycle struct {
 	doctor           DoctorReport
 	upgradePlan      UpgradePlan
 	configuration    Configuration
+	configurationErr error
 	err              error
 }
 
@@ -106,6 +107,9 @@ func (l *fakeLifecycle) Restart(context.Context) (Result, error) {
 
 func (l *fakeLifecycle) ReadConfiguration(context.Context) (Configuration, error) {
 	l.called = append(l.called, "config-read")
+	if l.configurationErr != nil {
+		return Configuration{}, l.configurationErr
+	}
 	return l.configuration, l.err
 }
 
@@ -208,6 +212,7 @@ func TestAppRejectsMalformedCommands(t *testing.T) {
 		{"secret"},
 		{"secret", "set"},
 		{"secret", "set", "--file", "/one", "--file", "/two"},
+		{"overview", "extra"},
 		{"status", "extra"},
 		{"doctor", "extra"},
 		{"start", "extra"},
@@ -263,6 +268,7 @@ func TestAppRendersHumanStatusFromLifecycle(t *testing.T) {
 		status   Status
 		wantExit int
 		want     []string
+		notWant  []string
 	}{
 		{
 			name: "healthy installed",
@@ -275,10 +281,20 @@ func TestAppRendersHumanStatusFromLifecycle(t *testing.T) {
 			want: []string{"Remnanode Lite", "State:       installed", "Health:      healthy", "Version:     2.8.0", "Service:     systemd (enabled, active)"},
 		},
 		{
-			name:     "recovery required",
+			name:     "unreadable recovery state",
 			status:   Status{SchemaVersion: 1, Deployment: "recovery-required", Installed: true, Problems: []string{"interrupted upgrade"}},
 			wantExit: 1,
-			want:     []string{"Health:      unhealthy", "Problems:", "interrupted upgrade", "Next:        sudo rnlctl repair"},
+			want:     []string{"Health:      unhealthy", "Problems:", "interrupted upgrade", "Next:        sudo rnlctl doctor"},
+			notWant:  []string{"Next:        sudo rnlctl repair"},
+		},
+		{
+			name: "pending transaction",
+			status: Status{
+				SchemaVersion: 1, Deployment: "recovery-required", Installed: true,
+				Pending: &PendingOperation{Operation: "upgrade", Phase: "planned"},
+			},
+			wantExit: 1,
+			want:     []string{"Pending:     upgrade / planned", "Next:        sudo rnlctl repair"},
 		},
 		{
 			name:   "absent",
@@ -300,8 +316,237 @@ func TestAppRendersHumanStatusFromLifecycle(t *testing.T) {
 					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
 				}
 			}
+			for _, notWant := range test.notWant {
+				if strings.Contains(stdout.String(), notWant) {
+					t.Fatalf("stdout = %q, do not want %q", stdout.String(), notWant)
+				}
+			}
 			if len(runner.commands) != 0 || !reflect.DeepEqual(lifecycle.called, []string{"status"}) {
 				t.Fatalf("runner commands = %#v, lifecycle calls = %q", runner.commands, lifecycle.called)
+			}
+		})
+	}
+}
+
+func TestAppRendersOperatorOverview(t *testing.T) {
+	tests := []struct {
+		name          string
+		status        Status
+		configuration Configuration
+		configErr     error
+		wantExit      int
+		wantCalls     []string
+		want          []string
+		notWant       []string
+	}{
+		{
+			name: "healthy active",
+			status: Status{
+				Deployment: "installed", Installed: true, Healthy: true,
+				Version: "2.8.0-rnl.2", Generation: "generation-b", Previous: "generation-a",
+				Service: ServiceStatus{Manager: "systemd", Enabled: true, Active: true},
+			},
+			configuration: Configuration{Values: map[string]string{"NODE_PORT": "2222", "NODE_BIND_ADDR": "::"}},
+			wantCalls:     []string{"status", "config-read"},
+			want: []string{
+				"Remnanode Lite", "State:       installed", "Health:      healthy",
+				"Version:     2.8.0-rnl.2", "Endpoint:    [::]:2222", "Commands:",
+				"sudo rnlctl doctor", "sudo rnlctl logs node --lines 100", "sudo rnlctl upgrade --help",
+			},
+		},
+		{
+			name:      "absent",
+			status:    Status{Deployment: "absent", Healthy: true},
+			wantCalls: []string{"status"},
+			want:      []string{"State:       absent", "Health:      not installed", "rnlctl install --help"},
+			notWant:   []string{"Endpoint:"},
+		},
+		{
+			name: "prepared",
+			status: Status{
+				Deployment: "prepared", Installed: true, Prepared: true, Healthy: true,
+				Service: ServiceStatus{Manager: "openrc"},
+			},
+			configuration: Configuration{Values: map[string]string{"NODE_PORT": "2222"}},
+			wantCalls:     []string{"status", "config-read"},
+			want:          []string{"State:       prepared", "Endpoint:    *:2222", "sudo rnlctl activate --help"},
+			notWant:       []string{"sudo rnlctl start"},
+		},
+		{
+			name: "pending repair",
+			status: Status{
+				Deployment: "recovery-required", Installed: true,
+				Pending: &PendingOperation{Operation: "upgrade", Phase: "committed"},
+			},
+			configuration: Configuration{Values: map[string]string{"NODE_PORT": "8443", "NODE_BIND_ADDR": "127.0.0.1"}},
+			wantExit:      exitFailure,
+			wantCalls:     []string{"status", "config-read"},
+			want:          []string{"Pending:     upgrade / committed", "sudo rnlctl repair"},
+			notWant:       []string{"sudo rnlctl doctor"},
+		},
+		{
+			name: "healthy inactive",
+			status: Status{
+				Deployment: "installed", Installed: true, Healthy: true,
+				Service: ServiceStatus{Manager: "systemd", Enabled: true},
+			},
+			configuration: Configuration{Values: map[string]string{"NODE_PORT": "2222"}},
+			wantCalls:     []string{"status", "config-read"},
+			want:          []string{"Service:     systemd (enabled, inactive)", "sudo rnlctl start"},
+		},
+		{
+			name: "configuration unavailable",
+			status: Status{
+				Deployment: "installed", Installed: true, Healthy: true,
+				Service: ServiceStatus{Manager: "systemd", Enabled: true, Active: true},
+			},
+			configErr: errors.New("node.env is unreadable"),
+			wantExit:  exitFailure,
+			wantCalls: []string{"status", "config-read"},
+			want:      []string{"Health:      unhealthy", "Problems:", "read configuration: node.env is unreadable", "sudo rnlctl doctor"},
+			notWant:   []string{"Endpoint:"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lifecycle := &fakeLifecycle{
+				status: test.status, configuration: test.configuration, configurationErr: test.configErr,
+			}
+			var stdout, stderr bytes.Buffer
+			application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+			if code := application.Run(context.Background(), []string{"overview"}); code != test.wantExit {
+				t.Fatalf("Run(overview) = %d, want %d; stdout = %q, stderr = %q", code, test.wantExit, stdout.String(), stderr.String())
+			}
+			for _, want := range test.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+				}
+			}
+			for _, notWant := range test.notWant {
+				if strings.Contains(stdout.String(), notWant) {
+					t.Fatalf("stdout = %q, do not want %q", stdout.String(), notWant)
+				}
+			}
+			if !reflect.DeepEqual(lifecycle.called, test.wantCalls) {
+				t.Fatalf("lifecycle calls = %q, want %q", lifecycle.called, test.wantCalls)
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("stderr = %q, want empty", stderr.String())
+			}
+		})
+	}
+}
+
+func TestAppQuietOverviewPreservesChecksAndExitCode(t *testing.T) {
+	lifecycle := &fakeLifecycle{
+		status:           Status{Deployment: "installed", Installed: true, Healthy: true},
+		configurationErr: errors.New("node.env is unreadable"),
+	}
+	var stdout, stderr bytes.Buffer
+	application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+	if code := application.Run(context.Background(), []string{"--quiet", "overview"}); code != exitFailure {
+		t.Fatalf("quiet overview = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("quiet output: stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+	if !reflect.DeepEqual(lifecycle.called, []string{"status", "config-read"}) {
+		t.Fatalf("lifecycle calls = %q", lifecycle.called)
+	}
+}
+
+func TestAppAddsGuidanceToLifecycleResults(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		args    []string
+		result  Result
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "prepared install", args: []string{"install"},
+			result:  Result{Operation: "install", Changed: true, Version: "2.8.0-rnl.2", PreparedOnly: true},
+			want:    []string{"install completed: 2.8.0-rnl.2", "Next:", "sudo rnlctl activate --help", "sudo rnlctl overview"},
+			notWant: []string{"sudo rnlctl doctor"},
+		},
+		{
+			name: "upgrade", args: []string{"upgrade"},
+			result: Result{Operation: "upgrade", Changed: true, Version: "2.8.0-rnl.2"},
+			want:   []string{"upgrade completed: 2.8.0-rnl.2", "sudo rnlctl overview", "sudo rnlctl doctor"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			lifecycle := &fakeLifecycle{result: test.result}
+			var stdout, stderr bytes.Buffer
+			application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+			if code := application.Run(context.Background(), test.args); code != exitOK {
+				t.Fatalf("Run(%q) = %d, stderr = %q", test.args, code, stderr.String())
+			}
+			for _, want := range test.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Fatalf("stdout = %q, want %q", stdout.String(), want)
+				}
+			}
+			for _, notWant := range test.notWant {
+				if strings.Contains(stdout.String(), notWant) {
+					t.Fatalf("stdout = %q, do not want %q", stdout.String(), notWant)
+				}
+			}
+		})
+	}
+
+	lifecycle := &fakeLifecycle{result: Result{Operation: "repair", Changed: true}}
+	var stdout, stderr bytes.Buffer
+	application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+	if code := application.Run(context.Background(), []string{"--quiet", "repair"}); code != exitOK {
+		t.Fatalf("quiet repair = %d, stderr = %q", code, stderr.String())
+	}
+	if stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("quiet output: stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
+
+func TestAppAddsSafeGuidanceToLifecycleFailures(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		args    []string
+		err     error
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "install", args: []string{"install"}, err: errors.New("bundle rejected"),
+			want: []string{"rnlctl: install: bundle rejected", "Next:", "sudo rnlctl status", "sudo rnlctl doctor"},
+		},
+		{
+			name: "restart", args: []string{"restart"}, err: errors.New("service unavailable"),
+			want: []string{"sudo rnlctl status", "sudo rnlctl doctor", "sudo rnlctl logs node --lines 100"},
+		},
+		{
+			name: "canceled", args: []string{"repair"}, err: context.Canceled,
+			want: []string{"rnlctl: repair: context canceled"}, notWant: []string{"Next:", "sudo rnlctl"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			lifecycle := &fakeLifecycle{err: test.err}
+			var stdout, stderr bytes.Buffer
+			application := New(Options{Lifecycle: lifecycle, Stdout: &stdout, Stderr: &stderr})
+			if code := application.Run(context.Background(), test.args); code != exitFailure {
+				t.Fatalf("Run(%q) = %d, stdout = %q, stderr = %q", test.args, code, stdout.String(), stderr.String())
+			}
+			for _, want := range test.want {
+				if !strings.Contains(stderr.String(), want) {
+					t.Fatalf("stderr = %q, want %q", stderr.String(), want)
+				}
+			}
+			for _, notWant := range test.notWant {
+				if strings.Contains(stderr.String(), notWant) {
+					t.Fatalf("stderr = %q, do not want %q", stderr.String(), notWant)
+				}
+			}
+			if stdout.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty", stdout.String())
 			}
 		})
 	}
@@ -870,6 +1115,13 @@ func TestAppReportsHumanAndJSONWriteFailures(t *testing.T) {
 	}{
 		{name: "human status", args: []string{"status"}, lifecycle: &fakeLifecycle{status: Status{Deployment: "installed", Healthy: true}}},
 		{name: "JSON status", args: []string{"status", "--json"}, lifecycle: &fakeLifecycle{status: Status{Deployment: "installed", Healthy: true}}},
+		{
+			name: "overview", args: []string{"overview"},
+			lifecycle: &fakeLifecycle{
+				status:        Status{Deployment: "installed", Installed: true, Healthy: true},
+				configuration: Configuration{Values: map[string]string{"NODE_PORT": "2222"}},
+			},
+		},
 		{name: "human doctor", args: []string{"doctor"}, lifecycle: &fakeLifecycle{doctor: DoctorReport{Healthy: true}}},
 		{name: "JSON doctor", args: []string{"doctor", "--json"}, lifecycle: &fakeLifecycle{doctor: DoctorReport{Healthy: true}}},
 	}

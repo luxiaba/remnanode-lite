@@ -394,6 +394,10 @@ func TestEnginePreparedInstallRequiresActivation(t *testing.T) {
 	if !result.Changed || !result.PreparedOnly {
 		t.Fatalf("Install(prepare-only) = %#v", result)
 	}
+	unchanged := harness.install(t, true)
+	if unchanged.Changed || !unchanged.PreparedOnly {
+		t.Fatalf("Install(existing prepared generation) = %#v", unchanged)
+	}
 	if harness.host.status.Enabled || harness.host.status.Active {
 		t.Fatalf("prepared service status = %#v", harness.host.status)
 	}
@@ -417,6 +421,43 @@ func TestEnginePreparedInstallRequiresActivation(t *testing.T) {
 	state, err := loadState(harness.paths)
 	if err != nil || state == nil || state.Prepared || !state.Desired.Active || !state.Desired.Enabled {
 		t.Fatalf("activated state = %#v, %v", state, err)
+	}
+}
+
+func TestEnginePreparedUpgradeAndRollbackResultsPreserveState(t *testing.T) {
+	harness := newLifecycleHarness(t, "2.8.0-rnl.1")
+	installed := harness.install(t, true)
+	secondBundle := writeTestBundle(t, filepath.Join(t.TempDir(), "bundle-v2"), "2.8.0-rnl.2")
+	request := UpgradeRequest{Bundle: BundleInput{Root: secondBundle, ExpectedVersion: "2.8.0-rnl.2"}}
+
+	upgraded, err := harness.engine.Upgrade(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Upgrade() error = %v", err)
+	}
+	if !upgraded.Changed || !upgraded.PreparedOnly {
+		t.Fatalf("Upgrade(prepared) = %#v", upgraded)
+	}
+	unchangedUpgrade, err := harness.engine.Upgrade(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Upgrade(existing prepared generation) error = %v", err)
+	}
+	if unchangedUpgrade.Changed || !unchangedUpgrade.PreparedOnly {
+		t.Fatalf("Upgrade(existing prepared generation) = %#v", unchangedUpgrade)
+	}
+
+	rolledBack, err := harness.engine.Rollback(context.Background(), RollbackRequest{})
+	if err != nil {
+		t.Fatalf("Rollback() error = %v", err)
+	}
+	if !rolledBack.Changed || !rolledBack.PreparedOnly || rolledBack.Generation != installed.Generation {
+		t.Fatalf("Rollback(prepared) = %#v", rolledBack)
+	}
+	unchangedRollback, err := harness.engine.Rollback(context.Background(), RollbackRequest{GenerationID: rolledBack.Generation})
+	if err != nil {
+		t.Fatalf("Rollback(current prepared generation) error = %v", err)
+	}
+	if unchangedRollback.Changed || !unchangedRollback.PreparedOnly {
+		t.Fatalf("Rollback(current prepared generation) = %#v", unchangedRollback)
 	}
 }
 
@@ -983,7 +1024,7 @@ func TestEngineRepairCompletesInterruptedPurgeUninstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Repair() error = %v", err)
 	}
-	if !repaired.Changed {
+	if !repaired.Changed || repaired.Generation != "" {
 		t.Fatalf("Repair() = %#v", repaired)
 	}
 	if countCall(harness.host.calls, "remove-account:user=true:group=true") != 2 {

@@ -18,7 +18,7 @@ func TestCommandSpecIsValidAndContainsExpectedCommands(t *testing.T) {
 	}
 
 	wantPaths := map[string]bool{
-		"install": false, "upgrade": false, "config show": false,
+		"install": false, "upgrade": false, "overview": false, "config show": false,
 		"config set": false, "secret set": false, "logs": false,
 		"completion": false,
 	}
@@ -99,7 +99,7 @@ func TestRunCompletionRendersSupportedShells(t *testing.T) {
 			}
 			output := stdout.String()
 			for _, required := range []string{
-				test.registered, "config", "NODE_PORT", "core-errors",
+				test.registered, "config", "overview", "NODE_PORT", "core-errors",
 				"quiet", "no-color", "progress", "auto", "plain", "never", "dry-run", "since",
 			} {
 				if !strings.Contains(output, required) {
@@ -261,6 +261,7 @@ func TestGeneratedBashCompletionBehavior(t *testing.T) {
 	}
 
 	assertBashCandidates([]string{"rnlctl", "con"}, 1, "config")
+	assertBashCandidates([]string{"rnlctl", "ov"}, 1, "overview")
 	assertBashCandidates([]string{"rnlctl", "--quiet", "con"}, 2, "config")
 	assertBashCandidates([]string{"rnlctl", "--progress", "a"}, 2, "auto")
 	assertBashCandidates([]string{"rnlctl", "--progress=a"}, 1, "--progress=auto")
@@ -347,6 +348,7 @@ _rnlctl
 	}
 
 	assertZshCandidates("rnlctl --quiet config --no-color se", "5", "set:Set and validate")
+	assertZshCandidates("rnlctl ov", "2", "overview:Show a concise operator summary")
 	assertZshCandidates("rnlctl --progress a", "3", "auto:Use terminal progress")
 	assertZshCandidates("rnlctl '--progress=a'", "2", "--progress=auto:Use terminal progress")
 	assertZshCandidates("rnlctl --progress plain config --no-color se", "6", "set:Set and validate")
@@ -404,6 +406,7 @@ func TestGeneratedFishCompletionBehavior(t *testing.T) {
 	}
 
 	assertFishCandidates("rnlctl config ", "set\tSet and validate")
+	assertFishCandidates("rnlctl ov", "overview\tShow a concise operator summary")
 	assertFishCandidates("rnlctl --progress a", "auto")
 	assertFishCandidates("rnlctl --progress=au", "auto")
 	assertFishCandidates("rnlctl --progress plain config ", "set\tSet and validate")

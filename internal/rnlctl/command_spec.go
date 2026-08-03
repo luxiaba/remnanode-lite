@@ -271,6 +271,10 @@ func buildRNLCTLCommandSpec() commandSpec {
 			configCommand,
 			secretCommand,
 			{
+				Name: "overview", Description: "Show a concise operator summary",
+				Help: commandHelpSpec{Synopsis: "rnlctl overview"},
+			},
+			{
 				Name: "status", Description: "Show service or lifecycle status", HelpListing: "status [--json]",
 				HelpDescription: "Show Native lifecycle status", Help: commandHelpSpec{Synopsis: "rnlctl status [--json]"},
 				Options: jsonCommandOption(),
@@ -302,6 +306,11 @@ func buildRNLCTLCommandSpec() commandSpec {
 	root.Help = commandHelpSpec{
 		Synopsis: "rnlctl [--quiet|-q] [--no-color] [--progress MODE] <command>",
 		Blocks: []commandHelpBlock{
+			{Heading: "Quick start", DescriptionColumn: 32, Rows: []commandHelpRow{
+				{Label: "rnlctl overview", Description: "Show a concise operator summary"},
+				{Label: "rnlctl doctor", Description: "Run deployment diagnostics"},
+				{Label: "rnlctl logs node", Description: "Show recent Node logs"},
+			}},
 			{Heading: "Commands", DescriptionColumn: 32, Rows: commandHelpRows(root.Commands)},
 			{Heading: "Global options", DescriptionColumn: 32, Rows: optionHelpRows(root.Options)},
 			{Heading: "Log options", DescriptionColumn: 32, Rows: optionHelpRows(rootLogOptions)},
