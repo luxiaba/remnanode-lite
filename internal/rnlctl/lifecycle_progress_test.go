@@ -295,8 +295,8 @@ func TestEngineRepairReportsInterruptedInstallCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Repair() error = %v", err)
 	}
-	if !result.Changed {
-		t.Fatalf("Repair() = %#v, want cleanup change", result)
+	if !result.Changed || result.Generation != "" {
+		t.Fatalf("Repair() = %#v, want cleanup to absent", result)
 	}
 
 	cleanupStarts := 0

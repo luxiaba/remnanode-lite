@@ -43,6 +43,7 @@ docker exec remnanode-lite remnanode-lite version
 Use the lifecycle view first:
 
 ```bash
+sudo rnlctl overview
 sudo rnlctl status
 sudo rnlctl status --json
 sudo rnlctl doctor
@@ -50,6 +51,13 @@ sudo rnlctl logs node --lines 100
 sudo rnlctl logs core-errors --lines 100
 ss -H -lntp 'sport = :2222'
 ```
+
+`overview` is the first human-oriented check. It combines lifecycle and service
+state, version and generation information, the configured non-secret listen
+endpoint, known problems, and a short state-specific command list. It reads
+only local lifecycle status and the safe administrator-controlled
+configuration; it does not contact Panel or generate proxy traffic. The command
+has no JSON form and its layout is not a parsing interface.
 
 Bare `rnlctl status` now returns a consistent human-readable lifecycle summary instead of proxying raw service-manager output. Its layout is not a parsing interface. `status --json` retains its existing machine-readable schema with deployment state, current and previous generation IDs, version, service manager, enabled/active flags, repair capability, pending operation, and problems. Both exit non-zero for a degraded or recovery-required installation.
 
@@ -82,13 +90,19 @@ progress. Only transfers with a known total size show percentages, rates, and
 estimated time. Lifecycle phases describe real work and are not an overall
 percentage or a stable parsing interface.
 
+Successful `install`, `activate`, `upgrade`, `rollback`, and `repair` results add
+state-aware `Next` commands. A failed lifecycle mutation may add safe local
+`status`, `doctor`, or Node-log diagnostics to stderr. These suggestions are
+never executed automatically, are omitted for cancellation errors, and are
+suppressed by quiet mode.
+
 Quiet mode overrides the progress choice and suppresses successful mutation
-output, `config check` success, and human `status`/`doctor`. It does not suppress
+output, `config check` success, and human `overview`/`status`/`doctor`. It does not suppress
 help, version, `config show`/`get`, logs, completion, dry-run plans, JSON, or
 errors. JSON output disables progress.
 
-Human output uses restrained color only when its own stream is a TTY. Status
-and doctor inspect stdout; progress inspects stderr. `--no-color`, a non-empty
+Human output uses restrained color only when its own stream is a TTY. Overview,
+status, and doctor inspect stdout; progress inspects stderr. `--no-color`, a non-empty
 `NO_COLOR`, or `TERM=dumb` disables color on both streams. A redirected stream
 does not contain color sequences.
 
@@ -100,7 +114,7 @@ that attempt. The signal returns to its default behavior after the first
 delivery, so a second signal can force the process to exit immediately; inspect
 `status --json` and run `repair` afterward if recovery is required.
 
-Exit codes are normally `0` for success, `1` for runtime failure or an unhealthy result, and `2` for usage errors. An `absent` status is valid and returns `0`; scripts that require an installation must inspect `installed` or `deployment` in JSON. `logs` passes through the exit code from `journalctl` or `tail` once the reader starts, including `128 + signal` when signaled.
+Exit codes are normally `0` for success, `1` for runtime failure or an unhealthy result, and `2` for usage errors. `status` and `overview` treat `absent` as valid and return `0`; `overview` also returns `1` when the safe configuration summary cannot be read. Scripts that require an installation must use `status --json` and inspect `installed` or `deployment`. `logs` passes through the exit code from `journalctl` or `tail` once the reader starts, including `128 + signal` when signaled.
 
 For Bash, Zsh, and Fish completion, run `rnlctl completion <shell>` and install the emitted script as described in the [Native deployment guide](deployment-native.md#shell-completion). The command only writes the script to stdout; it does not modify completion directories or shell startup files.
 

@@ -10,6 +10,11 @@ import (
 
 const expectedRootHelp = `Usage: rnlctl [--quiet|-q] [--no-color] [--progress MODE] <command>
 
+Quick start:
+  rnlctl overview                 Show a concise operator summary
+  rnlctl doctor                   Run deployment diagnostics
+  rnlctl logs node                Show recent Node logs
+
 Commands:
   version                         Show the rnlctl version
   install [options]               Install one verified Native bundle
@@ -20,6 +25,7 @@ Commands:
   uninstall [--purge --yes]       Remove the Native installation
   config <command>                Inspect or change Native Node configuration
   secret set [options]            Replace the managed Panel Secret
+  overview                        Show a concise operator summary
   status [--json]                 Show Native lifecycle status
   doctor [--json]                 Run deployment diagnostics
   start                           Start the service
@@ -126,6 +132,7 @@ func publicCommandHelpCases() []publicHelpCase {
 		{path: "config apply", args: []string{"config", "apply", "--help"}, want: "Usage: rnlctl config apply\n"},
 		{path: "secret", args: []string{"secret", "--help"}, want: expectedSecretHelp},
 		{path: "secret set", args: []string{"secret", "set", "--help"}, want: expectedSecretHelp},
+		{path: "overview", args: []string{"overview", "--help"}, want: "Usage: rnlctl overview\n"},
 		{path: "status", args: []string{"status", "--help"}, want: "Usage: rnlctl status [--json]\n"},
 		{path: "doctor", args: []string{"doctor", "--help"}, want: "Usage: rnlctl doctor [--json]\n"},
 		{path: "start", args: []string{"start", "--help"}, want: "Usage: rnlctl start\n"},
@@ -244,6 +251,7 @@ func expectedPublicCommandSurface() []publicCommandSurface {
 			{Long: "file", Value: "file"},
 			{Long: "apply", Value: "none"},
 		}},
+		{Path: "overview"},
 		{Path: "status", Options: []publicOptionSurface{{Long: "json", Value: "none"}}},
 		{Path: "doctor", Options: []publicOptionSurface{{Long: "json", Value: "none"}}},
 		{Path: "start"},

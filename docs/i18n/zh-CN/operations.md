@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=c90887e1b41cb78a7ec656a5872b8add62b215b70dfa29c60f155c59e8d5d28f -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=2fec0f211ec7497f3065d09ce8de5c82de961b526758fde3ac9fef165d347a9d -->
 
 # 运维与故障排查
 
@@ -34,6 +34,7 @@ ss -H -lntp 'sport = :2222'
 Native：
 
 ```bash
+sudo rnlctl overview
 sudo rnlctl status
 sudo rnlctl status --json
 sudo rnlctl doctor
@@ -41,6 +42,11 @@ sudo rnlctl logs node --lines 100
 sudo rnlctl logs core-errors --lines 100
 ss -H -lntp 'sport = :2222'
 ```
+
+`overview` 是人工巡检的首选入口。它汇总生命周期与服务状态、版本和 generation、
+不含 Secret 的监听端点、已知问题，以及一组随当前状态变化的简短命令。它只读取本地
+生命周期状态和允许管理员查看的安全配置，不会连接 Panel 或制造代理流量；没有 JSON
+形式，human 排版也不是解析接口。
 
 直接运行 `rnlctl status` 现在会输出一致、便于阅读的生命周期摘要，不再转发服务管理器的原始输出；human 排版不是解析接口。`status --json` 保持原有 schema，包含 current/previous generation、版本、服务管理器、启用与活动状态、repair 能力和待处理操作。状态为 degraded 或 recovery-required 时，两种形式都会返回非零。
 
@@ -70,11 +76,16 @@ sudo rc-service remnanode-lite status
 只隐藏进度。只有能够确定总大小的传输才显示百分比、速率和预计剩余时间。生命周期阶段
 只说明实际工作，不表示整体完成百分比，也不是稳定的解析接口。
 
+`install`、`activate`、`upgrade`、`rollback` 和 `repair` 成功后会附带随状态变化的
+`Next` 命令；生命周期变更失败时，stderr 可能附带安全的本地 `status`、`doctor` 或
+Node 日志诊断命令。这些建议绝不会自动执行，取消类错误不会附加建议，quiet 模式也会
+隐藏它们。
+
 quiet 会覆盖显式选择的进度模式，并隐藏成功的变更提示、`config check` 成功提示和
-human `status`/`doctor`；不会隐藏 help、version、`config show`/`get`、日志、补全、
+human `overview`/`status`/`doctor`；不会隐藏 help、version、`config show`/`get`、日志、补全、
 dry-run 计划、JSON 或错误。JSON 输出会关闭进度。
 
-面向人的输出只在对应输出流是 TTY 时使用克制的颜色：status 和 doctor 检查 stdout，
+面向人的输出只在对应输出流是 TTY 时使用克制的颜色：overview、status 和 doctor 检查 stdout，
 进度检查 stderr。指定 `--no-color`、`NO_COLOR` 为非空值或 `TERM=dumb` 时，两个输出流
 都不使用颜色；被重定向的输出流也不会包含颜色转义序列。
 
@@ -84,7 +95,7 @@ dry-run 计划、JSON 或错误。JSON 输出会关闭进度。
 操作系统的默认处理方式，因此第二次信号可以立即强制退出；如有必要，随后检查
 `status --json` 并运行 `repair`。
 
-退出码通常为：成功 `0`，运行失败或结果不健康 `1`，用法错误 `2`。`absent` 是有效的 status，会返回 `0`；要求必须已安装的脚本还要检查 JSON 的 `installed` 或 `deployment`。`logs` 启动 `journalctl` 或 `tail` 后会透传其退出码，被信号终止时也可能返回 `128 + signal`。
+退出码通常为：成功 `0`，运行失败或结果不健康 `1`，用法错误 `2`。`status` 和 `overview` 都把 `absent` 视为有效状态并返回 `0`；安全配置摘要无法读取时，`overview` 返回 `1`。要求必须已安装的脚本应使用 `status --json`，并检查其中的 `installed` 或 `deployment`。`logs` 启动 `journalctl` 或 `tail` 后会透传其退出码，被信号终止时也可能返回 `128 + signal`。
 
 Bash、Zsh 和 Fish 补全由 `rnlctl completion <shell>` 生成，用户级安装步骤见 [Native 部署指南](deployment-native.md#shell-补全)。命令只向 stdout 输出脚本，不会修改补全目录或 shell 启动文件。
 
