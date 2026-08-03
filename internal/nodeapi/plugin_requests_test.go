@@ -63,14 +63,9 @@ func TestPluginFormatsMatchOfficialZodAcceptance(t *testing.T) {
 			body: `{"plugin":{"config":{},"uuid":"00000000-0000-0000-0000-000000000000","name":"p"}}`,
 		},
 		{
-			name: "block scoped IPv6",
-			path: "/node/plugin/nftables/block-ips",
-			body: `{"ips":[{"ip":"fe80::1%eth0","timeout":60}]}`,
-		},
-		{
-			name: "unblock scoped IPv6",
-			path: "/node/plugin/nftables/unblock-ips",
-			body: `{"ips":["fe80::1%eth0"]}`,
+			name: "maximum UUID",
+			path: "/node/plugin/sync",
+			body: `{"plugin":{"config":{},"uuid":"ffffffff-ffff-ffff-ffff-ffffffffffff","name":"p"}}`,
 		},
 	}
 	for _, test := range tests {
@@ -98,13 +93,17 @@ func TestPluginRequestsRejectContractViolations(t *testing.T) {
 	}{
 		{name: "sync config is array", path: "/node/plugin/sync", body: `{"plugin":{"config":[],"uuid":"00000000-0000-4000-8000-000000000001","name":"p"}}`},
 		{name: "sync bad UUID", path: "/node/plugin/sync", body: `{"plugin":{"config":{},"uuid":"bad","name":"p"}}`},
+		{name: "sync UUID without RFC version", path: "/node/plugin/sync", body: `{"plugin":{"config":{},"uuid":"00000000-0000-0000-8000-000000000001","name":"p"}}`},
+		{name: "sync uppercase maximum UUID", path: "/node/plugin/sync", body: `{"plugin":{"config":{},"uuid":"FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF","name":"p"}}`},
 		{name: "sync missing name", path: "/node/plugin/sync", body: `{"plugin":{"config":{},"uuid":"00000000-0000-4000-8000-000000000001"}}`},
 		{name: "block invalid IP", path: "/node/plugin/nftables/block-ips", body: `{"ips":[{"ip":"bad","timeout":60}]}`},
+		{name: "block scoped link-local IPv6", path: "/node/plugin/nftables/block-ips", body: `{"ips":[{"ip":"fe80::1%eth0","timeout":60}]}`},
 		{name: "block scoped global IPv6", path: "/node/plugin/nftables/block-ips", body: `{"ips":[{"ip":"2001:db8::1%eth0","timeout":60}]}`},
 		{name: "block uppercase scoped prefix", path: "/node/plugin/nftables/block-ips", body: `{"ips":[{"ip":"FE80::1%eth0","timeout":60}]}`},
 		{name: "block invalid zone", path: "/node/plugin/nftables/block-ips", body: `{"ips":[{"ip":"fe80::1%eth-0","timeout":60}]}`},
 		{name: "block missing timeout", path: "/node/plugin/nftables/block-ips", body: `{"ips":[{"ip":"203.0.113.10"}]}`},
 		{name: "unblock invalid IP", path: "/node/plugin/nftables/unblock-ips", body: `{"ips":["bad"]}`},
+		{name: "unblock scoped IPv6", path: "/node/plugin/nftables/unblock-ips", body: `{"ips":["fe80::1%eth0"]}`},
 	}
 
 	for _, test := range tests {

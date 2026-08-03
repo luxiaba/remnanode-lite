@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=bd2603c30dc34c89013b52f0099d7119bb7be819957c80bc7d0f03f9dbb12046 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=f6688f12ea0c138e64caf4c61723ca5852245e3967dd8ba44925f05d6f70d1cd -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -18,7 +18,7 @@
 4. 从[架构说明](../architecture.md)只选择目标组件的数据流、所有权和并发章节。
 5. 按[测试指南](testing.md)选择与改动风险匹配的最小验证集合；准备提交时再阅读[贡献指南](../contributing.md)。
 
-再根据改动类型选择深入阅读的资料：修改 Panel 可见行为时读[当前契约基线](contract-2.8.0.md)，修改版本或镜像时读[版本策略](../versioning.md)，准备正式版本时读[发布手册](../release.md)。[文档总览](../README.md)提供完整的角色导航。
+再根据改动类型选择深入阅读的资料：修改 Panel 可见行为时读[当前契约基线](contract-3.0.0.md)，修改版本或镜像时读[版本策略](../versioning.md)，准备正式版本时读[发布手册](../release.md)。[文档总览](../README.md)提供完整的角色导航。
 
 ## 开发环境
 
@@ -296,7 +296,7 @@ Docker 基础镜像、GitHub Actions、rw-core、ASN 源和下载资产均有固
 
 完成第一次普通测试后，按修改目标继续阅读：
 
-- API、行为对齐：[当前契约基线](contract-2.8.0.md)。
+- API、行为对齐：[当前契约基线](contract-3.0.0.md)。
 - 并发和状态所有权：[架构说明](../architecture.md)。
 - 本地与 CI 验证：[测试指南](testing.md)。
 - 提交与评审：[贡献指南](../contributing.md)。

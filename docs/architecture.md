@@ -4,7 +4,7 @@
 
 This document is for maintainers encountering Remnanode Lite for the first time. It describes the boundaries, runtime flows, state ownership, and resource constraints implemented by the current code. Its purpose is to explain how the system works and which invariants a code change must preserve. It is not a deployment reference or a release checklist for a particular version.
 
-For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the route-by-route external API contract, see the [current official contract baseline](development/contract-2.8.0.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
+For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the current external API and lifecycle delta, see the [official 3.0.0 contract baseline](development/contract-3.0.0.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
 
 ## 1. System Role
 

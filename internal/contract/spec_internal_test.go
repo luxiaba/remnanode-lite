@@ -149,6 +149,20 @@ func TestSchemaRejectsTrailingJSON(t *testing.T) {
 	}
 }
 
+func TestIntegerSchemaRequiresJavaScriptSafeInteger(t *testing.T) {
+	t.Parallel()
+
+	schema := integerValue()
+	if err := schema.ValidateJSON([]byte(`9007199254740991`)); err != nil {
+		t.Fatalf("safe integer rejected: %v", err)
+	}
+	for _, raw := range [][]byte{[]byte(`9007199254740992`), []byte(`-9007199254740992`)} {
+		if err := schema.ValidateJSON(raw); err == nil {
+			t.Errorf("unsafe integer accepted: %s", raw)
+		}
+	}
+}
+
 func routeByID(t *testing.T, id string) RouteContract {
 	t.Helper()
 	for _, route := range OfficialRoutes() {

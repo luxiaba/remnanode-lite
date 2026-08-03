@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-docker.md; source-sha256=182a0ccbb28489ea87e947c8bc3467718f0b7acd692c3c29e21ae527e9b63b1e -->
+<!-- translation: locale=ru; source=docs/deployment-docker.md; source-sha256=228191634c7c3370bd939eb987683c9da5a88e856b4dc03c3874723e53f21b47 -->
 # Развёртывание Docker Compose
 
 > Это русский перевод. Если правила развёртывания расходятся с [английским руководством](../../deployment-docker.md), используйте английский оригинал.
@@ -342,7 +342,7 @@ docker image prune
 Текущий образ содержит:
 
 - статически скомпонованный `remnanode-lite`;
-- rw-core `v26.6.27`, закреплённый версией и digest ресурса;
+- rw-core `v26.7.28`, закреплённый версией и digest ресурса;
 - соответствующие `geoip.dat` и `geosite.dat`;
 - компактную базу ASN, собранную из закреплённого commit `ipverse/as-ip-blocks`;
 - среду выполнения Debian bookworm slim с CA-сертификатами и зависимостями nftables.

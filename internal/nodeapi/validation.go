@@ -10,12 +10,7 @@ import (
 const maxValidationIssues = 64
 
 var uuidPattern = regexp.MustCompile(
-	`^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$`,
-)
-
-// This is the sole zone-bearing alternation in Zod 3.25.76's IPv6 regex.
-var scopedIPv6Pattern = regexp.MustCompile(
-	`^fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}$`,
+	`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`,
 )
 
 func invalidUUIDIssue(path []any) Issue {
@@ -53,7 +48,7 @@ func validateIP(value *string, path []any) []Issue {
 }
 
 func validIP(value string) bool {
-	return net.ParseIP(value) != nil || scopedIPv6Pattern.MatchString(value)
+	return net.ParseIP(value) != nil
 }
 
 func invalidEnumIssue(path []any, received any, options ...any) Issue {

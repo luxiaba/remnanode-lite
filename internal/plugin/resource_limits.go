@@ -10,6 +10,7 @@ import (
 // nft rendering so no later stage can expand an already accepted request
 // without a corresponding budget.
 const (
+	maxJavaScriptSafeInteger  = 9_007_199_254_740_991
 	maxPluginHashDepth        = 64
 	maxPluginHashTokens       = 65_536
 	maxPluginHashOutputBytes  = 2 << 20
@@ -22,6 +23,7 @@ const (
 	maxFilterItems            = 16_384
 	maxIgnoreItems            = 8_192
 	maxRuleTags               = 256
+	maxPreStartSocketFiles    = 64
 	maxPluginStringBytes      = 512
 	maxDynamicNFTElements     = 16_384
 	maxNFTBlockBatch          = 1_024

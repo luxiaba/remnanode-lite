@@ -663,6 +663,7 @@ func pluginSnapshotsBehaviorEqual(left, right *pluginSnapshot) bool {
 	return left.firewallReady == right.firewallReady &&
 		left.whitelistIPs.equal(right.whitelistIPs) &&
 		torrentSettingsEqual(left.torrent, right.torrent) &&
+		preStartSettingsEqual(left.preStart, right.preStart) &&
 		firewallConfigsEqual(left.firewall, right.firewall)
 }
 
@@ -672,6 +673,12 @@ func torrentSettingsEqual(left, right torrentSettings) bool {
 		hashIncludeRuleTags(left.includeRuleTags) == hashIncludeRuleTags(right.includeRuleTags) &&
 		left.ignoredIPs.equal(right.ignoredIPs) &&
 		maps.Equal(left.ignoredUsers, right.ignoredUsers)
+}
+
+func preStartSettingsEqual(left, right preStartSettings) bool {
+	return left.enabled == right.enabled &&
+		left.cleanupSockets == right.cleanupSockets &&
+		slices.Equal(left.files, right.files)
 }
 
 func firewallConfigsEqual(left, right firewallConfig) bool {

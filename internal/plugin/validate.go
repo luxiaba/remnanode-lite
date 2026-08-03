@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// ValidatePluginConfig performs structural validation aligned with @remnawave/node-plugins@0.4.5.
+// ValidatePluginConfig performs structural validation aligned with @remnawave/node-plugins@0.6.0.
 func ValidatePluginConfig(config map[string]any) error {
 	if config == nil {
 		return fmt.Errorf("plugin config is required")
@@ -19,6 +19,7 @@ func ValidatePluginConfig(config map[string]any) error {
 		{name: "egressFilter", validate: validateEgressFilterSection},
 		{name: "connectionDrop", validate: validateConnectionDropSection},
 		{name: "torrentBlocker", validate: validateTorrentBlockerSection},
+		{name: "preStart", validate: validatePreStartSection},
 	}
 	for _, validator := range validators {
 		raw, present := config[validator.name]

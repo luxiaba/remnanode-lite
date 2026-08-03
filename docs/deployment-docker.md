@@ -340,7 +340,7 @@ Before pruning, record a verified previous version tag or manifest digest and co
 The current image contains:
 
 - a statically linked `remnanode-lite`;
-- rw-core `v26.6.27`, pinned by version and asset digest;
+- rw-core `v26.7.28`, pinned by version and asset digest;
 - the corresponding `geoip.dat` and `geosite.dat`;
 - a compact ASN database built from a pinned `ipverse/as-ip-blocks` commit;
 - a Debian bookworm slim runtime with CA certificates and nftables dependencies.

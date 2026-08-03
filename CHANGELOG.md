@@ -6,6 +6,40 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-08-03
+
+This stable release aligns Remnanode Lite with the official Node `3.0.0`
+contract and updates the bundled runtime selected by that release. The public
+`/node` route surface remains unchanged from `2.8.0`.
+
+### Added
+
+- Added the official plugin `preStart.cleanupSockets` behavior. When enabled by
+  trusted Panel configuration, the Node removes matching stale Unix sockets
+  after the previous rw-core process stops and before its replacement starts.
+  Regular files, directories, and symbolic links are preserved, and cleanup
+  failures remain non-fatal as in the official Node. The Panel first exposes
+  this configuration in release `3.1.0`; release `3.0.0` does not send it.
+
+### Changed
+
+- Pinned the behavioral contract to official Node `3.0.0` at commit
+  `46fc5d2d736ff60f6c6a9a56e2661acb95d3f559` and the external plugin schema
+  to `@remnawave/node-plugins@0.6.0`.
+- Aligned UUID, scoped IPv6, and JavaScript safe-integer validation with the
+  Zod 4 boundary used by the official Node. Normal Panel-generated values are
+  unaffected.
+- Updated the bundled rw-core to `v26.7.28` and refreshed the release-selected
+  GeoIP and GeoSite data with exact source and payload digests.
+
+### Upgrade Notes
+
+- rw-core `v26.7.28` defaults an omitted REALITY `minClientVer` to `26.3.27`.
+  Older Xray-based or third-party clients may therefore be rejected even when
+  the configuration starts successfully. Prefer updating clients. Explicitly
+  setting `minClientVer` to `0.0.0` restores the previous compatibility
+  boundary, but rw-core warns that doing so may increase blocking risk.
+
 ## [2.8.0-rnl.4] - 2026-08-03
 
 This preview keeps the verified official Node `2.8.0` contract while making

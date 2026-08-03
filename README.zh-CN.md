@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=e55326e430a757545d6b06cea12d91dc007898e579508b680179ed9a5a3e7d77 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=f07e7cb32188d5dd96ac9bf35b13e75b60b70d8d2258b84f21b33482f73ceacb -->
 <div align="center">
 
 # Remnanode Lite
@@ -28,10 +28,10 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 
 ## 主要特点
 
-- 实现 Remnawave Node `2.8.0` API 契约。
+- 实现 Remnawave Node `3.0.0` API 契约。
 - 使用一个 Go 进程直接管理 rw-core，不依赖 Node.js 或 s6。
 - 提供面向 512 MiB 服务器维护的低内存 Compose 配置。
-- 支持用户热更新、统计、连接管理和官方插件规则格式。
+- 支持用户热更新、统计、连接管理和官方插件规则格式，包括由可信 Panel 配置启用的 pre-start 陈旧 Unix socket 清理。
 - 提供 amd64/arm64 GHCR 镜像，并附带 SBOM、构建来源和证明。
 - Native Linux 的安装、升级、回滚和修复由 `rnlctl` 统一处理。
 - 只用一个 Compose 文件即可部署，不需要源码或持久化数据卷，`.env` 仍为可选项。
@@ -230,8 +230,8 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | 已发布的精确 Release |
 | Native 主机 | 按发行版划分，详见 [Native 主机矩阵](docs/i18n/zh-CN/deployment-native.md#native-主机矩阵) |
-| Node 契约 | `2.8.0` |
-| rw-core | `v26.6.27` |
+| Node 契约 | `3.0.0` |
+| rw-core | `v26.7.28` |
 | 平台 | `linux/amd64`、`linux/arm64` |
 | 整机目标 | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose 服务限制 | `448 MiB RAM`，不额外使用 swap |

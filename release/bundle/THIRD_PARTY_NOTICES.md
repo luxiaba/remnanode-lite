@@ -6,23 +6,23 @@ The Remnanode Lite license does not replace their licenses.
 ## Xray-core (`rw-core`)
 
 `lib/rw-core` is the unmodified `xray` executable from XTLS/Xray-core
-`v26.6.27`, commit `45cf2898ab12e97a55dd8f1f3d78d903340bdc9e`. It is renamed
+`v26.7.28`, commit `5ca6f4b7d4dc20a881d4330e498892697627ec0c`. It is renamed
 so the service can distinguish the managed runtime from a system-wide Xray
 installation. Xray-core is licensed under MPL-2.0. The corresponding source is:
 
-https://github.com/XTLS/Xray-core/tree/45cf2898ab12e97a55dd8f1f3d78d903340bdc9e
+https://github.com/XTLS/Xray-core/tree/5ca6f4b7d4dc20a881d4330e498892697627ec0c
 
 ## GeoIP data
 
 `share/xray/geoip.dat` is redistributed byte for byte from
-Loyalsoldier/geoip release `202606250051`, commit
-`14643bbb36652911e928bfef799aa46372de1d7f`:
+Loyalsoldier/geoip release `202607230036`, commit
+`e0cb5fd94679b83cd612a27e01ade2998fc24cdb`:
 
-https://github.com/Loyalsoldier/geoip/releases/download/202606250051/geoip.dat
+https://github.com/Loyalsoldier/geoip/releases/download/202607230036/geoip.dat
 
-https://github.com/Loyalsoldier/geoip/tree/14643bbb36652911e928bfef799aa46372de1d7f
+https://github.com/Loyalsoldier/geoip/tree/e0cb5fd94679b83cd612a27e01ade2998fc24cdb
 
-https://github.com/Loyalsoldier/geoip/archive/14643bbb36652911e928bfef799aa46372de1d7f.tar.gz
+https://github.com/Loyalsoldier/geoip/archive/e0cb5fd94679b83cd612a27e01ade2998fc24cdb.tar.gz
 
 The compiled database combines data from multiple sources under different licenses.
 For that reason its SPDX license conclusion is `NOASSERTION`. The included
@@ -34,14 +34,14 @@ https://www.maxmind.com.
 ## GeoSite data
 
 `share/xray/geosite.dat` is redistributed byte for byte from
-Loyalsoldier/v2ray-rules-dat release `202606262300`, commit
-`31fa173fc342e550822ad25da6e0e28bed9e1f73`:
+Loyalsoldier/v2ray-rules-dat release `202607272255`, commit
+`27c9bd1c8ebd2a1eb871476ef10b6c157db0b460`:
 
-https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202606262300/geosite.dat
+https://github.com/Loyalsoldier/v2ray-rules-dat/releases/download/202607272255/geosite.dat
 
-https://github.com/Loyalsoldier/v2ray-rules-dat/tree/31fa173fc342e550822ad25da6e0e28bed9e1f73
+https://github.com/Loyalsoldier/v2ray-rules-dat/tree/27c9bd1c8ebd2a1eb871476ef10b6c157db0b460
 
-https://github.com/Loyalsoldier/v2ray-rules-dat/archive/31fa173fc342e550822ad25da6e0e28bed9e1f73.tar.gz
+https://github.com/Loyalsoldier/v2ray-rules-dat/archive/27c9bd1c8ebd2a1eb871476ef10b6c157db0b460.tar.gz
 
 The GeoSite data is distributed under GPL-3.0-only. Its license text is
 included in the bundle.
@@ -66,10 +66,10 @@ the bundle.
 
 | Component | Release and commit | Source SHA-256 | Payload SHA-256 | License |
 | --- | --- | --- | --- | --- |
-| Xray core (amd64) | `v26.6.27 @ 45cf2898ab12e97a55dd8f1f3d78d903340bdc9e` | `sha256:b3e5902d06d6282fe53cfa2fc426058b9aeaa429b2c812e20887cd47f26d08bf` (21197571 bytes) | `sha256:8ef87ac07f95617e094b8e9302ea3e0c2d0edaa7045d57b455fdee28b3c9e41e` (37433470 bytes) | `MPL-2.0` |
-| Xray core (arm64) | `v26.6.27 @ 45cf2898ab12e97a55dd8f1f3d78d903340bdc9e` | `sha256:13a251379bea366c2cf10363ad71e75734193d401f26f518bf0c25e5c8f8c931` (19742958 bytes) | `sha256:53ad04b1ddcba6f4ff8834b3db2e9a596456441259cea3e4f03f86cd39e22884` (35061886 bytes) | `MPL-2.0` |
-| GeoIP | `202606250051 @ 14643bbb36652911e928bfef799aa46372de1d7f` | `sha256:e71b392b0d2c2d4f4203d93ef59f5d88f00765f84b7f2a46fdb0f6d9abb136d5` (1394831 bytes) | `sha256:e551b66e9300a98ecc94a5dc8c86a3973bf7033138b0fa61eb0638419ce50057` (18486901 bytes) | `NOASSERTION` |
-| GeoSite | `202606262300 @ 31fa173fc342e550822ad25da6e0e28bed9e1f73` | `sha256:3ea2cf6fcd74ea3152c9419b44029c4995772f8f4f25e1e91a346d183a158cf6` (21274 bytes) | `sha256:1417d29aa40e07fa3cd92e730e8d81921a78b8e573849ca2a4b8199c7c1d3b2b` (10440755 bytes) | `GPL-3.0-only` |
+| Xray core (amd64) | `v26.7.28 @ 5ca6f4b7d4dc20a881d4330e498892697627ec0c` | `sha256:8195d909f1109b8f3d99eefe401a3c451d7bf4af71f24d3815420f77e5dd2a40` (21164807 bytes) | `sha256:64d46afb80adea1bf97a0d467e83f4a9ac1ebd0995891e84bca3f1a1d1affb1d` (37720190 bytes) | `MPL-2.0` |
+| Xray core (arm64) | `v26.7.28 @ 5ca6f4b7d4dc20a881d4330e498892697627ec0c` | `sha256:f5698bb218ada3b4022db26fafc39601c5f53b46b19eb76c9616325985807501` (19699639 bytes) | `sha256:4b8af237444801bf17b3dc10a1c5c24581fbe3d433eba3d78c6c3a0da1df56fc` (35389566 bytes) | `MPL-2.0` |
+| GeoIP | `202607230036 @ e0cb5fd94679b83cd612a27e01ade2998fc24cdb` | `sha256:ac356437bcdefa3433a4eb100055debf0feda019f3757bcc25d31a1cb671d542` (1398786 bytes) | `sha256:cdf411fce977a1f48adb6a3b224e3e2bd7eccfcd4d6e2e30c6dc443f1a0e8e52` (17683114 bytes) | `NOASSERTION` |
+| GeoSite | `202607272255 @ 27c9bd1c8ebd2a1eb871476ef10b6c157db0b460` | `sha256:5be068756fcdbd6c01f04347833c34d31b0afa879a92f1e38a327a3a2273fe6b` (21271 bytes) | `sha256:ea8d817c4782a84db4104ba416329bb14024f69568c666f5cca6c4303ef1942e` (10514807 bytes) | `GPL-3.0-only` |
 | ASN database | `56d021c7536afb15317155e45b57e7b5c87a4700` | `sha256:fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa978a33b674a58ec` (16175007 bytes) | `sha256:8384ea40dd78786df51ff62e8c2018a9c582940b975bfea89c647c498a2ac997` (5072593 bytes) | `CC0-1.0` |
 
 The bundle also includes these exact license texts:

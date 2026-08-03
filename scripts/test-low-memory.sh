@@ -12,7 +12,7 @@ usage() {
 Usage: scripts/test-low-memory.sh --rw-core /path/to/linux/rw-core [options]
 
 Options:
-  --rw-core PATH   Linux rw-core v26.6.27 binary (or set RW_CORE_BIN)
+  --rw-core PATH   Locked Linux rw-core binary (or set RW_CORE_BIN)
   --users COUNT    Large-config user count (default: 50000)
   --memory MIB     Container hard limit and peak gate (default: 448)
   --image IMAGE    Container image (default: alpine:3.22)

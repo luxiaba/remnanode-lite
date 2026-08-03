@@ -25,11 +25,11 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 
 ## Highlights
 
-- Implements the Remnawave Node `2.8.0` API contract.
+- Implements the Remnawave Node `3.0.0` API contract.
 - Runs the Node as one Go process that directly manages rw-core, without Node.js or s6.
 - Uses Docker Compose as the simplest deployment path, with a self-contained Native Linux option for hosts that cannot run Docker.
 - Includes the same maintained low-memory profile for container and Native services on 512 MiB servers.
-- Supports live user updates, statistics, connection management, and the official plugin rule formats.
+- Supports live user updates, statistics, connection management, and the official plugin rule formats, including pre-start stale Unix-socket cleanup enabled by trusted Panel configuration.
 - Publishes multi-architecture images to GHCR with SBOM, provenance, and build attestations.
 - Native Linux support provides transactional install, upgrade, rollback, and repair through `rnlctl`.
 - Uses one Compose file for Docker deployment. No source tree or persistent data volume is required, and `.env` remains optional.
@@ -242,8 +242,8 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | --- | --- |
 | Native Linux bundles | Exact published Releases |
 | Native hosts | Distribution-specific; see the [Native host matrix](docs/deployment-native.md#native-host-matrix) |
-| Node contract | `2.8.0` |
-| rw-core | `v26.6.27` |
+| Node contract | `3.0.0` |
+| rw-core | `v26.7.28` |
 | Platforms | `linux/amd64`, `linux/arm64` |
 | Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose service limit | `448 MiB RAM`, no additional swap |

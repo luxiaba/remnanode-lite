@@ -26,7 +26,7 @@ const (
 	kindBoolean
 )
 
-// Schema models the subset of Zod used by the official 2.8.0 REST contract.
+// Schema models the subset of Zod used by the official 3.0.0 REST contract.
 // Values are immutable after construction.
 type Schema struct {
 	kind       schemaKind
@@ -258,8 +258,8 @@ func (s *Schema) validateNumber(value any, path string) error {
 	if err != nil || math.IsInf(parsed, 0) || math.IsNaN(parsed) {
 		return fmt.Errorf("%s: invalid number %q", path, number)
 	}
-	if s.kind == kindInteger && math.Trunc(parsed) != parsed {
-		return fmt.Errorf("%s: %q is not an integer", path, number)
+	if s.kind == kindInteger && (math.Trunc(parsed) != parsed || math.Abs(parsed) > 9_007_199_254_740_991) {
+		return fmt.Errorf("%s: %q is not a safe integer", path, number)
 	}
 	if len(s.numbers) != 0 {
 		if _, allowed := s.numbers[parsed]; !allowed {
@@ -287,17 +287,11 @@ func validDateTime(value string) bool {
 }
 
 var uuidPattern = regexp.MustCompile(
-	`^[0-9a-fA-F]{8}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{4}\b-[0-9a-fA-F]{12}$`,
-)
-
-// Zod 3.25.76 package/v3/types.js permits zones only through its
-// fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,} IPv6 alternation.
-var scopedIPv6Pattern = regexp.MustCompile(
-	`^fe80:(?::[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}$`,
+	`^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$`,
 )
 
 func validIP(value string) bool {
-	return net.ParseIP(value) != nil || scopedIPv6Pattern.MatchString(value)
+	return net.ParseIP(value) != nil
 }
 
 func schemaKindName(schema *Schema) string {
