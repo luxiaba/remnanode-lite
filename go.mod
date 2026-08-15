@@ -2,7 +2,7 @@ module github.com/luxiaba/remnanode-lite
 
 go 1.26
 
-toolchain go1.26.5
+toolchain go1.26.6
 
 require (
 	github.com/andybalholm/brotli v1.2.2

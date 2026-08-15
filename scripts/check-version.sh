@@ -113,7 +113,7 @@ grep -Fq "REMNANODE_IMAGE=${expected_ghcr_image}" .env.example ||
 grep -Fq "image: remnanode-lite:${version}" compose.build.yaml ||
   fail "compose.build.yaml local image is not remnanode-lite:$version"
 toolchain="$(sed -n 's/^toolchain[[:space:]][[:space:]]*//p' go.mod)"
-[ "$toolchain" = "go1.26.5" ] || fail "go.mod toolchain=${toolchain:-missing}, want go1.26.5"
+[ "$toolchain" = "go1.26.6" ] || fail "go.mod toolchain=${toolchain:-missing}, want go1.26.6"
 
 release_tag="${RELEASE_TAG:-}"
 if [ -n "$release_tag" ]; then

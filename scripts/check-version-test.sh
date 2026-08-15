@@ -77,7 +77,7 @@ module example.com/version-policy-fixture
 
 go 1.26
 
-toolchain go1.26.5
+toolchain go1.26.6
 EOF
 
   git -C "$fixture" init --quiet --initial-branch=main

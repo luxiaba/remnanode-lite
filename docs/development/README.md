@@ -22,7 +22,7 @@ Go deeper only when the change requires it: read the [current contract baseline]
 
 - Git.
 - Bash 4 or later; Bash 5 is recommended for CI parity and installer work. The Bash 3.2 bundled with macOS does not support syntax used by the scripts, including `${var,,}`.
-- The exact Go version selected by the `toolchain` directive in `go.mod`, currently Go `1.26.5`.
+- The exact Go version selected by the `toolchain` directive in `go.mod`, currently Go `1.26.6`.
 - `gofmt`, included with the Go toolchain.
 - A C compiler and working CGO environment. `check-go.sh` runs the race detector over `./internal/...` and the daemon command. Install Xcode Command Line Tools on macOS or the appropriate build toolchain on Linux.
 - GNU `timeout`, called directly by supply-chain and installer checks. On macOS, install Homebrew `coreutils` and add `$(brew --prefix coreutils)/libexec/gnubin` to `PATH`.

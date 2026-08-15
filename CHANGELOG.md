@@ -35,6 +35,12 @@ contract. The public `/node` route set remains unchanged from `3.0.0`.
   the `remnanode-state` volume required by dynamic assets on the read-only
   container filesystem; preserve the existing `.env` when replacing it.
 
+### Security
+
+- Upgraded the release toolchain and Docker builder from Go `1.26.5` to
+  `1.26.6` so published binaries include the August 2026 standard-library
+  security fixes.
+
 ## [3.0.0] - 2026-08-03
 
 This stable release aligns Remnanode Lite with the official Node `3.0.0`

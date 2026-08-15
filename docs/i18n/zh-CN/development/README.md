@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=6789d9d795dd4659c6826513bf6e4b364ac031a386d2740b3d60746bef3f7ee9 -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=fd1cb63b5b3f19139bd01a039af9d503b2b93577690c72b005fd5ff5869b7cab -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。
@@ -26,7 +26,7 @@
 
 - Git。
 - Bash 4 或更高版本；CI 与安装脚本建议 Bash 5。macOS 自带 Bash 3.2 不支持脚本使用的 `${var,,}` 等语法。
-- `go.mod` 中 `toolchain` 指定的完整 Go 版本，当前为 Go `1.26.5`。
+- `go.mod` 中 `toolchain` 指定的完整 Go 版本，当前为 Go `1.26.6`。
 - `gofmt`，随 Go 工具链安装。
 - C 编译器与可用的 CGO；`check-go.sh` 会对 `./internal/...` 和 daemon 命令运行 race detector。macOS 安装 Xcode Command Line Tools，Linux 安装对应 build toolchain。
 - GNU `timeout`；供应链和安装器检查会直接调用该命令。macOS 可安装 Homebrew `coreutils` 并把 `$(brew --prefix coreutils)/libexec/gnubin` 加入 `PATH`。
