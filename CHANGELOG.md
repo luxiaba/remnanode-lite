@@ -31,6 +31,8 @@ contract. The public `/node` route set remains unchanged from `3.0.0`.
   official schema.
 - Aligned selected rw-core version reporting with official prerelease SemVer
   coercion while retaining the configured bundled-Core override.
+- Updated `github.com/klauspost/compress` to `1.19.2` for Zstandard arm64 and
+  concurrency correctness fixes.
 - Docker upgrades must use the Compose template from this Release, which adds
   the `remnanode-state` volume required by dynamic assets on the read-only
   container filesystem; preserve the existing `.env` when replacing it.
