@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=2fec0f211ec7497f3065d09ce8de5c82de961b526758fde3ac9fef165d347a9d -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=6a4a64422c4c496b2b26fb48646d013840a49b18072b5b6068165dc3f3a26fe4 -->
 
 # 运维与故障排查
 
@@ -165,9 +165,10 @@ sudo rnlctl start
 
 1. 记录当前精确 tag 或 manifest digest。
 2. 阅读目标 Release notes。
-3. 修改 `.env` 中的 `REMNANODE_IMAGE` 或内联的 `image:`。
-4. pull 并重建容器。
-5. 检查 health、Panel 和代表性流量。
+3. 获取并校验目标 Release 的 Compose 模板，同时保留 `.env` 和有意设置的本地 override。从 `3.0.0` 升级到 `3.2.2` 时必须这样做，因为部署增加了 `remnanode-state`。
+4. 修改 `.env` 中的 `REMNANODE_IMAGE` 或内联的 `image:`。
+5. pull 并重建容器。
+6. 检查 health、Panel 和代表性流量。
 
 ```bash
 docker compose config --quiet

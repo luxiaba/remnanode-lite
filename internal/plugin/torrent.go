@@ -1,9 +1,12 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"math"
+	"net/http"
 	"net/netip"
 	"regexp"
 	"time"
@@ -16,6 +19,7 @@ var sourceIPPattern = regexp.MustCompile(`^(?:(?:tcp|udp):)?(?:\[(.+?)\]|(.+?))(
 type torrentSettings struct {
 	enabled         bool
 	blockDuration   float64
+	webhookURL      string
 	includeRuleTags []string
 	ignoredIPs      ipMatcher
 	ignoredUsers    map[string]struct{}
@@ -24,6 +28,13 @@ type torrentSettings struct {
 type queuedWebhook struct {
 	payload xraywebhook.Payload
 }
+
+type torrentWebhookDelivery struct {
+	url    string
+	report TorrentReport
+}
+
+const torrentWebhookTimeout = 5 * time.Second
 
 func (s *State) TorrentBlockerEnabled() bool {
 	s.mu.RLock()
@@ -68,6 +79,9 @@ func (s *Service) HandleXrayWebhookContext(ctx context.Context, payload xraywebh
 
 func (s *Service) runWebhookWorker() {
 	defer close(s.webhookDone)
+	// This worker is the only delivery producer. Waiting after its loop exits
+	// guarantees no WaitGroup Add can race with shutdown's wait.
+	defer s.torrentWebhookWG.Wait()
 	for {
 		select {
 		case <-s.webhookStop:
@@ -90,9 +104,12 @@ func (s *Service) runWebhookWorker() {
 			default:
 			}
 			itemCtx, cancel := context.WithTimeout(s.webhookContext, s.effectiveCleanupTimeout())
-			s.processXrayWebhookLocked(itemCtx, item.payload)
+			delivery := s.processXrayWebhookLocked(itemCtx, item.payload)
 			cancel()
 			s.releaseOperation()
+			if delivery != nil {
+				s.dispatchTorrentWebhook(*delivery)
+			}
 		}
 	}
 }
@@ -140,26 +157,26 @@ func (s *Service) finishWebhookShutdown(ctx context.Context) error {
 	}
 }
 
-func (s *Service) processXrayWebhookLocked(ctx context.Context, payload xraywebhook.Payload) {
+func (s *Service) processXrayWebhookLocked(ctx context.Context, payload xraywebhook.Payload) *torrentWebhookDelivery {
 	if s.readyLocked() != nil {
-		return
+		return nil
 	}
 
 	snapshot := s.state.currentSnapshot()
 	if !effectiveTorrentEnabled(snapshot) {
-		return
+		return nil
 	}
 
 	if payload.Email == nil || payload.Source == nil {
-		return
+		return nil
 	}
 	email := *payload.Email
 	ip := extractWebhookIP(*payload.Source)
 	if ip == "" || email == "" {
-		return
+		return nil
 	}
 	if torrentIPIgnored(snapshot.torrent, ip) || torrentUserIgnored(snapshot.torrent, email) {
-		return
+		return nil
 	}
 
 	duration := snapshot.torrent.blockDuration
@@ -179,7 +196,7 @@ func (s *Service) processXrayWebhookLocked(ctx context.Context, payload xraywebh
 	}
 
 	now := time.Now().UTC()
-	s.state.AddReport(TorrentReport{
+	report := TorrentReport{
 		ActionReport: struct {
 			Blocked       bool      `json:"blocked"`
 			IP            string    `json:"ip"`
@@ -196,7 +213,49 @@ func (s *Service) processXrayWebhookLocked(ctx context.Context, payload xraywebh
 			ProcessedAt:   now,
 		},
 		XrayReport: payload,
-	})
+	}
+	s.state.AddReport(report)
+	if snapshot.torrent.webhookURL == "" {
+		return nil
+	}
+	return &torrentWebhookDelivery{url: snapshot.torrent.webhookURL, report: report}
+}
+
+func (s *Service) sendTorrentWebhook(ctx context.Context, delivery torrentWebhookDelivery) {
+	body, err := json.Marshal(delivery.report)
+	if err != nil {
+		return
+	}
+	deliveryCtx, cancel := context.WithTimeout(ctx, torrentWebhookTimeout)
+	defer cancel()
+	request, err := http.NewRequestWithContext(deliveryCtx, http.MethodPost, delivery.url, bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return
+	}
+	_ = response.Body.Close()
+}
+
+func (s *Service) dispatchTorrentWebhook(delivery torrentWebhookDelivery) {
+	if s.webhookContext.Err() != nil {
+		return
+	}
+	select {
+	case s.torrentWebhookSlots <- struct{}{}:
+	default:
+		return
+	}
+
+	s.torrentWebhookWG.Add(1)
+	go func() {
+		defer s.torrentWebhookWG.Done()
+		defer func() { <-s.torrentWebhookSlots }()
+		s.sendTorrentWebhook(s.webhookContext, delivery)
+	}()
 }
 
 func torrentIPIgnored(settings torrentSettings, ip string) bool {

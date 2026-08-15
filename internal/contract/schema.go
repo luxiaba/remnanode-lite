@@ -26,7 +26,7 @@ const (
 	kindBoolean
 )
 
-// Schema models the subset of Zod used by the official 3.0.0 REST contract.
+// Schema models the subset of Zod used by the official 3.2.2 REST contract.
 // Values are immutable after construction.
 type Schema struct {
 	kind       schemaKind

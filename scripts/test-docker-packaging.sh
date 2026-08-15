@@ -49,6 +49,7 @@ require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geoi
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat'
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/asn/asn-prefixes.bin'
 require_text Dockerfile 'COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite'
+require_text Dockerfile '/var/lib/remnanode-lite'
 for license_file in CC-BY-SA-4.0 CC0-1.0 GPL-3.0-only MPL-2.0; do
   require_text Dockerfile "COPY --from=assets --chmod=0644 /assets/licenses/${license_file}.txt /usr/share/doc/remnanode-lite/licenses/${license_file}.txt"
 done
@@ -123,6 +124,7 @@ for required in \
   'cpus: 1.0' \
   'pids_limit: 256' \
   'read_only: true' \
+  'remnanode-state:/var/lib/remnanode-lite' \
   '["CMD", "/usr/local/bin/remnanode-lite", "healthcheck"]' \
   '/run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700' \
   '/var/log/remnanode-lite:rw,noexec,nosuid,nodev,size=28m,mode=0750' \
@@ -142,6 +144,7 @@ for required in \
   'network_mode: host' \
   'init: true' \
   'read_only: true' \
+  'remnanode-state:/var/lib/remnanode-lite' \
   'mem_limit: 448m' \
   '/run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700' \
   '/var/log/remnanode-lite:rw,noexec,nosuid,nodev,size=28m,mode=0750'; do
@@ -149,9 +152,6 @@ for required in \
 done
 if grep -Eq '^[[:space:]]*-[[:space:]]*SECRET_KEY=' deploy/compose.single-file.yaml; then
   fail "single-file Compose must use a mapping for SECRET_KEY"
-fi
-if grep -Eq '^[[:space:]]+volumes:' deploy/compose.single-file.yaml; then
-  fail "single-file Compose must keep runtime logs ephemeral"
 fi
 if grep -Fq 'remnanode-logs' compose.yaml; then
   fail "production Compose must keep rw-core logs ephemeral"

@@ -132,10 +132,26 @@ state have independent small bounds. Archives are copied into private,
 root-only workspaces before parsing so a caller cannot replace the checked
 path during installation.
 
-Node, `rnlctl`, rw-core, GeoIP, GeoSite, ASN data, notices, SBOM, and service
-material form one bundle. There is no separate Native core/data updater and no
-custom runtime-asset URL path; this keeps the disk peak and rollback identity
-attached to one release generation.
+Node, `rnlctl`, the bundled rw-core, GeoIP, GeoSite, ASN data, notices, SBOM,
+and service material form one release bundle. Panel-selected Core and GeoData
+are instead derived cache under
+`/var/lib/remnanode-lite/panel-runtime/{assets,cores}`. Docker keeps that cache
+in the `remnanode-state` named volume; Native reuses its application state
+directory. Cache files do not belong to a generation or lifecycle journal and
+are not covered by `release/runtime-assets.lock.json` or the release SBOM. The
+bundled assets remain the fallback.
+
+Each initial Node download requires HTTPS, is limited to `128 MiB`, has a
+`15s` total timeout, and fails after `5s` without data. At most five GeoData
+assets download concurrently. A custom Core must also match its configured
+SHA-256 and return a parseable version before use. These are per-download and
+admission bounds, not a total cache quota.
+
+After startup, rw-core may update GeoData according to a Panel-provided cron
+configuration. Those later rw-core writes are not governed by the Node's
+initial-download size or total-time limits and can increase persistent disk
+use. Treat dynamic Core/GeoData as a trusted-administrator feature, and monitor
+free disk when enabling its URLs or schedules.
 
 Production `node.env` must be a regular, non-symlink file. Go reads at most `1 MiB` before setting the memory soft limit and accepts no more than `4096` lines and `256` assignments. A single line may be up to `1 MiB`, allowing migration of legacy inline Secrets up to `256 KiB`.
 

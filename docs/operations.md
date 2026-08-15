@@ -199,9 +199,10 @@ For a controlled update:
 
 1. Record the current effective image or manifest digest.
 2. Read the target Release notes.
-3. Change `REMNANODE_IMAGE` in `.env`, or the intentionally inline `image:` value.
-4. Pull and recreate the container.
-5. Check health, Panel state, and representative traffic.
+3. Obtain and verify the target Release's Compose template, preserving `.env` and intentional local overrides. This is mandatory from `3.0.0` to `3.2.2` because the deployment adds `remnanode-state`.
+4. Change `REMNANODE_IMAGE` in `.env`, or the intentionally inline `image:` value.
+5. Pull and recreate the container.
+6. Check health, Panel state, and representative traffic.
 
 ```bash
 docker compose config --quiet

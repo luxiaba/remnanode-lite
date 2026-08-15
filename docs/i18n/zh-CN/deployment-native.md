@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=238d3061b8c4b809d59102ca9a4bc848ac3d6c54d4f9467a4a2fb599ca517bff -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=c4f03de4f1d242010a3470f4e2cccecf0e4128f1a1eb13dd9c32f96e5df42852 -->
 
 # 原生 Linux 部署
 
@@ -173,6 +173,9 @@ sudo sh ./install.sh \
 └── secret.key
 
 /var/lib/remnanode-lite/
+└── panel-runtime/                              # Panel 选择动态资产时创建
+    ├── assets/
+    └── cores/
 /var/log/remnanode-lite/
 /run/remnanode-lite/
 
@@ -194,6 +197,12 @@ systemd 和 OpenRC 的服务名分别是 `remnanode-lite.service` 与 `remnanode
 systemctl status remnanode-lite.service
 rc-service remnanode-lite status
 ```
+
+## Panel 选择的 Core 与 GeoData 缓存
+
+Native 复用 `/var/lib/remnanode-lite` 应用状态目录（systemd 使用 `StateDirectory=remnanode-lite`，OpenRC 准备相同路径）。Panel 选择自定义 Core 或 GeoData 后，派生文件缓存于 `panel-runtime/{assets,cores}`。它们不属于 release generation、lifecycle journal、`release/runtime-assets.lock.json` 或 release SBOM。内置 Core 和 GeoData 始终作为 fallback，因此可以在服务停止后删除该缓存，再由 Panel 同步重建。
+
+Node 的首次下载必须使用 HTTPS。单次下载最多 `128 MiB`、总时限 `15s`，连续 `5s` 没有数据即失败；GeoData asset 最多同时下载五个。自定义 Core 还必须通过配置的 SHA-256 和版本探测。rw-core 之后可能按照 Panel 下发的 cron 配置刷新 GeoData；这些后续写入不受 Node 首次下载的大小或总时限约束，可能增加磁盘占用。动态资产应只由可信 Panel 管理员启用，并监控磁盘余量。
 
 ## 安装后检查
 
@@ -430,7 +439,7 @@ Secret 值不会进入 `node.env`、命令参数或命令输出。如果 `set --
 
 ## 卸载
 
-普通卸载删除服务、二进制、generation、运行状态、日志和 installer 缓存，但保留 `/etc/remnanode-lite` 以便安全重装：
+普通卸载删除服务、二进制、generation、运行状态（包括 Panel 派生 Core/GeoData 缓存）、日志和 installer 缓存，但保留 `/etc/remnanode-lite` 以便安全重装：
 
 ```bash
 sudo rnlctl uninstall

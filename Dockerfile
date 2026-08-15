@@ -79,6 +79,7 @@ RUN set -eux; \
       /usr/local/share/remnanode-lite/asn \
       /usr/share/doc/remnanode-lite/licenses \
       /run/remnanode-lite \
+      /var/lib/remnanode-lite \
       /var/log/remnanode-lite
 
 COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite

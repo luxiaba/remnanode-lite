@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=44d03c0d2ef60a941805add030cde38290ff79732ffc700532b3cbced5767833 -->
+<!-- translation: locale=zh-CN; source=docs/development/resource-budget.md; source-sha256=cc1922222b5d5d8152aef96ed7657ec23cde44cd38d45676b0d21a71c61415fa -->
 # 512 MiB 资源预算与工程基准
 
 > 这是中文译文；资源数字和边界以[英文原文](../../../development/resource-budget.md)为准。
@@ -94,7 +94,11 @@ root 生命周期操作使用权限为 `0700` 的私有工作目录，并在操�
 
 bootstrap、生命周期引擎和 release 校验器都将 Native 归档限制为 `512 MiB`。校验最多允许 512 个归档条目、总计 `512 MiB` 的解压后载荷，以及单个不超过 `256 MiB` 的载荷。manifest 和生命周期状态另有各自的小型上限。归档会先复制到仅 root 可访问的私有工作目录再解析，调用方无法在安装期间替换已经检查过的路径。
 
-Node、`rnlctl`、rw-core、GeoIP、GeoSite、ASN 数据、第三方声明、SBOM 和服务文件共同组成一个 bundle。Native 不存在独立的 core/data 更新器，也不提供自定义运行时资产 URL；磁盘峰值与回滚身份因此始终绑定到同一个 release generation。
+Node、`rnlctl`、内置 rw-core、GeoIP、GeoSite、ASN 数据、第三方声明、SBOM 和服务文件共同组成 release bundle。Panel 选择的 Core 和 GeoData 则属于 `/var/lib/remnanode-lite/panel-runtime/{assets,cores}` 下的派生缓存：Docker 把它放在 `remnanode-state` named volume，Native 复用应用状态目录。缓存不属于 generation 或 lifecycle journal，也不受 `release/runtime-assets.lock.json` 或 release SBOM 覆盖；内置资产始终作为 fallback。
+
+Node 的每次首次下载都必须使用 HTTPS，单文件最多 `128 MiB`、总时限 `15s`，连续 `5s` 没有数据即失败；GeoData asset 最多同时下载五个。自定义 Core 还必须匹配配置的 SHA-256，并在使用前返回可解析的版本。这些是逐次下载和准入边界，不是缓存总配额。
+
+启动后，rw-core 可能按照 Panel 下发的 cron 配置继续更新 GeoData。后续写入不受 Node 首次下载的大小或总时限约束，可能增加持久磁盘占用。动态 Core/GeoData 应只由可信管理员启用，并在配置 URL 或 schedule 后监控磁盘余量。
 
 生产 `node.env` 必须是普通的非符号链接文件。Go 在设置内存软上限前最多读取 `1 MiB`，并接受最多 `4096` 行和 `256` 个赋值。单行上限也是 `1 MiB`，因此可以迁移旧版最多 `256 KiB` 的内联 Secret。
 

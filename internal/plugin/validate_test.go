@@ -36,6 +36,30 @@ func TestValidatePluginConfigAcceptsMinimalConfig(t *testing.T) {
 	}
 }
 
+func TestValidatePluginConfigValidatesTorrentWebhookURL(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []any{
+		"https://example.com/torrent",
+		"  https://example.com/torrent  ",
+		"mailto:ops@example.com",
+	} {
+		cfg := validTorrentBlocker(true)
+		cfg["webhookUrl"] = value
+		if err := ValidatePluginConfig(map[string]any{"torrentBlocker": cfg}); err != nil {
+			t.Errorf("webhookUrl=%v rejected: %v", value, err)
+		}
+	}
+
+	for _, value := range []any{"", "example.com/torrent", "://example.com", 42, nil} {
+		cfg := validTorrentBlocker(true)
+		cfg["webhookUrl"] = value
+		if err := ValidatePluginConfig(map[string]any{"torrentBlocker": cfg}); err == nil {
+			t.Errorf("webhookUrl=%v was accepted", value)
+		}
+	}
+}
+
 func TestValidatePluginConfigAcceptsNonNegativeSafeIntegerDurationAndExtEdges(t *testing.T) {
 	t.Parallel()
 
@@ -205,6 +229,36 @@ func TestValidatePluginConfigRejectsInvalidCIDR(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected validation error for invalid blocked IP")
+	}
+}
+
+func TestValidatePluginConfigMatchesIPv6TextForms(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"2001:db8::1", "::ffff:c000:201"} {
+		if err := ValidatePluginConfig(map[string]any{
+			"connectionDrop": map[string]any{"enabled": true, "whitelistIps": []any{value}},
+		}); err != nil {
+			t.Errorf("plain IPv6 %q rejected: %v", value, err)
+		}
+		if err := ValidatePluginConfig(map[string]any{
+			"ingressFilter": map[string]any{"enabled": true, "blockedIps": []any{value + "/128"}},
+		}); err != nil {
+			t.Errorf("IPv6 CIDR %q rejected: %v", value+"/128", err)
+		}
+	}
+
+	for _, value := range []string{"::ffff:192.0.2.1", "ffff::192.0.2.1"} {
+		if err := ValidatePluginConfig(map[string]any{
+			"connectionDrop": map[string]any{"enabled": true, "whitelistIps": []any{value}},
+		}); err == nil {
+			t.Errorf("IPv4-embedded IPv6 %q was accepted", value)
+		}
+		if err := ValidatePluginConfig(map[string]any{
+			"ingressFilter": map[string]any{"enabled": true, "blockedIps": []any{value + "/128"}},
+		}); err == nil {
+			t.Errorf("IPv4-embedded IPv6 CIDR %q was accepted", value+"/128")
+		}
 	}
 }
 

@@ -2,12 +2,9 @@ package xray
 
 import (
 	"context"
-	"os"
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/luxiaba/remnanode-lite/internal/executil"
 )
 
 const (
@@ -58,9 +55,20 @@ func (m *Manager) refreshVersion(parent context.Context) {
 
 func (m *Manager) probeVersion(parent context.Context) *string {
 	m.mu.RLock()
-	override := m.version.coreOverride
+	binary := m.xrayBin
+	if m.process != nil && m.process.binary != "" {
+		binary = m.process.binary
+	}
 	m.mu.RUnlock()
-	if override != "" {
+	return m.probeVersionForBinary(parent, binary)
+}
+
+func (m *Manager) probeVersionForBinary(parent context.Context, binary string) *string {
+	m.mu.RLock()
+	override := m.version.coreOverride
+	bundledBinary := m.xrayBin
+	m.mu.RUnlock()
+	if override != "" && binary == bundledBinary {
 		return &override
 	}
 	if parent == nil {
@@ -71,7 +79,6 @@ func (m *Manager) probeVersion(parent context.Context) *string {
 
 	m.mu.RLock()
 	probe := m.version.probe
-	xrayBin := m.xrayBin
 	m.mu.RUnlock()
 
 	var version string
@@ -79,18 +86,7 @@ func (m *Manager) probeVersion(parent context.Context) *string {
 	if probe != nil {
 		version, err = probe(ctx)
 	} else {
-		var result executil.Result
-		result, err = executil.RunWithEnv(
-			ctx,
-			nil,
-			versionOutputMaxSize,
-			sanitizedChildEnvironment(os.Environ()),
-			xrayBin,
-			"version",
-		)
-		if err == nil {
-			version = parseVersionLine(string(result.Stdout))
-		}
+		version, err = probeCoreBinary(ctx, binary)
 	}
 	if err != nil || version == "" {
 		return nil
@@ -145,9 +141,13 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 	}
 }
 
-var xraySemverRe = regexp.MustCompile(`\d+\.\d+\.\d+`)
+var (
+	xraySemverRe     = regexp.MustCompile(`\d+\.\d+\.\d+`)
+	xrayPrereleaseRe = regexp.MustCompile(`^[0-9A-Za-z.-]+`)
+)
 
-// parseVersionLine returns semver like "26.3.27", matching official node semver coercion.
+// parseVersionLine returns semver like "26.3.27" or "26.3.27-rc.1",
+// matching official node coercion, which omits build metadata.
 func parseVersionLine(output string) string {
 	for _, line := range strings.Split(output, "\n") {
 		line = strings.TrimSpace(line)
@@ -171,5 +171,49 @@ func extractSemver(raw string) string {
 	if raw == "" {
 		return ""
 	}
-	return xraySemverRe.FindString(raw)
+	location := xraySemverRe.FindStringIndex(raw)
+	if location == nil {
+		return ""
+	}
+
+	version := raw[location[0]:location[1]]
+	if !validSemverCore(version) {
+		return ""
+	}
+	suffix := raw[location[1]:]
+	if !strings.HasPrefix(suffix, "-") {
+		return version
+	}
+
+	prerelease := xrayPrereleaseRe.FindString(suffix[1:])
+	if prerelease == "" {
+		return version
+	}
+	identifiers := strings.Split(prerelease, ".")
+	valid := 0
+	for _, identifier := range identifiers {
+		invalidNumeric := len(identifier) > 1 && identifier[0] == '0' && strings.Trim(identifier, "0123456789") == ""
+		if identifier == "" || invalidNumeric {
+			break
+		}
+		valid++
+	}
+	if valid == 0 {
+		return version
+	}
+	return version + "-" + strings.Join(identifiers[:valid], ".")
+}
+
+func validSemverCore(version string) bool {
+	const maxSafeInteger = "9007199254740991"
+	for _, identifier := range strings.Split(version, ".") {
+		if len(identifier) > 1 && identifier[0] == '0' {
+			return false
+		}
+		if len(identifier) > len(maxSafeInteger) ||
+			(len(identifier) == len(maxSafeInteger) && identifier > maxSafeInteger) {
+			return false
+		}
+	}
+	return true
 }

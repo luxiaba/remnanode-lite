@@ -24,12 +24,12 @@ command derives the stable-versus-preview class from the source version.
 `Version` and `ContractVersion` move independently. For example:
 
 ```text
-Version:         3.0.0
-ContractVersion: 3.0.0
+Version:         3.2.2
+ContractVersion: 3.2.2
 ```
 
-This is the Remnanode Lite stable line aligned with the verified official Node
-`3.0.0` contract. Its Native Linux distribution is attached only when the
+This is the Remnanode Lite source line aligned with the verified official Node
+`3.2.2` contract. Its Native Linux distribution is attached only when the
 corresponding GitHub Release is published.
 
 Changing `ContractVersion` requires pinned official source, a reviewed contract
@@ -90,6 +90,7 @@ contract has already been implemented.
 | `2.8.0-rnl.3` | `2.8.0` | Preview | Evidence-based Native host matrix and current distribution qualification rules |
 | `2.8.0-rnl.4` | `2.8.0` | Preview | Concise Native operator overview and state-aware lifecycle guidance |
 | `3.0.0` | `3.0.0` | Stable | Official 3.0.0 contract, pre-start socket cleanup, Zod 4 boundaries, and refreshed runtime assets |
+| `3.2.2` | `3.2.2` | Stable | Official 3.2.2 contract, optional start metadata and integrations, Torrent Blocker report webhook, and plugin schema 0.6.3 |
 
 A source version can appear in this table before it is published. Use the
 criteria in [What Counts as Published](#what-counts-as-published), rather than

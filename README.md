@@ -25,14 +25,14 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 
 ## Highlights
 
-- Implements the Remnawave Node `3.0.0` API contract.
+- Implements the Remnawave Node `3.2.2` API contract.
 - Runs the Node as one Go process that directly manages rw-core, without Node.js or s6.
 - Uses Docker Compose as the simplest deployment path, with a self-contained Native Linux option for hosts that cannot run Docker.
 - Includes the same maintained low-memory profile for container and Native services on 512 MiB servers.
 - Supports live user updates, statistics, connection management, and the official plugin rule formats, including pre-start stale Unix-socket cleanup enabled by trusted Panel configuration.
 - Publishes multi-architecture images to GHCR with SBOM, provenance, and build attestations.
 - Native Linux support provides transactional install, upgrade, rollback, and repair through `rnlctl`.
-- Uses one Compose file for Docker deployment. No source tree or persistent data volume is required, and `.env` remains optional.
+- Uses one Compose file for Docker deployment. Compose automatically creates and manages the `remnanode-state` cache volume, and `.env` remains optional.
 
 ## Choose a deployment mode
 
@@ -212,9 +212,12 @@ Check the running version:
 docker exec remnanode-lite remnanode-lite version
 ```
 
-To move between exact versions, change `REMNANODE_IMAGE` in `.env` first. If
-you intentionally deploy without `.env`, change `image:` in the Compose file
-instead. Then pull and recreate the container:
+To move between exact versions, first use the Compose template attached to the
+target Release, preserving `.env` and any intentional local overrides. This is
+required when upgrading from `3.0.0` to `3.2.2` because the newer deployment
+adds the `remnanode-state` volume. Then change `REMNANODE_IMAGE` in `.env`, or
+the inline `image:` value when intentionally deploying without `.env`, and
+recreate the container:
 
 ```bash
 docker compose pull
@@ -242,7 +245,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | --- | --- |
 | Native Linux bundles | Exact published Releases |
 | Native hosts | Distribution-specific; see the [Native host matrix](docs/deployment-native.md#native-host-matrix) |
-| Node contract | `3.0.0` |
+| Node contract | `3.2.2` |
 | rw-core | `v26.7.28` |
 | Platforms | `linux/amd64`, `linux/arm64` |
 | Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |
@@ -262,7 +265,7 @@ flowchart LR
     Core --> Traffic["Proxy traffic"]
 ```
 
-The Node owns the rw-core process and current runtime state. The Panel remains the source of truth for the active Xray configuration, so a recreated container does not need a configuration volume. Read [Architecture and runtime design](docs/architecture.md) for package boundaries, lifecycle rules, and data flows.
+The Node owns the rw-core process and current runtime state. The Panel remains the source of truth for the active Xray configuration. The `remnanode-state` persistent volume created by Compose does not store that configuration; it only caches Panel-derived custom Core and GeoData assets. Normal configurations require no manual volume management, and bundled assets remain the fallback. Read [Architecture and runtime design](docs/architecture.md) for package boundaries, lifecycle rules, and data flows.
 
 ## Documentation
 

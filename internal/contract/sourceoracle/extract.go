@@ -60,6 +60,14 @@ func extractRoutes(
 	if err != nil {
 		return nil, err
 	}
+	for _, sourcePath := range sourceTree {
+		if !strings.HasSuffix(sourcePath, ".integration.ts") {
+			continue
+		}
+		if _, exists := evidenceSet[sourcePath]; !exists {
+			return nil, fmt.Errorf("discovered Integration provider %s is missing from the evidence catalog", sourcePath)
+		}
+	}
 	if err := verifyControllerSourceConventions(ctx, reader, sourceTree); err != nil {
 		return nil, err
 	}

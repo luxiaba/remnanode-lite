@@ -77,6 +77,8 @@ type processState struct {
 	reap              func() error
 	epoch             uint64
 	socket            string
+	binary            string
+	assetDir          string
 	mutationGate      sync.RWMutex
 	statsCapabilities xrayrpc.StatsCapabilities
 	done              chan struct{}
@@ -173,6 +175,7 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 		m.restorePreviousStart(operationEpoch, previous, previousProcess)
 		return m.startFailure("xray start canceled", context.Canceled)
 	}
+	geodata, hasGeodata := req.XrayConfig["geodata"]
 	prepared, err := prepareRuntimeConfig(req.XrayConfig, req.Internals.Hashes, socket, m.torrentBlockerOptions())
 	// The prepared value contains only canonical JSON plus compact hash state;
 	// release the decoded request tree before waiting for low-memory rw-core.
@@ -181,6 +184,18 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 		cancel()
 		m.restorePreviousStart(operationEpoch, previous, previousProcess)
 		return m.startFailure("prepare Xray config", err)
+	}
+	if err := ctx.Err(); err != nil {
+		cancel()
+		m.restorePreviousStart(operationEpoch, previous, previousProcess)
+		return m.startFailure("xray start canceled", err)
+	}
+	selectedRuntime, err := m.preparePanelRuntime(ctx, geodata, hasGeodata, m.fallbackBinary(previousProcess))
+	geodata = nil
+	if err != nil {
+		cancel()
+		m.restorePreviousStart(operationEpoch, previous, previousProcess)
+		return m.startFailure("prepare Panel-selected Core and GeoData", err)
 	}
 	if err := ctx.Err(); err != nil {
 		cancel()
@@ -220,7 +235,7 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 	}
 	releasePreviousGate()
 
-	process, err := m.startProcess(processEpoch, socket)
+	process, err := m.startProcess(processEpoch, socket, selectedRuntime.binary, selectedRuntime.assetDir)
 	if err != nil {
 		cancel()
 		m.completeStart(operationEpoch, lifecycleStopped, m.clearRuntimeLocked)
@@ -243,10 +258,13 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 	readyErr := m.waitForGRPC(ctx, process, startupTimeout)
 
 	if readyErr == nil {
-		version := m.probeVersion(ctx)
+		version := m.probeVersionForBinary(ctx, process.binary)
 		if err := ctx.Err(); err != nil {
 			readyErr = err
 		} else {
+			// The selected Core is now ready and lifecycle ownership still blocks
+			// another Start, so stale cache entries can be removed without racing preparation.
+			m.cleanupCoreCache(process.binary)
 			committed, owned, exitErr := m.commitRunningStart(operationEpoch, process, prepared.hashState, version)
 			if committed {
 				cancel()
@@ -665,7 +683,7 @@ func (m *Manager) startFailure(action string, err error) StartResponse {
 	return m.startResponse(false, &message)
 }
 
-func (m *Manager) startProcess(processEpoch uint64, socket string) (*processState, error) {
+func (m *Manager) startProcess(processEpoch uint64, socket, binary, assetDir string) (*processState, error) {
 	stdout, err := openCappedLogWriter(filepath.Join(m.logDir, "xray.out.log"), maxLogSize)
 	if err != nil {
 		return nil, fmt.Errorf("open xray stdout log: %w", err)
@@ -679,9 +697,7 @@ func (m *Manager) startProcess(processEpoch uint64, socket string) (*processStat
 	m.mu.RLock()
 	commandFactory := m.processCommand
 	processWaitDelay := m.processWaitDelay
-	xrayBin := m.xrayBin
 	socketPath := m.socketPath
-	geoDir := m.geoDir
 	token := m.token
 	m.mu.RUnlock()
 
@@ -689,7 +705,7 @@ func (m *Manager) startProcess(processEpoch uint64, socket string) (*processStat
 	if commandFactory != nil {
 		cmd = commandFactory()
 	} else {
-		cmd = exec.Command(xrayBin, BuildCommandArgs(socketPath)...)
+		cmd = exec.Command(binary, BuildCommandArgs(socketPath)...)
 	}
 	if cmd == nil {
 		_ = stdout.Close()
@@ -709,7 +725,7 @@ func (m *Manager) startProcess(processEpoch uint64, socket string) (*processStat
 	if len(baseEnv) == 0 {
 		baseEnv = os.Environ()
 	}
-	cmd.Env = rwCoreEnvironment(baseEnv, geoDir, token)
+	cmd.Env = rwCoreEnvironment(baseEnv, assetDir, token)
 
 	if err := cmd.Start(); err != nil {
 		_ = stdout.Close()
@@ -722,6 +738,8 @@ func (m *Manager) startProcess(processEpoch uint64, socket string) (*processStat
 		reap:        cmd.Wait,
 		epoch:       processEpoch,
 		socket:      socket,
+		binary:      binary,
+		assetDir:    assetDir,
 		done:        make(chan struct{}),
 		leaderDone:  make(chan struct{}),
 		monitorDone: make(chan struct{}),

@@ -2,6 +2,9 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -90,6 +93,180 @@ func TestHandleXrayWebhookBlocksAndAddsReport(t *testing.T) {
 	defer backend.mu.Unlock()
 	if len(backend.blockCalls) != 1 || len(backend.blockCalls[0]) != 1 {
 		t.Fatalf("block calls = %#v", backend.blockCalls)
+	}
+}
+
+func TestHandleXrayWebhookPostsConfiguredReportWithoutChangingLocalOutcome(t *testing.T) {
+	t.Parallel()
+
+	type observation struct {
+		method      string
+		contentType string
+		report      TorrentReport
+		err         error
+	}
+	received := make(chan observation, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var report TorrentReport
+		err := json.NewDecoder(request.Body).Decode(&report)
+		received <- observation{
+			method:      request.Method,
+			contentType: request.Header.Get("Content-Type"),
+			report:      report,
+			err:         err,
+		}
+		writer.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+
+	state := NewState()
+	service, backend := newReadyService(t, state, nil)
+	if response := service.Sync(torrentPluginWithWebhookURL(t, "  "+server.URL+"  ")); !response.Accepted {
+		t.Fatal("torrent webhook config was rejected")
+	}
+	service.HandleXrayWebhook(xraywebhook.Payload{
+		Email:       xraywebhook.String("user-1"),
+		Network:     xraywebhook.String("tcp"),
+		Source:      xraywebhook.String("tcp:203.0.113.10:443"),
+		Destination: xraywebhook.String("198.51.100.1:443"),
+		Timestamp:   xraywebhook.Number(123),
+	})
+
+	select {
+	case got := <-received:
+		if got.err != nil {
+			t.Fatalf("decode posted report: %v", got.err)
+		}
+		if got.method != http.MethodPost || got.contentType != "application/json" {
+			t.Fatalf("request method/content-type = %q/%q", got.method, got.contentType)
+		}
+		if got.report.ActionReport.UserID != "user-1" || got.report.ActionReport.IP != "203.0.113.10" || !got.report.ActionReport.Blocked {
+			t.Fatalf("posted report = %#v", got.report)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("configured torrent report webhook was not called")
+	}
+
+	if state.ReportsCount() != 1 {
+		t.Fatalf("local reports count = %d, want 1", state.ReportsCount())
+	}
+	backend.mu.Lock()
+	blockCalls := len(backend.blockCalls)
+	backend.mu.Unlock()
+	if blockCalls != 1 {
+		t.Fatalf("block calls = %d, want 1", blockCalls)
+	}
+}
+
+func TestSlowTorrentReportWebhookDoesNotDelayLocalProcessing(t *testing.T) {
+	t.Parallel()
+
+	const reports = maxConcurrentTorrentWebhooks + 2
+	requestsStarted := make(chan struct{}, reports)
+	releaseRequests := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		requestsStarted <- struct{}{}
+		select {
+		case <-request.Context().Done():
+		case <-releaseRequests:
+		}
+	}))
+	t.Cleanup(func() {
+		close(releaseRequests)
+		server.Close()
+	})
+
+	state := NewState()
+	service, backend := newReadyService(t, state, nil)
+	if response := service.Sync(torrentPluginWithWebhookURL(t, server.URL)); !response.Accepted {
+		t.Fatal("torrent webhook config was rejected")
+	}
+	payload := xraywebhook.Payload{
+		Email:       xraywebhook.String("user-1"),
+		Network:     xraywebhook.String("tcp"),
+		Source:      xraywebhook.String("tcp:203.0.113.10:443"),
+		Destination: xraywebhook.String("198.51.100.1:443"),
+		Timestamp:   xraywebhook.Number(123),
+	}
+	service.HandleXrayWebhook(payload)
+	select {
+	case <-requestsStarted:
+	case <-time.After(time.Second):
+		t.Fatal("first torrent report webhook did not start")
+	}
+
+	for range reports - 1 {
+		service.HandleXrayWebhook(payload)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for state.ReportsCount() != reports {
+		if time.Now().After(deadline) {
+			t.Fatalf("slow remote webhook delayed local reports: count=%d", state.ReportsCount())
+		}
+		time.Sleep(time.Millisecond)
+	}
+	remoteDeadline := time.Now().Add(time.Second)
+	for len(requestsStarted) != maxConcurrentTorrentWebhooks-1 {
+		if time.Now().After(remoteDeadline) {
+			t.Fatalf("started remote webhooks = %d, want %d", len(requestsStarted)+1, maxConcurrentTorrentWebhooks)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	time.Sleep(20 * time.Millisecond)
+	if got := len(requestsStarted) + 1; got != maxConcurrentTorrentWebhooks {
+		t.Fatalf("concurrent remote webhooks = %d, want %d", got, maxConcurrentTorrentWebhooks)
+	}
+	backend.mu.Lock()
+	blockCalls := len(backend.blockCalls)
+	backend.mu.Unlock()
+	if blockCalls != reports {
+		t.Fatalf("block calls = %d, want %d", blockCalls, reports)
+	}
+}
+
+func TestCloseCancelsInFlightTorrentReportWebhook(t *testing.T) {
+	t.Parallel()
+
+	requestStarted := make(chan struct{})
+	releaseRequest := make(chan struct{})
+	var startedOnce sync.Once
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		startedOnce.Do(func() { close(requestStarted) })
+		select {
+		case <-request.Context().Done():
+		case <-releaseRequest:
+		}
+	}))
+	t.Cleanup(func() {
+		close(releaseRequest)
+		server.Close()
+	})
+
+	service, _ := newReadyService(t, NewState(), nil)
+	if response := service.Sync(torrentPluginWithWebhookURL(t, server.URL)); !response.Accepted {
+		t.Fatal("torrent webhook config was rejected")
+	}
+	service.HandleXrayWebhook(xraywebhook.Payload{
+		Email:       xraywebhook.String("user-1"),
+		Network:     xraywebhook.String("tcp"),
+		Source:      xraywebhook.String("tcp:203.0.113.10:443"),
+		Destination: xraywebhook.String("198.51.100.1:443"),
+		Timestamp:   xraywebhook.Number(123),
+	})
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("torrent report webhook did not start")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	started := time.Now()
+	if err := service.CloseContext(ctx); err != nil {
+		t.Fatalf("close service: %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("close waited %s for canceled torrent report webhook", elapsed)
 	}
 }
 
@@ -404,4 +581,20 @@ func TestWebhookStopWakesAdmissionWaitingOnFullQueue(t *testing.T) {
 
 	<-service.operationGate
 	gateReleased = true
+}
+
+func torrentPluginWithWebhookURL(t *testing.T, webhookURL string) *SyncPlugin {
+	t.Helper()
+	return mustSyncPlugin(t, map[string]any{
+		"uuid": "00000000-0000-4000-8000-000000000001",
+		"name": "test",
+		"config": map[string]any{
+			"torrentBlocker": map[string]any{
+				"enabled":       true,
+				"blockDuration": 300,
+				"ignoreLists":   map[string]any{},
+				"webhookUrl":    webhookURL,
+			},
+		},
+	})
 }
