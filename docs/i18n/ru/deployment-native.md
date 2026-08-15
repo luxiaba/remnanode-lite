@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=238d3061b8c4b809d59102ca9a4bc848ac3d6c54d4f9467a4a2fb599ca517bff -->
+<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=c4f03de4f1d242010a3470f4e2cccecf0e4128f1a1eb13dd9c32f96e5df42852 -->
 
 # Нативное развёртывание Linux
 
@@ -182,6 +182,9 @@ sudo sh ./install.sh \
 └── secret.key
 
 /var/lib/remnanode-lite/
+└── panel-runtime/                              # создаётся при выборе динамических ресурсов в Panel
+    ├── assets/
+    └── cores/
 /var/log/remnanode-lite/
 /run/remnanode-lite/
 
@@ -203,6 +206,12 @@ Installer предпочитает безопасный явно заданны�
 systemctl status remnanode-lite.service
 rc-service remnanode-lite status
 ```
+
+## Кэш Core и GeoData, выбранных Panel
+
+Native использует существующий каталог состояния приложения `/var/lib/remnanode-lite` (`StateDirectory=remnanode-lite` в systemd; OpenRC подготавливает тот же путь). Когда Panel выбирает пользовательский Core или GeoData, производные файлы кэшируются в `panel-runtime/{assets,cores}`. Они не входят в release generation, lifecycle journal, `release/runtime-assets.lock.json` или SBOM выпуска. Встроенные Core и GeoData остаются резервным вариантом, поэтому кэш можно удалить при остановленной службе и восстановить синхронизацией Panel.
+
+Первичные загрузки Node требуют HTTPS. Каждая загрузка ограничена `128 MiB`, общим временем `15s` и прерывается после `5s` без данных; одновременно загружается не более пяти ресурсов GeoData. Пользовательский Core должен также пройти проверку заданного SHA-256 и версии. Позднее rw-core может обновлять GeoData по cron-конфигурации от Panel; на эти записи не распространяются ограничения размера и общего времени первичной загрузки Node, и они могут увеличить использование диска. Разрешайте динамические ресурсы только доверенному администратору Panel и контролируйте свободное место.
 
 ## Проверка после установки
 
@@ -451,7 +460,7 @@ sudo rm -f /root/new-node-secret.key
 
 ## Удаление
 
-Обычное удаление убирает службу, бинарные файлы, generation, runtime-состояние, журналы и cache установщика, но оставляет `/etc/remnanode-lite` для безопасной повторной установки:
+Обычное удаление убирает службу, бинарные файлы, generation, runtime-состояние (включая производный кэш Core/GeoData от Panel), журналы и cache установщика, но оставляет `/etc/remnanode-lite` для безопасной повторной установки:
 
 ```bash
 sudo rnlctl uninstall

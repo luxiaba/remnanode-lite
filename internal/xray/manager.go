@@ -21,6 +21,7 @@ type Options struct {
 	XrayBin            string
 	GeoDir             string
 	LogDir             string
+	PanelRuntimeDir    string
 	InternalSocketPath string
 	InternalRESTToken  string
 	DisableHashCheck   bool
@@ -86,6 +87,7 @@ type Manager struct {
 	xrayBin          string
 	geoDir           string
 	logDir           string
+	panelRuntimeDir  string
 	socketPath       string
 	token            string
 	socketPrefix     string
@@ -114,6 +116,7 @@ type Manager struct {
 	processCommand      func() *exec.Cmd
 	processGroupCleanup func(*os.Process, time.Duration) error
 	processWaitDelay    time.Duration
+	downloadPanelFile   func(context.Context, string, string, string, os.FileMode) (downloadResult, error)
 }
 
 type StartRequest struct {
@@ -184,10 +187,15 @@ func newManager(opts Options, versionProbe func(context.Context) (string, error)
 		lifetime = context.Background()
 	}
 	versionProbeContext, versionProbeCancel := context.WithCancel(lifetime)
+	panelRuntimeDir := strings.TrimSpace(opts.PanelRuntimeDir)
+	if panelRuntimeDir == "" {
+		panelRuntimeDir = "/var/lib/remnanode-lite/panel-runtime"
+	}
 	manager := &Manager{
 		xrayBin:             opts.XrayBin,
 		geoDir:              opts.GeoDir,
 		logDir:              opts.LogDir,
+		panelRuntimeDir:     panelRuntimeDir,
 		socketPath:          opts.InternalSocketPath,
 		token:               opts.InternalRESTToken,
 		socketPrefix:        socket,
@@ -202,6 +210,7 @@ func newManager(opts Options, versionProbe func(context.Context) (string, error)
 		killTimeout:         defaultKillTimeout,
 		processWaitDelay:    defaultProcessWaitDelay,
 		processGroupCleanup: cleanupOwnedProcessGroup,
+		downloadPanelFile:   downloadPanelFile,
 		version: versionState{
 			coreOverride: coreVersion,
 			probe:        versionProbe,

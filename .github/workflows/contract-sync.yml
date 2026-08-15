@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  OFFICIAL_NODE_COMMIT: "46fc5d2d736ff60f6c6a9a56e2661acb95d3f559"
+  OFFICIAL_NODE_COMMIT: "2c532c4e33bf5864e9867a7bdc36245cc1057eb1"
 
 permissions:
   contents: read

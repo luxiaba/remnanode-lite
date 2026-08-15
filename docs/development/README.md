@@ -14,7 +14,7 @@ You do not need to read every long-form document before making a first change:
 4. In the [architecture guide](../architecture.md), read only the data-flow, ownership, and concurrency sections for the component you will change.
 5. Choose the smallest sufficient verification from the [testing guide](testing.md). Read the [contribution guide](../../CONTRIBUTING.md) before preparing a commit.
 
-Go deeper only when the change requires it: read the [current contract baseline](contract-3.0.0.md) for Panel-visible behavior, the [versioning policy](../versioning.md) for versions or images, and the [release guide](../release.md) for a formal release. The [documentation index](../README.md) provides complete role-based navigation.
+Go deeper only when the change requires it: read the [current contract baseline](contract-3.2.2.md) for Panel-visible behavior, the [versioning policy](../versioning.md) for versions or images, and the [release guide](../release.md) for a formal release. The [documentation index](../README.md) provides complete role-based navigation.
 
 ## Development Environment
 
@@ -22,7 +22,7 @@ Go deeper only when the change requires it: read the [current contract baseline]
 
 - Git.
 - Bash 4 or later; Bash 5 is recommended for CI parity and installer work. The Bash 3.2 bundled with macOS does not support syntax used by the scripts, including `${var,,}`.
-- The exact Go version selected by the `toolchain` directive in `go.mod`, currently Go `1.26.5`.
+- The exact Go version selected by the `toolchain` directive in `go.mod`, currently Go `1.26.6`.
 - `gofmt`, included with the Go toolchain.
 - A C compiler and working CGO environment. `check-go.sh` runs the race detector over `./internal/...` and the daemon command. Install Xcode Command Line Tools on macOS or the appropriate build toolchain on Linux.
 - GNU `timeout`, called directly by supply-chain and installer checks. On macOS, install Homebrew `coreutils` and add `$(brew --prefix coreutils)/libexec/gnubin` to `PATH`.
@@ -302,7 +302,7 @@ sufficient.
 
 After the first normal test run, continue according to the change:
 
-- API and behavioral alignment: [current contract baseline](contract-3.0.0.md).
+- API and behavioral alignment: [current contract baseline](contract-3.2.2.md).
 - Concurrency and state ownership: [architecture guide](../architecture.md).
 - Local and CI verification: [testing guide](testing.md).
 - Commits and review: [contribution guide](../../CONTRIBUTING.md).

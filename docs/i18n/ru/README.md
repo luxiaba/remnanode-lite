@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/README.md; source-sha256=9f8ef0daf73c3e7f0a1ba6f66af4b82c8e58f9b26e5106d5bf7a5fc82db525ca -->
+<!-- translation: locale=ru; source=docs/README.md; source-sha256=e8226538e7b0c3915ee65fe297cb48726236ef269edd4ed288756fd2b003d98b -->
 # Документация Remnanode Lite
 
 Содержание и правила задаёт [английский индекс документации](../../README.md). Русский перевод подготовлен для операторов и иногда может обновляться с задержкой. Порядок перевода описан в [политике локализации (на английском)](../README.md).
@@ -28,7 +28,7 @@
 1. Начните с healthcheck, журналов, обновления, отката и диагностики в [руководстве по эксплуатации](operations.md).
 2. Проверьте источник и приоритет параметров в [справочнике конфигурации](configuration.md).
 3. Для памяти, диска, журналов и времени остановки используйте [бюджет ресурсов (англ.)](../../development/resource-budget.md).
-4. При проблемах протокола или жизненного цикла смотрите [архитектуру (англ.)](../../architecture.md) и [контракт 3.0.0 (англ.)](../../development/contract-3.0.0.md).
+4. При проблемах протокола или жизненного цикла смотрите [архитектуру (англ.)](../../architecture.md) и [контракт 3.2.2 (англ.)](../../development/contract-3.2.2.md).
 5. Docker откатывается к записанной exact version или manifest digest; Native — к сохранённому previous generation. Не полагайтесь на историческое значение движущегося канала.
 
 ## Руководства на русском
@@ -61,7 +61,8 @@
 | [Архитектура и устройство, англ.](../../architecture.md) | Владение компонентами, потоки запросов, Xray, плагины, сеть и ресурсы |
 | [Разработка и навигация по коду, англ.](../../development/README.md) | Инструменты Go, пакеты, команды и рабочий процесс |
 | [Стратегия тестирования, англ.](../../development/testing.md) | Unit, race, contract, Linux namespace, container и Release tests |
-| [Official 3.0.0 contract baseline](../../development/contract-3.0.0.md) | Текущие исходные доказательства, проверенные изменения, pre-start и границы Zod 4 |
+| [Official 3.2.2 contract baseline](../../development/contract-3.2.2.md) | Текущие закреплённые доказательства, optional start metadata и integrations, plugin schema 0.6.3 и известные отличия |
+| [Official 3.0.0 contract baseline](../../development/contract-3.0.0.md) | Исторические доказательства для pre-start, границ Zod 4 и выравнивания 3.0.0 |
 | [Official 2.8.0 contract baseline](../../development/contract-2.8.0.md) | Исторический официальный исходный код, 26 маршрутов и известные различия |
 | [Бюджет ресурсов, англ.](../../development/resource-budget.md) | Цель 512 MiB, инженерные измерения и защитные лимиты |
 | [Дорожная карта, англ.](../../development/roadmap.md) | Завершённые этапы и дальнейшая работа |

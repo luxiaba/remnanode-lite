@@ -40,6 +40,38 @@ func TestXrayStartDefaultsForceRestartAndAcceptsNumber(t *testing.T) {
 	}
 }
 
+func TestXrayStartAcceptsOptionalInternalsAndStripsMetadataUnknownFields(t *testing.T) {
+	t.Parallel()
+
+	body := `{
+		"internals":{
+			"metadata":{"name":"node-1","uuid":"node-uuid","id":1.5,"tags":["edge"],"countryCode":"NL","ignored":true},
+			"integrations":{"veil":{"endpoint":"https://example.com"},"enabled":true,"unset":null},
+			"hashes":{"emptyConfig":"hash","inbounds":[]},
+			"ignored":true
+		},
+		"xrayConfig":{}
+	}`
+	var request nodeapi.XrayStartRequest
+	if validation := nodeapi.DecodeJSON(strings.NewReader(body), &request); validation != nil {
+		t.Fatalf("request rejected: %+v", validation)
+	}
+	metadata := request.Internals.Metadata
+	if !metadata.Present || metadata.Null || metadata.Value.Name == nil || *metadata.Value.Name != "node-1" {
+		t.Fatalf("metadata = %+v", metadata)
+	}
+	if metadata.Value.ID == nil || *metadata.Value.ID != 1.5 {
+		t.Fatalf("metadata id = %v, want 1.5", metadata.Value.ID)
+	}
+	integrations := request.Internals.Integrations
+	if !integrations.Present || integrations.Null || len(integrations.Value) != 3 {
+		t.Fatalf("integrations = %+v", integrations)
+	}
+	if integrations.Value["enabled"] != true || integrations.Value["unset"] != nil {
+		t.Fatalf("integration values = %#v", integrations.Value)
+	}
+}
+
 func TestXrayStartDoesNotApplyControlArrayLimitToOpaqueConfig(t *testing.T) {
 	const clientsCount = 50_000
 	var body strings.Builder
@@ -90,6 +122,11 @@ func TestXrayStartRejectsContractViolations(t *testing.T) {
 		{name: "missing all", body: `{}`},
 		{name: "null force restart", body: `{"internals":{"forceRestart":null,"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`},
 		{name: "missing hashes", body: `{"internals":{},"xrayConfig":{}}`},
+		{name: "null metadata", body: `{"internals":{"metadata":null,"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`},
+		{name: "incomplete metadata", body: `{"internals":{"metadata":{"name":"n","uuid":"u","id":1,"tags":[]},"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`},
+		{name: "metadata tags are not strings", body: `{"internals":{"metadata":{"name":"n","uuid":"u","id":1,"tags":[1],"countryCode":"NL"},"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`},
+		{name: "null integrations", body: `{"internals":{"integrations":null,"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`},
+		{name: "integrations is array", body: `{"internals":{"integrations":[],"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`},
 		{name: "missing empty config", body: `{"internals":{"hashes":{"inbounds":[]}},"xrayConfig":{}}`},
 		{name: "missing inbound field", body: `{"internals":{"hashes":{"emptyConfig":"h","inbounds":[{"usersCount":1,"tag":"in"}]}},"xrayConfig":{}}`},
 		{name: "config is array", body: `{"internals":{"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":[]}`},

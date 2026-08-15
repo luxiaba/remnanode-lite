@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=f07e7cb32188d5dd96ac9bf35b13e75b60b70d8d2258b84f21b33482f73ceacb -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=12b84c8f07c5d63d378eb801b563468fea466d108b6f9ea18aca9c60b348ea07 -->
 <div align="center">
 
 # Remnanode Lite
@@ -12,7 +12,7 @@
 [![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
 [![Candidate](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
 [![Security](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml/badge.svg)](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml)
-[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.26.6-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 [Docker 快速部署](#docker-快速部署) · [原生 Linux](#原生-linux) · [配置](docs/i18n/zh-CN/configuration.md) · [运维](docs/i18n/zh-CN/operations.md) · [完整文档](docs/i18n/zh-CN/README.md)
@@ -28,13 +28,13 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 
 ## 主要特点
 
-- 实现 Remnawave Node `3.0.0` API 契约。
+- 实现 Remnawave Node `3.2.2` API 契约。
 - 使用一个 Go 进程直接管理 rw-core，不依赖 Node.js 或 s6。
 - 提供面向 512 MiB 服务器维护的低内存 Compose 配置。
 - 支持用户热更新、统计、连接管理和官方插件规则格式，包括由可信 Panel 配置启用的 pre-start 陈旧 Unix socket 清理。
 - 提供 amd64/arm64 GHCR 镜像，并附带 SBOM、构建来源和证明。
 - Native Linux 的安装、升级、回滚和修复由 `rnlctl` 统一处理。
-- 只用一个 Compose 文件即可部署，不需要源码或持久化数据卷，`.env` 仍为可选项。
+- Docker 部署只需一个 Compose 文件；Compose 会自动创建并管理 `remnanode-state` 缓存卷，`.env` 仍为可选项。
 
 ## 选择部署方式
 
@@ -201,8 +201,10 @@ docker exec -it remnanode-lite sh -c \
 docker exec remnanode-lite remnanode-lite version
 ```
 
-如果要切换精确版本，先修改 `.env` 中的 `REMNANODE_IMAGE`。只有明确不使用
-`.env` 时才直接修改 Compose 中的 `image:`。随后拉取镜像并重建容器：
+如果要切换精确版本，应先使用目标 Release 附带的 Compose 模板，同时保留 `.env`
+和有意设置的本地 override。从 `3.0.0` 升级到 `3.2.2` 时必须这样做，因为新部署
+增加了 `remnanode-state` volume。随后修改 `.env` 中的 `REMNANODE_IMAGE`；只有
+明确不使用 `.env` 时才直接修改 Compose 中的 `image:`，然后拉取镜像并重建容器：
 
 ```bash
 docker compose pull
@@ -230,7 +232,7 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | 已发布的精确 Release |
 | Native 主机 | 按发行版划分，详见 [Native 主机矩阵](docs/i18n/zh-CN/deployment-native.md#native-主机矩阵) |
-| Node 契约 | `3.0.0` |
+| Node 契约 | `3.2.2` |
 | rw-core | `v26.7.28` |
 | 平台 | `linux/amd64`、`linux/arm64` |
 | 整机目标 | `512 MiB RAM / 1 vCPU / 2 GB disk` |
@@ -250,7 +252,7 @@ flowchart LR
     Core --> Traffic["代理流量"]
 ```
 
-Node 负责管理 rw-core 进程及其运行状态，Xray 配置始终以 Panel 下发的内容为准。因此，重建容器不需要配置数据卷，Panel 会重新下发配置。包结构、生命周期和数据流见 [架构与运行设计](docs/i18n/zh-CN/architecture.md)。
+Node 负责管理 rw-core 进程及其运行状态，Xray 配置始终以 Panel 下发的内容为准。Compose 自动创建的 `remnanode-state` 持久卷不保存该配置，仅用于缓存由 Panel 配置派生的 custom Core 和 GeoData 资产。正常配置无需手工管理该卷，内置资产仍作为回退。包结构、生命周期和数据流见 [架构与运行设计](docs/i18n/zh-CN/architecture.md)。
 
 ## 文档
 

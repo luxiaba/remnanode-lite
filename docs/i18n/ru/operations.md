@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/operations.md; source-sha256=2fec0f211ec7497f3065d09ce8de5c82de961b526758fde3ac9fef165d347a9d -->
+<!-- translation: locale=ru; source=docs/operations.md; source-sha256=6a4a64422c4c496b2b26fb48646d013840a49b18072b5b6068165dc3f3a26fe4 -->
 
 # Эксплуатация и диагностика
 
@@ -175,9 +175,10 @@ sudo rnlctl start
 
 1. Запишите текущий точный tag или manifest digest.
 2. Прочитайте Release notes.
-3. Измените `REMNANODE_IMAGE` в `.env` или намеренно inline `image:`.
-4. Выполните pull и recreate.
-5. Проверьте health, Panel и representative traffic.
+3. Получите и проверьте шаблон Compose из целевого Release, сохранив `.env` и намеренные локальные переопределения. Это обязательно при обновлении с `3.0.0` до `3.2.2`, поскольку развёртывание добавляет `remnanode-state`.
+4. Измените `REMNANODE_IMAGE` в `.env` или намеренно inline `image:`.
+5. Выполните pull и recreate.
+6. Проверьте health, Panel и representative traffic.
 
 ```bash
 docker compose config --quiet

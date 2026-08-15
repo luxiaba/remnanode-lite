@@ -50,7 +50,16 @@ var allowedDynamicModuleImports = map[string]map[string]string{
 	},
 }
 
+var allowedLocalDynamicModuleImports = map[string]map[string]string{
+	"src/integration-modules/integrations.module.ts": {
+		"DESCRIPTORS.map": "DESCRIPTORS.map((descriptor) => ConditionalModule.registerWhen(descriptor.module, descriptor.isAvailable, { debug: false }), )",
+	},
+}
+
 var allowedExternalModuleImports = map[string]map[string]string{
+	"src/modules/remnawave-node.modules.ts": {
+		"IntegrationsModule": "@integration-modules/integrations.module",
+	},
 	"src/modules/_plugin/plugin.module.ts": {
 		"CqrsModule": "@nestjs/cqrs",
 	},
@@ -276,7 +285,7 @@ func parseNestModule(sourcePath, source string) (nestModule, error) {
 	if err != nil {
 		return nestModule{}, fmt.Errorf("parse Nest module %s metadata: %w", sourcePath, err)
 	}
-	imports, err := parseTopLevelArray(properties["imports"])
+	imports, err := parseNestModuleImports(sourcePath, properties["imports"])
 	if err != nil {
 		return nestModule{}, fmt.Errorf("parse Nest module %s imports: %w", sourcePath, err)
 	}
@@ -291,6 +300,34 @@ func parseNestModule(sourcePath, source string) (nestModule, error) {
 		controllerNames: controllers,
 		bindings:        class.imports,
 	}, nil
+}
+
+func parseNestModuleImports(sourcePath, expression string) ([]string, error) {
+	imports, err := parseTopLevelArray(expression)
+	if err == nil {
+		return imports, nil
+	}
+
+	item := strings.TrimSpace(expression)
+	call := dynamicModuleCallPattern.FindStringSubmatchIndex(item)
+	if call == nil {
+		return nil, err
+	}
+	open := call[1] - 1
+	end, balanceErr := balancedEnd(item, open, '(', ')')
+	if balanceErr != nil || strings.TrimSpace(item[end+1:]) != "" {
+		return nil, err
+	}
+	callee := item[call[2]:call[3]] + "." + item[call[4]:call[5]]
+	if !isAllowedLocalDynamicModuleImport(sourcePath, callee, item) {
+		return nil, err
+	}
+	return []string{item}, nil
+}
+
+func isAllowedLocalDynamicModuleImport(sourcePath, callee, expression string) bool {
+	want := allowedLocalDynamicModuleImports[sourcePath][callee]
+	return want != "" && strings.Join(strings.Fields(expression), " ") == want
 }
 
 func parseNestController(sourcePath, source string) (decoratedClass, error) {
@@ -483,6 +520,12 @@ func resolveModuleMetadataImport(module nestModule, item string, modulesBySource
 	base := item[call[2]:call[3]]
 	method := item[call[4]:call[5]]
 	callee := base + "." + method
+	if isAllowedLocalDynamicModuleImport(module.source, callee, item) {
+		if _, imported := module.bindings[base]; imported {
+			return "", fmt.Errorf("Nest module %s local dynamic import %s unexpectedly has a static import binding", module.source, callee)
+		}
+		return "", nil
+	}
 	wantSource := allowedDynamicModuleImports[module.source][callee]
 	if wantSource == "" {
 		return "", fmt.Errorf("Nest module %s has unapproved dynamic import %s", module.source, callee)

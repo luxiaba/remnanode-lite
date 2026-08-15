@@ -353,6 +353,7 @@ func runNode() (runErr error) {
 		XrayBin:            cfg.XrayBin,
 		GeoDir:             cfg.GeoDir,
 		LogDir:             cfg.LogDir,
+		PanelRuntimeDir:    config.DefaultPanelRuntimeDir,
 		InternalSocketPath: cfg.InternalSocketPath,
 		InternalRESTToken:  cfg.InternalRESTToken,
 		DisableHashCheck:   cfg.DisableHashedSetCheck,

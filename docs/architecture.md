@@ -4,7 +4,7 @@
 
 This document is for maintainers encountering Remnanode Lite for the first time. It describes the boundaries, runtime flows, state ownership, and resource constraints implemented by the current code. Its purpose is to explain how the system works and which invariants a code change must preserve. It is not a deployment reference or a release checklist for a particular version.
 
-For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the current external API and lifecycle delta, see the [official 3.0.0 contract baseline](development/contract-3.0.0.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
+For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the current external API and lifecycle delta, see the [official 3.2.2 contract baseline](development/contract-3.2.2.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
 
 ## 1. System Role
 
@@ -340,6 +340,7 @@ sequenceDiagram
     else restart required
         M->>M: inject API/stats/policy/plugin config
         M->>M: serialize bounded pending JSON
+        M->>M: prepare Panel-selected Core/GeoData cache
         M->>C: stop prior owned process group
         M->>C: spawn rw-core with http+unix config URL
         C->>U: GET /internal/get-config
@@ -361,16 +362,17 @@ The concrete steps are:
 4. Override or inject stats, API, policy, the abstract tunnel inbound, and the API routing rule.
 5. Inject the Torrent blackhole outbound, routing rule, and webhook according to the committed and valid Plugin snapshot.
 6. Build compact hash state, then serialize the final configuration as canonical JSON bounded to `20 MiB` and 128 levels.
-7. Stop the previous process and verify its cleanup.
-8. Store the JSON in `pendingConfigJSON` and start rw-core:
+7. Prepare any Panel-selected custom Core and GeoData under `/var/lib/remnanode-lite/panel-runtime`. The bundled Core and GeoData remain the fallback; a custom Core is accepted only after its SHA-256 and reported version have been verified.
+8. Stop the previous process and verify its cleanup.
+9. Store the JSON in `pendingConfigJSON` and start rw-core:
 
    ```text
    rw-core -config http+unix://<filesystem-socket>/internal/get-config -format json
    ```
 
-9. Wait for abstract gRPC readiness. The default is 20 seconds in normal mode and 90 seconds with `LOW_MEMORY=1`, probing every 2 seconds.
-10. Verify that the current operation still owns the process epoch and that the process has not exited, probe the core version, and atomically publish running state, hash state, and version.
-11. Release the complete JSON immediately, retaining only compact hashes and inbound tags.
+10. Wait for abstract gRPC readiness. The default is 20 seconds in normal mode and 90 seconds with `LOW_MEMORY=1`, probing every 2 seconds.
+11. Verify that the current operation still owns the process epoch and that the process has not exited, probe the core version, and atomically publish running state, hash state, and version.
+12. Release the complete JSON immediately, retaining only compact hashes and inbound tags.
 
 `CurrentConfigJSON()` is not a runtime dump-config endpoint. It returns pending JSON only during startup and returns `{}` after rw-core becomes ready. After a Node restart, it also does not restore an old Panel configuration from disk; it waits for Panel to send a new start request.
 
@@ -527,10 +529,13 @@ The outer systemd or Compose stop grace must exceed the application's 25-second 
 | ASN prefix data | `asn.DB` | Read-only file + `ReadAt` | Read-only on-disk asset |
 | nftables rules | Linux kernel | Plugin transaction + backend mutex | Network namespace |
 | rw-core logs | Capped writers / periodic rotation | Writer mutex / rotation mutex | `LOG_DIR`, normally tmpfs in a container |
+| Panel-selected Core/GeoData cache | `xray.Manager` and rw-core | Serialized start preparation + filesystem | Across process/container restarts until deleted or uninstalled |
 | Native selected generations | `rnlctl` | Process lock + durable journal + atomic files/symlinks | Across host restarts until upgrade/uninstall |
 | Native service intent and account ownership | `rnlctl` | Strict JSON state committed after service verification | Across host restarts until uninstall/purge |
 
 The Node does not persist the complete Xray configuration received from Panel, the Plugin snapshot, user hashes, or Torrent reports. Correct recovery after a process restart comes from Panel synchronizing state again, not from reading stale local state.
+
+`/var/lib/remnanode-lite/panel-runtime/{assets,cores}` is a derived, deletable cache rather than authoritative configuration. Docker stores it in the `remnanode-state` named volume while keeping the root filesystem read-only; Native uses its existing application state directory. It is not part of a Native generation or lifecycle journal, and downloaded files are not covered by `release/runtime-assets.lock.json` or the release SBOM. The immutable bundled Core and GeoData remain the recovery fallback.
 
 Native lifecycle state records release identity, generation selection, service intent, repair cache identity, and whether the installer created the service account. It contains no Panel Secret and no active Xray configuration. `/etc/remnanode-lite/secret.key` is a separate root-managed file.
 

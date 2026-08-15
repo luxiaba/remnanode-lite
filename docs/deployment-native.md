@@ -211,6 +211,9 @@ An extracted bundle can install itself with `sudo ./install.sh`, but an archive 
 └── secret.key
 
 /var/lib/remnanode-lite/
+└── panel-runtime/                              # created when Panel selects dynamic assets
+    ├── assets/
+    └── cores/
 /var/log/remnanode-lite/
 /run/remnanode-lite/
 
@@ -234,6 +237,12 @@ rc-service remnanode-lite status
 ```
 
 The base systemd unit works with systemd 239. On systemd 247 or newer, the installer also places `20-remnanode-lite-hardening.conf` in the unit's drop-in directory. Local overrides belong in a later file such as `/etc/systemd/system/remnanode-lite.service.d/90-local.conf`; do not edit the managed unit in place.
+
+## Panel-selected Core and GeoData cache
+
+Native reuses the service application state directory at `/var/lib/remnanode-lite` (`StateDirectory=remnanode-lite` on systemd; OpenRC prepares the same path). If the Panel selects a custom Core or GeoData, derived files are cached under `panel-runtime/{assets,cores}`. They are not part of a release generation, the lifecycle journal, `release/runtime-assets.lock.json`, or the release SBOM. The bundled Core and GeoData remain the fallback, so this cache can be deleted while the service is stopped and rebuilt by Panel synchronization.
+
+Initial Node downloads require HTTPS. Each download is limited to `128 MiB`, `15s` total, and `5s` without data; at most five GeoData assets download concurrently. A custom Core must also pass its configured SHA-256 and version probe. rw-core can later refresh GeoData according to a Panel-provided cron configuration; those later writes are not subject to the Node's initial-download size or total-time limits and can increase disk use. Enable dynamic assets only through a trusted Panel administrator and monitor free space.
 
 ## Verify the installation
 
@@ -508,7 +517,7 @@ See the [configuration reference](configuration.md) for the complete setting tab
 
 ## Uninstall
 
-A normal uninstall removes the service, binaries, generations, runtime state, logs, and repair bundle cache. It keeps `/etc/remnanode-lite` and records account ownership so a later reinstall can safely reuse the configuration:
+A normal uninstall removes the service, binaries, generations, runtime state (including the Panel-derived Core/GeoData cache), logs, and repair bundle cache. It keeps `/etc/remnanode-lite` and records account ownership so a later reinstall can safely reuse the configuration:
 
 ```bash
 sudo rnlctl uninstall

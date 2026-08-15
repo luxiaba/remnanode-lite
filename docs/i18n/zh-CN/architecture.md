@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=86fafae74d56f980174acaae8168514427c1a900d798da66da04068654f999c0 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=605310166f571d145e880e04addc060c9afebb1e8023d4d4234d1799f180ef62 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -7,7 +7,7 @@
 
 本文面向第一次接触 Remnanode Lite 的维护者，描述当前代码真实采用的边界、运行流程、状态所有权和资源约束。它回答的是“系统如何工作、修改代码时应守住什么”，而不是部署参数或某个版本的发布清单。
 
-部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.0.0 契约基线](development/contract-3.0.0.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
+部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.2.2 契约基线](development/contract-3.2.2.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
 
 ## 1. 系统定位
 
@@ -340,6 +340,7 @@ sequenceDiagram
     else restart required
         M->>M: inject API/stats/policy/plugin config
         M->>M: serialize bounded pending JSON
+        M->>M: prepare Panel-selected Core/GeoData cache
         M->>C: stop prior owned process group
         M->>C: spawn rw-core with http+unix config URL
         C->>U: GET /internal/get-config
@@ -361,16 +362,17 @@ sequenceDiagram
 4. 覆盖/注入 stats、API、policy、abstract tunnel inbound 和 API routing rule。
 5. 根据已提交且有效的 Plugin snapshot 注入 Torrent blackhole outbound、routing rule 和 webhook。
 6. 构建紧凑 hash state，并把最终配置序列化为最多 `20 MiB`、128 层的 canonical JSON。
-7. 停止并确认上一进程已清理。
-8. 把 JSON 放入 `pendingConfigJSON`，启动 rw-core：
+7. 在 `/var/lib/remnanode-lite/panel-runtime` 下准备 Panel 选择的自定义 Core 和 GeoData。内置 Core 和 GeoData 始终作为 fallback；自定义 Core 只有在 SHA-256 与其报告的版本均通过校验后才会使用。
+8. 停止并确认上一进程已清理。
+9. 把 JSON 放入 `pendingConfigJSON`，启动 rw-core：
 
    ```text
    rw-core -config http+unix://<filesystem-socket>/internal/get-config -format json
    ```
 
-9. 等待 abstract gRPC ready。普通模式默认 20 秒，`LOW_MEMORY=1` 默认 90 秒，每 2 秒探测。
-10. 确认当前 operation 仍拥有该 process epoch 且进程未退出，探测 core 版本，原子发布 running、hash state 和 version。
-11. 立即释放完整 JSON，只保留紧凑哈希与 inbound tag。
+10. 等待 abstract gRPC ready。普通模式默认 20 秒，`LOW_MEMORY=1` 默认 90 秒，每 2 秒探测。
+11. 确认当前 operation 仍拥有该 process epoch 且进程未退出，探测 core 版本，原子发布 running、hash state 和 version。
+12. 立即释放完整 JSON，只保留紧凑哈希与 inbound tag。
 
 `CurrentConfigJSON()` 不是运行期 dump-config。它只在启动阶段返回 pending JSON；rw-core ready 后返回 `{}`。Node 重启后也不会从磁盘恢复旧 Panel 配置，而是等待 Panel 重新下发 start。
 
@@ -527,8 +529,11 @@ flowchart TD
 | ASN prefix data | `asn.DB` | read-only file + `ReadAt` | 磁盘只读资产 |
 | nftables rules | Linux kernel | Plugin transaction + backend mutex | network namespace |
 | rw-core logs | capped writers / periodic rotation | writer mutex / rotation mutex | `LOG_DIR`，容器通常为 tmpfs |
+| Panel 选择的 Core/GeoData 缓存 | `xray.Manager` 与 rw-core | 串行 start 准备 + 文件系统 | 跨进程/容器重启，直到被删除或卸载 |
 
 Node 不持久化 Panel 下发的完整 Xray 配置、Plugin snapshot、用户哈希或 Torrent report。进程重启后的正确恢复来源是 Panel 重新同步，而不是读取本地旧状态。
+
+`/var/lib/remnanode-lite/panel-runtime/{assets,cores}` 是可删除的派生缓存，不是权威配置。Docker 在 rootfs 保持只读的同时，把它放入 `remnanode-state` named volume；Native 复用既有应用状态目录。它不属于 Native generation 或 lifecycle journal，下载文件也不受 `release/runtime-assets.lock.json` 或 release SBOM 覆盖。不可变的内置 Core 和 GeoData 始终是恢复 fallback。
 
 ASN 数据库使用自定义的 `RWASNDB\x01` 小端格式。只有命中某个 ASN 时才读取对应的前缀数据，不使用 mmap，也不会把整个数据库载入内存。启动时只检查文件头和 magic；文件其他位置的损坏通常表现为空查询结果，因此这不等于启动时完成全库校验。
 

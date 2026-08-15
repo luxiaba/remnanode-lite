@@ -28,6 +28,8 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
+    volumes:
+      - remnanode-state:/var/lib/remnanode-lite
 
     tmpfs:
       - /run/remnanode-lite:rw,noexec,nosuid,nodev,size=4m,mode=0700
@@ -56,3 +58,6 @@ services:
       options:
         max-size: 2m
         max-file: "2"
+
+volumes:
+  remnanode-state:

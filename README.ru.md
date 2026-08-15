@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=README.md; source-sha256=f07e7cb32188d5dd96ac9bf35b13e75b60b70d8d2258b84f21b33482f73ceacb -->
+<!-- translation: locale=ru; source=README.md; source-sha256=12b84c8f07c5d63d378eb801b563468fea466d108b6f9ea18aca9c60b348ea07 -->
 <div align="center">
 
 # Remnanode Lite
@@ -12,7 +12,7 @@
 [![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
 [![Candidate](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
 [![Security](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml/badge.svg)](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml)
-[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.26.6-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 [Быстрый запуск Docker](#быстрый-запуск-docker) · [Native Linux](#native-linux) · [Настройка](docs/i18n/ru/configuration.md) · [Эксплуатация](docs/i18n/ru/operations.md) · [Документация](docs/i18n/ru/README.md)
@@ -28,13 +28,13 @@ Remnanode Lite работает как Remnawave-совместимый Node н�
 
 ## Возможности
 
-- Реализует контракт API Remnawave Node `3.0.0`.
+- Реализует контракт API Remnawave Node `3.2.2`.
 - Node работает как единый процесс на Go и напрямую управляет rw-core; Node.js и s6 не требуются.
 - Использует единый поддерживаемый профиль с пониженным потреблением памяти для контейнера и Native-службы на серверах с 512 MiB RAM.
 - Поддерживает обновление пользователей на лету, сбор статистики, управление соединениями и официальные форматы правил плагинов, включая очистку устаревших Unix-сокетов перед запуском по доверенной конфигурации Panel.
 - Публикует в GHCR мультиархитектурные образы с SBOM, данными о происхождении и аттестациями сборки.
 - Native Linux поддерживает транзакционные установку, обновление, откат и восстановление через `rnlctl`.
-- Для развёртывания достаточно одного Compose-файла. Исходный код и постоянный том данных не нужны, а `.env` остаётся необязательным.
+- Для развёртывания достаточно одного Compose-файла. Compose автоматически создаёт и обслуживает том кэша `remnanode-state`, а `.env` остаётся необязательным.
 
 ## Выбор способа развёртывания
 
@@ -208,9 +208,12 @@ docker exec -it remnanode-lite sh -c \
 docker exec remnanode-lite remnanode-lite version
 ```
 
-При переходе между точными версиями сначала измените `REMNANODE_IMAGE` в
-`.env`. Если вы намеренно работаете без `.env`, измените вместо этого `image:`
-в Compose-файле. Затем загрузите образ и пересоздайте контейнер:
+При переходе между точными версиями сначала используйте шаблон Compose из
+целевого Release, сохранив `.env` и намеренные локальные переопределения. Это
+обязательно при обновлении с `3.0.0` до `3.2.2`, поскольку новое развёртывание
+добавляет том `remnanode-state`. Затем измените `REMNANODE_IMAGE` в `.env` или
+inline-значение `image:`, если вы намеренно работаете без `.env`, и пересоздайте
+контейнер:
 
 ```bash
 docker compose pull
@@ -238,7 +241,7 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | Точные опубликованные Releases |
 | Хосты для Native | Зависит от дистрибутива; см. [матрицу хостов Native](docs/i18n/ru/deployment-native.md#матрица-хостов-native) |
-| Контракт Node | `3.0.0` |
+| Контракт Node | `3.2.2` |
 | rw-core | `v26.7.28` |
 | Платформы | `linux/amd64`, `linux/arm64` |
 | Целевая конфигурация хоста | `512 MiB RAM / 1 vCPU / 2 GB диска` |
@@ -258,7 +261,7 @@ flowchart LR
     Core --> Traffic["Трафик через прокси"]
 ```
 
-Node управляет процессом rw-core и текущим состоянием сервиса. Активная конфигурация Xray поступает из Panel, поэтому после пересоздания контейнера отдельный том для конфигурации не нужен. Границы между пакетами, правила жизненного цикла и потоки данных описаны в [документе об архитектуре (на английском)](docs/architecture.md).
+Node управляет процессом rw-core и текущим состоянием сервиса. Активная конфигурация Xray по-прежнему поступает из Panel. Создаваемый Compose постоянный том `remnanode-state` не хранит эту конфигурацию и используется только как кэш custom Core и GeoData, полученных из конфигурации Panel. При обычной настройке том не требует ручного управления, а встроенные ресурсы остаются резервным вариантом. Границы между пакетами, правила жизненного цикла и потоки данных описаны в [документе об архитектуре (на английском)](docs/architecture.md).
 
 ## Документация
 

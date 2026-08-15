@@ -2,11 +2,11 @@ module github.com/luxiaba/remnanode-lite
 
 go 1.26
 
-toolchain go1.26.5
+toolchain go1.26.6
 
 require (
 	github.com/andybalholm/brotli v1.2.2
-	github.com/klauspost/compress v1.19.1
+	github.com/klauspost/compress v1.19.2
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/net v0.57.0
 	golang.org/x/sys v0.47.0

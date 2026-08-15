@@ -2,9 +2,13 @@
   "schemaVersion": 1,
   "repository": "https://github.com/remnawave/node.git",
   "packageName": "@remnawave/node",
-  "version": "3.0.0",
-  "commit": "46fc5d2d736ff60f6c6a9a56e2661acb95d3f559",
+  "version": "3.2.2",
+  "commit": "2c532c4e33bf5864e9867a7bdc36245cc1057eb1",
   "files": [
+    {
+      "path": "docker/rootfs/etc/s6-overlay/s6-rc.d/xray/timeout-kill",
+      "sha256": "f5aee7df0c39c9481508d69657ba4a0d39b7198bf97969ad11d50207a7f60228"
+    },
     {
       "path": "libs/contract/api/controllers/handler.ts",
       "sha256": "aae61fff29afd3cb4a009ba3bc37fd3a1123f361264852e7f570e2781d0d6d18"
@@ -123,7 +127,7 @@
     },
     {
       "path": "libs/contract/commands/xray/start.command.ts",
-      "sha256": "0a8b284f93032db5e6cf44bc54ee48680025261c71579daf0e3488e1080e7a4a"
+      "sha256": "07de641e7ad2b22a8b93ee0665a722133ddbb7736af7e14235e828afbfb3a352"
     },
     {
       "path": "libs/contract/commands/xray/stop.command.ts",
@@ -142,6 +146,10 @@
       "sha256": "799ef663b0a21bda97b833fd6eaed661e6baff55701ae7a4310b3ac1f0e39c81"
     },
     {
+      "path": "libs/contract/models/node-metadata.schema.ts",
+      "sha256": "c10146dcfcfdf3266c07ebad495e216f9b4f0b58cf17027ae0b9fb90b536bd06"
+    },
+    {
       "path": "libs/contract/models/node-system.schema.ts",
       "sha256": "163a576401078c145637b23fd187beac239bbf882cd5f5bbf0a24e91c6118668"
     },
@@ -155,11 +163,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "a4fb7587c3633582fb69e99ab39ef4199831df3e27e0f5e4b1121ac2c2a89339"
+      "sha256": "45db83a18d8bca8b4a2cc3999372e2e8e788fed6a18ef362ef1a1545a96aea61"
     },
     {
       "path": "package.json",
-      "sha256": "7bfb4c916369e6238ed4e374345d03476132568ad9aad1f789c87185b0d7ddd4"
+      "sha256": "71bc42f9aa0f3887d099bc72161b8e30b00de5ec862dcb6defad3356136306fc"
     },
     {
       "path": "src/app.module.ts",
@@ -178,12 +186,36 @@
       "sha256": "e172148f31132b136ea725377ab055f95e249cacf8c5f7b3b2b924d3d2ce178c"
     },
     {
+      "path": "src/common/utils/download-file.ts",
+      "sha256": "3abda76be2ab438b418216b3fac2edf82b66e7772ce231e0ceead472d3283948"
+    },
+    {
+      "path": "src/common/utils/read-core-version.ts",
+      "sha256": "1d2327488d5fbf8d4f86f991707fe661d3cc29f30ef68b072569bae66f397e9a"
+    },
+    {
+      "path": "src/integration-modules/integrations.contract.ts",
+      "sha256": "3b4ccf5ccc83c8493eecbc569d1f9c098a76479b2c7e95aa9ace5be7a1adcc02"
+    },
+    {
+      "path": "src/integration-modules/integrations.module.ts",
+      "sha256": "d192ef563dd74a6a1209b3c18d2112c645b096f3eddbececbd6cc0570b8c01eb"
+    },
+    {
+      "path": "src/integration-modules/integrations.service.ts",
+      "sha256": "0a9f7167a863a29188f6f3faf57ea344061f8c36644b2856d40a023f0f017fdb"
+    },
+    {
       "path": "src/main.ts",
       "sha256": "19363060d7860ed2413828622fbff3594bc341eab429b6c656f170076125e5fa"
     },
     {
       "path": "src/modules/_plugin/commands/run-pre-start/run-pre-start.handler.ts",
       "sha256": "66a9e0cd2b506c39c71ad17eab10b6bd133afc9aba6ff533e2fc708f0dd11011"
+    },
+    {
+      "path": "src/modules/_plugin/events/xray-webhook/xray-webhook.handler.ts",
+      "sha256": "35b88e24cee959f7ec84779bb35c9837cf40785c4cef970c3e2c688b570ccb9f"
     },
     {
       "path": "src/modules/_plugin/plugin.controller.ts",
@@ -195,7 +227,7 @@
     },
     {
       "path": "src/modules/_plugin/plugin.service.ts",
-      "sha256": "dac34b9586e20206fff3cacd2774358ec6d4e3cc82247bb45d74f4a35f6b94d5"
+      "sha256": "71294afae53c3f4c60a2d66c6dbf1eeaa78b92fc554d7b2e4ba1032934dfed66"
     },
     {
       "path": "src/modules/_plugin/services/plugin-state.service.ts",
@@ -208,6 +240,10 @@
     {
       "path": "src/modules/_plugin/services/states/pre-start.state.ts",
       "sha256": "33d2bc2abd02c1edee98ae87a5c09552d811b34e2a007d671c5102baae0089db"
+    },
+    {
+      "path": "src/modules/_plugin/services/states/torrent-blocker.state.ts",
+      "sha256": "d48d793ef71f3ae64ef69ce8934622484064d55ea13f20412e8c37a1442d5553"
     },
     {
       "path": "src/modules/asn-lmdb/asn-lmdb.module.ts",
@@ -235,7 +271,7 @@
     },
     {
       "path": "src/modules/remnawave-node.modules.ts",
-      "sha256": "914511b3d3eeca78c0d576e2d79e00d034075c110f8e1bbbdac33d50b30b77e5"
+      "sha256": "220d1786502a2bdf3429368aeed4c3bd19287315b57adb13ae3309fa1fe4d25f"
     },
     {
       "path": "src/modules/stats/stats.controller.ts",
@@ -246,16 +282,28 @@
       "sha256": "8c258d79379d1e566d8e5dc84210e3cae3f12ffd840ef06a4a698765b8033905"
     },
     {
+      "path": "src/modules/xray-core/core-loader.service.ts",
+      "sha256": "894fdc1078d8fcf28c6b2334529f733ed86dec1b8606c87ade951e3a0b860c04"
+    },
+    {
+      "path": "src/modules/xray-core/geodata.service.ts",
+      "sha256": "16ef6ab9be8885b54a58dab1a9f4c2b7a3add9bfc5fca3306d45be8cdd244fd6"
+    },
+    {
+      "path": "src/modules/xray-core/xray-process.service.ts",
+      "sha256": "71feef3e352b32db98555fe2034bb7f98c7e9b63000720f8566bf5de6ab27c69"
+    },
+    {
       "path": "src/modules/xray-core/xray.controller.ts",
       "sha256": "008e670306cf6d8ab7195fbb8c30ea913a834408a400ac7e03cd013a98eedf83"
     },
     {
       "path": "src/modules/xray-core/xray.module.ts",
-      "sha256": "1aeb685c107cee562dc3b003271fc33c81a9dac5562cdb23c78198275120b58c"
+      "sha256": "c5e546cab90bc575346cc9d01d8bb0017cbb1bf84116c3fa576e53d98596898b"
     },
     {
       "path": "src/modules/xray-core/xray.service.ts",
-      "sha256": "2210fca26769cb8e8e7cf61db421ee4555feb42f25f1847f7717d0a330852d38"
+      "sha256": "958a0dc729e05a3b8ec80fce1c207e679320c2fa98914f179575b2b227631280"
     }
   ],
   "routes": [

@@ -10,8 +10,8 @@ import (
 
 const (
 	OfficialNodeRepository = "https://github.com/remnawave/node.git"
-	OfficialNodeVersion    = "3.0.0"
-	OfficialNodeCommit     = "46fc5d2d736ff60f6c6a9a56e2661acb95d3f559"
+	OfficialNodeVersion    = "3.2.2"
+	OfficialNodeCommit     = "2c532c4e33bf5864e9867a7bdc36245cc1057eb1"
 )
 
 // RouteContract is one executable route contract backed by the pinned
@@ -93,7 +93,9 @@ func buildOfficialRoutes() []RouteContract {
 			"xray.start", http.MethodPost, "/node/xray/start",
 			`{"internals":{"forceRestart":false,"hashes":{"emptyConfig":"empty-hash","inbounds":[]}},"xrayConfig":{}}`,
 			[]string{
+				"synchronize enabled integrations before evaluating the core restart",
 				"start or replace the rw-core process",
+				"prepare configured core and GeoData assets before starting rw-core",
 				"run configured pre-start cleanup after the old core stops and before its replacement starts",
 				"replace active config and inbound hash state",
 			},
@@ -101,9 +103,18 @@ func buildOfficialRoutes() []RouteContract {
 			[]string{
 				controller("xray-core/xray.controller.ts"),
 				command("xray/start.command.ts"),
+				"libs/contract/models/node-metadata.schema.ts",
+				"src/common/utils/download-file.ts",
+				"src/common/utils/read-core-version.ts",
+				"src/integration-modules/integrations.contract.ts",
+				"src/integration-modules/integrations.service.ts",
 				"src/modules/xray-core/xray.service.ts",
+				"src/modules/xray-core/core-loader.service.ts",
+				"src/modules/xray-core/geodata.service.ts",
+				"src/modules/xray-core/xray-process.service.ts",
 				"src/modules/_plugin/commands/run-pre-start/run-pre-start.handler.ts",
 				"src/modules/_plugin/services/pre-start.service.ts",
+				"docker/rootfs/etc/s6-overlay/s6-rc.d/xray/timeout-kill",
 				"libs/contract/constants/errors/known-errors.ts",
 			},
 		),
@@ -243,9 +254,11 @@ func buildOfficialRoutes() []RouteContract {
 			[]string{
 				controller("_plugin/plugin.controller.ts"),
 				command("plugin/sync.command.ts"),
+				"src/modules/_plugin/events/xray-webhook/xray-webhook.handler.ts",
 				"src/modules/_plugin/plugin.service.ts",
 				"src/modules/_plugin/services/plugin-state.service.ts",
 				"src/modules/_plugin/services/states/pre-start.state.ts",
+				"src/modules/_plugin/services/states/torrent-blocker.state.ts",
 			},
 		),
 		route(
@@ -282,10 +295,11 @@ func OfficialRoutes() []RouteContract {
 // executable contract. The list is stable and contains no duplicates.
 func OfficialSourceFiles() []string {
 	sources := map[string]struct{}{
-		"package.json":                                           {},
-		"package-lock.json":                                      {},
-		"src/app.module.ts":                                      {},
-		"src/main.ts":                                            {},
+		"package.json":      {},
+		"package-lock.json": {},
+		"src/app.module.ts": {},
+		"src/main.ts":       {},
+		"src/integration-modules/integrations.module.ts":         {},
 		"src/modules/remnawave-node.modules.ts":                  {},
 		"src/modules/_plugin/plugin.module.ts":                   {},
 		"src/modules/asn-lmdb/asn-lmdb.module.ts":                {},

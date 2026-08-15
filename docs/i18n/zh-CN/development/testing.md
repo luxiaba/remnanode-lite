@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=eb91b718deb1a815ad3152771272ec0725b99c0151cbba8555a4a6f607216edb -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=8b953226dfaed843cf27b8fa0b1a987796ddcde01b9973a22041bd5172e1a0b2 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -143,7 +143,7 @@ REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 ### 外部插件 schema 证据
 
 官方 Node 的插件 `config` schema 来自独立 npm 包，不在固定源码 checkout 内。当前
-`@remnawave/node-plugins@0.6.0` tarball 可以在隔离临时目录中复核：
+`@remnawave/node-plugins@0.6.3` tarball 可以在隔离临时目录中复核：
 
 ```bash
 plugin_tgz="$(mktemp)"
@@ -151,13 +151,13 @@ trap 'rm -f "$plugin_tgz"' EXIT
 
 curl --fail --location --silent --show-error \
   --proto '=https' --tlsv1.2 \
-  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.6.0.tgz \
+  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.6.3.tgz \
   -o "$plugin_tgz"
 
 test "$(openssl dgst -sha1 "$plugin_tgz" | awk '{print $NF}')" = \
-  278e0d0e9180f22144580e1ad1589d82588bb285
+  9562fe8a6d90ec646023211ee7487cbede91fcdc
 test "sha512-$(openssl dgst -sha512 -binary "$plugin_tgz" | openssl base64 -A)" = \
-  'sha512-q82oHyZxqw0OdbTyC6fDs6s+Wbky9HzVL36T/nDyRA4BKdboOuOH58tET0YiO12M1kQFXqiMsEci0ZEB1ONKmQ=='
+  'sha512-WBuY6PeSe8Sm/3mPWHPACDjOPrLE/bHwzQZiUYwF8L+Ww3q8f+5gVdRHZY+V+c+pm5ozhxRxrzyphgKg3jb7hw=='
 tar -tzf "$plugin_tgz" \
   | grep -Fx 'package/build/backend/models/node-plugins.schema.js'
 ```

@@ -133,6 +133,14 @@ func tagResetRequestSchema() *Schema {
 func startXrayRequestSchema() *Schema {
 	return object(map[string]*Schema{
 		"internals": object(map[string]*Schema{
+			"metadata": object(map[string]*Schema{
+				"name":        stringValue(),
+				"uuid":        stringValue(),
+				"id":          numberValue(),
+				"tags":        array(stringValue()),
+				"countryCode": stringValue(),
+			}, "name", "uuid", "id", "tags", "countryCode"),
+			"integrations": record(anyValue()),
 			"forceRestart": booleanValue(),
 			"hashes": object(map[string]*Schema{
 				"emptyConfig": stringValue(),

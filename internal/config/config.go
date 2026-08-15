@@ -24,6 +24,7 @@ const (
 	DefaultXrayBinPath        = "/usr/local/lib/remnanode-lite/current/lib/rw-core"
 	DefaultGeoDir             = "/usr/local/lib/remnanode-lite/current/share/xray"
 	DefaultLogDir             = "/var/log/remnanode-lite"
+	DefaultPanelRuntimeDir    = "/var/lib/remnanode-lite/panel-runtime"
 	DefaultASNDBPath          = "/usr/local/lib/remnanode-lite/current/share/asn/asn-prefixes.bin"
 	maxDotEnvBytes            = 1 << 20
 	maxDotEnvLines            = 4096

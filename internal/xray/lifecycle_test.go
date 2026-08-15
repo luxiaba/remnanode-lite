@@ -2,8 +2,10 @@ package xray
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -120,6 +122,7 @@ func newLifecycleManager(t *testing.T, mode string) (*Manager, *testProcess) {
 		XrayBin:            "definitely-missing-rw-core",
 		GeoDir:             t.TempDir(),
 		LogDir:             t.TempDir(),
+		PanelRuntimeDir:    t.TempDir(),
 		InternalSocketPath: "/run/remnawave-test.sock",
 		InternalRESTToken:  "token",
 		NodeVersion:        "2.8.0",
@@ -157,6 +160,99 @@ func newLifecycleManager(t *testing.T, mode string) (*Manager, *testProcess) {
 		_ = manager.Shutdown(ctx)
 	})
 	return manager, process
+}
+
+func TestCanceledPanelAssetPreparationLeavesPreviousCoreRunning(t *testing.T) {
+	manager, _ := newLifecycleManager(t, "hold")
+	manager.readinessProbe = func(context.Context) bool { return true }
+	if response := manager.Start(context.Background(), lifecycleStartRequest("client-a")); !response.IsStarted {
+		t.Fatalf("initial start failed: %#v", response)
+	}
+	previous := snapshotManagerForTest(manager).process
+	if previous == nil {
+		t.Fatal("initial process missing")
+	}
+
+	downloadEntered := make(chan struct{})
+	manager.downloadPanelFile = func(ctx context.Context, _, _, _ string, _ os.FileMode) (downloadResult, error) {
+		close(downloadEntered)
+		<-ctx.Done()
+		return downloadResult{}, ctx.Err()
+	}
+	request := lifecycleStartRequest("client-b")
+	request.Internals.ForceRestart = true
+	request.XrayConfig["geodata"] = map[string]any{"assets": []any{
+		map[string]any{"url": "https://example.com/custom.dat", "file": "custom.dat"},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	response := make(chan StartResponse, 1)
+	go func() { response <- manager.Start(ctx, request) }()
+	awaitSignal(t, downloadEntered, "Panel asset download")
+
+	during := snapshotManagerForTest(manager)
+	if during.state != lifecycleStarting || during.process != previous || channelClosed(previous.leaderDone) {
+		t.Fatalf("previous process changed during preparation: state=%s same=%v exited=%v", during.state, during.process == previous, channelClosed(previous.leaderDone))
+	}
+	cancel()
+	resp := awaitStartResponse(t, response)
+	if resp.IsStarted || resp.Error == nil || !strings.Contains(*resp.Error, context.Canceled.Error()) {
+		t.Fatalf("canceled preparation response = %#v", resp)
+	}
+	after := snapshotManagerForTest(manager)
+	if after.state != lifecycleRunning || after.process != previous || channelClosed(previous.leaderDone) {
+		t.Fatalf("previous process not restored: state=%s same=%v exited=%v", after.state, after.process == previous, channelClosed(previous.leaderDone))
+	}
+}
+
+func TestSuccessfulStartRecordsSelectedCoreAndGeoDataOverlay(t *testing.T) {
+	manager, _ := newLifecycleManager(t, "hold")
+	manager.readinessProbe = func(context.Context) bool { return true }
+	script := []byte("#!/bin/sh\necho 'Xray 26.7.28-custom.1'\n")
+	digest := fmt.Sprintf("%x", sha256.Sum256(script))
+	coreDir := filepath.Join(manager.panelRuntimeDir, "cores")
+	if err := os.MkdirAll(coreDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	staleCore := filepath.Join(coreDir, strings.Repeat("b", 64))
+	if err := os.WriteFile(staleCore, []byte("stale"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manager.downloadPanelFile = func(_ context.Context, _, destination, expected string, mode os.FileMode) (downloadResult, error) {
+		if expected != digest {
+			t.Fatalf("download expected hash = %q", expected)
+		}
+		if err := os.WriteFile(destination, script, mode); err != nil {
+			return downloadResult{}, err
+		}
+		return downloadResult{sha256: digest, size: int64(len(script))}, nil
+	}
+	request := lifecycleStartRequest("client-a")
+	request.XrayConfig["geodata"] = map[string]any{
+		"core": map[string]any{
+			"url":    "https://example.com/rw-core",
+			"sha256": digest,
+		},
+		"assets": []any{},
+	}
+	response := manager.Start(context.Background(), request)
+	if !response.IsStarted || response.Version == nil || *response.Version != "26.7.28-custom.1" {
+		t.Fatalf("start response = %#v", response)
+	}
+	snapshot := snapshotManagerForTest(manager)
+	wantBinary := filepath.Join(manager.panelRuntimeDir, "cores", digest)
+	wantAssets := filepath.Join(manager.panelRuntimeDir, "assets")
+	if snapshot.process == nil || snapshot.process.binary != wantBinary || snapshot.process.assetDir != wantAssets {
+		t.Fatalf("selected runtime = %#v", snapshot.process)
+	}
+	if !slices.Contains(snapshot.process.cmd.Env, "XRAY_LOCATION_ASSET="+wantAssets) {
+		t.Fatalf("rw-core environment does not select overlay: %#v", snapshot.process.cmd.Env)
+	}
+	if _, err := os.Stat(wantBinary); err != nil {
+		t.Fatalf("committed custom Core missing: %v", err)
+	}
+	if _, err := os.Stat(staleCore); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale Core remains after successful readiness: %v", err)
+	}
 }
 
 func lifecycleStartRequest(clientID string) StartRequest {

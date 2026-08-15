@@ -161,13 +161,38 @@ func TestCurrentConfigJSONRemainsEmptyAfterFailedStart(t *testing.T) {
 }
 
 func TestParseVersionLine(t *testing.T) {
-	raw := "Xray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\nA unified platform..."
-	if got := parseVersionLine(raw); got != "26.3.27" {
-		t.Fatalf("parseVersionLine() = %q, want 26.3.27", got)
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{
+			name: "stable",
+			raw:  "Xray 26.3.27 (Xray, Penetrates Everything.) d2758a0 (go1.26.1 linux/amd64)\nA unified platform...",
+			want: "26.3.27",
+		},
+		{name: "prerelease", raw: "Xray 26.8.0-rc.1", want: "26.8.0-rc.1"},
+		{name: "build metadata omitted", raw: "Xray 26.8.0+remnawave.7", want: "26.8.0"},
+		{name: "build metadata omitted after prerelease", raw: "Xray 26.8.0-rc.1+remnawave.7", want: "26.8.0-rc.1"},
+		{name: "invalid numeric prerelease", raw: "Xray 26.8.0-01", want: "26.8.0"},
+		{name: "invalid later numeric prerelease", raw: "Xray 26.8.0-alpha.01", want: "26.8.0-alpha"},
+		{name: "leading zero major", raw: "Xray 01.2.3", want: ""},
+		{name: "leading zero minor", raw: "Xray 1.02.3", want: ""},
+		{name: "leading zero patch", raw: "Xray 1.2.03", want: ""},
+		{name: "maximum safe core", raw: "Xray 9007199254740991.2.3", want: "9007199254740991.2.3"},
+		{name: "unsafe integer core", raw: "Xray 9007199254740992.2.3", want: ""},
+		{name: "missing", raw: "not a version", want: ""},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := parseVersionLine(test.raw); got != test.want {
+				t.Fatalf("parseVersionLine() = %q, want %q", got, test.want)
+			}
+		})
 	}
 
-	if got := parseVersionLine("not a version"); got != "" {
-		t.Fatalf("parseVersionLine() = %q, want empty", got)
+	if got := coerceSemver("v26.8.0-rc.1+remnawave.7"); got != "26.8.0-rc.1" {
+		t.Fatalf("coerceSemver() = %q, want prerelease without build metadata", got)
 	}
 }
 

@@ -15,7 +15,7 @@ The container has one application supervisor: `remnanode-lite` starts and reaps 
 - a read-only root filesystem;
 - tmpfs mounts for `/run/remnanode-lite`, `/tmp`, and `/var/log/remnanode-lite`, capped at `48 MiB` in total;
 - Docker `json-file` rotation of `2 MiB x 2` for Node logs;
-- no persistent data volume. Recreating the container clears runtime configuration copies and logs, and the Panel sends the Xray configuration again.
+- a `remnanode-state` named volume at `/var/lib/remnanode-lite` for deletable Panel-derived Core/GeoData cache. The root filesystem remains read-only; recreating the container still clears runtime configuration copies and logs, and the Panel sends the Xray configuration again.
 
 These are strict container cgroup limits and remain required when the Docker host is larger. Equal memory and combined memory-and-swap limits leave no additional container swap allowance. The separate whole-machine target of `512 MiB RAM / 1 vCPU / 2 GB disk` remains an engineering target, not an SLA for every traffic pattern or plugin combination. See the [resource budget](development/resource-budget.md) for measurements and boundaries.
 
@@ -166,6 +166,14 @@ A `healthy` container means the Node accepted a connection on its internal Unix 
 
 It is normal for rw-core to be offline immediately after a Node restart. The Node does not restore an old Panel configuration from disk. A later Panel health cycle calls `/node/xray/start` again. Complete verification in the Panel and test representative proxy traffic.
 
+### Panel-selected Core and GeoData cache
+
+When the Panel selects a custom Core or GeoData, the Node stores derived files under `/var/lib/remnanode-lite/panel-runtime/{assets,cores}` in the `remnanode-state` volume. The volume survives normal container recreation, updates, rollbacks, and `docker compose down`; it contains neither the complete Xray configuration nor the Secret or logs. These files are not covered by the image's `runtime-assets.lock.json`, SBOM, or provenance. The Core and GeoData bundled in the image remain the fallback.
+
+Initial Node downloads require HTTPS. Each download is limited to `128 MiB`, `15s` total, and `5s` without data; at most five GeoData assets download concurrently. A custom Core must also pass its configured SHA-256 and version probe. rw-core can later refresh GeoData according to a Panel-provided cron configuration, and those later writes are not subject to the Node's initial-download size or total-time limits. Enable dynamic assets only from a trusted Panel administrator and monitor volume and host disk use.
+
+`docker compose down -v` removes Compose-managed volumes, including this cache; use it only when discarding the cache is intentional. No backup is required for correctness because Panel synchronization and the bundled fallback can rebuild runtime state.
+
 ## Migrate from the official container
 
 The `NODE_PORT` and complete `SECRET_KEY` used by the official `remnawave/node` image remain valid. They belong to the external Panel-to-Node contract, not to the official image's Node.js and s6 internals. Do not run the old and new Nodes together: host networking would make them compete for the Node API and proxy inbound ports.
@@ -187,7 +195,7 @@ docker compose logs --tail=100 remnanode-lite
 
 4. Confirm that the node returns online in the Panel, rw-core starts, and representative proxy traffic works. This implementation writes rw-core logs to `/var/log/remnanode-lite/xray.out.log` and `/var/log/remnanode-lite/xray.err.log`, not the official container's `/var/log/xray/current`.
 
-There is no container runtime state or Xray configuration volume to migrate; the Panel sends the configuration again. To roll back, first bring down `remnanode-lite`, then restore the backed-up Compose file and exact official image. Never leave both container names running. Keep the backup until the new container has completed its observation period.
+There is no official-container runtime state or Xray configuration to migrate; the new `remnanode-state` volume starts as an empty derived cache and the Panel sends the configuration again. To roll back, first bring down `remnanode-lite`, then restore the backed-up Compose file and exact official image. Never leave both container names running. Keep the backup until the new container has completed its observation period.
 
 ## Release candidates
 
@@ -232,7 +240,7 @@ A tag states which version you intend to reference. A digest identifies the byte
 
 ## Update and rollback
 
-Back up the current Compose inputs. Change `REMNANODE_IMAGE` in `.env`, or `image:` when it is intentionally inline, then pull and recreate explicitly:
+Back up the current Compose inputs, then obtain and verify the Compose template attached to the target Release. Preserve `.env` and deliberately reapply any local overrides before changing `REMNANODE_IMAGE` or an intentionally inline `image:` value. Do not pair a new image with an older Compose file: upgrading from `3.0.0` to `3.2.2` specifically requires the new `remnanode-state` volume because the container root filesystem remains read-only. Then pull and recreate explicitly:
 
 ```bash
 cp -p docker-compose.yaml docker-compose.yaml.previous
@@ -325,6 +333,8 @@ docker exec -it remnanode-lite sh -c \
 
 Each rw-core stream rotates at `4 MiB` and retains one `.1` file inside the `28 MiB` tmpfs; recreating the container clears it. Docker limits Node `json-file` logs to approximately `2 MiB x 2`. The project does not require persistent logs. Any long-term collection must fit within the host's own disk budget.
 
+The `remnanode-state` volume is persistent but contains only rebuildable Panel-derived Core/GeoData cache. Its use depends on the assets and refresh schedule selected in Panel and is not capped by the log tmpfs limits. A normal `docker compose down` preserves it; `docker compose down -v` deletes it.
+
 Inspect disk use and remove unused images:
 
 ```bash
@@ -346,3 +356,5 @@ The current image contains:
 - a Debian bookworm slim runtime with CA certificates and nftables dependencies.
 
 Base images, rw-core, and the ASN source are pinned by digest or checksum. Debian `apt` packages are not pinned to a package snapshot, so two builds are not guaranteed to be byte-for-byte identical. Use the manifest digest, SBOM, provenance, and attestation together when identifying a formal artifact.
+
+This traceability applies to assets bundled in the image, not to the deletable Core/GeoData cache downloaded later from Panel-selected URLs.

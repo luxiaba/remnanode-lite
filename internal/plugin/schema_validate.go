@@ -4,29 +4,33 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"net/url"
 	"strings"
 )
 
-// Validation aligned with @remnawave/node-plugins@0.6.0 (NodePluginSchema).
+// Validation aligned with @remnawave/node-plugins@0.6.3 (NodePluginSchema).
 
 func isPlainIP(value string) bool {
+	if strings.Contains(value, ":") && strings.Contains(value, ".") {
+		return false
+	}
 	return net.ParseIP(value) != nil
 }
 
 func isIPv4CIDR(value string) bool {
-	ip, _, err := net.ParseCIDR(value)
-	if err != nil {
+	if strings.Contains(value, ":") || !strings.Contains(value, ".") {
 		return false
 	}
-	return ip.To4() != nil && strings.Contains(value, ".")
+	_, _, err := net.ParseCIDR(value)
+	return err == nil
 }
 
 func isIPv6CIDR(value string) bool {
-	ip, _, err := net.ParseCIDR(value)
-	if err != nil {
+	if !strings.Contains(value, ":") || strings.Contains(value, ".") {
 		return false
 	}
-	return ip.To4() == nil && strings.Contains(value, ":")
+	_, _, err := net.ParseCIDR(value)
+	return err == nil
 }
 
 func isIPCidrOrExt(value string) bool {
@@ -184,6 +188,19 @@ func validateTorrentBlockerSection(raw any) error {
 			if err := validateStringLength(fmt.Sprintf("torrentBlocker.includeRuleTags[%d]", i), value); err != nil {
 				return err
 			}
+		}
+	}
+	if rawURL, ok := section["webhookUrl"]; ok {
+		value, ok := rawURL.(string)
+		if !ok {
+			return fmt.Errorf("torrentBlocker.webhookUrl must be a URL")
+		}
+		if err := validateStringLength("torrentBlocker.webhookUrl", value); err != nil {
+			return err
+		}
+		parsed, err := url.Parse(strings.TrimSpace(value))
+		if err != nil || parsed.Scheme == "" {
+			return fmt.Errorf("torrentBlocker.webhookUrl must be a URL")
 		}
 	}
 	return nil

@@ -110,6 +110,9 @@ func buildPluginPlanFromConfigContext(
 		if enabled, _ := blocker["enabled"].(bool); enabled {
 			snapshot.torrent.enabled = true
 			snapshot.torrent.blockDuration, _ = numberValue(blocker["blockDuration"])
+			if webhookURL, ok := blocker["webhookUrl"].(string); ok {
+				snapshot.torrent.webhookURL = strings.TrimSpace(webhookURL)
+			}
 			if ignore, ok := blocker["ignoreLists"].(map[string]any); ok {
 				resolved, resolveErr := resolveIPListContext(ctx, toStringSlice(ignore["ip"]), shared, &plan.diagnostics, &resolvedBudget)
 				if resolveErr != nil {

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=228191634c7c3370bd939eb987683c9da5a88e856b4dc03c3874723e53f21b47 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=a3b539bade79baaca4ec026ca448b36ea2f026634e73944f0f1eaed094a31c1e -->
 
 # Docker Compose 部署
 
@@ -19,7 +19,7 @@ Docker Compose 是小内存节点的首选部署方式。服务器只需要一�
 - 只读 rootfs；
 - `/run/remnanode-lite`、`/tmp`、`/var/log/remnanode-lite` 使用总上限 `48 MiB` 的 tmpfs；
 - Docker Node 日志采用 `2 MiB x 2` 的 `json-file` 轮转；
-- 不挂载持久数据卷，重建容器会清空配置副本和日志，由 Panel 重新下发 Xray 配置。
+- 在 `/var/lib/remnanode-lite` 挂载 `remnanode-state` named volume，用于可删除的 Panel 派生 Core/GeoData 缓存。rootfs 仍保持只读；重建容器仍会清空运行配置副本和日志，并由 Panel 重新下发 Xray 配置。
 
 这些是严格的容器 cgroup 限制，即使 Docker 宿主机更大也应保持。`448 MiB` 内存上限与 `448 MiB` 内存加 swap 合计上限相等，因此容器没有额外 swap 配额。整机 `512 MiB RAM / 1 vCPU / 2 GB disk` 是设计目标，不代表任意流量和插件组合都适合相同规格。实测数据和边界见[资源预算](development/resource-budget.md)。
 
@@ -170,6 +170,14 @@ ss -H -lnt "sport = :2222"
 
 Node 重启后 rw-core 初始离线是正常行为。Node 不从磁盘恢复旧 Panel 配置，Panel 后续健康轮询会重新调用 `/node/xray/start`。最终应在 Panel 确认节点在线，并检查实际代理功能。
 
+### Panel 选择的 Core 与 GeoData 缓存
+
+当 Panel 选择自定义 Core 或 GeoData 时，Node 会把派生文件存入 `remnanode-state` volume 中的 `/var/lib/remnanode-lite/panel-runtime/{assets,cores}`。该 volume 会跨正常的容器重建、更新、回滚和 `docker compose down` 保留，但不保存完整 Xray 配置、Secret 或日志。缓存文件不受镜像的 `runtime-assets.lock.json`、SBOM 或 provenance 覆盖；镜像内置 Core 和 GeoData 始终作为 fallback。
+
+Node 的首次下载必须使用 HTTPS。单次下载最多 `128 MiB`、总时限 `15s`，连续 `5s` 没有数据即失败；GeoData asset 最多同时下载五个。自定义 Core 还必须通过配置的 SHA-256 和版本探测。rw-core 之后可能按照 Panel 下发的 cron 配置刷新 GeoData，这些后续写入不受 Node 首次下载的大小或总时限约束。动态资产应只由可信 Panel 管理员启用，并监控 volume 与宿主机磁盘占用。
+
+`docker compose down -v` 会删除 Compose 管理的 volume，包括这份缓存；仅在确定要丢弃缓存时使用。正确性不依赖其备份，因为 Panel 同步和内置 fallback 可以重建运行状态。
+
 ## 从官方容器迁移
 
 官方 `remnawave/node` 使用的 `NODE_PORT` 和完整 `SECRET_KEY` 可以继续使用；它们属于 Panel 与 Node 的外部契约，不依赖官方容器的 Node.js/s6 内部结构。绝不能让旧 Node 与新 Node 同时运行，因为 host network 下会争用 Node API 和代理入站端口。
@@ -191,7 +199,7 @@ docker compose logs --tail=100 remnanode-lite
 
 4. 在 Panel 确认节点重新在线、rw-core 已启动并抽查真实代理流量。新实现的 rw-core 日志路径是 `/var/log/remnanode-lite/xray.out.log` 和 `xray.err.log`，不是官方容器的 `/var/log/xray/current`。
 
-不需要迁移容器内运行状态或 Xray 配置卷：Panel 会重新下发配置。回滚时先停止 `remnanode-lite`，再恢复备份 Compose 和原官方精确镜像；绝不能让两个容器名同时运行。新容器完成观察期前不要删除备份。
+不需要迁移官方容器的运行状态或 Xray 配置；新的 `remnanode-state` volume 起初只是空的派生缓存，Panel 会重新下发配置。回滚时先停止 `remnanode-lite`，再恢复备份 Compose 和原官方精确镜像；绝不能让两个容器名同时运行。新容器完成观察期前不要删除备份。
 
 ## 候选镜像
 
@@ -236,7 +244,7 @@ tag 说明“希望引用哪个版本”，digest 说明“实际运行哪一份
 
 ## 更新与回滚
 
-先备份当前 Compose 输入。在使用 `.env` 时修改 `REMNANODE_IMAGE`；只有明确内联时才修改 `image:`，然后主动拉取并重建：
+先备份当前 Compose 输入，再获取并校验目标 Release 附带的 Compose 模板。保留 `.env`，并有意重新应用所需的本地 override 后，才修改 `REMNANODE_IMAGE` 或明确内联的 `image:`。不要让新镜像继续使用旧 Compose：从 `3.0.0` 升级到 `3.2.2` 时尤其必须加入新的 `remnanode-state` volume，因为容器 rootfs 仍然只读。随后主动拉取并重建：
 
 ```bash
 cp -p docker-compose.yaml docker-compose.yaml.previous
@@ -328,6 +336,8 @@ docker exec -it remnanode-lite sh -c \
 
 两条 rw-core 日志各以 `4 MiB` 为轮转阈值并保留一个 `.1` 文件，存放在 `28 MiB` tmpfs；容器重建后清空。Node 的 Docker 日志由 `json-file` 限制为约 `2 MiB x 2`。本项目不要求持久日志，长期监控应由宿主机在自身磁盘预算内完成。
 
+`remnanode-state` volume 会持久保留，但只包含可重建的 Panel 派生 Core/GeoData 缓存。其占用取决于 Panel 选择的资产和刷新 schedule，不受日志 tmpfs 限制。普通 `docker compose down` 保留它，`docker compose down -v` 删除它。
+
 检查和清理无用镜像：
 
 ```bash
@@ -349,3 +359,5 @@ docker image prune
 - Debian bookworm slim 运行环境、CA 证书和 nftables 依赖。
 
 基础镜像、rw-core 和 ASN 来源都固定了 digest 或摘要。Debian `apt` 软件包没有固定到 package snapshot，因此两次构建不保证字节级完全相同。识别正式产物时，应同时保留 manifest digest、SBOM、provenance 和 attestation。
+
+这些可追溯性信息覆盖镜像内置资产，不覆盖之后从 Panel 所选 URL 下载的可删除 Core/GeoData 缓存。

@@ -6,6 +6,43 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.2.2] - 2026-08-15
+
+This stable release aligns Remnanode Lite with the official Node `3.2.2`
+contract. The public `/node` route set remains unchanged from `3.0.0`.
+
+### Added
+
+- Accepted the optional `metadata` and `integrations` fields introduced under
+  `/node/xray/start` internals. The stock Node has no enabled Integration
+  modules, so these fields do not add a second runtime extension system.
+- Added the optional Torrent Blocker report webhook from the official plugin
+  schema while preserving local blocking and report collection when delivery
+  is unavailable.
+- Added Panel-selected custom Core and GeoData preparation with bounded HTTPS
+  downloads, a deletable persistent cache, and bundled runtime fallbacks.
+
+### Changed
+
+- Pinned the behavioral contract to official Node `3.2.2` at commit
+  `2c532c4e33bf5864e9867a7bdc36245cc1057eb1` and the external plugin schema
+  to `@remnawave/node-plugins@0.6.3`.
+- Aligned plugin IP, IPv6, CIDR, and webhook URL validation with the updated
+  official schema.
+- Aligned selected rw-core version reporting with official prerelease SemVer
+  coercion while retaining the configured bundled-Core override.
+- Updated `github.com/klauspost/compress` to `1.19.2` for Zstandard arm64 and
+  concurrency correctness fixes.
+- Docker upgrades must use the Compose template from this Release, which adds
+  the `remnanode-state` volume required by dynamic assets on the read-only
+  container filesystem; preserve the existing `.env` when replacing it.
+
+### Security
+
+- Upgraded the release toolchain and Docker builder from Go `1.26.5` to
+  `1.26.6` so published binaries include the August 2026 standard-library
+  security fixes.
+
 ## [3.0.0] - 2026-08-03
 
 This stable release aligns Remnanode Lite with the official Node `3.0.0`

@@ -146,6 +146,31 @@ func TestParserRejectsUnsupportedScalarSuffix(t *testing.T) {
 	}
 }
 
+func TestParserAllowsOnlyPinnedLocalDynamicModuleImports(t *testing.T) {
+	t.Parallel()
+
+	expression := `DESCRIPTORS.map((descriptor) =>
+        ConditionalModule.registerWhen(descriptor.module, descriptor.isAvailable, { debug: false }),
+    )`
+	imports, err := parseNestModuleImports("src/integration-modules/integrations.module.ts", expression)
+	if err != nil || len(imports) != 1 || imports[0] != expression {
+		t.Fatalf("pinned local dynamic import = %#v, %v", imports, err)
+	}
+
+	for _, changed := range []struct {
+		source     string
+		expression string
+	}{
+		{source: "src/other.module.ts", expression: expression},
+		{source: "src/integration-modules/integrations.module.ts", expression: strings.Replace(expression, "debug: false", "debug: true", 1)},
+		{source: "src/integration-modules/integrations.module.ts", expression: `DESCRIPTORS.filter(() => true)`},
+	} {
+		if _, err := parseNestModuleImports(changed.source, changed.expression); err == nil {
+			t.Errorf("accepted unpinned local dynamic import in %s: %s", changed.source, changed.expression)
+		}
+	}
+}
+
 func TestExtractorRejectsUnmatchedRESTAPIRoute(t *testing.T) {
 	repository := createOfficialFixture(t)
 	commit := runGit(t, repository, "rev-parse", "HEAD")
@@ -205,6 +230,20 @@ export class ExtraController {
 	_, err := Generate(context.Background(), repository, fixtureExpectation(commit))
 	if err == nil || !strings.Contains(err.Error(), "official controller inventory differs") {
 		t.Fatalf("Generate undeclared controller error = %v", err)
+	}
+}
+
+func TestExtractorRejectsUnreviewedIntegrationProvider(t *testing.T) {
+	repository := createOfficialFixture(t)
+	writeFixtureFile(t, repository, "src/integration-modules/example.integration.ts", `
+export const descriptor = {};
+`)
+	runGit(t, repository, "add", ".")
+	runGit(t, repository, "commit", "-m", "add integration provider")
+	commit := runGit(t, repository, "rev-parse", "HEAD")
+	_, err := Generate(context.Background(), repository, fixtureExpectation(commit))
+	if err == nil || !strings.Contains(err.Error(), "Integration provider") {
+		t.Fatalf("Generate unreviewed Integration provider error = %v", err)
 	}
 }
 

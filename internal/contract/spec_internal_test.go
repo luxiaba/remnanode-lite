@@ -118,6 +118,35 @@ func TestOfficialSpecialRequestConstraints(t *testing.T) {
 	}
 }
 
+func TestOfficialStartXrayOptionalInternals(t *testing.T) {
+	t.Parallel()
+
+	route := routeByID(t, "xray.start")
+	valid := []byte(`{
+		"internals":{
+			"metadata":{"name":"node-1","uuid":"node-uuid","id":1.5,"tags":["edge"],"countryCode":"NL","ignored":true},
+			"integrations":{"veil":{"endpoint":"https://example.com"},"enabled":true,"unset":null},
+			"hashes":{"emptyConfig":"h","inbounds":[]},
+			"ignored":true
+		},
+		"xrayConfig":{}
+	}`)
+	if err := route.Request.ValidateJSON(valid); err != nil {
+		t.Fatalf("optional 3.2.2 internals rejected: %v", err)
+	}
+
+	for _, body := range []string{
+		`{"internals":{"metadata":null,"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`,
+		`{"internals":{"metadata":{"name":"n","uuid":"u","id":1,"tags":[]},"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`,
+		`{"internals":{"integrations":null,"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`,
+		`{"internals":{"integrations":[],"hashes":{"emptyConfig":"h","inbounds":[]}},"xrayConfig":{}}`,
+	} {
+		if err := route.Request.ValidateJSON([]byte(body)); err == nil {
+			t.Errorf("official schema accepted invalid optional internals: %s", body)
+		}
+	}
+}
+
 func TestOfficialErrorSchemas(t *testing.T) {
 	t.Parallel()
 
