@@ -34,6 +34,9 @@ type releaseManifest struct {
 }
 
 type manifestRuntimeAssets struct {
+	// Keep this schema compatible with 3.2.2 rnlctl so an installed CLI can
+	// verify and upgrade the next bundle. Additional tools are transitively
+	// bound by RuntimeAssetLockSHA256 and their manifest file metadata.
 	Xray    manifestXray    `json:"xray"`
 	GeoIP   runtimeDataLock `json:"geoIP"`
 	GeoSite runtimeDataLock `json:"geoSite"`
@@ -217,13 +220,14 @@ type spdxRelationship struct {
 
 func buildSPDX(options buildOptions, lock runtimeLock, files []bundleFile, goModules []goModule) spdxDocument {
 	const (
-		bundlePackage  = "SPDXRef-Package-native-bundle"
-		projectPackage = "SPDXRef-Package-remnanode-lite"
-		xrayPackage    = "SPDXRef-Package-xray-core"
-		geoIPPackage   = "SPDXRef-Package-geoip-data"
-		geoSitePackage = "SPDXRef-Package-geosite-data"
-		asnPackage     = "SPDXRef-Package-asn-database"
-		asnSource      = "SPDXRef-Package-asn-source"
+		bundlePackage   = "SPDXRef-Package-native-bundle"
+		projectPackage  = "SPDXRef-Package-remnanode-lite"
+		xrayPackage     = "SPDXRef-Package-xray-core"
+		geoCheckPackage = "SPDXRef-Package-geocheck"
+		geoIPPackage    = "SPDXRef-Package-geoip-data"
+		geoSitePackage  = "SPDXRef-Package-geosite-data"
+		asnPackage      = "SPDXRef-Package-asn-database"
+		asnSource       = "SPDXRef-Package-asn-source"
 	)
 	spdxFiles := make([]spdxFile, 0, len(files))
 	packageSHA1 := make(map[string][]string)
@@ -231,6 +235,7 @@ func buildSPDX(options buildOptions, lock runtimeLock, files []bundleFile, goMod
 		{SPDXElementID: "SPDXRef-DOCUMENT", RelationshipType: "DESCRIBES", RelatedSPDXElement: bundlePackage},
 		{SPDXElementID: bundlePackage, RelationshipType: "CONTAINS", RelatedSPDXElement: projectPackage},
 		{SPDXElementID: bundlePackage, RelationshipType: "CONTAINS", RelatedSPDXElement: xrayPackage},
+		{SPDXElementID: bundlePackage, RelationshipType: "CONTAINS", RelatedSPDXElement: geoCheckPackage},
 		{SPDXElementID: bundlePackage, RelationshipType: "CONTAINS", RelatedSPDXElement: geoIPPackage},
 		{SPDXElementID: bundlePackage, RelationshipType: "CONTAINS", RelatedSPDXElement: geoSitePackage},
 		{SPDXElementID: bundlePackage, RelationshipType: "CONTAINS", RelatedSPDXElement: asnPackage},
@@ -283,6 +288,13 @@ func buildSPDX(options buildOptions, lock runtimeLock, files []bundleFile, goMod
 			PackageVerificationCode: packageVerificationCode(packageSHA1[xrayPackage]),
 			LicenseConcluded:        "MPL-2.0", LicenseDeclared: "MPL-2.0", CopyrightText: "NOASSERTION",
 			ExternalRefs: []spdxExternalRef{{ReferenceCategory: "PACKAGE-MANAGER", ReferenceType: "purl", ReferenceLocator: "pkg:github/xtls/xray-core@" + lock.Xray.Version}},
+		},
+		{
+			Name: "Remnawave geocheck", SPDXID: geoCheckPackage, VersionInfo: lock.GeoCheck.Version,
+			DownloadLocation: lock.GeoCheck.SourceURL, FilesAnalyzed: true,
+			PackageVerificationCode: packageVerificationCode(packageSHA1[geoCheckPackage]),
+			LicenseConcluded:        "MIT", LicenseDeclared: "MIT", CopyrightText: "NOASSERTION",
+			ExternalRefs: []spdxExternalRef{{ReferenceCategory: "PACKAGE-MANAGER", ReferenceType: "purl", ReferenceLocator: "pkg:github/remnawave/geocheck@" + lock.GeoCheck.Version}},
 		},
 		{
 			Name: "Loyalsoldier GeoIP data", SPDXID: geoIPPackage, VersionInfo: lock.GeoIP.Version,
@@ -353,6 +365,8 @@ func buildSPDX(options buildOptions, lock runtimeLock, files []bundleFile, goMod
 
 func spdxOwnerForPath(filePath string) string {
 	switch filePath {
+	case "lib/geocheck":
+		return "SPDXRef-Package-geocheck"
 	case "lib/rw-core":
 		return "SPDXRef-Package-xray-core"
 	case "share/xray/geoip.dat":
@@ -391,7 +405,7 @@ func validateSPDX(document spdxDocument, files map[string]manifestFile, entries 
 	if document.SPDXVersion != "SPDX-2.3" || document.DataLicense != "CC0-1.0" || document.SPDXID != "SPDXRef-DOCUMENT" {
 		return fmt.Errorf("SBOM does not identify a valid SPDX 2.3 document")
 	}
-	if document.Name == "" || document.DocumentNamespace == "" || len(document.Packages) < 7 {
+	if document.Name == "" || document.DocumentNamespace == "" || len(document.Packages) < 8 {
 		return fmt.Errorf("SBOM is missing document or package identity")
 	}
 	seen := make(map[string]struct{}, len(document.Files))
@@ -438,6 +452,7 @@ func validateSPDX(document spdxDocument, files map[string]manifestFile, entries 
 		"SPDXRef-Package-native-bundle":  packageVerificationCode(allSHA1),
 		"SPDXRef-Package-remnanode-lite": packageVerificationCode(packageSHA1["SPDXRef-Package-remnanode-lite"]),
 		"SPDXRef-Package-xray-core":      packageVerificationCode(packageSHA1["SPDXRef-Package-xray-core"]),
+		"SPDXRef-Package-geocheck":       packageVerificationCode(packageSHA1["SPDXRef-Package-geocheck"]),
 		"SPDXRef-Package-geoip-data":     packageVerificationCode(packageSHA1["SPDXRef-Package-geoip-data"]),
 		"SPDXRef-Package-geosite-data":   packageVerificationCode(packageSHA1["SPDXRef-Package-geosite-data"]),
 		"SPDXRef-Package-asn-database":   packageVerificationCode(packageSHA1["SPDXRef-Package-asn-database"]),

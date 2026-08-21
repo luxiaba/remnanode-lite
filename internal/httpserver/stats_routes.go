@@ -109,6 +109,23 @@ func (s *Server) handleStatsGetCombinedStats(w http.ResponseWriter, r *http.Requ
 	writeNodeResult(w, r, response, err)
 }
 
+func (s *Server) handleStatsGetGeoCheck(w http.ResponseWriter, r *http.Request) {
+	var request nodeapi.GeoCheckRequest
+	if !s.decodeNodeRequest(w, r, &request) {
+		return
+	}
+	ip := ""
+	if request.IP.Present {
+		ip = request.IP.Value
+	}
+	interfaceName := ""
+	if request.Interface.Present {
+		interfaceName = request.Interface.Value
+	}
+	response, err := s.geocheckService.Get(r.Context(), ip, interfaceName)
+	writeNodeResult(w, r, response, err)
+}
+
 func (s *Server) handleStatsGetUserIPList(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.UserIDRequest
 	if !s.decodeNodeRequest(w, r, &request) {

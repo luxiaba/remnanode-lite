@@ -110,6 +110,7 @@ func buildPluginPlanFromConfigContext(
 		if enabled, _ := blocker["enabled"].(bool); enabled {
 			snapshot.torrent.enabled = true
 			snapshot.torrent.blockDuration, _ = numberValue(blocker["blockDuration"])
+			snapshot.torrent.rulePosition, _ = numberValue(blocker["rulePlacement"])
 			if webhookURL, ok := blocker["webhookUrl"].(string); ok {
 				snapshot.torrent.webhookURL = strings.TrimSpace(webhookURL)
 			}

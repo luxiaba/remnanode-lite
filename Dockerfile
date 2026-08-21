@@ -83,6 +83,7 @@ RUN set -eux; \
       /var/log/remnanode-lite
 
 COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite
+COPY --from=assets --chmod=0755 /assets/lib/geocheck /usr/local/lib/remnanode-lite/geocheck
 COPY --from=assets --chmod=0755 /assets/lib/rw-core /usr/local/lib/remnanode-lite/rw-core
 COPY --from=assets --chmod=0644 /assets/share/xray/geoip.dat /usr/local/share/remnanode-lite/xray/geoip.dat
 COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat /usr/local/share/remnanode-lite/xray/geosite.dat
@@ -91,6 +92,7 @@ COPY --from=assets --chmod=0644 /assets/licenses/CC-BY-SA-4.0.txt /usr/share/doc
 COPY --from=assets --chmod=0644 /assets/licenses/CC0-1.0.txt /usr/share/doc/remnanode-lite/licenses/CC0-1.0.txt
 COPY --from=assets --chmod=0644 /assets/licenses/GPL-3.0-only.txt /usr/share/doc/remnanode-lite/licenses/GPL-3.0-only.txt
 COPY --from=assets --chmod=0644 /assets/licenses/MPL-2.0.txt /usr/share/doc/remnanode-lite/licenses/MPL-2.0.txt
+COPY --from=assets --chmod=0644 /assets/licenses/MIT.txt /usr/share/doc/remnanode-lite/licenses/MIT.txt
 
 # Keep the runtime image self-describing. These small files let an operator
 # inspect the exact license, provenance, and source-offer terms without the

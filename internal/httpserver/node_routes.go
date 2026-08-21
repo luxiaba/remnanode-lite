@@ -39,6 +39,7 @@ const (
 	routeStatsGetAllOutboundsStats
 	routeStatsGetAllInboundsStats
 	routeStatsGetCombinedStats
+	routeStatsGetGeoCheck
 	routeStatsGetUserIPList
 	routeStatsGetUsersIPList
 	routeHandlerAddUser
@@ -73,6 +74,7 @@ var nodeRouteDefinitions = [...]nodeRouteDefinition{
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/stats/get-all-outbounds-stats"}, id: routeStatsGetAllOutboundsStats},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/stats/get-all-inbounds-stats"}, id: routeStatsGetAllInboundsStats},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/stats/get-combined-stats"}, id: routeStatsGetCombinedStats},
+	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/stats/get-geocheck"}, id: routeStatsGetGeoCheck},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/stats/get-user-ip-list"}, id: routeStatsGetUserIPList},
 	{NodeRoute: NodeRoute{Method: http.MethodGet, Path: "/node/stats/get-users-ip-list"}, id: routeStatsGetUsersIPList},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/add-user"}, id: routeHandlerAddUser},
@@ -124,6 +126,7 @@ func nodeRouteHasRequestDTO(route nodeRouteID) bool {
 		routeStatsGetAllOutboundsStats,
 		routeStatsGetAllInboundsStats,
 		routeStatsGetCombinedStats,
+		routeStatsGetGeoCheck,
 		routeStatsGetUserIPList,
 		routeHandlerAddUser,
 		routeHandlerRemoveUser,
@@ -165,6 +168,7 @@ func nodeRouteRequestBodyClass(route nodeRouteID) nodeRequestBodyClass {
 		routeStatsGetAllOutboundsStats,
 		routeStatsGetAllInboundsStats,
 		routeStatsGetCombinedStats,
+		routeStatsGetGeoCheck,
 		routeStatsGetUserIPList,
 		routeStatsGetUsersIPList,
 		routeHandlerRemoveUser,
@@ -208,6 +212,7 @@ func nodeRouteIsReadOnly(route nodeRouteID) bool {
 		routeStatsGetAllOutboundsStats,
 		routeStatsGetAllInboundsStats,
 		routeStatsGetCombinedStats,
+		routeStatsGetGeoCheck,
 		routeStatsGetUserIPList,
 		routeStatsGetUsersIPList,
 		routeHandlerGetInboundUsersCount,

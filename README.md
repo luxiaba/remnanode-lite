@@ -25,7 +25,8 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 
 ## Highlights
 
-- Implements the Remnawave Node `3.2.2` API contract.
+- Implements the Remnawave Node `3.3.2` API contract, including derived-SNI
+  admission, Secret integrity checks, GeoCheck, and Torrent rule placement.
 - Runs the Node as one Go process that directly manages rw-core, without Node.js or s6.
 - Uses Docker Compose as the simplest deployment path, with a self-contained Native Linux option for hosts that cannot run Docker.
 - Includes the same maintained low-memory profile for container and Native services on 512 MiB servers.
@@ -245,7 +246,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | --- | --- |
 | Native Linux bundles | Exact published Releases |
 | Native hosts | Distribution-specific; see the [Native host matrix](docs/deployment-native.md#native-host-matrix) |
-| Node contract | `3.2.2` |
+| Node contract | `3.3.2` |
 | rw-core | `v26.7.28` |
 | Platforms | `linux/amd64`, `linux/arm64` |
 | Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |

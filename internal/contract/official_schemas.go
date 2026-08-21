@@ -10,6 +10,7 @@ func requestSchemas() map[string]*Schema {
 		"stats.all-inbounds":             resetRequestSchema(),
 		"stats.all-outbounds":            resetRequestSchema(),
 		"stats.combined":                 resetRequestSchema(),
+		"stats.geocheck":                 geoCheckRequestSchema(),
 		"stats.user-ip-list":             object(map[string]*Schema{"userId": stringValue()}, "userId"),
 		"handler.add-user":               addUserRequestSchema(),
 		"handler.remove-user":            removeUserRequestSchema(),
@@ -80,6 +81,14 @@ func responseSchemas() map[string]*Schema {
 			"inbounds":  array(tagTraffic("inbound")),
 			"outbounds": array(tagTraffic("outbound")),
 		}, "inbounds", "outbounds")),
+		"stats.geocheck": responseEnvelope(object(map[string]*Schema{
+			"image": object(map[string]*Schema{
+				"format":     stringEnum("svg"),
+				"media_type": stringEnum("image/svg+xml"),
+				"encoding":   stringEnum("base64"),
+				"data":       stringValue(),
+			}, "format", "media_type", "encoding", "data"),
+		}, "image")),
 		"stats.user-ip-list": responseEnvelope(object(map[string]*Schema{
 			"ips": array(ipEntrySchema()),
 		}, "ips")),
@@ -128,6 +137,13 @@ func tagResetRequestSchema() *Schema {
 		"tag":   stringValue(),
 		"reset": booleanValue(),
 	}, "tag", "reset")
+}
+
+func geoCheckRequestSchema() *Schema {
+	return object(map[string]*Schema{
+		"ip":        stringValue(),
+		"interface": stringValue(),
+	})
 }
 
 func startXrayRequestSchema() *Schema {

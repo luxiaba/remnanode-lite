@@ -20,7 +20,9 @@ type materializeOptions struct {
 type runtimePayloadSet struct {
 	document     runtimeLockDocument
 	architecture xrayArchitecture
+	geoCheckArch geoCheckArchitecture
 	core         []byte
+	geoCheck     []byte
 	geoIP        []byte
 	geoSite      []byte
 	asn          []byte
@@ -47,6 +49,21 @@ func resolveRuntimePayloads(ctx context.Context, lockPath, architecture, asnBuil
 	}
 	core := xrayAssets[architectureLock.Core.ArchivePath]
 	if err := validateELFArchitecture("rw-core", core, architecture); err != nil {
+		return runtimePayloadSet{}, err
+	}
+	geoCheckArchitecture, err := document.Lock.geoCheckForArchitecture(architecture)
+	if err != nil {
+		return runtimePayloadSet{}, err
+	}
+	geoCheckArchivePath, err := fetcher.fetch(ctx, "geocheck "+architecture+" archive", geoCheckArchitecture.Archive)
+	if err != nil {
+		return runtimePayloadSet{}, err
+	}
+	geoCheck, err := extractGeoCheckBinary(geoCheckArchivePath, geoCheckArchitecture)
+	if err != nil {
+		return runtimePayloadSet{}, err
+	}
+	if err := validateELFArchitecture("geocheck", geoCheck, architecture); err != nil {
 		return runtimePayloadSet{}, err
 	}
 	geoIPPath, err := fetcher.fetch(ctx, "GeoIP data", document.Lock.GeoIP.Artifact)
@@ -89,11 +106,12 @@ func resolveRuntimePayloads(ctx context.Context, lockPath, architecture, asnBuil
 		licenses[identifier] = licenseData
 	}
 	return runtimePayloadSet{
-		document: document, architecture: architectureLock,
-		core:    core,
-		geoIP:   geoIP,
-		geoSite: geoSite,
-		asn:     asnDatabase, licenses: licenses,
+		document: document, architecture: architectureLock, geoCheckArch: geoCheckArchitecture,
+		core:     core,
+		geoCheck: geoCheck,
+		geoIP:    geoIP,
+		geoSite:  geoSite,
+		asn:      asnDatabase, licenses: licenses,
 	}, nil
 }
 
@@ -116,6 +134,7 @@ func materializeRuntimeAssets(ctx context.Context, options materializeOptions) e
 		return err
 	}
 	files := []bundleFile{
+		{Path: "lib/geocheck", Mode: 0o755, Data: payloads.geoCheck},
 		{Path: "lib/rw-core", Mode: 0o755, Data: payloads.core},
 		{Path: "runtime-assets.lock.json", Mode: 0o644, Data: payloads.document.Data},
 		{Path: "share/asn/asn-prefixes.bin", Mode: 0o644, Data: payloads.asn},

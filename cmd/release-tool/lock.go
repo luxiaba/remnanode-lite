@@ -24,6 +24,7 @@ var (
 type runtimeLock struct {
 	SchemaVersion int             `json:"schemaVersion"`
 	Xray          xrayLock        `json:"xray"`
+	GeoCheck      geoCheckLock    `json:"geocheck"`
 	GeoIP         runtimeDataLock `json:"geoIP"`
 	GeoSite       runtimeDataLock `json:"geoSite"`
 	ASN           asnLock         `json:"asn"`
@@ -45,6 +46,23 @@ type xrayArchitectures struct {
 type xrayArchitecture struct {
 	Archive artifactLock `json:"archive"`
 	Core    archiveEntry `json:"core"`
+}
+
+type geoCheckLock struct {
+	Version       string                `json:"version"`
+	Commit        string                `json:"commit"`
+	SourceURL     string                `json:"sourceURL"`
+	Architectures geoCheckArchitectures `json:"architectures"`
+}
+
+type geoCheckArchitectures struct {
+	AMD64 geoCheckArchitecture `json:"amd64"`
+	ARM64 geoCheckArchitecture `json:"arm64"`
+}
+
+type geoCheckArchitecture struct {
+	Archive artifactLock `json:"archive"`
+	Binary  archiveEntry `json:"binary"`
 }
 
 type runtimeDataLock struct {
@@ -87,6 +105,7 @@ type licenseLock struct {
 	GPL3   artifactLock `json:"GPL-3.0-only"`
 	CCBYSA artifactLock `json:"CC-BY-SA-4.0"`
 	CC0    artifactLock `json:"CC0-1.0"`
+	MIT    artifactLock `json:"MIT"`
 }
 
 type runtimeLockDocument struct {
@@ -213,8 +232,8 @@ func inspectJSONValue(decoder *json.Decoder) error {
 }
 
 func (lock runtimeLock) validate() error {
-	if lock.SchemaVersion != 2 {
-		return fmt.Errorf("schemaVersion must be 2")
+	if lock.SchemaVersion != 3 {
+		return fmt.Errorf("schemaVersion must be 3")
 	}
 	if !xrayTagPattern.MatchString(lock.Xray.Version) {
 		return fmt.Errorf("invalid Xray version %q", lock.Xray.Version)
@@ -255,6 +274,43 @@ func (lock runtimeLock) validate() error {
 			return err
 		}
 	}
+	if !xrayTagPattern.MatchString(lock.GeoCheck.Version) {
+		return fmt.Errorf("invalid geocheck version %q", lock.GeoCheck.Version)
+	}
+	if !gitCommitPattern.MatchString(lock.GeoCheck.Commit) {
+		return fmt.Errorf("invalid geocheck commit %q", lock.GeoCheck.Commit)
+	}
+	wantGeoCheckSource := "https://github.com/remnawave/geocheck/tree/" + lock.GeoCheck.Commit
+	if lock.GeoCheck.SourceURL != wantGeoCheckSource {
+		return fmt.Errorf("geocheck sourceURL must be %q", wantGeoCheckSource)
+	}
+	geoCheckArchitectures := []struct {
+		name string
+		lock geoCheckArchitecture
+	}{
+		{name: "amd64", lock: lock.GeoCheck.Architectures.AMD64},
+		{name: "arm64", lock: lock.GeoCheck.Architectures.ARM64},
+	}
+	for _, architecture := range geoCheckArchitectures {
+		prefix := "geocheck.architectures." + architecture.name
+		wantURL := "https://github.com/remnawave/geocheck/releases/download/" + lock.GeoCheck.Version +
+			"/geocheck_linux_" + architecture.name + ".tar.gz"
+		if architecture.lock.Archive.URL != wantURL {
+			return fmt.Errorf("%s.archive.url must be %q", prefix, wantURL)
+		}
+		if err := validateArtifact(prefix+".archive", architecture.lock.Archive, 64<<20); err != nil {
+			return err
+		}
+		if architecture.lock.Binary.ArchivePath != "geocheck" {
+			return fmt.Errorf("%s.binary.archivePath must be %q", prefix, "geocheck")
+		}
+		if architecture.lock.Binary.License != "MIT" {
+			return fmt.Errorf("%s.binary.license must be MIT", prefix)
+		}
+		if err := validateDigestAndSize(prefix+".binary", architecture.lock.Binary.SHA256, architecture.lock.Binary.Size, 64<<20); err != nil {
+			return err
+		}
+	}
 	if err := validateRuntimeData("geoIP", lock.GeoIP, "Loyalsoldier/geoip", "geoip.dat", "NOASSERTION", true); err != nil {
 		return err
 	}
@@ -287,6 +343,7 @@ func (lock runtimeLock) validate() error {
 		{id: "GPL-3.0-only", artifact: lock.Licenses.GPL3},
 		{id: "CC-BY-SA-4.0", artifact: lock.Licenses.CCBYSA},
 		{id: "CC0-1.0", artifact: lock.Licenses.CC0},
+		{id: "MIT", artifact: lock.Licenses.MIT},
 	}
 	for _, license := range licenses {
 		wantURL := "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/" + license.id + ".txt"
@@ -376,11 +433,23 @@ func (lock runtimeLock) xrayForArchitecture(architecture string) (xrayArchitectu
 	}
 }
 
+func (lock runtimeLock) geoCheckForArchitecture(architecture string) (geoCheckArchitecture, error) {
+	switch architecture {
+	case "amd64":
+		return lock.GeoCheck.Architectures.AMD64, nil
+	case "arm64":
+		return lock.GeoCheck.Architectures.ARM64, nil
+	default:
+		return geoCheckArchitecture{}, fmt.Errorf("unsupported architecture %q", architecture)
+	}
+}
+
 func (lock runtimeLock) licenseArtifacts() map[string]artifactLock {
 	return map[string]artifactLock{
 		"MPL-2.0":      lock.Licenses.MPL2,
 		"GPL-3.0-only": lock.Licenses.GPL3,
 		"CC-BY-SA-4.0": lock.Licenses.CCBYSA,
 		"CC0-1.0":      lock.Licenses.CC0,
+		"MIT":          lock.Licenses.MIT,
 	}
 }

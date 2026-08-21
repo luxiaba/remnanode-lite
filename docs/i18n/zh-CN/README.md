@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=e8226538e7b0c3915ee65fe297cb48726236ef269edd4ed288756fd2b003d98b -->
+<!-- translation: locale=zh-CN; source=docs/README.md; source-sha256=00bbfb397bda5d3eec9eeefae2b167f70828bb7cc2e8a1cea890680862ba6ca3 -->
 
 # Remnanode Lite 文档中心
 
@@ -29,7 +29,7 @@ Native 支持按发行版划分。[Native 主机矩阵](deployment-native.md#nat
 1. 从[运维手册](operations.md)的健康检查、日志、更新、回滚和故障定位开始。
 2. 对照[配置参考](configuration.md)确认当前部署方式的配置来源与覆盖关系。
 3. 对照[资源预算](development/resource-budget.md)理解内存、磁盘、日志和关闭预算。
-4. 出现协议或生命周期问题时，查看[架构与运行时设计](architecture.md)和[3.2.2 契约基线](development/contract-3.2.2.md)。
+4. 出现协议或生命周期问题时，查看[架构与运行时设计](architecture.md)和[3.3.2 契约基线](development/contract-3.3.2.md)。
 5. Docker 回滚使用之前记录的精确版本或 manifest digest；Native 回滚使用保留的 previous generation。不要依赖移动通道的历史指向。
 
 ### 我要阅读或修改 Go 代码
@@ -40,7 +40,7 @@ Native 支持按发行版划分。[Native 主机矩阵](deployment-native.md#nat
 2. 按[开发上手与代码导航](development/README.md)准备工具链、跑通普通测试并定位目标包。
 3. 只阅读[架构与运行时设计](architecture.md)中与目标组件相关的所有权、数据流和锁序章节。
 4. 按[测试策略](development/testing.md)选择与改动风险匹配的验证；提交前遵循[贡献指南](contributing.md)。
-5. 只有修改 `/node` 行为、DTO 或错误语义时，才必须先阅读版本化的[官方 3.2.2 契约基线](development/contract-3.2.2.md)。
+5. 只有修改 `/node` 行为、DTO 或错误语义时，才必须先阅读版本化的[官方 3.3.2 契约基线](development/contract-3.3.2.md)。
 
 ### 我要同步官方版本或发布
 
@@ -84,7 +84,8 @@ Native 支持按发行版划分。[Native 主机矩阵](deployment-native.md#nat
 | [架构与运行时设计](architecture.md) | 组件边界、请求链、Xray 生命周期、插件、网络和资源所有权 |
 | [开发上手与代码导航](development/README.md) | Go 工具链、目录职责、常用命令和开发工作流 |
 | [测试策略](development/testing.md) | 单元、race、契约、Linux namespace、容器和发布测试 |
-| [官方 3.2.2 契约基线](development/contract-3.2.2.md) | 当前固定证据、可选启动 metadata 与 integrations、插件 schema 0.6.3 和已接受差异 |
+| [官方 3.3.2 契约基线](development/contract-3.3.2.md) | 当前固定证据、派生 SNI、Secret 完整性、GeoCheck、插件 schema 0.7.3 和已接受差异 |
+| [官方 3.2.2 契约基线](development/contract-3.2.2.md) | 可选启动 metadata 与 integrations、插件 schema 0.6.3 及 3.2.2 对齐的历史固定证据 |
 | [官方 3.0.0 契约基线](development/contract-3.0.0.md) | pre-start 清理、Zod 4 边界与 3.0.0 对齐的历史固定证据 |
 | [官方 2.8.0 契约基线](development/contract-2.8.0.md) | 历史固定证据、26 条路由、请求响应和已知差异 |
 | [历史审计整改记录](archive/2026-07-audit-remediation.md) | 首轮静态审计的历史范围；不作为当前状态真相源 |

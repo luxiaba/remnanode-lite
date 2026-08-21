@@ -101,11 +101,11 @@ Recreating a container is an accepted operational recovery method when its runti
 | Operator | Health, logs, updates, rollback, and fault diagnosis | Operations path in the [documentation index](README.md) |
 | Go developer | Package boundaries, lifecycle, testing, and change standards | [Architecture](architecture.md), [development guide](development/README.md) |
 | Release maintainer | Versions, compatibility evidence, image tags, and gates | [Versioning](versioning.md), [Release process](release.md) |
-| Security or compatibility auditor | Official evidence, resource boundaries, supply chain, and known differences | [Contract baseline](development/contract-3.2.2.md), [resource budget](development/resource-budget.md) |
+| Security or compatibility auditor | Official evidence, resource boundaries, supply chain, and known differences | [Contract baseline](development/contract-3.3.2.md), [resource budget](development/resource-budget.md) |
 
 ## Project status
 
-The repository has an independent Git history, automated tests, a GHCR candidate-image workflow, and a Native bundle release workflow. The contract compiled into the binary is recorded in [`internal/version/contract.version`](../internal/version/contract.version); its official source and known differences are documented in the versioned [contract baseline](development/contract-3.2.2.md).
+The repository has an independent Git history, automated tests, a GHCR candidate-image workflow, and a Native bundle release workflow. The contract compiled into the binary is recorded in [`internal/version/contract.version`](../internal/version/contract.version); its official source and known differences are documented in the versioned [contract baseline](development/contract-3.3.2.md).
 
 A version in source identifies the build, not a published Release. Check Git tags, GitHub Releases, and exact GHCR tags to see what is actually available. Project version, contract version, Panel integration target, and rw-core version remain separate; [Versioning and image tags](versioning.md) explains how they relate.
 

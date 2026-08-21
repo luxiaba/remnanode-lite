@@ -10,8 +10,8 @@ import (
 
 const (
 	OfficialNodeRepository = "https://github.com/remnawave/node.git"
-	OfficialNodeVersion    = "3.2.2"
-	OfficialNodeCommit     = "2c532c4e33bf5864e9867a7bdc36245cc1057eb1"
+	OfficialNodeVersion    = "3.3.2"
+	OfficialNodeCommit     = "afdfa2d837118efd95c317700e60e9429a169b48"
 )
 
 // RouteContract is one executable route contract backed by the pinned
@@ -183,6 +183,16 @@ func buildOfficialRoutes() []RouteContract {
 			[]string{controller("stats/stats.controller.ts"), command("stats/get-combined-stats.command.ts")},
 		),
 		route(
+			"stats.geocheck", http.MethodPost, "/node/stats/get-geocheck", `{}`,
+			[]string{"run one bounded geocheck report for an optional source IP or interface"},
+			[]string{"A018"},
+			[]string{
+				controller("stats/stats.controller.ts"),
+				command("stats/get-geocheck.command.ts"),
+				"src/modules/stats/geocheck.service.ts",
+			},
+		),
+		route(
 			"stats.user-ip-list", http.MethodPost, "/node/stats/get-user-ip-list",
 			`{"userId":"user-1"}`,
 			[]string{"query and reset one user's IP statistics"}, nil,
@@ -295,33 +305,41 @@ func OfficialRoutes() []RouteContract {
 // executable contract. The list is stable and contains no duplicates.
 func OfficialSourceFiles() []string {
 	sources := map[string]struct{}{
-		"package.json":      {},
-		"package-lock.json": {},
-		"src/app.module.ts": {},
-		"src/main.ts":       {},
-		"src/integration-modules/integrations.module.ts":         {},
-		"src/modules/remnawave-node.modules.ts":                  {},
-		"src/modules/_plugin/plugin.module.ts":                   {},
-		"src/modules/asn-lmdb/asn-lmdb.module.ts":                {},
-		"src/modules/handler/handler.module.ts":                  {},
-		"src/modules/internal/internal.controller.ts":            {},
-		"src/modules/internal/internal.module.ts":                {},
-		"src/modules/network-stats/network-stats.module.ts":      {},
-		"src/modules/stats/stats.module.ts":                      {},
-		"src/modules/xray-core/xray.module.ts":                   {},
-		"src/common/exception/http-exception.filter.ts":          {},
-		"src/common/exception/not-found-exception.filter.ts":     {},
-		"src/common/helpers/error-handler.helper.ts":             {},
-		"libs/contract/api/routes.ts":                            {},
-		"libs/contract/api/controllers/xray.ts":                  {},
-		"libs/contract/api/controllers/stats.ts":                 {},
-		"libs/contract/api/controllers/handler.ts":               {},
-		"libs/contract/api/controllers/plugin.ts":                {},
-		"libs/contract/constants/errors/errors.ts":               {},
-		"libs/contract/constants/internal/internal.constants.ts": {},
-		"libs/contract/models/node-system.schema.ts":             {},
-		"libs/contract/models/torrent-blocker.report.schema.ts":  {},
-		"libs/contract/models/xray-webhook.schema.ts":            {},
+		"package.json":               {},
+		"package-lock.json":          {},
+		"libs/contract/package.json": {},
+		"docker/Dockerfile":          {},
+		"src/app.module.ts":          {},
+		"src/main.ts":                {},
+		"src/common/utils/decode-node-payload/decode-node-payload.ts":                                {},
+		"src/common/utils/decode-node-payload/decode-servername.util.ts":                             {},
+		"src/common/utils/decode-node-payload/validate-secret-key.util.ts":                           {},
+		"src/common/utils/generate-api-config.ts":                                                    {},
+		"src/modules/_plugin/queries/get-torrent-blocker-state/get-torrent-blocker-state.handler.ts": {},
+		"src/modules/_plugin/queries/get-torrent-blocker-state/get-torrent-blocker-state.query.ts":   {},
+		"src/integration-modules/integrations.module.ts":                                             {},
+		"src/modules/remnawave-node.modules.ts":                                                      {},
+		"src/modules/_plugin/plugin.module.ts":                                                       {},
+		"src/modules/asn-lmdb/asn-lmdb.module.ts":                                                    {},
+		"src/modules/handler/handler.module.ts":                                                      {},
+		"src/modules/internal/internal.controller.ts":                                                {},
+		"src/modules/internal/internal.module.ts":                                                    {},
+		"src/modules/network-stats/network-stats.module.ts":                                          {},
+		"src/modules/stats/stats.module.ts":                                                          {},
+		"src/modules/xray-core/xray.module.ts":                                                       {},
+		"src/common/exception/http-exception.filter.ts":                                              {},
+		"src/common/exception/not-found-exception.filter.ts":                                         {},
+		"src/common/helpers/error-handler.helper.ts":                                                 {},
+		"libs/contract/api/routes.ts":                                                                {},
+		"libs/contract/api/controllers/xray.ts":                                                      {},
+		"libs/contract/api/controllers/stats.ts":                                                     {},
+		"libs/contract/api/controllers/handler.ts":                                                   {},
+		"libs/contract/api/controllers/plugin.ts":                                                    {},
+		"libs/contract/constants/errors/errors.ts":                                                   {},
+		"libs/contract/constants/internal/internal.constants.ts":                                     {},
+		"libs/contract/models/node-system.schema.ts":                                                 {},
+		"libs/contract/models/torrent-blocker.report.schema.ts":                                      {},
+		"libs/contract/models/xray-webhook.schema.ts":                                                {},
 	}
 	for _, route := range officialRoutes {
 		for _, source := range route.Sources {

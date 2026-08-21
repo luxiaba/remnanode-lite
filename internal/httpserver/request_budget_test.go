@@ -24,6 +24,7 @@ func TestEveryRegisteredRouteHasExpectedRequestBodyBudget(t *testing.T) {
 		routeStatsGetAllOutboundsStats:   nodeRequestBodySmall,
 		routeStatsGetAllInboundsStats:    nodeRequestBodySmall,
 		routeStatsGetCombinedStats:       nodeRequestBodySmall,
+		routeStatsGetGeoCheck:            nodeRequestBodySmall,
 		routeStatsGetUserIPList:          nodeRequestBodySmall,
 		routeStatsGetUsersIPList:         nodeRequestBodySmall,
 		routeHandlerAddUser:              nodeRequestBodyMedium,

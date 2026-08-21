@@ -15,6 +15,7 @@ const (
 type TorrentBlockerOptions struct {
 	Enabled         bool
 	IncludeRuleTags []string
+	RulePosition    float64
 	SocketPath      string
 	RESTToken       string
 }
@@ -77,14 +78,12 @@ func generateAPIConfig(input map[string]any, xrayRPCSocket string, torrent Torre
 				"deduplication": 5,
 			},
 		}
-		if len(rules) == 0 {
-			rules = []any{torrentRule}
-		} else {
-			inserted := make([]any, 0, len(rules)+1)
-			inserted = append(inserted, rules[0], torrentRule)
-			inserted = append(inserted, rules[1:]...)
-			rules = inserted
-		}
+		position := torrentRuleIndex(torrent.RulePosition, len(rules))
+		inserted := make([]any, 0, len(rules)+1)
+		inserted = append(inserted, rules[:position]...)
+		inserted = append(inserted, torrentRule)
+		inserted = append(inserted, rules[position:]...)
+		rules = inserted
 
 		if len(torrent.IncludeRuleTags) > 0 {
 			tagSet := make(map[string]struct{}, len(torrent.IncludeRuleTags))
@@ -111,6 +110,16 @@ func generateAPIConfig(input map[string]any, xrayRPCSocket string, torrent Torre
 	}
 
 	return result
+}
+
+func torrentRuleIndex(position float64, rulesLength int) int {
+	if rulesLength == 0 {
+		return 0
+	}
+	if position <= 0 || position != float64(int(position)) {
+		return 1
+	}
+	return 1 + min(int(position), rulesLength-1)
 }
 
 func buildWebhookURL(socketPath string) string {

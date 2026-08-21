@@ -60,6 +60,25 @@ func TestValidatePluginConfigValidatesTorrentWebhookURL(t *testing.T) {
 	}
 }
 
+func TestValidatePluginConfigValidatesTorrentRulePlacement(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []any{float64(0), float64(1), float64(1.5), float64(1000)} {
+		cfg := validTorrentBlocker(true)
+		cfg["rulePlacement"] = value
+		if err := ValidatePluginConfig(map[string]any{"torrentBlocker": cfg}); err != nil {
+			t.Errorf("rulePlacement=%v rejected: %v", value, err)
+		}
+	}
+	for _, value := range []any{float64(-1), float64(1001), math.Inf(1), math.NaN(), "1", nil} {
+		cfg := validTorrentBlocker(true)
+		cfg["rulePlacement"] = value
+		if err := ValidatePluginConfig(map[string]any{"torrentBlocker": cfg}); err == nil {
+			t.Errorf("rulePlacement=%v was accepted", value)
+		}
+	}
+}
+
 func TestValidatePluginConfigAcceptsNonNegativeSafeIntegerDurationAndExtEdges(t *testing.T) {
 	t.Parallel()
 

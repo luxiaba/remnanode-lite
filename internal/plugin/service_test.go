@@ -334,6 +334,28 @@ func TestSyncIncludeRuleTagsChangeRestartsXray(t *testing.T) {
 	}
 }
 
+func TestSyncTorrentRulePlacementChangeRestartsXray(t *testing.T) {
+	t.Parallel()
+
+	state := NewState()
+	xray := &mockXray{}
+	service, _ := newReadyService(t, state, xray)
+	service.Sync(torrentPluginWithRulePlacement(t, 0))
+	xray.resetCalls()
+
+	response := service.Sync(torrentPluginWithRulePlacement(t, 2))
+
+	if !response.Accepted {
+		t.Fatal("sync was not accepted")
+	}
+	if xray.stopIfOnline != 1 {
+		t.Fatalf("StopIfOnline calls = %d, want 1", xray.stopIfOnline)
+	}
+	if got := state.TorrentBlockerRulePosition(); got != 2 {
+		t.Fatalf("rule position = %v, want 2", got)
+	}
+}
+
 func TestSyncInvalidConfigCleansStateStopsXrayAndPreservesReports(t *testing.T) {
 	t.Parallel()
 
@@ -1486,6 +1508,22 @@ func torrentPluginWithDuration(t *testing.T, enabled bool, blockDuration float64
 		"uuid":   "00000000-0000-4000-8000-000000000001",
 		"name":   "test",
 		"config": map[string]any{"torrentBlocker": torrent},
+	})
+}
+
+func torrentPluginWithRulePlacement(t *testing.T, position float64) *SyncPlugin {
+	t.Helper()
+	return mustSyncPlugin(t, map[string]any{
+		"uuid": "00000000-0000-4000-8000-000000000001",
+		"name": "test",
+		"config": map[string]any{
+			"torrentBlocker": map[string]any{
+				"enabled":       true,
+				"blockDuration": 300,
+				"ignoreLists":   map[string]any{},
+				"rulePlacement": position,
+			},
+		},
 	})
 }
 

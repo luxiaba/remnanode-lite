@@ -44,13 +44,14 @@ require_text Dockerfile 'COPY release/runtime-assets.lock.json /runtime-assets.l
 require_text Dockerfile 'release-tool materialize'
 require_text Dockerfile "--arch \"${literal_dollar}TARGETARCH\""
 require_text Dockerfile '--out-dir /assets'
+require_text Dockerfile 'COPY --from=assets --chmod=0755 /assets/lib/geocheck'
 require_text Dockerfile 'COPY --from=assets --chmod=0755 /assets/lib/rw-core'
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geoip.dat'
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/xray/geosite.dat'
 require_text Dockerfile 'COPY --from=assets --chmod=0644 /assets/share/asn/asn-prefixes.bin'
 require_text Dockerfile 'COPY --from=build --chmod=0755 /out/remnanode-lite /usr/local/bin/remnanode-lite'
 require_text Dockerfile '/var/lib/remnanode-lite'
-for license_file in CC-BY-SA-4.0 CC0-1.0 GPL-3.0-only MPL-2.0; do
+for license_file in CC-BY-SA-4.0 CC0-1.0 GPL-3.0-only MIT MPL-2.0; do
   require_text Dockerfile "COPY --from=assets --chmod=0644 /assets/licenses/${license_file}.txt /usr/share/doc/remnanode-lite/licenses/${license_file}.txt"
 done
 require_text Dockerfile 'COPY --chmod=0644 LICENSE /usr/share/doc/remnanode-lite/LICENSE'
