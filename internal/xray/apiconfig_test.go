@@ -314,3 +314,44 @@ func TestGenerateAPIConfigTorrentBlocker(t *testing.T) {
 		t.Fatalf("expected at least 2 rules, got %d", len(rules))
 	}
 }
+
+func TestGenerateAPIConfigTorrentBlockerRulePlacement(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name     string
+		position float64
+		want     []string
+	}{
+		{name: "default", position: 0, want: []string{apiTag, torrentBlockerOutboundTag, "a", "b", "c"}},
+		{name: "after two user rules", position: 2, want: []string{apiTag, "a", "b", torrentBlockerOutboundTag, "c"}},
+		{name: "past end", position: 1000, want: []string{apiTag, "a", "b", "c", torrentBlockerOutboundTag}},
+		{name: "fractional falls back", position: 1.5, want: []string{apiTag, torrentBlockerOutboundTag, "a", "b", "c"}},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := generateAPIConfig(map[string]any{
+				"routing": map[string]any{"rules": []any{
+					map[string]any{"ruleTag": "a", "outboundTag": "a"},
+					map[string]any{"ruleTag": "b", "outboundTag": "b"},
+					map[string]any{"ruleTag": "c", "outboundTag": "c"},
+				}},
+			}, "remnanode-lite-xtls-test", TorrentBlockerOptions{
+				Enabled: true, RulePosition: test.position, SocketPath: "/run/test.sock",
+			})
+
+			routing := cfg["routing"].(map[string]any)
+			rules := arrayFrom(routing["rules"])
+			got := make([]string, 0, len(rules))
+			for _, item := range rules {
+				rule := item.(map[string]any)
+				tag, _ := rule["outboundTag"].(string)
+				got = append(got, tag)
+			}
+			if strings.Join(got, ",") != strings.Join(test.want, ",") {
+				t.Fatalf("rule order = %v, want %v", got, test.want)
+			}
+		})
+	}
+}

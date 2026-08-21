@@ -14,6 +14,9 @@ func validateThirdPartyNotices(lock runtimeLock, notices []byte) error {
 		{name: "Xray version", value: "`" + lock.Xray.Version + "`"},
 		{name: "Xray commit", value: "`" + lock.Xray.Commit + "`"},
 		{name: "Xray source URL", value: lock.Xray.SourceURL},
+		{name: "geocheck version", value: "`" + lock.GeoCheck.Version + "`"},
+		{name: "geocheck commit", value: "`" + lock.GeoCheck.Commit + "`"},
+		{name: "geocheck source URL", value: lock.GeoCheck.SourceURL},
 		{name: "GeoIP version", value: "`" + lock.GeoIP.Version + "`"},
 		{name: "GeoIP commit", value: "`" + lock.GeoIP.Commit + "`"},
 		{name: "GeoIP source URL", value: lock.GeoIP.SourceURL},
@@ -41,7 +44,7 @@ func validateThirdPartyNotices(lock runtimeLock, notices []byte) error {
 		}
 	}
 	for _, path := range []string{
-		"lib/rw-core", "share/xray/geoip.dat", "share/xray/geosite.dat", "share/asn/asn-prefixes.bin",
+		"lib/geocheck", "lib/rw-core", "share/xray/geoip.dat", "share/xray/geosite.dat", "share/asn/asn-prefixes.bin",
 	} {
 		if !strings.Contains(text, "`"+path+"`") {
 			return fmt.Errorf("third-party notices do not describe %s", path)
@@ -78,6 +81,10 @@ func lockedProvenanceRows(lock runtimeLock) []string {
 			lock.Xray.Architectures.AMD64.Archive, artifactLock{SHA256: lock.Xray.Architectures.AMD64.Core.SHA256, Size: lock.Xray.Architectures.AMD64.Core.Size}, lock.Xray.Architectures.AMD64.Core.License),
 		provenanceRow("Xray core (arm64)", lock.Xray.Version+" @ "+lock.Xray.Commit,
 			lock.Xray.Architectures.ARM64.Archive, artifactLock{SHA256: lock.Xray.Architectures.ARM64.Core.SHA256, Size: lock.Xray.Architectures.ARM64.Core.Size}, lock.Xray.Architectures.ARM64.Core.License),
+		provenanceRow("GeoCheck (amd64)", lock.GeoCheck.Version+" @ "+lock.GeoCheck.Commit,
+			lock.GeoCheck.Architectures.AMD64.Archive, artifactLock{SHA256: lock.GeoCheck.Architectures.AMD64.Binary.SHA256, Size: lock.GeoCheck.Architectures.AMD64.Binary.Size}, lock.GeoCheck.Architectures.AMD64.Binary.License),
+		provenanceRow("GeoCheck (arm64)", lock.GeoCheck.Version+" @ "+lock.GeoCheck.Commit,
+			lock.GeoCheck.Architectures.ARM64.Archive, artifactLock{SHA256: lock.GeoCheck.Architectures.ARM64.Binary.SHA256, Size: lock.GeoCheck.Architectures.ARM64.Binary.Size}, lock.GeoCheck.Architectures.ARM64.Binary.License),
 		provenanceRow("GeoIP", lock.GeoIP.Version+" @ "+lock.GeoIP.Commit,
 			lock.GeoIP.SourceArtifact, lock.GeoIP.Artifact, lock.GeoIP.License),
 		provenanceRow("GeoSite", lock.GeoSite.Version+" @ "+lock.GeoSite.Commit,

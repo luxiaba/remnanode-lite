@@ -18,6 +18,7 @@ import (
 
 	"github.com/luxiaba/remnanode-lite/internal/auth"
 	"github.com/luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/geocheck"
 	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
 	"github.com/luxiaba/remnanode-lite/internal/secret"
 )
@@ -32,6 +33,38 @@ func TestExternalServerSecurityPolicy(t *testing.T) {
 	}
 	if got := server.httpServer.MaxHeaderBytes; got != 64<<10 {
 		t.Fatalf("MaxHeaderBytes = %d, want %d", got, 64<<10)
+	}
+	if got := server.httpServer.TLSConfig.ClientAuth; got != tls.RequireAndVerifyClientCert {
+		t.Fatalf("client authentication = %v, want RequireAndVerifyClientCert", got)
+	}
+}
+
+func TestTLSCertificateRequiresExactDerivedSNI(t *testing.T) {
+	payload := testTLSPayload(t)
+	tlsConfig, err := buildTLSConfig(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tlsConfig.Certificates) != 0 {
+		t.Fatal("TLS config must not expose a default certificate")
+	}
+	if tlsConfig.GetCertificate == nil {
+		t.Fatal("TLS config is missing its SNI certificate gate")
+	}
+
+	expected, err := secret.DeriveSNI(payload.CACertPEM, payload.JWTPublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificate, err := tlsConfig.GetCertificate(&tls.ClientHelloInfo{ServerName: expected})
+	if err != nil || certificate == nil {
+		t.Fatalf("derived SNI was rejected: certificate=%v error=%v", certificate != nil, err)
+	}
+
+	for _, offered := range []string{"", strings.ToUpper(expected), expected + ".", "x" + expected[1:]} {
+		if certificate, err := tlsConfig.GetCertificate(&tls.ClientHelloInfo{ServerName: offered}); err == nil || certificate != nil {
+			t.Fatalf("unexpected SNI %q returned certificate=%v error=%v", offered, certificate != nil, err)
+		}
 	}
 }
 
@@ -77,6 +110,7 @@ func securityTestDependencies(t *testing.T, validator *auth.JWTValidator) Depend
 		Validator: validator,
 		Xray:      &recordingXrayController{},
 		Stats:     newTestStatsService(countingStatsProvider{calls: &calls}),
+		GeoCheck:  geocheck.NewService("geocheck"),
 		Handler:   nodehandler.NewService(countingHandlerProvider{calls: &calls}, nil),
 		Plugins:   &recordingPluginController{},
 		Body:      newHTTPTestBudget(t, false, 0),
@@ -94,6 +128,7 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 		"JWT validator":       func(d *Dependencies) { d.Validator = nil },
 		"Xray controller":     func(d *Dependencies) { d.Xray = nil },
 		"stats service":       func(d *Dependencies) { d.Stats = nil },
+		"geocheck service":    func(d *Dependencies) { d.GeoCheck = nil },
 		"handler service":     func(d *Dependencies) { d.Handler = nil },
 		"plugin controller":   func(d *Dependencies) { d.Plugins = nil },
 		"request body budget": func(d *Dependencies) { d.Body = nil },

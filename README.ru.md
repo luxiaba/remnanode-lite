@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=README.md; source-sha256=12b84c8f07c5d63d378eb801b563468fea466d108b6f9ea18aca9c60b348ea07 -->
+<!-- translation: locale=ru; source=README.md; source-sha256=3b586473d8c8f915d0f3367e1bf1456a8c6d5408c966522b81a7bd942614ae93 -->
 <div align="center">
 
 # Remnanode Lite
@@ -28,7 +28,8 @@ Remnanode Lite работает как Remnawave-совместимый Node н�
 
 ## Возможности
 
-- Реализует контракт API Remnawave Node `3.2.2`.
+- Реализует контракт API Remnawave Node `3.3.2`, включая производный SNI,
+  проверку целостности Secret, GeoCheck и позицию Torrent-правила.
 - Node работает как единый процесс на Go и напрямую управляет rw-core; Node.js и s6 не требуются.
 - Использует единый поддерживаемый профиль с пониженным потреблением памяти для контейнера и Native-службы на серверах с 512 MiB RAM.
 - Поддерживает обновление пользователей на лету, сбор статистики, управление соединениями и официальные форматы правил плагинов, включая очистку устаревших Unix-сокетов перед запуском по доверенной конфигурации Panel.
@@ -241,7 +242,7 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | Точные опубликованные Releases |
 | Хосты для Native | Зависит от дистрибутива; см. [матрицу хостов Native](docs/i18n/ru/deployment-native.md#матрица-хостов-native) |
-| Контракт Node | `3.2.2` |
+| Контракт Node | `3.3.2` |
 | rw-core | `v26.7.28` |
 | Платформы | `linux/amd64`, `linux/arm64` |
 | Целевая конфигурация хоста | `512 MiB RAM / 1 vCPU / 2 GB диска` |

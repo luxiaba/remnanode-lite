@@ -37,6 +37,26 @@ func TestExtractorRejectsUninvokedNestBootstrap(t *testing.T) {
 	assertErrorContains(t, err, "must be invoked exactly once")
 }
 
+func TestExtractorAcceptsTopLevelNestBootstrapCatch(t *testing.T) {
+	repository := createOfficialFixture(t)
+	replaceFixtureText(t, repository, mainSource, "void bootstrap();", `void bootstrap().catch((error) => {
+    console.error(error);
+});`)
+	runGit(t, repository, "add", ".")
+	runGit(t, repository, "commit", "-m", "add bootstrap catch")
+	commit := runGit(t, repository, "rev-parse", "HEAD")
+	if _, err := Generate(context.Background(), repository, fixtureExpectation(commit)); err != nil {
+		t.Fatalf("top-level bootstrap catch was rejected: %v", err)
+	}
+}
+
+func TestExtractorRejectsUnsupportedNestBootstrapPromiseChain(t *testing.T) {
+	repository := createOfficialFixture(t)
+	replaceFixtureText(t, repository, mainSource, "void bootstrap();", "void bootstrap().then(() => undefined);")
+	err := generateChangedFixture(t, repository, "unsupported bootstrap promise chain")
+	assertErrorContains(t, err, "supports only a catch handler")
+}
+
 func TestExtractorRejectsConditionallyExecutedNestBootstrap(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
 		repository := createOfficialFixture(t)

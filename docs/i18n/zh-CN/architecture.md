@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=605310166f571d145e880e04addc060c9afebb1e8023d4d4234d1799f180ef62 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=763e1e667873b69a8da088666eaafe7995c7a7a61709a490239a96185f682536 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -7,7 +7,7 @@
 
 本文面向第一次接触 Remnanode Lite 的维护者，描述当前代码真实采用的边界、运行流程、状态所有权和资源约束。它回答的是“系统如何工作、修改代码时应守住什么”，而不是部署参数或某个版本的发布清单。
 
-部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.2.2 契约基线](development/contract-3.2.2.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
+部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.3.2 契约基线](development/contract-3.3.2.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
 
 ## 1. 系统定位
 
@@ -97,6 +97,7 @@ Docker 与 Native Linux 交付相同的 Node 和锁定版本的运行时资产�
 | `internal/nodeapi` | 官方请求 DTO、JSON 结构保护、Zod 兼容验证与错误模型 |
 | `internal/nodehandler` | 用户增删、批量变更和连接清理的应用服务 |
 | `internal/stats` | rw-core、插件和宿主统计的应用响应映射 |
+| `internal/geocheck` | 有界执行并校验 Release 固定的官方 GeoCheck 二进制 |
 | `internal/xray` | rw-core 聚合根：进程状态机、配置注入、版本、哈希、日志和 gRPC 门面 |
 | `internal/xrayrpc` | 面向 rw-core 的最小 gRPC wire adapter |
 | `internal/xrayrpc/wire` | Node 实际使用的最小 protobuf 消息；`wire.pb.go` 为生成文件 |

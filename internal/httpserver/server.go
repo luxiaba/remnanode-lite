@@ -18,6 +18,7 @@ import (
 	"github.com/luxiaba/remnanode-lite/internal/auth"
 	"github.com/luxiaba/remnanode-lite/internal/bodylimit"
 	"github.com/luxiaba/remnanode-lite/internal/config"
+	"github.com/luxiaba/remnanode-lite/internal/geocheck"
 	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
 	"github.com/luxiaba/remnanode-lite/internal/plugin"
 	"github.com/luxiaba/remnanode-lite/internal/secret"
@@ -26,14 +27,15 @@ import (
 )
 
 type Server struct {
-	httpServer     *http.Server
-	maxConnections int
-	xrayGate       xrayLifecycleGate
-	manager        xrayController
-	statsService   *stats.Service
-	handlerService *nodehandler.Service
-	pluginService  pluginController
-	bodyBudget     *bodylimit.Budget
+	httpServer      *http.Server
+	maxConnections  int
+	xrayGate        xrayLifecycleGate
+	manager         xrayController
+	statsService    *stats.Service
+	geocheckService geocheckController
+	handlerService  *nodehandler.Service
+	pluginService   pluginController
+	bodyBudget      *bodylimit.Budget
 }
 
 const (
@@ -62,10 +64,15 @@ type pluginController interface {
 	ReportsCount() int
 }
 
+type geocheckController interface {
+	Get(ctx context.Context, ip, interfaceName string) (json.RawMessage, error)
+}
+
 type Dependencies struct {
 	Validator *auth.JWTValidator
 	Xray      xrayController
 	Stats     *stats.Service
+	GeoCheck  *geocheck.Service
 	Handler   *nodehandler.Service
 	Plugins   pluginController
 	Body      *bodylimit.Budget
@@ -80,6 +87,9 @@ func (d Dependencies) validate() error {
 	}
 	if d.Stats == nil {
 		return errors.New("httpserver: stats service is required")
+	}
+	if d.GeoCheck == nil {
+		return errors.New("httpserver: geocheck service is required")
 	}
 	if d.Handler == nil {
 		return errors.New("httpserver: handler service is required")
@@ -103,11 +113,12 @@ func New(cfg config.Config, payload secret.Payload, dependencies Dependencies) (
 	}
 
 	server := &Server{
-		manager:        dependencies.Xray,
-		statsService:   dependencies.Stats,
-		handlerService: dependencies.Handler,
-		pluginService:  dependencies.Plugins,
-		bodyBudget:     dependencies.Body,
+		manager:         dependencies.Xray,
+		statsService:    dependencies.Stats,
+		geocheckService: dependencies.GeoCheck,
+		handlerService:  dependencies.Handler,
+		pluginService:   dependencies.Plugins,
+		bodyBudget:      dependencies.Body,
 	}
 
 	maxConnections, maxHandlers := serverCapacity(cfg.LowMemory)
@@ -423,6 +434,8 @@ func (s *Server) handleNodeRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleStatsGetAllOutboundsStats(w, r)
 	case routeStatsGetCombinedStats:
 		s.handleStatsGetCombinedStats(w, r)
+	case routeStatsGetGeoCheck:
+		s.handleStatsGetGeoCheck(w, r)
 	case routeStatsGetUserIPList:
 		s.handleStatsGetUserIPList(w, r)
 	case routeStatsGetUsersIPList:
@@ -465,6 +478,10 @@ func buildTLSConfig(payload secret.Payload) (*tls.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load node TLS certificate: %w", err)
 	}
+	expectedSNI, err := secret.DeriveSNI(payload.CACertPEM, payload.JWTPublicKey)
+	if err != nil {
+		return nil, err
+	}
 
 	clientCAs := x509.NewCertPool()
 	if ok := clientCAs.AppendCertsFromPEM([]byte(payload.CACertPEM)); !ok {
@@ -472,10 +489,15 @@ func buildTLSConfig(payload secret.Payload) (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{certificate},
-		ClientCAs:    clientCAs,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
+		MinVersion: tls.VersionTLS13,
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			if !secret.MatchesSNI(hello.ServerName, expectedSNI) {
+				return nil, errors.New("unknown SNI")
+			}
+			return &certificate, nil
+		},
+		ClientCAs:  clientCAs,
+		ClientAuth: tls.RequireAndVerifyClientCert,
 	}, nil
 }
 

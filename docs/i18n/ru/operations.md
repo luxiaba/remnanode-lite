@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/operations.md; source-sha256=6a4a64422c4c496b2b26fb48646d013840a49b18072b5b6068165dc3f3a26fe4 -->
+<!-- translation: locale=ru; source=docs/operations.md; source-sha256=b8fb94f1665d1c37da012250b8041de8f92325a2de8d9f3b6d46a9e1249f0c34 -->
 
 # Эксплуатация и диагностика
 
@@ -160,6 +160,10 @@ sudo rnlctl start
 Установка с `--prepare-only` сначала требует `rnlctl activate`. Не используйте `kill -9` для обычных операций: он обходится без HTTP drain, завершения process group rw-core и очистки nftables.
 
 ## Обновление и откат Docker
+
+Текущая стабильная цель — `3.3.2`. Compose-шаблон этого Release выбирает соответствующий
+образ и содержит закреплённый asset GeoCheck. Сохраните `.env`, запишите текущий digest, а после
+пересоздания проверьте связь с Panel, GeoCheck, rw-core и репрезентативный proxy-трафик.
 
 | Ссылка | Назначение |
 | --- | --- |

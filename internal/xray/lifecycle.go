@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxiaba/remnanode-lite/internal/executil"
 	"github.com/luxiaba/remnanode-lite/internal/unixconfig"
 	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
@@ -759,29 +760,7 @@ func rwCoreEnvironment(base []string, geoDir, token string) []string {
 }
 
 func sanitizedChildEnvironment(base []string) []string {
-	managed := map[string]struct{}{
-		"SECRET_KEY":                   {},
-		"SECRET_KEY_FILE":              {},
-		"INTERNAL_REST_TOKEN":          {},
-		"REMNANODE_ENV":                {},
-		"GOMEMLIMIT":                   {},
-		"NODE_CONTRACT_VERSION":        {},
-		"XRAY_CORE_VERSION":            {},
-		"XRAY_LOCATION_ASSET":          {},
-		unixconfig.InternalTokenEnvVar: {},
-	}
-
-	environment := make([]string, 0, len(base))
-	for _, assignment := range base {
-		key, _, ok := strings.Cut(assignment, "=")
-		if ok {
-			if _, sensitive := managed[key]; sensitive {
-				continue
-			}
-		}
-		environment = append(environment, assignment)
-	}
-	return environment
+	return executil.SanitizedEnvironment(base)
 }
 
 func (m *Manager) monitorProcess(process *processState) {

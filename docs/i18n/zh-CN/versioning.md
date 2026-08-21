@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=1f15ef219c27f5e247dff43a258c47367af143daf9ff12ac66a5f08dcd743647 -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=0912a624e627b50b9b412d0a5115c936bd6037cd7e43331962f6691145616ce5 -->
 
 # 版本与镜像标签
 
@@ -22,11 +22,11 @@ release workflow 是发布行为的可执行真相源。它调用 `release-tool 
 例如：
 
 ```text
-Version:         3.2.2
-ContractVersion: 3.2.2
+Version:         3.3.2
+ContractVersion: 3.3.2
 ```
 
-这表示已经对齐官方 Node `3.2.2` 契约的 Remnanode Lite 源码线。对应 GitHub Release 公开后，才会附带 Native Linux 发行包。仅改变 `Version` 不会扩大项目声明的兼容范围。
+这表示已经对齐官方 Node `3.3.2` 契约的 Remnanode Lite 源码线。对应 GitHub Release 公开后，才会附带 Native Linux 发行包。仅改变 `Version` 不会扩大项目声明的兼容范围。
 
 改变 `ContractVersion` 前，必须固定官方源码、审查契约差异、更新实现和测试，并完成兼容性验证。只改项目版本从不等于新增兼容性。
 
@@ -71,6 +71,7 @@ GitHub 也会将该 Release 标记为 Latest。它既是不可变的对齐点，
 | `2.8.0-rnl.4` | `2.8.0` | 预发布版 | 简洁的 Native 运维总览与状态感知的生命周期提示 |
 | `3.0.0` | `3.0.0` | 稳定版 | 官方 3.0.0 契约、pre-start socket 清理、Zod 4 边界和更新的运行时资产 |
 | `3.2.2` | `3.2.2` | 稳定版 | 官方 3.2.2 契约、可选启动 metadata 与 integrations、Torrent Blocker 报告 webhook 和插件 schema 0.6.3 |
+| `3.3.2` | `3.3.2` | 稳定版 | 官方 3.3.2 契约、派生 SNI、Secret 完整性、GeoCheck 0.3.0、Torrent 规则位置和插件 schema 0.7.3 |
 
 源码中的版本可能早于正式发布出现在本表中。判断精确资产是否可用时，应使用[何时才算已发布](#何时才算已发布)中的标准，而不是只看源码。
 

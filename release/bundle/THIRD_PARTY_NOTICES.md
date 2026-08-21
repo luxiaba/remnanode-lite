@@ -12,6 +12,14 @@ installation. Xray-core is licensed under MPL-2.0. The corresponding source is:
 
 https://github.com/XTLS/Xray-core/tree/5ca6f4b7d4dc20a881d4330e498892697627ec0c
 
+## Remnawave GeoCheck
+
+`lib/geocheck` is the unmodified `geocheck` executable from Remnawave GeoCheck
+`v0.3.0`, commit `50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc`. GeoCheck is
+licensed under MIT. The corresponding source is:
+
+https://github.com/remnawave/geocheck/tree/50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc
+
 ## GeoIP data
 
 `share/xray/geoip.dat` is redistributed byte for byte from
@@ -60,14 +68,16 @@ digests. No network source is consulted when the installed service starts.
 ## Locked provenance
 
 The following values mirror `runtime-assets.lock.json`. The source column is the
-release archive used for Xray, the immutable source snapshot for Geo data, and
-the ASN input archive. The payload column is the exact file redistributed in
-the bundle.
+release archive used for Xray and GeoCheck, the immutable source snapshot for
+Geo data, and the ASN input archive. The payload column is the exact file
+redistributed in the bundle.
 
 | Component | Release and commit | Source SHA-256 | Payload SHA-256 | License |
 | --- | --- | --- | --- | --- |
 | Xray core (amd64) | `v26.7.28 @ 5ca6f4b7d4dc20a881d4330e498892697627ec0c` | `sha256:8195d909f1109b8f3d99eefe401a3c451d7bf4af71f24d3815420f77e5dd2a40` (21164807 bytes) | `sha256:64d46afb80adea1bf97a0d467e83f4a9ac1ebd0995891e84bca3f1a1d1affb1d` (37720190 bytes) | `MPL-2.0` |
 | Xray core (arm64) | `v26.7.28 @ 5ca6f4b7d4dc20a881d4330e498892697627ec0c` | `sha256:f5698bb218ada3b4022db26fafc39601c5f53b46b19eb76c9616325985807501` (19699639 bytes) | `sha256:4b8af237444801bf17b3dc10a1c5c24581fbe3d433eba3d78c6c3a0da1df56fc` (35389566 bytes) | `MPL-2.0` |
+| GeoCheck (amd64) | `v0.3.0 @ 50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc` | `sha256:eca33bbee3c2c3ea7ade85f9a61ef4c7471a8334eb8f0a715e844aef865307d9` (3648208 bytes) | `sha256:09f52e3de1a3037f5311d441b658de34349b33811da90d211daced7b88043da6` (9097378 bytes) | `MIT` |
+| GeoCheck (arm64) | `v0.3.0 @ 50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc` | `sha256:1badce683fd901b4052a78b833d536b851cf1f5952d82bc985c875e37a153267` (3319891 bytes) | `sha256:5d0d2a662fa5a85b6d3286143769967f7edd7705b48e62b7e91b0268bf2644d0` (8519842 bytes) | `MIT` |
 | GeoIP | `202607230036 @ e0cb5fd94679b83cd612a27e01ade2998fc24cdb` | `sha256:ac356437bcdefa3433a4eb100055debf0feda019f3757bcc25d31a1cb671d542` (1398786 bytes) | `sha256:cdf411fce977a1f48adb6a3b224e3e2bd7eccfcd4d6e2e30c6dc443f1a0e8e52` (17683114 bytes) | `NOASSERTION` |
 | GeoSite | `202607272255 @ 27c9bd1c8ebd2a1eb871476ef10b6c157db0b460` | `sha256:5be068756fcdbd6c01f04347833c34d31b0afa879a92f1e38a327a3a2273fe6b` (21271 bytes) | `sha256:ea8d817c4782a84db4104ba416329bb14024f69568c666f5cca6c4303ef1942e` (10514807 bytes) | `GPL-3.0-only` |
 | ASN database | `56d021c7536afb15317155e45b57e7b5c87a4700` | `sha256:fc8be15bfbef3134f603276a26364935dbd2543d099dbaafa978a33b674a58ec` (16175007 bytes) | `sha256:8384ea40dd78786df51ff62e8c2018a9c582940b975bfea89c647c498a2ac997` (5072593 bytes) | `CC0-1.0` |
@@ -79,4 +89,5 @@ The bundle also includes these exact license texts:
 | `CC-BY-SA-4.0` | https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/CC-BY-SA-4.0.txt | `sha256:cde7883b9050a1104f4ac19a1572aafd6e5d7323b68351aaf51fbf4beba54966` | 18375 |
 | `CC0-1.0` | https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/CC0-1.0.txt | `sha256:a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499` | 7048 |
 | `GPL-3.0-only` | https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/GPL-3.0-only.txt | `sha256:fb981668c18a279e285fc4d83fba1e836cc84dd4daa73c9697d3cfd2d8aca6e0` | 34674 |
+| `MIT` | https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt | `sha256:b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5` | 1078 |
 | `MPL-2.0` | https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MPL-2.0.txt | `sha256:66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172` | 16727 |

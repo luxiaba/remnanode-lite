@@ -29,6 +29,7 @@ func TestMaterializeLockedRuntimeAssets(t *testing.T) {
 		size   int64
 		mode   os.FileMode
 	}{
+		"lib/geocheck":               {document.Lock.GeoCheck.Architectures.AMD64.Binary.SHA256, document.Lock.GeoCheck.Architectures.AMD64.Binary.Size, 0o755},
 		"lib/rw-core":                {document.Lock.Xray.Architectures.AMD64.Core.SHA256, document.Lock.Xray.Architectures.AMD64.Core.Size, 0o755},
 		"runtime-assets.lock.json":   {document.SHA256, int64(len(document.Data)), 0o644},
 		"share/asn/asn-prefixes.bin": {document.Lock.ASN.Output.SHA256, document.Lock.ASN.Output.Size, 0o644},

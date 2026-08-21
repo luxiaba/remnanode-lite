@@ -14,7 +14,7 @@ You do not need to read every long-form document before making a first change:
 4. In the [architecture guide](../architecture.md), read only the data-flow, ownership, and concurrency sections for the component you will change.
 5. Choose the smallest sufficient verification from the [testing guide](testing.md). Read the [contribution guide](../../CONTRIBUTING.md) before preparing a commit.
 
-Go deeper only when the change requires it: read the [current contract baseline](contract-3.2.2.md) for Panel-visible behavior, the [versioning policy](../versioning.md) for versions or images, and the [release guide](../release.md) for a formal release. The [documentation index](../README.md) provides complete role-based navigation.
+Go deeper only when the change requires it: read the [current contract baseline](contract-3.3.2.md) for Panel-visible behavior, the [versioning policy](../versioning.md) for versions or images, and the [release guide](../release.md) for a formal release. The [documentation index](../README.md) provides complete role-based navigation.
 
 ## Development Environment
 
@@ -302,7 +302,7 @@ sufficient.
 
 After the first normal test run, continue according to the change:
 
-- API and behavioral alignment: [current contract baseline](contract-3.2.2.md).
+- API and behavioral alignment: [current contract baseline](contract-3.3.2.md).
 - Concurrency and state ownership: [architecture guide](../architecture.md).
 - Local and CI verification: [testing guide](testing.md).
 - Commits and review: [contribution guide](../../CONTRIBUTING.md).

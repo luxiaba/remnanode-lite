@@ -24,7 +24,7 @@ var (
 	nestFactoryCreatePattern   = regexp.MustCompile(`\bNestFactory\s*\.\s*create\s*\(`)
 	nestBootstrapPattern       = regexp.MustCompile(`\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*await\s+NestFactory\s*\.\s*create\s*\(`)
 	bootstrapFunctionPattern   = regexp.MustCompile(`\basync\s+function\s+bootstrap\s*\([^)]*\)\s*(?::[^\{]+)?\s*\{`)
-	bootstrapInvocationPattern = regexp.MustCompile(`\bvoid\s+bootstrap\s*\(\s*\)\s*;`)
+	bootstrapInvocationPattern = regexp.MustCompile(`\bvoid\s+bootstrap\s*\(\s*\)`)
 )
 
 var supportedNestDecoratorImports = map[string]struct{}{
@@ -432,6 +432,9 @@ func parseNestBootstrap(source string) (nestBootstrap, error) {
 	if depth, err := braceDepth(code, 0, invocations[0][0]); err != nil || depth != 0 {
 		return nestBootstrap{}, fmt.Errorf("void bootstrap() must be a top-level statement")
 	}
+	if err := validateBootstrapInvocation(code, invocations[0][1]); err != nil {
+		return nestBootstrap{}, err
+	}
 	bindings, err := parseStaticImports(source)
 	if err != nil {
 		return nestBootstrap{}, err
@@ -472,6 +475,57 @@ func parseNestBootstrap(source string) (nestBootstrap, error) {
 		functionBodyStart:   functionBodyStart,
 		functionBodyEnd:     functionBodyEnd,
 	}, nil
+}
+
+func validateBootstrapInvocation(code string, invocationEnd int) error {
+	position := skipTypeScriptSpace(code, invocationEnd)
+	if position < len(code) && code[position] == ';' {
+		return nil
+	}
+	if position >= len(code) || code[position] != '.' {
+		return fmt.Errorf("void bootstrap() must end directly or attach one catch handler")
+	}
+	position = skipTypeScriptSpace(code, position+1)
+	const catchName = "catch"
+	if !strings.HasPrefix(code[position:], catchName) {
+		return fmt.Errorf("void bootstrap() supports only a catch handler")
+	}
+	position += len(catchName)
+	if position < len(code) && isIdentifierPart(code[position]) {
+		return fmt.Errorf("void bootstrap() supports only a catch handler")
+	}
+	position = skipTypeScriptSpace(code, position)
+	if position >= len(code) || code[position] != '(' {
+		return fmt.Errorf("bootstrap catch handler is missing its argument list")
+	}
+	catchEnd, err := balancedEnd(code, position, '(', ')')
+	if err != nil {
+		return fmt.Errorf("parse bootstrap catch handler: %w", err)
+	}
+	position = skipTypeScriptSpace(code, catchEnd+1)
+	if position >= len(code) || code[position] != ';' {
+		return fmt.Errorf("bootstrap catch handler must terminate the top-level statement")
+	}
+	return nil
+}
+
+func skipTypeScriptSpace(code string, position int) int {
+	for position < len(code) {
+		switch code[position] {
+		case ' ', '\t', '\n', '\r':
+			position++
+		default:
+			return position
+		}
+	}
+	return position
+}
+
+func isIdentifierPart(character byte) bool {
+	return character == '_' || character == '$' ||
+		character >= 'a' && character <= 'z' ||
+		character >= 'A' && character <= 'Z' ||
+		character >= '0' && character <= '9'
 }
 
 func resolveModuleMetadataImport(module nestModule, item string, modulesBySource map[string]string) (string, error) {

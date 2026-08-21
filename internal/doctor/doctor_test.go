@@ -2,12 +2,20 @@ package doctor
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"math/big"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/luxiaba/remnanode-lite/internal/asn"
 	"github.com/luxiaba/remnanode-lite/internal/config"
@@ -24,7 +32,7 @@ func TestRunMissingEnv(t *testing.T) {
 
 func TestCheckSecret(t *testing.T) {
 	t.Parallel()
-	valid := base64.StdEncoding.EncodeToString([]byte(`{"caCertPem":"ca","jwtPublicKey":"jwt","nodeCertPem":"cert","nodeKeyPem":"key"}`))
+	valid := validDoctorSecret(t)
 	if r := checkSecret(config.Config{SecretKey: valid}); r[0].level != "OK" || r[0].detail != "configured; envelope parsed and required fields are present" {
 		t.Fatalf("expected OK, got %#v", r)
 	}
@@ -42,6 +50,48 @@ func TestCheckSecret(t *testing.T) {
 	if strings.Contains(visible, marker) || strings.Contains(visible, invalid) {
 		t.Fatalf("secret diagnostic leaked input: %q", visible)
 	}
+}
+
+func validDoctorSecret(t *testing.T) string {
+	t.Helper()
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "remnanode-doctor-test"},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicDER, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}))
+	raw, err := json.Marshal(map[string]string{
+		"caCertPem":    certPEM,
+		"jwtPublicKey": string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER})),
+		"nodeCertPem":  certPEM,
+		"nodeKeyPem":   string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base64.StdEncoding.EncodeToString(raw)
 }
 
 func TestCheckServiceDefinition(t *testing.T) {

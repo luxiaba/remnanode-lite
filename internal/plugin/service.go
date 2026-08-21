@@ -397,11 +397,14 @@ func (s *Service) reconcileTorrentLocked(previous, next *pluginSnapshot) error {
 	wasEnabled := effectiveTorrentEnabled(previous)
 	nowEnabled := effectiveTorrentEnabled(next)
 	var previousTags, nextTags []string
+	var previousPosition, nextPosition float64
 	if previous != nil {
 		previousTags = previous.torrent.includeRuleTags
+		previousPosition = previous.torrent.rulePosition
 	}
 	if next != nil {
 		nextTags = next.torrent.includeRuleTags
+		nextPosition = next.torrent.rulePosition
 	}
 
 	if wasEnabled && !nowEnabled && len(nextTags) == 0 {
@@ -410,7 +413,8 @@ func (s *Service) reconcileTorrentLocked(previous, next *pluginSnapshot) error {
 
 	needsRestart := (wasEnabled && !nowEnabled) ||
 		(!wasEnabled && nowEnabled) ||
-		(wasEnabled && nowEnabled && hashIncludeRuleTags(previousTags) != hashIncludeRuleTags(nextTags))
+		(wasEnabled && nowEnabled && hashIncludeRuleTags(previousTags) != hashIncludeRuleTags(nextTags)) ||
+		(wasEnabled && nowEnabled && previousPosition != nextPosition)
 	if needsRestart {
 		return s.xray.StopIfOnline()
 	}
@@ -675,6 +679,7 @@ func torrentSettingsEqual(left, right torrentSettings) bool {
 	return left.enabled == right.enabled &&
 		left.blockDuration == right.blockDuration &&
 		left.webhookURL == right.webhookURL &&
+		left.rulePosition == right.rulePosition &&
 		hashIncludeRuleTags(left.includeRuleTags) == hashIncludeRuleTags(right.includeRuleTags) &&
 		left.ignoredIPs.equal(right.ignoredIPs) &&
 		maps.Equal(left.ignoredUsers, right.ignoredUsers)

@@ -140,7 +140,7 @@ func (p Payload) Validate() error {
 	if len(missing) > 0 {
 		return fmt.Errorf("SECRET_KEY missing required fields: %s", strings.Join(missing, ", "))
 	}
-	return nil
+	return p.validateIntegrity()
 }
 
 func NormalizePEM(pemText string) string {

@@ -2,10 +2,16 @@ package rnlctl
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1281,7 +1287,43 @@ func writeTestSecret(t *testing.T, path string) string {
 
 func writeTestSecretValue(t *testing.T, path, marker string) string {
 	t.Helper()
-	raw := []byte(fmt.Sprintf(`{"caCertPem":"ca-%s","jwtPublicKey":"jwt-%s","nodeCertPem":"cert-%s","nodeKeyPem":"key-%s"}`, marker, marker, marker, marker))
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "remnanode-test-" + marker},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(time.Hour),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, publicKey, privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateDER, err := x509.MarshalPKCS8PrivateKey(privateKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicDER, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}))
+	raw, err := json.Marshal(map[string]string{
+		"caCertPem":    certPEM,
+		"jwtPublicKey": string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: publicDER})),
+		"nodeCertPem":  certPEM,
+		"nodeKeyPem":   string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateDER})),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	encoded := base64.StdEncoding.EncodeToString(raw) + "\n"
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)

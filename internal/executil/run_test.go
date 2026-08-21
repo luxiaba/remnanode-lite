@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -50,6 +51,23 @@ func TestRunBoundsAndDrainsCombinedOutput(t *testing.T) {
 	}
 	if len(result.DiagnosticOutput()) != 2049 || !result.AnyTruncated() {
 		t.Fatalf("combined diagnostic result is not bounded per stream")
+	}
+}
+
+func TestSanitizedEnvironmentRemovesNodeSecrets(t *testing.T) {
+	got := SanitizedEnvironment([]string{
+		"PATH=/usr/bin",
+		"SECRET_KEY=panel-secret",
+		"SECRET_KEY_FILE=/etc/remnanode-lite/secret.key",
+		"INTERNAL_REST_TOKEN=caller-token",
+		"RNL_INTERNAL_REST_TOKEN=internal-token",
+		"REMNANODE_ENV=/etc/remnanode-lite/node.env",
+		"GOMEMLIMIT=180MiB",
+		"HTTP_PROXY=http://proxy.example",
+	})
+	want := []string{"PATH=/usr/bin", "HTTP_PROXY=http://proxy.example"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("SanitizedEnvironment() = %#v, want %#v", got, want)
 	}
 }
 

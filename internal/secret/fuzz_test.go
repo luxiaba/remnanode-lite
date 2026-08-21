@@ -6,7 +6,7 @@ import (
 )
 
 func FuzzParse(f *testing.F) {
-	valid := []byte(`{"caCertPem":"ca","jwtPublicKey":"jwt","nodeCertPem":"cert","nodeKeyPem":"key","extra":"??"}`)
+	valid := marshalTestPayload(f, newTestPayload(f, validTestCertificateTimes()), `"extra":"???"`)
 	encodedSeeds := make(map[string]struct{}, 4)
 	for _, encoding := range []*base64.Encoding{
 		base64.StdEncoding,

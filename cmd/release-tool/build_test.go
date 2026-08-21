@@ -51,6 +51,7 @@ func TestBuildBundleIsDeterministicAndVerifiable(t *testing.T) {
 		"remnanode-lite/install.sh",
 		"remnanode-lite/bin/remnanode-lite",
 		"remnanode-lite/bin/rnlctl",
+		"remnanode-lite/lib/geocheck",
 		"remnanode-lite/lib/rw-core",
 		"remnanode-lite/share/xray/geoip.dat",
 		"remnanode-lite/share/xray/geosite.dat",
@@ -185,6 +186,30 @@ func TestVerifyBundleBindsManifestPayloadToRuntimeLock(t *testing.T) {
 	}
 }
 
+func TestLockedPayloadValidationBindsGeoCheck(t *testing.T) {
+	t.Parallel()
+	want := []byte("locked-geocheck")
+	document := runtimeLockDocument{Lock: runtimeLock{
+		GeoCheck: geoCheckLock{Architectures: geoCheckArchitectures{
+			AMD64: geoCheckArchitecture{Binary: archiveEntry{
+				SHA256: digestBytes(want), Size: int64(len(want)), License: "MIT",
+			}},
+		}},
+	}}
+	manifest := releaseManifest{Files: []manifestFile{{
+		Path: "lib/geocheck", Mode: "0755", Size: int64(len(want)),
+		SHA256: digestBytes([]byte("different-binary")), Role: "runtime-tool", License: "MIT",
+	}}}
+	if err := validateLockedPayloadFiles(
+		manifest,
+		document,
+		xrayArchitecture{},
+		document.Lock.GeoCheck.Architectures.AMD64,
+	); err == nil || !strings.Contains(err.Error(), "does not match the runtime asset lock") {
+		t.Fatalf("validate error = %v, want GeoCheck lock binding failure", err)
+	}
+}
+
 func TestReadBundleArchiveRejectsPathTraversal(t *testing.T) {
 	archivePath := filepath.Join(t.TempDir(), "malicious.tar.gz")
 	file, err := os.Create(archivePath)
@@ -302,6 +327,8 @@ func newBuildFixture(t *testing.T) buildFixture {
 	binaries := fixtureGoBinaries(t)
 	core := binaries["rw-core-amd64"]
 	armCore := binaries["rw-core-arm64"]
+	geoCheck := binaries["geocheck-amd64"]
+	armGeoCheck := binaries["geocheck-arm64"]
 	geoIP := []byte("fixture-geoip")
 	geoSite := []byte("fixture-geosite")
 	xrayArchivePath := filepath.Join(root, "xray.zip")
@@ -323,6 +350,18 @@ func newBuildFixture(t *testing.T) buildFixture {
 	}
 	xrayArtifact := fixtureArtifact("https://github.com/XTLS/Xray-core/releases/download/v1.2.3/Xray-linux-64.zip", xrayArchive)
 	armXrayArtifact := fixtureArtifact("https://github.com/XTLS/Xray-core/releases/download/v1.2.3/Xray-linux-arm64-v8a.zip", armXrayArchive)
+	geoCheckArchivePath := filepath.Join(root, "geocheck-amd64.tar.gz")
+	writeFixtureTarGzip(t, geoCheckArchivePath, map[string][]byte{"LICENSE": []byte("MIT"), "geocheck": geoCheck})
+	geoCheckArchive, err := os.ReadFile(geoCheckArchivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	armGeoCheckArchivePath := filepath.Join(root, "geocheck-arm64.tar.gz")
+	writeFixtureTarGzip(t, armGeoCheckArchivePath, map[string][]byte{"LICENSE": []byte("MIT"), "geocheck": armGeoCheck})
+	armGeoCheckArchive, err := os.ReadFile(armGeoCheckArchivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	asnSource := []byte("fixture-asn-source")
 	asnDatabase := []byte("fixture-asn-database")
@@ -331,15 +370,30 @@ func newBuildFixture(t *testing.T) buildFixture {
 		"GPL-3.0-only": []byte("fixture GPL text"),
 		"CC-BY-SA-4.0": []byte("fixture CC BY-SA text"),
 		"CC0-1.0":      []byte("fixture CC0 text"),
+		"MIT":          []byte("fixture MIT text"),
 	}
 	lock := runtimeLock{
-		SchemaVersion: 2,
+		SchemaVersion: 3,
 		Xray: xrayLock{
 			Version: "v1.2.3", Commit: strings.Repeat("a", 40),
 			SourceURL: "https://github.com/XTLS/Xray-core/tree/" + strings.Repeat("a", 40),
 			Architectures: xrayArchitectures{
 				AMD64: fixtureXrayArchitecture(xrayArtifact, core, geoIP, geoSite),
 				ARM64: fixtureXrayArchitecture(armXrayArtifact, armCore, geoIP, geoSite),
+			},
+		},
+		GeoCheck: geoCheckLock{
+			Version: "v0.3.0", Commit: strings.Repeat("f", 40),
+			SourceURL: "https://github.com/remnawave/geocheck/tree/" + strings.Repeat("f", 40),
+			Architectures: geoCheckArchitectures{
+				AMD64: geoCheckArchitecture{
+					Archive: fixtureArtifact("https://github.com/remnawave/geocheck/releases/download/v0.3.0/geocheck_linux_amd64.tar.gz", geoCheckArchive),
+					Binary:  archiveEntry{ArchivePath: "geocheck", SHA256: digestBytes(geoCheck), Size: int64(len(geoCheck)), License: "MIT"},
+				},
+				ARM64: geoCheckArchitecture{
+					Archive: fixtureArtifact("https://github.com/remnawave/geocheck/releases/download/v0.3.0/geocheck_linux_arm64.tar.gz", armGeoCheckArchive),
+					Binary:  archiveEntry{ArchivePath: "geocheck", SHA256: digestBytes(armGeoCheck), Size: int64(len(armGeoCheck)), License: "MIT"},
+				},
 			},
 		},
 		GeoIP:   fixtureRuntimeData(strings.Repeat("d", 40), "202401010000", "Loyalsoldier/geoip", "geoip.dat", geoIP, "NOASSERTION", "fixture mixed-license rationale"),
@@ -354,6 +408,7 @@ func newBuildFixture(t *testing.T) buildFixture {
 			GPL3:   fixtureArtifact(spdxLicenseURL("GPL-3.0-only"), licenses["GPL-3.0-only"]),
 			CCBYSA: fixtureArtifact(spdxLicenseURL("CC-BY-SA-4.0"), licenses["CC-BY-SA-4.0"]),
 			CC0:    fixtureArtifact(spdxLicenseURL("CC0-1.0"), licenses["CC0-1.0"]),
+			MIT:    fixtureArtifact(spdxLicenseURL("MIT"), licenses["MIT"]),
 		},
 	}
 	lockJSON, err := marshalDeterministicJSON(lock)
@@ -365,6 +420,8 @@ func newBuildFixture(t *testing.T) buildFixture {
 
 	cacheFixtureArtifact(t, cache, xrayArchive)
 	cacheFixtureArtifact(t, cache, armXrayArchive)
+	cacheFixtureArtifact(t, cache, geoCheckArchive)
+	cacheFixtureArtifact(t, cache, armGeoCheckArchive)
 	cacheFixtureArtifact(t, cache, geoIP)
 	cacheFixtureArtifact(t, cache, geoSite)
 	cacheFixtureArtifact(t, cache, asnSource)
@@ -415,6 +472,7 @@ func fixtureNotices(lock runtimeLock) []byte {
 	lines := []string{
 		"# Third-party notices",
 		"`lib/rw-core` `" + lock.Xray.Version + "` `" + lock.Xray.Commit + "` " + lock.Xray.SourceURL,
+		"`lib/geocheck` `" + lock.GeoCheck.Version + "` `" + lock.GeoCheck.Commit + "` " + lock.GeoCheck.SourceURL,
 		"`share/xray/geoip.dat` `" + lock.GeoIP.Version + "` `" + lock.GeoIP.Commit + "` " + lock.GeoIP.SourceURL + " " + lock.GeoIP.SourceArtifact.URL + " " + lock.GeoIP.Artifact.URL,
 		lock.GeoIP.LicenseRationale,
 		"`share/xray/geosite.dat` `" + lock.GeoSite.Version + "` `" + lock.GeoSite.Commit + "` " + lock.GeoSite.SourceURL + " " + lock.GeoSite.SourceArtifact.URL + " " + lock.GeoSite.Artifact.URL,
@@ -476,6 +534,19 @@ func fixtureGoBinaries(t *testing.T) map[string][]byte {
 			fixtureBinariesErr = err
 			return
 		}
+		geoCheckRoot := filepath.Join(root, "geocheck")
+		if err := os.MkdirAll(filepath.Join(geoCheckRoot, "cmd", "geocheck"), 0o755); err != nil {
+			fixtureBinariesErr = err
+			return
+		}
+		if err := os.WriteFile(filepath.Join(geoCheckRoot, "go.mod"), []byte("module github.com/remnawave/geocheck\n\ngo 1.22\n"), 0o644); err != nil {
+			fixtureBinariesErr = err
+			return
+		}
+		if err := os.WriteFile(filepath.Join(geoCheckRoot, "cmd", "geocheck", "main.go"), []byte("package main\nfunc main() {}\n"), 0o644); err != nil {
+			fixtureBinariesErr = err
+			return
+		}
 		fixtureBinariesData = make(map[string][]byte)
 		for _, architecture := range []string{"amd64", "arm64"} {
 			for _, commandName := range []string{"remnanode-lite", "rnlctl"} {
@@ -508,6 +579,20 @@ func fixtureGoBinaries(t *testing.T) map[string][]byte {
 				return
 			}
 			fixtureBinariesData["rw-core-"+architecture] = data
+			geoCheckOutput := filepath.Join(root, "geocheck-"+architecture)
+			command = exec.Command("go", "build", "-buildvcs=false", "-trimpath", "-ldflags=-s -w", "-o", geoCheckOutput, "./cmd/geocheck")
+			command.Dir = geoCheckRoot
+			command.Env = append(os.Environ(), "GOTOOLCHAIN=local", "GOWORK=off", "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+architecture)
+			if output, err := command.CombinedOutput(); err != nil {
+				fixtureBinariesErr = fmt.Errorf("build fixture geocheck/%s: %w: %s", architecture, err, output)
+				return
+			}
+			data, err = os.ReadFile(geoCheckOutput)
+			if err != nil {
+				fixtureBinariesErr = err
+				return
+			}
+			fixtureBinariesData["geocheck-"+architecture] = data
 		}
 	})
 	if fixtureBinariesErr != nil {

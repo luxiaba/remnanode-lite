@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/project.md; source-sha256=96cf3f8bf1b0cc8b4071a82be477ebb77031ddc3c04e3fd8ac2f56f5701b3fb2 -->
+<!-- translation: locale=zh-CN; source=docs/project.md; source-sha256=ea881b192dee20e42a9fb578fd2f46f4420744865a71bbdcf3387a6f53f75164 -->
 
 # 项目定位与目标
 
@@ -105,11 +105,11 @@ Remnanode Lite 用一个 Go 进程协调 Node API、rw-core 生命周期和插�
 | 日常运维者 | 日志、健康检查、更新、回滚和故障定位 | [文档中心](README.md) 的运维路径 |
 | Go 开发者 | 包边界、生命周期、测试和变更规范 | [架构设计](architecture.md)、[开发指南](development/README.md) |
 | 发布维护者 | 版本、兼容证据、镜像标签和发布门禁 | [版本策略](versioning.md)、[发布流程](release.md) |
-| 安全与兼容审计者 | 官方证据、资源边界、供应链与已知差异 | [契约基线](development/contract-3.2.2.md)、[资源预算](development/resource-budget.md) |
+| 安全与兼容审计者 | 官方证据、资源边界、供应链与已知差异 | [契约基线](development/contract-3.3.2.md)、[资源预算](development/resource-budget.md) |
 
 ## 项目状态
 
-仓库拥有独立的 Git 历史、自动化测试和 GHCR 候选镜像流程。二进制内置的契约版本记录在 [`internal/version/contract.version`](../../../internal/version/contract.version)，对应的官方来源与已知差异见版本化的[契约基线](development/contract-3.2.2.md)。
+仓库拥有独立的 Git 历史、自动化测试和 GHCR 候选镜像流程。二进制内置的契约版本记录在 [`internal/version/contract.version`](../../../internal/version/contract.version)，对应的官方来源与已知差异见版本化的[契约基线](development/contract-3.3.2.md)。
 
 源码中的版本号只说明正在构建什么，不代表它已经发布。实际可用版本应以 Git tag、GitHub Release 和 GHCR 精确标签为准。项目版本、契约版本、Panel 验证目标和 rw-core 版本彼此独立；它们的关系见[版本策略](versioning.md)。
 

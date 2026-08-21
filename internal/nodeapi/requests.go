@@ -59,3 +59,19 @@ func (r *UserIDRequest) Validate() []Issue {
 	}
 	return nil
 }
+
+type GeoCheckRequest struct {
+	IP        OptionalString `json:"ip"`
+	Interface OptionalString `json:"interface"`
+}
+
+func (r *GeoCheckRequest) Validate() []Issue {
+	issues := make([]Issue, 0, 2)
+	if r.IP.Present && r.IP.Null {
+		issues = append(issues, InvalidTypeIssue([]any{"ip"}, "string", "null"))
+	}
+	if r.Interface.Present && r.Interface.Null {
+		issues = append(issues, InvalidTypeIssue([]any{"interface"}, "string", "null"))
+	}
+	return issues
+}
