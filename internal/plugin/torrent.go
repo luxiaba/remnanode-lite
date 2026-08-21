@@ -21,6 +21,7 @@ type torrentSettings struct {
 	blockDuration   float64
 	webhookURL      string
 	includeRuleTags []string
+	rulePosition    float64
 	ignoredIPs      ipMatcher
 	ignoredUsers    map[string]struct{}
 }
@@ -49,6 +50,15 @@ func (s *State) TorrentBlockerIncludeRuleTags() []string {
 		return nil
 	}
 	return append([]string(nil), s.active.torrent.includeRuleTags...)
+}
+
+func (s *State) TorrentBlockerRulePosition() float64 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if !effectiveTorrentEnabled(s.active) {
+		return 0
+	}
+	return s.active.torrent.rulePosition
 }
 
 func (s *Service) HandleXrayWebhook(payload xraywebhook.Payload) bool {

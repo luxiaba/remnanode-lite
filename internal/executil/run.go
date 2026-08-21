@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
@@ -48,6 +49,34 @@ func Run(ctx context.Context, stdin io.Reader, maxOutputBytes int, name string, 
 // environment prevents the command from inheriting process secrets.
 func RunWithEnv(ctx context.Context, stdin io.Reader, maxOutputBytes int, environment []string, name string, args ...string) (Result, error) {
 	return run(ctx, stdin, maxOutputBytes, DefaultWaitDelay, environment, name, args...)
+}
+
+// SanitizedEnvironment removes variables that contain Node configuration or
+// credentials before launching a bundled helper. Unlisted variables remain
+// available for ordinary process behavior such as locale and proxy settings.
+func SanitizedEnvironment(base []string) []string {
+	forbidden := map[string]struct{}{
+		"SECRET_KEY":              {},
+		"SECRET_KEY_FILE":         {},
+		"INTERNAL_REST_TOKEN":     {},
+		"REMNANODE_ENV":           {},
+		"GOMEMLIMIT":              {},
+		"NODE_CONTRACT_VERSION":   {},
+		"XRAY_CORE_VERSION":       {},
+		"XRAY_LOCATION_ASSET":     {},
+		"RNL_INTERNAL_REST_TOKEN": {},
+	}
+	environment := make([]string, 0, len(base))
+	for _, assignment := range base {
+		key, _, ok := strings.Cut(assignment, "=")
+		if ok {
+			if _, blocked := forbidden[key]; blocked {
+				continue
+			}
+		}
+		environment = append(environment, assignment)
+	}
+	return environment
 }
 
 func run(ctx context.Context, stdin io.Reader, maxOutputBytes int, waitDelay time.Duration, environment []string, name string, args ...string) (Result, error) {

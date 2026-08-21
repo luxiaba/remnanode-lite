@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=6a4a64422c4c496b2b26fb48646d013840a49b18072b5b6068165dc3f3a26fe4 -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=b8fb94f1665d1c37da012250b8041de8f92325a2de8d9f3b6d46a9e1249f0c34 -->
 
 # 运维与故障排查
 
@@ -150,6 +150,10 @@ sudo rnlctl start
 使用 `--prepare-only` 创建的安装必须先运行 `rnlctl activate`。正常运维不要使用 `kill -9`，否则会绕过 HTTP drain、rw-core 进程组关闭和 nftables 清理。
 
 ## Docker 更新与回滚
+
+当前稳定目标是 `3.3.2`。该 Release 的 Compose 模板选择匹配的镜像，并包含 Release
+固定的 GeoCheck 资产。保留 `.env`，记录当前 digest，重建后检查 Panel 连接、GeoCheck、
+rw-core 和代表性代理流量。
 
 | 引用 | 用途 |
 | --- | --- |

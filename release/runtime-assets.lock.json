@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "xray": {
     "version": "v26.7.28",
     "commit": "5ca6f4b7d4dc20a881d4330e498892697627ec0c",
@@ -29,6 +29,39 @@
           "sha256": "4b8af237444801bf17b3dc10a1c5c24581fbe3d433eba3d78c6c3a0da1df56fc",
           "size": 35389566,
           "license": "MPL-2.0"
+        }
+      }
+    }
+  },
+  "geocheck": {
+    "version": "v0.3.0",
+    "commit": "50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc",
+    "sourceURL": "https://github.com/remnawave/geocheck/tree/50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc",
+    "architectures": {
+      "amd64": {
+        "archive": {
+          "url": "https://github.com/remnawave/geocheck/releases/download/v0.3.0/geocheck_linux_amd64.tar.gz",
+          "sha256": "eca33bbee3c2c3ea7ade85f9a61ef4c7471a8334eb8f0a715e844aef865307d9",
+          "size": 3648208
+        },
+        "binary": {
+          "archivePath": "geocheck",
+          "sha256": "09f52e3de1a3037f5311d441b658de34349b33811da90d211daced7b88043da6",
+          "size": 9097378,
+          "license": "MIT"
+        }
+      },
+      "arm64": {
+        "archive": {
+          "url": "https://github.com/remnawave/geocheck/releases/download/v0.3.0/geocheck_linux_arm64.tar.gz",
+          "sha256": "1badce683fd901b4052a78b833d536b851cf1f5952d82bc985c875e37a153267",
+          "size": 3319891
+        },
+        "binary": {
+          "archivePath": "geocheck",
+          "sha256": "5d0d2a662fa5a85b6d3286143769967f7edd7705b48e62b7e91b0268bf2644d0",
+          "size": 8519842,
+          "license": "MIT"
         }
       }
     }
@@ -99,6 +132,11 @@
       "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/CC0-1.0.txt",
       "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
       "size": 7048
+    },
+    "MIT": {
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt",
+      "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+      "size": 1078
     }
   }
 }

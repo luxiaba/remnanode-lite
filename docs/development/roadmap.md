@@ -33,7 +33,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 
 ## Compatibility boundary
 
-- `/node` routes follow official Node 3.2.2 HTTP methods, request and response shapes, and error semantics.
+- `/node` routes follow official Node 3.3.2 HTTP methods, request and response shapes, and error semantics.
 - Project-specific diagnostics and operations live in the CLI or a separate internal interface; they do not extend the official `/node` contract.
 - After a Node restart, the process waits for Panel to resend configuration instead of restoring a potentially stale full proxy configuration from disk.
 - Request-size and resource protections may create documented safety deviations, but they must fail explicitly rather than degrade silently.
@@ -54,7 +54,8 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M8 Release preparation | Complete |
 | M9 Self-contained Native distribution | Complete |
 | M10 Official Node 3.0.0 alignment | Complete |
-| M11 Official Node 3.2.2 alignment | Implementation complete; candidate validation pending |
+| M11 Official Node 3.2.2 alignment | Complete |
+| M12 Official Node 3.3.2 alignment | Implementation complete; candidate validation pending |
 
 The M6 50,000-user measurement from 2026-07-15 and the M7
 init/distribution snapshots from 2026-07-19 remain useful engineering
@@ -70,25 +71,25 @@ The published `2.8.0-rnl.3` preview establishes an evidence-based Native host
 matrix and corrects Alpine qualification guidance without changing the official
 Node contract. The published `2.8.0-rnl.4` preview improves `rnlctl` inspection
 and state-aware guidance. The published stable `3.0.0` release adds pre-start
-socket cleanup and the Zod 4 contract boundaries. The `3.2.2` source line
-aligns the current official contract, including optional start metadata and
-integrations plus plugin schema `0.6.3`, and awaits immutable-candidate
-verification before release.
+socket cleanup and the Zod 4 contract boundaries. The `3.2.2` release adds
+optional start metadata and integrations plus plugin schema `0.6.3`. The
+`3.3.2` source line aligns the current official contract with derived SNI,
+Secret integrity, GeoCheck `0.3.0`, Torrent rule placement, and plugin schema
+`0.7.3`, and awaits immutable-candidate verification before release.
 Runtime observations stay outside the source repository, and GitHub generates
 the Release notes.
 
 ## Current focus
 
-- **Now:** Verify the immutable `3.2.2` candidate with a compatible Panel,
-  bundled rw-core startup, and real proxy traffic. Keep the optional start
-  fields and Torrent Blocker report webhook under focused regression coverage;
-  the stock build does not add Integration modules. Keep server details and
-  runtime observations outside the repository.
+- **Now:** Verify the immutable `3.3.2` candidate with a compatible Panel,
+  derived SNI, GeoCheck, bundled rw-core startup, and real proxy traffic. Keep
+  Secret integrity and Torrent rule placement under focused regression
+  coverage. Keep server details and runtime observations outside the repository.
 - **Release discipline:** For the next two release cycles, do not add release
   channels, artifact types, publication state, or proof mechanisms. Reliability
   and security fixes, and removal of redundant checks, remain in scope.
 - **Next:** Resume the explicit Native qualification candidates after the
-  `3.2.2` release decision.
+  `3.3.2` release decision.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements. Release decisions

@@ -27,11 +27,11 @@ func TestOfficialRouteRegistry(t *testing.T) {
 	sortRoutes(want)
 	got := httpserver.RegisteredNodeRoutes()
 
-	if len(got) != 26 {
-		t.Fatalf("registered route count = %d, want 26", len(got))
+	if len(got) != 27 {
+		t.Fatalf("registered route count = %d, want 27", len(got))
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("registered routes do not match official 3.2.2\n got: %#v\nwant: %#v", got, want)
+		t.Fatalf("registered routes do not match official 3.3.2\n got: %#v\nwant: %#v", got, want)
 	}
 }
 

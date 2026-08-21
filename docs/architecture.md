@@ -4,7 +4,7 @@
 
 This document is for maintainers encountering Remnanode Lite for the first time. It describes the boundaries, runtime flows, state ownership, and resource constraints implemented by the current code. Its purpose is to explain how the system works and which invariants a code change must preserve. It is not a deployment reference or a release checklist for a particular version.
 
-For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the current external API and lifecycle delta, see the [official 3.2.2 contract baseline](development/contract-3.2.2.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
+For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the current external API and lifecycle delta, see the [official 3.3.2 contract baseline](development/contract-3.3.2.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
 
 ## 1. System Role
 
@@ -94,6 +94,7 @@ The composition root is [`cmd/remnanode-lite/main.go`](../cmd/remnanode-lite/mai
 | `internal/nodeapi` | Official request DTOs, JSON structural safeguards, Zod-compatible validation, and error models |
 | `internal/nodehandler` | Application service for user add/remove, bulk mutations, and connection cleanup |
 | `internal/stats` | Application response mapping for rw-core, plugin, and host statistics |
+| `internal/geocheck` | Bounded execution and validation of the release-locked official GeoCheck binary |
 | `internal/xray` | rw-core aggregate root: process state machine, configuration injection, version, hashes, logs, and gRPC facade |
 | `internal/xrayrpc` | Minimal gRPC wire adapter for rw-core |
 | `internal/xrayrpc/wire` | Minimal protobuf messages used by the Node; `wire.pb.go` is generated |

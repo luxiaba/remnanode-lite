@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ import (
 	"github.com/luxiaba/remnanode-lite/internal/config"
 	"github.com/luxiaba/remnanode-lite/internal/connections"
 	"github.com/luxiaba/remnanode-lite/internal/doctor"
+	"github.com/luxiaba/remnanode-lite/internal/geocheck"
 	"github.com/luxiaba/remnanode-lite/internal/httpserver"
 	"github.com/luxiaba/remnanode-lite/internal/netadmin"
 	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
@@ -385,12 +387,14 @@ func runNode() (runErr error) {
 	}
 
 	statsService := stats.NewService(manager, pluginService, systemCollector)
+	geocheckService := geocheck.NewService(filepath.Join(filepath.Dir(cfg.XrayBin), "geocheck"))
 	handlerService := nodehandler.NewService(manager, dropper)
 
 	server, err := httpserver.New(cfg, payload, httpserver.Dependencies{
 		Validator: validator,
 		Xray:      manager,
 		Stats:     statsService,
+		GeoCheck:  geocheckService,
 		Handler:   handlerService,
 		Plugins:   pluginService,
 		Body:      bodyBudget,

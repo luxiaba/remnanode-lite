@@ -54,6 +54,10 @@ func verifyBundle(options verifyOptions) error {
 	if err != nil {
 		return err
 	}
+	geoCheckArchitecture, err := lock.geoCheckForArchitecture(options.architecture)
+	if err != nil {
+		return err
+	}
 	if options.version != "" {
 		if err := validateProjectVersion(options.version); err != nil {
 			return fmt.Errorf("invalid expected project version: %w", err)
@@ -86,10 +90,10 @@ func verifyBundle(options verifyOptions) error {
 	if err := validateReleaseManifest(manifest, options, lock, lockDocument.SHA256, architecture); err != nil {
 		return err
 	}
-	if err := validateManifestFiles(manifest, entries, lock, architecture); err != nil {
+	if err := validateManifestFiles(manifest, entries, lock, architecture, geoCheckArchitecture); err != nil {
 		return err
 	}
-	if err := validateLockedPayloadFiles(manifest, lockDocument, architecture); err != nil {
+	if err := validateLockedPayloadFiles(manifest, lockDocument, architecture, geoCheckArchitecture); err != nil {
 		return err
 	}
 	if err := validateArchiveDirectories(manifest, entries); err != nil {
@@ -139,7 +143,7 @@ func verifyBundle(options verifyOptions) error {
 	return nil
 }
 
-func validateLockedPayloadFiles(manifest releaseManifest, document runtimeLockDocument, architecture xrayArchitecture) error {
+func validateLockedPayloadFiles(manifest releaseManifest, document runtimeLockDocument, architecture xrayArchitecture, geoCheckArchitecture geoCheckArchitecture) error {
 	lock := document.Lock
 	files := make(map[string]manifestFile, len(manifest.Files))
 	for _, file := range manifest.Files {
@@ -154,6 +158,7 @@ func validateLockedPayloadFiles(manifest releaseManifest, document runtimeLockDo
 		license string
 	}
 	wanted := []lockedPayload{
+		{path: "lib/geocheck", sha256: geoCheckArchitecture.Binary.SHA256, size: geoCheckArchitecture.Binary.Size, mode: "0755", role: "runtime-tool", license: geoCheckArchitecture.Binary.License},
 		{path: "lib/rw-core", sha256: architecture.Core.SHA256, size: architecture.Core.Size, mode: "0755", role: "runtime-core", license: architecture.Core.License},
 		{path: "runtime-assets.lock.json", sha256: document.SHA256, size: int64(len(document.Data)), mode: "0644", role: "runtime-lock", license: "AGPL-3.0-only"},
 		{path: "share/xray/geoip.dat", sha256: lock.GeoIP.Artifact.SHA256, size: lock.GeoIP.Artifact.Size, mode: "0644", role: "runtime-data", license: lock.GeoIP.License},
@@ -192,6 +197,7 @@ func validateBundleArchitectures(entries map[string]archivedEntry, architecture 
 	}{
 		{path: "bin/remnanode-lite", name: "remnanode-lite"},
 		{path: "bin/rnlctl", name: "rnlctl"},
+		{path: "lib/geocheck", name: "geocheck"},
 		{path: "lib/rw-core", name: "rw-core"},
 	} {
 		entry, exists := entries[path.Join(bundleName, binary.path)]
@@ -392,7 +398,7 @@ func validateReleaseManifest(manifest releaseManifest, options verifyOptions, lo
 	return nil
 }
 
-func validateManifestFiles(manifest releaseManifest, entries map[string]archivedEntry, lock runtimeLock, architecture xrayArchitecture) error {
+func validateManifestFiles(manifest releaseManifest, entries map[string]archivedEntry, lock runtimeLock, architecture xrayArchitecture, geoCheckArchitecture geoCheckArchitecture) error {
 	type requiredMetadata struct {
 		mode    string
 		role    string
@@ -407,6 +413,7 @@ func validateManifestFiles(manifest releaseManifest, entries map[string]archived
 		"bin/remnanode-lite":                           {mode: "0755", role: "node-binary", license: "AGPL-3.0-only"},
 		"bin/rnlctl":                                   {mode: "0755", role: "administration-cli", license: "AGPL-3.0-only"},
 		"install.sh":                                   {mode: "0755", role: "installer", license: "AGPL-3.0-only"},
+		"lib/geocheck":                                 {mode: "0755", role: "runtime-tool", license: geoCheckArchitecture.Binary.License},
 		"lib/rw-core":                                  {mode: "0755", role: "runtime-core", license: architecture.Core.License},
 		"share/asn/asn-prefixes.bin":                   {mode: "0644", role: "runtime-data", license: lock.ASN.Output.License},
 		"share/xray/geoip.dat":                         {mode: "0644", role: "runtime-data", license: lock.GeoIP.License},

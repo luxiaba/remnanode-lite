@@ -240,6 +240,15 @@ A tag states which version you intend to reference. A digest identifies the byte
 
 ## Update and rollback
 
+For the `3.3.2` release, use the Compose template shipped with that Release:
+it selects the `3.3.2` image and includes the release-locked GeoCheck runtime
+asset. Keep the existing `.env`, pull the exact image or digest, and recreate
+the container before checking Panel connectivity and real traffic.
+
+Upgrade the Panel to a compatible `3.3.x` release first. Older Panels do not
+send the derived SNI required by the `3.3.2` Node TLS gate and cannot connect
+after the Node upgrade.
+
 Back up the current Compose inputs, then obtain and verify the Compose template attached to the target Release. Preserve `.env` and deliberately reapply any local overrides before changing `REMNANODE_IMAGE` or an intentionally inline `image:` value. Do not pair a new image with an older Compose file: upgrading from `3.0.0` to `3.2.2` specifically requires the new `remnanode-state` volume because the container root filesystem remains read-only. Then pull and recreate explicitly:
 
 ```bash

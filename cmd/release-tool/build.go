@@ -53,6 +53,7 @@ func buildBundle(ctx context.Context, options buildOptions) error {
 	}
 	lock := payloads.document.Lock
 	architecture := payloads.architecture
+	geoCheckArchitecture := payloads.geoCheckArch
 
 	node, err := readRegularInput(options.nodePath, maxProjectBinaryBytes, true)
 	if err != nil {
@@ -103,6 +104,7 @@ func buildBundle(ctx context.Context, options buildOptions) error {
 		{Path: "bin/remnanode-lite", Mode: 0o755, Data: node, Role: "node-binary", License: "AGPL-3.0-only"},
 		{Path: "bin/rnlctl", Mode: 0o755, Data: rnlctl, Role: "administration-cli", License: "AGPL-3.0-only"},
 		{Path: "install.sh", Mode: 0o755, Data: installer, Role: "installer", License: "AGPL-3.0-only"},
+		{Path: "lib/geocheck", Mode: 0o755, Data: payloads.geoCheck, Role: "runtime-tool", License: geoCheckArchitecture.Binary.License},
 		{Path: "lib/rw-core", Mode: 0o755, Data: payloads.core, Role: "runtime-core", License: architecture.Core.License},
 		{Path: "runtime-assets.lock.json", Mode: 0o644, Data: payloads.document.Data, Role: "runtime-lock", License: "AGPL-3.0-only"},
 		{Path: "share/asn/asn-prefixes.bin", Mode: 0o644, Data: payloads.asn, Role: "runtime-data", License: lock.ASN.Output.License},

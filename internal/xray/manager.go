@@ -40,6 +40,7 @@ type SystemSnapshotter interface {
 type TorrentBlockerConfigProvider interface {
 	TorrentBlockerEnabled() bool
 	TorrentBlockerIncludeRuleTags() []string
+	TorrentBlockerRulePosition() float64
 }
 
 type PreStartConfigProvider interface {
@@ -248,6 +249,7 @@ func (m *Manager) torrentBlockerOptions() TorrentBlockerOptions {
 	if provider != nil {
 		opts.Enabled = provider.TorrentBlockerEnabled()
 		opts.IncludeRuleTags = provider.TorrentBlockerIncludeRuleTags()
+		opts.RulePosition = provider.TorrentBlockerRulePosition()
 	}
 	return opts
 }

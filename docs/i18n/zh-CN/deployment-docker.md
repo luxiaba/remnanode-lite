@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=a3b539bade79baaca4ec026ca448b36ea2f026634e73944f0f1eaed094a31c1e -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=5807f5ad275e0506a0a51fef5020b311a0f30f6a4ef5522e5da93c0117e671ba -->
 
 # Docker Compose 部署
 
@@ -243,6 +243,13 @@ gh attestation verify \
 tag 说明“希望引用哪个版本”，digest 说明“实际运行哪一份字节”。受控批量部署应保存后者。
 
 ## 更新与回滚
+
+当前 `3.3.2` Release 应使用该 Release 附带的 Compose 模板：模板选择 `3.3.2` 镜像，
+并包含 Release 固定的 GeoCheck 运行时资产。保留现有 `.env`，拉取精确镜像或 digest，
+重建容器后再检查 Panel 连接和真实流量。
+
+请先把 Panel 升级到兼容的 `3.3.x` 版本。旧 Panel 不会发送 `3.3.2` Node TLS 门禁所需
+的派生 SNI，因此 Node 升级后将无法连接。
 
 先备份当前 Compose 输入，再获取并校验目标 Release 附带的 Compose 模板。保留 `.env`，并有意重新应用所需的本地 override 后，才修改 `REMNANODE_IMAGE` 或明确内联的 `image:`。不要让新镜像继续使用旧 Compose：从 `3.0.0` 升级到 `3.2.2` 时尤其必须加入新的 `remnanode-state` volume，因为容器 rootfs 仍然只读。随后主动拉取并重建：
 

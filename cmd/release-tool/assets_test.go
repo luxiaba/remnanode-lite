@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +40,38 @@ func TestExtractXrayAssetsRejectsLockedDigestMismatch(t *testing.T) {
 	}
 }
 
+func TestExtractGeoCheckBinaryRejectsMaliciousPath(t *testing.T) {
+	binary := []byte("geocheck")
+	architecture := geoCheckArchitecture{Binary: archiveEntry{
+		ArchivePath: "geocheck", SHA256: digestBytes(binary), Size: int64(len(binary)), License: "MIT",
+	}}
+	archivePath := filepath.Join(t.TempDir(), "geocheck.tar.gz")
+	writeFixtureTarGzip(t, archivePath, map[string][]byte{"geocheck": binary, "../escape": []byte("bad")})
+	if _, err := extractGeoCheckBinary(archivePath, architecture); err == nil || !strings.Contains(err.Error(), "unsafe geocheck archive entry") {
+		t.Fatalf("extract error = %v, want unsafe path rejection", err)
+	}
+}
+
+func TestExtractGeoCheckBinaryVerifiesPayload(t *testing.T) {
+	binary := []byte("geocheck")
+	architecture := geoCheckArchitecture{Binary: archiveEntry{
+		ArchivePath: "geocheck", SHA256: digestBytes(binary), Size: int64(len(binary)), License: "MIT",
+	}}
+	archivePath := filepath.Join(t.TempDir(), "geocheck.tar.gz")
+	writeFixtureTarGzip(t, archivePath, map[string][]byte{"LICENSE": []byte("MIT"), "geocheck": binary})
+	got, err := extractGeoCheckBinary(archivePath, architecture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(binary) {
+		t.Fatalf("binary = %q, want %q", got, binary)
+	}
+	architecture.Binary.SHA256 = strings.Repeat("a", 64)
+	if _, err := extractGeoCheckBinary(archivePath, architecture); err == nil || !strings.Contains(err.Error(), "SHA-256") {
+		t.Fatalf("extract error = %v, want digest rejection", err)
+	}
+}
+
 func writeFixtureZip(t *testing.T, outputPath string, entries map[string][]byte) {
 	t.Helper()
 	file, err := os.Create(outputPath)
@@ -57,6 +91,34 @@ func writeFixtureZip(t *testing.T, outputPath string, entries map[string][]byte)
 		}
 	}
 	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeFixtureTarGzip(t *testing.T, outputPath string, entries map[string][]byte) {
+	t.Helper()
+	file, err := os.Create(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zipper := gzip.NewWriter(file)
+	archive := tar.NewWriter(zipper)
+	for name, contents := range entries {
+		header := &tar.Header{Name: name, Mode: 0o644, Size: int64(len(contents)), Typeflag: tar.TypeReg}
+		if err := archive.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := archive.Write(contents); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := zipper.Close(); err != nil {
 		t.Fatal(err)
 	}
 	if err := file.Close(); err != nil {

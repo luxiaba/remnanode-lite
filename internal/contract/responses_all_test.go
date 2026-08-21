@@ -32,6 +32,7 @@ var responseShapeTests = map[string]func(t *testing.T) []byte{
 	"/node/stats/get-all-inbounds-stats":    testGetAllInboundsStatsResponseShape,
 	"/node/stats/get-all-outbounds-stats":   testGetAllOutboundsStatsResponseShape,
 	"/node/stats/get-combined-stats":        testGetCombinedStatsResponseShape,
+	"/node/stats/get-geocheck":              testGetGeoCheckResponseShape,
 	"/node/stats/get-user-ip-list":          testGetUserIPListResponseShape,
 	"/node/stats/get-users-ip-list":         testGetUsersIPListResponseShape,
 	"/node/handler/add-user":                testAddUserResponseShape,
@@ -192,6 +193,13 @@ func testGetCombinedStatsResponseShape(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return encodeEnvelope(response)
+}
+
+func testGetGeoCheckResponseShape(t *testing.T) []byte {
+	return encodeEnvelope(json.RawMessage(`{
+		"ip":"203.0.113.10",
+		"image":{"format":"svg","media_type":"image/svg+xml","encoding":"base64","data":"PHN2Zz4="}
+	}`))
 }
 
 func testGetUserIPListResponseShape(t *testing.T) []byte {

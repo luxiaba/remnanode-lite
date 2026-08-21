@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Validation aligned with @remnawave/node-plugins@0.6.3 (NodePluginSchema).
+// Validation aligned with @remnawave/node-plugins@0.7.3 (NodePluginSchema).
 
 func isPlainIP(value string) bool {
 	if strings.Contains(value, ":") && strings.Contains(value, ".") {
@@ -201,6 +201,12 @@ func validateTorrentBlockerSection(raw any) error {
 		parsed, err := url.Parse(strings.TrimSpace(value))
 		if err != nil || parsed.Scheme == "" {
 			return fmt.Errorf("torrentBlocker.webhookUrl must be a URL")
+		}
+	}
+	if rawPosition, ok := section["rulePlacement"]; ok {
+		position, valid := numberValue(rawPosition)
+		if !valid || math.IsNaN(position) || math.IsInf(position, 0) || position < 0 || position > 1000 {
+			return fmt.Errorf("torrentBlocker.rulePlacement must be a number between 0 and 1000")
 		}
 	}
 	return nil

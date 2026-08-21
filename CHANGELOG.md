@@ -6,6 +6,51 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.3.2] - 2026-08-21
+
+This stable release aligns Remnanode Lite with the official Node `3.3.2`
+contract and adds the new GeoCheck route. Existing Panel synchronization and
+proxy traffic behavior remain compatible with the `3.2.2` baseline.
+
+### Added
+
+- Added `POST /node/stats/get-geocheck` with the official success and `A018`
+  error envelopes. The release bundles the official Remnawave GeoCheck
+  `v0.3.0` binary and runs it behind existing mTLS/JWT authentication, a
+  single-run gate, a 45-second timeout, and 32 MiB output limits.
+- Added the official derived-SNI TLS gate so the Node certificate is presented
+  only for the server name derived from the complete Panel Secret.
+- Added startup integrity checks for the complete `SECRET_KEY`: certificate
+  parsing, CA validity and self-signature, node certificate issuer, matching
+  node private key, and a parseable JWT public key.
+- Added Torrent Blocker `rulePlacement` support for selecting the injected
+  Xray routing-rule position.
+
+### Changed
+
+- Pinned the behavioral contract to official Node `3.3.2` at commit
+  `afdfa2d837118efd95c317700e60e9429a169b48`, the official contract package
+  to `@remnawave/node-contract@3.2.3`, and the external plugin schema to
+  `@remnawave/node-plugins@0.7.3`.
+- Added official GeoCheck `v0.3.0` as a release-locked Docker and Native asset,
+  with exact archive and executable digests and MIT license provenance.
+
+### Security
+
+- The derived-SNI gate rejects TLS ClientHello messages that do not carry the
+  expected server name before exposing the Node certificate. mTLS and JWT
+  authentication remain required after that gate.
+- GeoCheck `v0.3.0` is redistributed unchanged and was built upstream with Go
+  `1.26.5`; this release does not claim that residual toolchain vulnerabilities
+  in that fixed binary were removed. Its execution is constrained by the
+  authenticated, single-concurrency, timeout, and output-size boundaries above.
+
+### Upgrade Notes
+
+- Upgrade the Panel to a compatible `3.3.x` release before upgrading the Node.
+  Older Panels do not send the derived SNI required by the `3.3.2` Node TLS
+  gate and therefore cannot connect after the Node is upgraded.
+
 ## [3.2.2] - 2026-08-15
 
 This stable release aligns Remnanode Lite with the official Node `3.2.2`

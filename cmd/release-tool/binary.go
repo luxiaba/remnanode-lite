@@ -52,6 +52,7 @@ func collectGoModules(files []bundleFile) ([]goModule, error) {
 	expectedCommands := map[string]commandIdentity{
 		"bin/remnanode-lite": {path: "github.com/luxiaba/remnanode-lite/cmd/remnanode-lite", module: "github.com/luxiaba/remnanode-lite"},
 		"bin/rnlctl":         {path: "github.com/luxiaba/remnanode-lite/cmd/rnlctl", module: "github.com/luxiaba/remnanode-lite"},
+		"lib/geocheck":       {path: "github.com/remnawave/geocheck/cmd/geocheck", module: "github.com/remnawave/geocheck"},
 		"lib/rw-core":        {path: "github.com/xtls/xray-core/main", module: "github.com/xtls/xray-core"},
 	}
 	seenCommands := make(map[string]struct{}, len(expectedCommands))

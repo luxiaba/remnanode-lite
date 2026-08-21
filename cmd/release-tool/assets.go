@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +20,8 @@ import (
 const (
 	maxXrayArchiveEntries = 64
 	maxXrayEntryNameBytes = 256
+	maxGeoCheckEntries    = 16
+	maxGeoCheckBytes      = 64 << 20
 )
 
 type assetFetcher struct {
@@ -221,6 +225,78 @@ func extractXrayAssets(archivePath string, architecture xrayArchitecture) (map[s
 		}
 	}
 	return result, nil
+}
+
+func extractGeoCheckBinary(archivePath string, architecture geoCheckArchitecture) ([]byte, error) {
+	info, err := os.Lstat(archivePath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect geocheck archive: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxGeoCheckBytes {
+		return nil, fmt.Errorf("geocheck archive must be a regular file no larger than %d bytes", maxGeoCheckBytes)
+	}
+	file, err := os.Open(archivePath)
+	if err != nil {
+		return nil, fmt.Errorf("open geocheck archive: %w", err)
+	}
+	defer file.Close()
+	zipper, err := gzip.NewReader(io.LimitReader(file, maxGeoCheckBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("open geocheck gzip stream: %w", err)
+	}
+	defer zipper.Close()
+	archive := tar.NewReader(zipper)
+	seen := make(map[string]struct{})
+	var binary []byte
+	var totalSize int64
+	entryCount := 0
+	for {
+		header, readErr := archive.Next()
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return nil, fmt.Errorf("read geocheck archive: %w", readErr)
+		}
+		entryCount++
+		if entryCount > maxGeoCheckEntries {
+			return nil, fmt.Errorf("geocheck archive exceeds %d entries", maxGeoCheckEntries)
+		}
+		if err := validateArchiveRelativePath(header.Name, maxXrayEntryNameBytes); err != nil {
+			return nil, fmt.Errorf("unsafe geocheck archive entry %q: %w", header.Name, err)
+		}
+		if _, duplicate := seen[header.Name]; duplicate {
+			return nil, fmt.Errorf("duplicate geocheck archive entry %q", header.Name)
+		}
+		seen[header.Name] = struct{}{}
+		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
+			return nil, fmt.Errorf("geocheck archive entry %q is not a regular file", header.Name)
+		}
+		if header.Size <= 0 || header.Size > maxGeoCheckBytes || totalSize > maxGeoCheckBytes-header.Size {
+			return nil, fmt.Errorf("geocheck archive exceeds %d uncompressed bytes", maxGeoCheckBytes)
+		}
+		totalSize += header.Size
+		if header.Name != architecture.Binary.ArchivePath {
+			continue
+		}
+		if header.Size != architecture.Binary.Size {
+			return nil, fmt.Errorf("geocheck binary declares size %d, want %d", header.Size, architecture.Binary.Size)
+		}
+		binary, err = io.ReadAll(io.LimitReader(archive, architecture.Binary.Size+1))
+		if err != nil {
+			return nil, fmt.Errorf("read geocheck binary: %w", err)
+		}
+		if int64(len(binary)) != architecture.Binary.Size {
+			return nil, fmt.Errorf("geocheck binary has size %d, want %d", len(binary), architecture.Binary.Size)
+		}
+		if digest := digestBytes(binary); digest != architecture.Binary.SHA256 {
+			return nil, fmt.Errorf("geocheck binary SHA-256 %s does not match %s", digest, architecture.Binary.SHA256)
+		}
+	}
+	if binary == nil {
+		return nil, fmt.Errorf("geocheck archive is missing required root entry %q", architecture.Binary.ArchivePath)
+	}
+	return binary, nil
 }
 
 func validateArchiveRelativePath(name string, maxBytes int) error {
