@@ -108,8 +108,6 @@ func TestHandlerValidationPrecedesAllSideEffects(t *testing.T) {
 		{name: "add user unknown union", path: "/node/handler/add-user", body: `{"data":[{"type":"unknown"}],"hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000001"}}`},
 		{name: "add user invalid UUID", path: "/node/handler/add-user", body: `{"data":[],"hashData":{"vlessUuid":"bad"}}`},
 		{name: "remove user missing", path: "/node/handler/remove-user", body: `{}`},
-		{name: "inbound count missing", path: "/node/handler/get-inbound-users-count", body: `{}`},
-		{name: "inbound users missing", path: "/node/handler/get-inbound-users", body: `{}`},
 		{name: "add users missing", path: "/node/handler/add-users", body: `{}`},
 		{name: "add users invalid nested UUID", path: "/node/handler/add-users", body: `{"affectedInboundTags":[],"users":[{"inboundData":[],"userData":{"userId":"u","hashUuid":"bad","vlessUuid":"bad","trojanPassword":"","ssPassword":""}}]}`},
 		{name: "add users null affected inbound tag", path: "/node/handler/add-users", body: `{"affectedInboundTags":[null],"users":[]}`},
@@ -206,8 +204,6 @@ func TestHandlerRoutesProduceOfficialResponseShapes(t *testing.T) {
 	paths := []string{
 		"/node/handler/add-user",
 		"/node/handler/remove-user",
-		"/node/handler/get-inbound-users-count",
-		"/node/handler/get-inbound-users",
 		"/node/handler/add-users",
 		"/node/handler/remove-users",
 		"/node/handler/drop-users-connections",
@@ -240,47 +236,5 @@ func TestHandlerRoutesProduceOfficialResponseShapes(t *testing.T) {
 				t.Fatalf("response violates official schema: %v\n%s", err, rec.Body.Bytes())
 			}
 		})
-	}
-}
-
-type failingInboundUsersProvider struct {
-	countingHandlerProvider
-}
-
-func (p failingInboundUsersProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xrayrpc.HandlerResult) {
-	p.hit()
-	return 0, xrayrpc.HandlerResult{OK: false, Message: "raw SDK detail"}
-}
-
-func TestHandlerApplicationErrorUsesOfficialCodeAndPath(t *testing.T) {
-	t.Parallel()
-
-	var providerCalls atomic.Int64
-	var dropperCalls atomic.Int64
-	server := &Server{handlerService: nodehandler.NewService(
-		failingInboundUsersProvider{countingHandlerProvider{calls: &providerCalls}},
-		countingDropper{calls: &dropperCalls},
-	), bodyBudget: newHTTPTestBudget(t, false, 0)}
-	req := newJSONRequest(
-		http.MethodPost,
-		"/node/handler/get-inbound-users-count",
-		strings.NewReader(`{"tag":"inbound-1"}`),
-	)
-	rec := httptest.NewRecorder()
-
-	server.handleNodeRoutes(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500; body=%s", rec.Code, rec.Body.String())
-	}
-	if err := contractspec.OfficialErrors.ApplicationResponse.ValidateJSON(rec.Body.Bytes()); err != nil {
-		t.Fatalf("application error violates official schema: %v\n%s", err, rec.Body.Bytes())
-	}
-	if !bytes.Contains(rec.Body.Bytes(), []byte(`"errorCode":"A014"`)) ||
-		!bytes.Contains(rec.Body.Bytes(), []byte(`"path":"/node/handler/get-inbound-users-count"`)) {
-		t.Fatalf("unexpected application error: %s", rec.Body.Bytes())
-	}
-	if bytes.Contains(rec.Body.Bytes(), []byte("raw SDK detail")) {
-		t.Fatalf("SDK detail leaked into official application error: %s", rec.Body.Bytes())
 	}
 }

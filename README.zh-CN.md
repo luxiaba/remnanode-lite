@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=3b586473d8c8f915d0f3367e1bf1456a8c6d5408c966522b81a7bd942614ae93 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=d0e6e349144244f99a65e70e063f02613c42cf908e4ea8703aa16421720a4084 -->
 <div align="center">
 
 # Remnanode Lite
@@ -28,8 +28,8 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 
 ## 主要特点
 
-- 实现 Remnawave Node `3.3.2` API 契约，包括派生 SNI 准入、Secret 完整性校验、
-  GeoCheck 与 Torrent 规则位置。
+- 实现 Remnawave Node `3.4.1` API 契约，包括可选派生 SNI 校验、凭据替换时的
+  连接清理、GeoCheck 和当前 nftables 行为。
 - 使用一个 Go 进程直接管理 rw-core，不依赖 Node.js 或 s6。
 - 提供面向 512 MiB 服务器维护的低内存 Compose 配置。
 - 支持用户热更新、统计、连接管理和官方插件规则格式，包括由可信 Panel 配置启用的 pre-start 陈旧 Unix socket 清理。
@@ -162,7 +162,7 @@ Native bundle 与其对应 Release 使用相同的契约。批量上线前请阅
 
 ## Docker Compose 环境变量
 
-绝大多数节点只需要设置 `NODE_PORT` 和 `SECRET_KEY`。受维护的 Compose 文件只插值以下 8 个变量：
+绝大多数节点只需要设置 `NODE_PORT` 和 `SECRET_KEY`。受维护的 Compose 文件只插值以下 11 个变量：
 
 | 变量 | `.env` 中必需 | Compose 回退值 | 用途 |
 | --- | --- | --- | --- |
@@ -172,10 +172,13 @@ Native bundle 与其对应 Release 使用相同的契约。批量上线前请阅
 | `SECRET_KEY` | 是，除非直接写在 YAML 中 | 无；空值会使插值失败 | Panel 提供的完整 base64 或 base64url Secret。 |
 | `LOW_MEMORY` | 否 | `1` | 启用小机器使用的低内存运行参数。 |
 | `DISABLE_HASHED_SET_CHECK` | 否 | `false` | 仅用于调试，使每次 start 请求都重启 rw-core。 |
+| `SNI_VERIFICATION` | 否 | `false` | 启用可选的派生 SNI 证书选择门禁；关闭时仍强制 mTLS 和 JWT。 |
+| `NFTABLES_LOGGING` | 否 | `true` | 把 ingress 与 Torrent Blocker 的丢弃记录到内核日志。 |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | 否 | `false` | 在 ingress block set 前接受 conntrack reply-direction 流量。 |
 | `BODY_LIMIT_MB` | 否 | 空（自动） | 覆盖 Node 对外 API 的请求体上限；低内存模式会自动使用 16 MiB。 |
 | `GOMEMLIMIT` | 否 | 空（自动） | 覆盖 Go 运行时内存软限制；低内存模式会自动使用 180 MiB。 |
 
-插值优先级为 shell 环境变量 > `.env` > Compose 文件中的回退值。使用 `:-` 时，最终值未设置或为空会采用回退值。Compose 只把 `environment` 下明确列出的 7 个运行变量传入容器；`REMNANODE_IMAGE` 只供 Compose 使用，`.env` 中的未知键不会注入容器。
+插值优先级为 shell 环境变量 > `.env` > Compose 文件中的回退值。使用 `:-` 时，最终值未设置或为空会采用回退值。Compose 只把 `environment` 下明确列出的 10 个运行变量传入容器；`REMNANODE_IMAGE` 只供 Compose 使用，`.env` 中的未知键不会注入容器。
 
 请使用上面展示的 YAML 映射写法。不要写成 `- SECRET_KEY="..."`：在这种列表写法中，引号会成为值的一部分，导致 Secret 无法解码。Compose 文件中含有 Secret，Docker 本地元数据也能看到环境变量，因此文件权限应保持为 `0600`。
 
@@ -233,7 +236,7 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | 已发布的精确 Release |
 | Native 主机 | 按发行版划分，详见 [Native 主机矩阵](docs/i18n/zh-CN/deployment-native.md#native-主机矩阵) |
-| Node 契约 | `3.3.2` |
+| Node 契约 | `3.4.1` |
 | rw-core | `v26.7.28` |
 | 平台 | `linux/amd64`、`linux/arm64` |
 | 整机目标 | `512 MiB RAM / 1 vCPU / 2 GB disk` |

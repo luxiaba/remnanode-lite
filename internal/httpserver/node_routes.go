@@ -44,8 +44,6 @@ const (
 	routeStatsGetUsersIPList
 	routeHandlerAddUser
 	routeHandlerRemoveUser
-	routeHandlerGetInboundUsersCount
-	routeHandlerGetInboundUsers
 	routeHandlerAddUsers
 	routeHandlerRemoveUsers
 	routeHandlerDropUsersConnections
@@ -79,8 +77,6 @@ var nodeRouteDefinitions = [...]nodeRouteDefinition{
 	{NodeRoute: NodeRoute{Method: http.MethodGet, Path: "/node/stats/get-users-ip-list"}, id: routeStatsGetUsersIPList},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/add-user"}, id: routeHandlerAddUser},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/remove-user"}, id: routeHandlerRemoveUser},
-	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/get-inbound-users-count"}, id: routeHandlerGetInboundUsersCount},
-	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/get-inbound-users"}, id: routeHandlerGetInboundUsers},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/add-users"}, id: routeHandlerAddUsers},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/remove-users"}, id: routeHandlerRemoveUsers},
 	{NodeRoute: NodeRoute{Method: http.MethodPost, Path: "/node/handler/drop-users-connections"}, id: routeHandlerDropUsersConnections},
@@ -130,8 +126,6 @@ func nodeRouteHasRequestDTO(route nodeRouteID) bool {
 		routeStatsGetUserIPList,
 		routeHandlerAddUser,
 		routeHandlerRemoveUser,
-		routeHandlerGetInboundUsersCount,
-		routeHandlerGetInboundUsers,
 		routeHandlerAddUsers,
 		routeHandlerRemoveUsers,
 		routeHandlerDropUsersConnections,
@@ -172,8 +166,6 @@ func nodeRouteRequestBodyClass(route nodeRouteID) nodeRequestBodyClass {
 		routeStatsGetUserIPList,
 		routeStatsGetUsersIPList,
 		routeHandlerRemoveUser,
-		routeHandlerGetInboundUsersCount,
-		routeHandlerGetInboundUsers,
 		routePluginCollectTorrentReports,
 		routePluginRecreateTables:
 		return nodeRequestBodySmall
@@ -214,9 +206,7 @@ func nodeRouteIsReadOnly(route nodeRouteID) bool {
 		routeStatsGetCombinedStats,
 		routeStatsGetGeoCheck,
 		routeStatsGetUserIPList,
-		routeStatsGetUsersIPList,
-		routeHandlerGetInboundUsersCount,
-		routeHandlerGetInboundUsers:
+		routeStatsGetUsersIPList:
 		return true
 	default:
 		return false

@@ -19,8 +19,6 @@ type Provider interface {
 	HandlerAddShadowsocksUser(ctx context.Context, tag, username, password string, cipherType int, ivCheck bool, level uint32, hashUUID string) xrayrpc.HandlerResult
 	HandlerAddShadowsocks2022User(ctx context.Context, tag, username, key string, level uint32, hashUUID string) xrayrpc.HandlerResult
 	HandlerAddHysteriaUser(ctx context.Context, tag, username, auth string, level uint32, hashUUID string) xrayrpc.HandlerResult
-	HandlerGetInboundUsers(ctx context.Context, tag string) ([]xrayrpc.InboundUser, xrayrpc.HandlerResult)
-	HandlerGetInboundUsersCount(ctx context.Context, tag string) (int64, xrayrpc.HandlerResult)
 }
 
 type ConnectionDropper interface {
@@ -55,14 +53,6 @@ type GenericResponse struct {
 
 type SuccessResponse struct {
 	Success bool `json:"success"`
-}
-
-type InboundUsersCountResponse struct {
-	Count int64 `json:"count"`
-}
-
-type InboundUsersResponse struct {
-	Users []xrayrpc.InboundUser `json:"users"`
 }
 
 type AddUserRequest struct {
@@ -143,11 +133,25 @@ func (s *Service) AddUser(ctx context.Context, request AddUserRequest) (response
 	}
 	defer releaseCore()
 
+	username := request.Data[0].Username
 	hashUUID := request.HashData.VlessUUID
+	var replacementDrop userIPDropPlan
+	replacementDropReady := false
 	if request.HashData.PrevVlessUUID != nil {
 		hashUUID = *request.HashData.PrevVlessUUID
+		lookupPlan, lookupResult := s.prepareUserIPDrop(ctx, username)
+		if ctx.Err() != nil {
+			var canceled resultAccumulator
+			canceled.StopForContext(ctx)
+			return canceled.Response(), nil
+		}
+		if lookupResult.OK {
+			replacementDrop = lookupPlan
+			replacementDropReady = true
+		} else {
+			slog.Warn("continuing user replacement without connection cleanup", "userId", username)
+		}
 	}
-	username := request.Data[0].Username
 	tags := userMutationTags(s.provider.InboundTags(), addUserTags(request.Data))
 	var cleanup resultAccumulator
 	for _, tag := range tags {
@@ -159,6 +163,11 @@ func (s *Service) AddUser(ctx context.Context, request AddUserRequest) (response
 	}
 	if response := cleanup.Response(); !response.Success {
 		return response, nil
+	}
+	if replacementDropReady {
+		if result := s.applyUserIPDrops(ctx, []userIPDropPlan{replacementDrop}); !result.OK {
+			slog.Warn("failed to drop connections while replacing user", "userId", username, "reason", result.Message)
+		}
 	}
 
 	var results resultAccumulator
@@ -314,33 +323,6 @@ func (s *Service) RemoveUsers(ctx context.Context, request RemoveUsersRequest) (
 	}
 	results.Add(s.applyUserIPDrops(ctx, dropPlans))
 	return results.Response(), nil
-}
-
-func (s *Service) GetInboundUsersCount(ctx context.Context, tag string) (InboundUsersCountResponse, error) {
-	ctx = nonNilContext(ctx)
-	if s.provider == nil {
-		return InboundUsersCountResponse{Count: 0}, nil
-	}
-	count, result := s.provider.HandlerGetInboundUsersCount(ctx, tag)
-	if !result.OK {
-		return InboundUsersCountResponse{}, errFailedInboundUsers
-	}
-	return InboundUsersCountResponse{Count: count}, nil
-}
-
-func (s *Service) GetInboundUsers(ctx context.Context, tag string) (InboundUsersResponse, error) {
-	ctx = nonNilContext(ctx)
-	if s.provider == nil {
-		return InboundUsersResponse{Users: []xrayrpc.InboundUser{}}, nil
-	}
-	users, result := s.provider.HandlerGetInboundUsers(ctx, tag)
-	if !result.OK {
-		return InboundUsersResponse{}, errFailedInboundUsers
-	}
-	if users == nil {
-		users = []xrayrpc.InboundUser{}
-	}
-	return InboundUsersResponse{Users: users}, nil
 }
 
 func (s *Service) DropUsersConnections(ctx context.Context, userIDs []string) SuccessResponse {

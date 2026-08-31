@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=763e1e667873b69a8da088666eaafe7995c7a7a61709a490239a96185f682536 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=841b4fdf8e6d5ff0b39c5780a85ef405cb60a93b0f21be0963a0fb739eb2bf53 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -7,7 +7,7 @@
 
 本文面向第一次接触 Remnanode Lite 的维护者，描述当前代码真实采用的边界、运行流程、状态所有权和资源约束。它回答的是“系统如何工作、修改代码时应守住什么”，而不是部署参数或某个版本的发布清单。
 
-部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.3.2 契约基线](development/contract-3.3.2.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
+部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.4.1 契约基线](development/contract-3.4.1.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
 
 ## 1. 系统定位
 
@@ -75,7 +75,7 @@ Docker 与 Native Linux 交付相同的 Node 和锁定版本的运行时资产�
 
 `rnlctl` 是宿主机管理进程，不属于常驻 Node 本身。它的事务引擎会校验完整 Release bundle、准备服务定义、切换 `current` 和 `previous` generation 链接、保留启用与运行状态，并且只有在选中的二进制文件和私有 health socket 都通过后才提交。持久 journal 会让中断的操作显示在 `status --json` 中，并可通过 `repair` 恢复。独立的 `/usr/local/sbin/rnlctl` 是 root 所有的普通文件，不会作为待修复 generation 的符号链接。
 
-`/etc/remnanode-lite/node.env` 仍是 Native 运行参数的唯一事实源。`rnlctl config` 只是其上受限的编辑层：它只开放 6 个不含 Secret 的管理员字段，保留生命周期管理的路径，校验完整候选配置，并可以重启 active 服务后检查私有 health。Panel Secret 由单独的受管文件保存。带 `--apply` 的操作失败时会尽力恢复改动的文件和服务；它不是第二份持久化配置存储，也不能替代生命周期 journal。
+`/etc/remnanode-lite/node.env` 仍是 Native 运行参数的唯一事实源。`rnlctl config` 只是其上受限的编辑层：它只开放 9 个不含 Secret 的管理员字段，保留生命周期管理的路径，校验完整候选配置，并可以重启 active 服务后检查私有 health。Panel Secret 由单独的受管文件保存。带 `--apply` 的操作失败时会尽力恢复改动的文件和服务；它不是第二份持久化配置存储，也不能替代生命周期 journal。
 
 这套交付状态与下文的内存中 Xray 生命周期彼此独立。Native generation 保存的是软件与服务意图，不会持久化 Panel 下发的完整 Xray 配置。
 

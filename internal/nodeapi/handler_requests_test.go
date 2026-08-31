@@ -14,8 +14,6 @@ func TestHandlerRequestsAcceptOfficialExamples(t *testing.T) {
 	paths := []string{
 		"/node/handler/add-user",
 		"/node/handler/remove-user",
-		"/node/handler/get-inbound-users-count",
-		"/node/handler/get-inbound-users",
 		"/node/handler/add-users",
 		"/node/handler/remove-users",
 		"/node/handler/drop-users-connections",
@@ -142,9 +140,6 @@ func decodeHandlerRequest(path, body string) *nodeapi.ValidationError {
 		return nodeapi.DecodeJSON(reader, &request)
 	case "/node/handler/remove-user":
 		var request nodeapi.RemoveUserRequest
-		return nodeapi.DecodeJSON(reader, &request)
-	case "/node/handler/get-inbound-users-count", "/node/handler/get-inbound-users":
-		var request nodeapi.TagRequest
 		return nodeapi.DecodeJSON(reader, &request)
 	case "/node/handler/add-users":
 		var request nodeapi.AddUsersRequest

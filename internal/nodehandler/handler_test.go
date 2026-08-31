@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/luxiaba/remnanode-lite/internal/connections"
-	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
 	"github.com/luxiaba/remnanode-lite/internal/nodehandler"
 	"github.com/luxiaba/remnanode-lite/internal/xrayrpc"
 )
@@ -67,25 +66,6 @@ func TestAddUsersReportsHandlerFailure(t *testing.T) {
 	}
 	if response.Success || response.Error == nil || *response.Error != "boom" {
 		t.Fatalf("response = %+v, want handler failure", response)
-	}
-}
-
-type failingInboundProvider struct {
-	stubProvider
-}
-
-func (failingInboundProvider) HandlerGetInboundUsersCount(context.Context, string) (int64, xrayrpc.HandlerResult) {
-	return 0, xrayrpc.HandlerResult{OK: false, Message: "xray is not online"}
-}
-
-func TestGetInboundUsersCountGRPCFailure(t *testing.T) {
-	t.Parallel()
-
-	service := nodehandler.NewService(&failingInboundProvider{}, connections.NewDropper(nil))
-	_, err := service.GetInboundUsersCount(context.Background(), "in-1")
-	serviceError, ok := nodeapi.AsServiceError(err)
-	if !ok || serviceError.Code != "A014" || serviceError.Message != "Failed to get inbound users" {
-		t.Fatalf("error = %+v, want A014", err)
 	}
 }
 

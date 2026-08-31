@@ -66,10 +66,6 @@ func successSemanticHash(routeID string, raw []byte) (string, error) {
 		projection, err = usersIPProjection(response)
 	case "handler.add-user", "handler.remove-user", "handler.add-users", "handler.remove-users":
 		projection = map[string]any{"success": response["success"], "errorIsNil": response["error"] == nil}
-	case "handler.inbound-users-count":
-		projection = selectSemanticFields(response, "count")
-	case "handler.inbound-users":
-		projection, err = identityArrayProjection(response, "users", "username")
 	case "handler.drop-users-connections", "handler.drop-ips":
 		projection = selectSemanticFields(response, "success")
 	case "plugin.sync", "plugin.nftables.block-ips", "plugin.nftables.unblock-ips", "plugin.nftables.recreate-tables":

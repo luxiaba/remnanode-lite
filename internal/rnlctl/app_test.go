@@ -780,12 +780,15 @@ func TestAppRendersUpgradePreflight(t *testing.T) {
 
 func TestAppConfigurationAndSecretCommands(t *testing.T) {
 	values := map[string]string{
-		"NODE_PORT":                "2222",
-		"NODE_BIND_ADDR":           "127.0.0.1",
-		"LOW_MEMORY":               "1",
-		"BODY_LIMIT_MB":            "",
-		"GOMEMLIMIT":               "180MiB",
-		"DISABLE_HASHED_SET_CHECK": "false",
+		"NODE_PORT":                     "2222",
+		"NODE_BIND_ADDR":                "127.0.0.1",
+		"LOW_MEMORY":                    "1",
+		"BODY_LIMIT_MB":                 "",
+		"GOMEMLIMIT":                    "180MiB",
+		"DISABLE_HASHED_SET_CHECK":      "false",
+		"SNI_VERIFICATION":              "false",
+		"NFTABLES_LOGGING":              "true",
+		"NFTABLES_ACCEPT_REPLY_TRAFFIC": "false",
 	}
 
 	t.Run("show and get", func(t *testing.T) {

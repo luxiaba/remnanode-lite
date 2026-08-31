@@ -25,8 +25,9 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 
 ## Highlights
 
-- Implements the Remnawave Node `3.3.2` API contract, including derived-SNI
-  admission, Secret integrity checks, GeoCheck, and Torrent rule placement.
+- Implements the Remnawave Node `3.4.1` API contract, including optional
+  derived-SNI verification, credential-replacement connection cleanup,
+  GeoCheck, and the current nftables behavior.
 - Runs the Node as one Go process that directly manages rw-core, without Node.js or s6.
 - Uses Docker Compose as the simplest deployment path, with a self-contained Native Linux option for hosts that cannot run Docker.
 - Includes the same maintained low-memory profile for container and Native services on 512 MiB servers.
@@ -173,7 +174,7 @@ rollback, repair, and uninstall.
 
 ## Docker Compose environment variables
 
-Most deployments only need to set `NODE_PORT` and `SECRET_KEY`. The maintained Compose files interpolate exactly these eight variables:
+Most deployments only need to set `NODE_PORT` and `SECRET_KEY`. The maintained Compose files interpolate exactly these eleven variables:
 
 | Variable | Required in `.env` | Compose fallback | Purpose |
 | --- | --- | --- | --- |
@@ -183,10 +184,13 @@ Most deployments only need to set `NODE_PORT` and `SECRET_KEY`. The maintained C
 | `SECRET_KEY` | Yes, unless set directly in YAML | None; interpolation fails when empty | Complete base64 or base64url Secret supplied by the Panel. |
 | `LOW_MEMORY` | No | `1` | Enables the low-memory limits used by the small-server profile. |
 | `DISABLE_HASHED_SET_CHECK` | No | `false` | Debug-only switch that forces every start request to restart rw-core. |
+| `SNI_VERIFICATION` | No | `false` | Enables the optional derived-SNI certificate-selection gate. mTLS and JWT remain mandatory when disabled. |
+| `NFTABLES_LOGGING` | No | `true` | Logs ingress and Torrent Blocker drops to the kernel log. |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | No | `false` | Accepts conntrack reply-direction traffic before ingress block sets. |
 | `BODY_LIMIT_MB` | No | Empty (automatic) | Overrides the Node API body limit. Low-memory mode selects 16 MiB automatically. |
 | `GOMEMLIMIT` | No | Empty (automatic) | Overrides the Go runtime soft memory limit. Low-memory mode selects 180 MiB automatically. |
 
-For interpolation, precedence is shell environment > `.env` > the fallback written in the Compose file. The `:-` form uses its fallback when the resolved value is unset or empty. Compose passes only the seven runtime variables explicitly listed under `environment`; `REMNANODE_IMAGE` is Compose-only, and unknown keys in `.env` are not injected into the container.
+For interpolation, precedence is shell environment > `.env` > the fallback written in the Compose file. The `:-` form uses its fallback when the resolved value is unset or empty. Compose passes only the ten runtime variables explicitly listed under `environment`; `REMNANODE_IMAGE` is Compose-only, and unknown keys in `.env` are not injected into the container.
 
 Keep the mapping form shown above. Do not write `- SECRET_KEY="..."`: in that list form the quote characters become part of the value and the Secret cannot be decoded. Keep the Compose file private because Docker stores inline environment values in its local metadata.
 
@@ -246,7 +250,7 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | --- | --- |
 | Native Linux bundles | Exact published Releases |
 | Native hosts | Distribution-specific; see the [Native host matrix](docs/deployment-native.md#native-host-matrix) |
-| Node contract | `3.3.2` |
+| Node contract | `3.4.1` |
 | rw-core | `v26.7.28` |
 | Platforms | `linux/amd64`, `linux/arm64` |
 | Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |

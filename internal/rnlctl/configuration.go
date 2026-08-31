@@ -27,6 +27,9 @@ var editableConfigurationKeySpecs = [...]editableConfigurationKeySpec{
 	{Name: "BODY_LIMIT_MB", Description: "Request budget in MiB", Optional: true},
 	{Name: "GOMEMLIMIT", Description: "Go soft memory limit", Optional: true},
 	{Name: "DISABLE_HASHED_SET_CHECK", Description: "Configuration hash debug switch", Optional: true},
+	{Name: "SNI_VERIFICATION", Description: "Derived SNI verification", Optional: true},
+	{Name: "NFTABLES_LOGGING", Description: "nftables ingress-drop logging", Optional: true},
+	{Name: "NFTABLES_ACCEPT_REPLY_TRAFFIC", Description: "nftables reply-traffic acceptance", Optional: true},
 }
 
 var editableConfigurationKeys = func() []string {

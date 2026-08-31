@@ -101,6 +101,9 @@ func TestEngineUpdateConfigurationRejectsUnsafeOrInvalidCandidates(t *testing.T)
 		{name: "bell control", request: ConfigurationUpdateRequest{Set: map[string]string{"NODE_BIND_ADDR": "127.0.0.1\x07"}}, want: "unsupported whitespace"},
 		{name: "invalid UTF-8", request: ConfigurationUpdateRequest{Set: map[string]string{"NODE_BIND_ADDR": string([]byte{'1', '2', '7', '.', '0', '.', '0', '.', '1', 0xff})}}, want: "unsupported whitespace"},
 		{name: "literal backslash n", request: ConfigurationUpdateRequest{Set: map[string]string{"NODE_BIND_ADDR": `127.0.0.1\nLOW_MEMORY=0`}}, want: "unsupported whitespace"},
+		{name: "SNI boolean", request: ConfigurationUpdateRequest{Set: map[string]string{"SNI_VERIFICATION": "enabled"}}, want: "SNI_VERIFICATION must be a boolean"},
+		{name: "nftables logging boolean", request: ConfigurationUpdateRequest{Set: map[string]string{"NFTABLES_LOGGING": "enabled"}}, want: "NFTABLES_LOGGING must be a boolean"},
+		{name: "nftables reply boolean", request: ConfigurationUpdateRequest{Set: map[string]string{"NFTABLES_ACCEPT_REPLY_TRAFFIC": "enabled"}}, want: "NFTABLES_ACCEPT_REPLY_TRAFFIC must be a boolean"},
 		{name: "low memory body limit", request: ConfigurationUpdateRequest{Set: map[string]string{"LOW_MEMORY": "1", "BODY_LIMIT_MB": "64"}}, want: "must not exceed 16"},
 		{name: "required port", request: ConfigurationUpdateRequest{Unset: []string{"NODE_PORT"}}, want: "NODE_PORT must be between 1 and 65535"},
 	}

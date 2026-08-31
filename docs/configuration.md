@@ -16,7 +16,7 @@ Only recognized keys affect the daemon. The file is parsed as data; it is never 
 
 Native services start with a clean process environment and set only `REMNANODE_ENV=/etc/remnanode-lite/node.env` plus a minimal identity and `PATH`. This prevents an inline Secret or unrelated file entries from being exported to the Node or rw-core process environment.
 
-Docker Compose handles `.env` differently: Compose reads it for YAML interpolation before the container starts. An exported shell variable wins over the same `.env` key. The maintained Compose file then passes only the seven runtime values listed in its `environment` mapping; it does not inject `.env` wholesale.
+Docker Compose handles `.env` differently: Compose reads it for YAML interpolation before the container starts. An exported shell variable wins over the same `.env` key. The maintained Compose file then passes only the ten runtime values listed in its `environment` mapping; it does not inject `.env` wholesale.
 
 ## Runtime settings
 
@@ -33,6 +33,9 @@ Docker Compose handles `.env` differently: Compose reads it for YAML interpolati
 | `INTERNAL_SOCKET_PATH` | No | `/run/remnanode-lite/internal.sock` | Private filesystem Unix socket used by rw-core config/webhooks and the local healthcheck. |
 | `INTERNAL_REST_TOKEN` | No | Random value generated at startup | Bearer token for the private Unix HTTP service. Leave empty unless debugging a controlled setup. |
 | `DISABLE_HASHED_SET_CHECK` | No | `false` | Debug switch. When true, every start request restarts rw-core instead of using the configuration hash. |
+| `SNI_VERIFICATION` | No | `false` | Enables the derived-SNI certificate-selection gate. TLS 1.3, mTLS, JWT, and Secret integrity remain mandatory when false. |
+| `NFTABLES_LOGGING` | No | `true` | Adds kernel logging before ingress and Torrent Blocker drops. Egress filters never log. |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | No | `false` | Accepts conntrack reply-direction packets before ingress block sets. Requires conntrack support when enabled. |
 | `LOW_MEMORY` | No | `false` in the daemon; maintained Docker and Native templates use `1` | Enables the 512 MiB profile: 180 MiB Go soft memory limit, 16 MiB request budget, and longer rw-core readiness allowance. |
 | `BODY_LIMIT_MB` | No | Automatic | Global request budget in MiB. Automatic means 16 MiB in low-memory mode and 256 MiB otherwise; route-specific limits may be lower. |
 | `GOMEMLIMIT` | No | Automatic | Go runtime soft memory limit as bytes or `KiB`, `MiB`, `GiB`, `TiB`; `off` disables it. Overrides the low-memory default. |
@@ -96,6 +99,9 @@ The production Compose files interpolate these values:
 | `SECRET_KEY` | No fallback | Yes | Compose fails interpolation when it is missing or empty. |
 | `LOW_MEMORY` | `1` | Yes | Small-server policy. |
 | `DISABLE_HASHED_SET_CHECK` | `false` | Yes | Debug only. |
+| `SNI_VERIFICATION` | `false` | Yes | Optional derived-SNI certificate gate. |
+| `NFTABLES_LOGGING` | `true` | Yes | Kernel logging for ingress and Torrent drops. |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | `false` | Yes | Optional conntrack reply-direction acceptance. |
 | `BODY_LIMIT_MB` | Empty | Yes | Empty lets the daemon select the low-memory default. |
 | `GOMEMLIMIT` | Empty | Yes | Empty lets the daemon select 180 MiB in low-memory mode. |
 
@@ -130,6 +136,9 @@ LOG_DIR=/var/log/remnanode-lite
 ASN_DB_PATH=/usr/local/lib/remnanode-lite/current/share/asn/asn-prefixes.bin
 INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 LOW_MEMORY=1
+SNI_VERIFICATION=false
+NFTABLES_LOGGING=true
+NFTABLES_ACCEPT_REPLY_TRAFFIC=false
 ```
 
 The lifecycle engine rewrites managed path keys during installation and rejects duplicate managed assignments. Keep administrator choices such as `NODE_BIND_ADDR`, `BODY_LIMIT_MB`, and `GOMEMLIMIT` in the same file, but do not redirect managed paths to a system-wide Xray installation. Bundled Node and runtime assets are one tested generation.
@@ -138,7 +147,7 @@ The file and Secret must remain regular, non-symlink files. The daemon opens the
 
 ### Native configuration commands
 
-`rnlctl config show` and `get` expose only these six administrator-editable keys:
+`rnlctl config show` and `get` expose only these nine administrator-editable keys:
 
 - `NODE_PORT`
 - `NODE_BIND_ADDR`
@@ -146,8 +155,11 @@ The file and Secret must remain regular, non-symlink files. The daemon opens the
 - `BODY_LIMIT_MB`
 - `GOMEMLIMIT`
 - `DISABLE_HASHED_SET_CHECK`
+- `SNI_VERIFICATION`
+- `NFTABLES_LOGGING`
+- `NFTABLES_ACCEPT_REPLY_TRAFFIC`
 
-Secret material, managed runtime path assignments, internal tokens, and version overrides are neither exposed nor editable through `rnlctl config`. The `show --json` envelope contains `schemaVersion`, `path` (the managed `node.env` file), and `values`; only `values` contains configuration assignments, limited to the six keys above. `show` and `get` report values stored in `node.env`, not defaults computed by the daemon. An empty optional value may therefore have an effective runtime default.
+Secret material, managed runtime path assignments, internal tokens, and version overrides are neither exposed nor editable through `rnlctl config`. The `show --json` envelope contains `schemaVersion`, `path` (the managed `node.env` file), and `values`; only `values` contains configuration assignments, limited to the nine keys above. `show` and `get` report values stored in `node.env`, not defaults computed by the daemon. An empty optional value may therefore have an effective runtime default.
 
 ```bash
 sudo rnlctl config show
@@ -173,13 +185,13 @@ sudo rnlctl config unset BODY_LIMIT_MB GOMEMLIMIT
 ```
 
 Each value passed through `rnlctl config set` must be empty or a single value
-without whitespace or control characters. None of the six editable settings
+without whitespace or control characters. None of the nine editable settings
 needs quoting; keeping them single-token avoids a difference between the
 command's validation and the environment-file parser used by the service.
 
 Configuration and Secret mutations require root, a clean lifecycle state, and the shared lifecycle operation lock. Without `--apply`, no service restart occurs; an active process continues with its previously loaded settings until `config apply` or a restart.
 
-Only the six keys listed above are accepted. `NODE_PORT` is required, so it cannot remain unset. Add `--apply` to validate, write, restart an active service, and wait for internal health in one operation:
+Only the nine keys listed above are accepted. `NODE_PORT` is required, so it cannot remain unset. Add `--apply` to validate, write, restart an active service, and wait for internal health in one operation:
 
 ```bash
 sudo rnlctl config set NODE_PORT=2222 --apply

@@ -37,8 +37,6 @@ var responseShapeTests = map[string]func(t *testing.T) []byte{
 	"/node/stats/get-users-ip-list":         testGetUsersIPListResponseShape,
 	"/node/handler/add-user":                testAddUserResponseShape,
 	"/node/handler/remove-user":             testRemoveUserResponseShape,
-	"/node/handler/get-inbound-users-count": testGetInboundUsersCountResponseShape,
-	"/node/handler/get-inbound-users":       testGetInboundUsersResponseShape,
 	"/node/handler/add-users":               testAddUsersResponseShape,
 	"/node/handler/remove-users":            testRemoveUsersResponseShape,
 	"/node/handler/drop-users-connections":  testDropUsersConnectionsResponseShape,
@@ -228,15 +226,6 @@ func testRemoveUserResponseShape(t *testing.T) []byte {
 	return encodeEnvelope(response)
 }
 
-func testGetInboundUsersResponseShape(t *testing.T) []byte {
-	service := handlerService()
-	response, err := service.GetInboundUsers(context.Background(), "inbound-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return encodeEnvelope(response)
-}
-
 func testAddUsersResponseShape(t *testing.T) []byte {
 	service := handlerService()
 	response, err := service.AddUsers(context.Background(), nodehandler.AddUsersRequest{
@@ -297,15 +286,6 @@ func testDropUsersConnectionsResponseShape(t *testing.T) []byte {
 	return encodeEnvelope(service.DropUsersConnections(context.Background(), []string{"user-1"}))
 }
 
-func testGetInboundUsersCountResponseShape(t *testing.T) []byte {
-	service := handlerService()
-	response, err := service.GetInboundUsersCount(context.Background(), "inbound-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return encodeEnvelope(response)
-}
-
 func testPluginSyncResponseShape(t *testing.T) []byte {
 	service := pluginService()
 	request, err := plugin.NewSyncPlugin(
@@ -340,7 +320,7 @@ func testPluginCollectReportsResponseShape(t *testing.T) []byte {
 		Timestamp:   xraywebhook.Number(float64(time.Now().UnixMilli())),
 	}
 	state.AddReport(report)
-	service := plugin.NewService(state, connections.NewDropper(state.IsWhitelisted), nil)
+	service := plugin.NewService(state, connections.NewDropper(state.IsWhitelisted), nil, plugin.Options{NFTablesLogging: true})
 	return encodeEnvelope(service.CollectReports())
 }
 
@@ -351,7 +331,7 @@ func testPluginBlockIPsResponseShape(t *testing.T) []byte {
 
 func pluginService() *plugin.Service {
 	state := plugin.NewState()
-	service := plugin.NewService(state, connections.NewDropper(state.IsWhitelisted), nil)
+	service := plugin.NewService(state, connections.NewDropper(state.IsWhitelisted), nil, plugin.Options{NFTablesLogging: true})
 	_ = service.Initialize()
 	return service
 }

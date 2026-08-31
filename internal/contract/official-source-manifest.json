@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "repository": "https://github.com/remnawave/node.git",
   "packageName": "@remnawave/node",
-  "version": "3.3.2",
-  "commit": "afdfa2d837118efd95c317700e60e9429a169b48",
+  "version": "3.4.1",
+  "commit": "44912631321664dbd5822e9bf8d96766ccff7c93",
   "files": [
     {
       "path": "docker/Dockerfile",
-      "sha256": "c345322d3ae867c7acd73aff60edd046343d688d03e3254378bbf80d997328ed"
+      "sha256": "517ff778694ad24e6a04a273d3c24c402f2a2b9a2bc3297e223948ef9c41a10e"
     },
     {
       "path": "docker/rootfs/etc/s6-overlay/s6-rc.d/xray/timeout-kill",
@@ -15,7 +15,7 @@
     },
     {
       "path": "libs/contract/api/controllers/handler.ts",
-      "sha256": "aae61fff29afd3cb4a009ba3bc37fd3a1123f361264852e7f570e2781d0d6d18"
+      "sha256": "793b5997235347f51825fd2fe13e2a1d9e32ba8114c2ab75403b976c938c1a9b"
     },
     {
       "path": "libs/contract/api/controllers/plugin.ts",
@@ -31,7 +31,7 @@
     },
     {
       "path": "libs/contract/api/routes.ts",
-      "sha256": "c7dc52650c51958eefe50cd15f40a7e88417b778a1a2492f4de2bed964c94a87"
+      "sha256": "06237333f00da8151b9a994d04bc29ef92fd16cecbe8e6c3987d5941959613eb"
     },
     {
       "path": "libs/contract/commands/handler/add-user.command.ts",
@@ -48,14 +48,6 @@
     {
       "path": "libs/contract/commands/handler/drop-users-connections.command.ts",
       "sha256": "07158f5e53b05943f34c299e86db0d51d635f3b305ea7be6cb95d0a824a99df5"
-    },
-    {
-      "path": "libs/contract/commands/handler/get-inbound-users-count.command.ts",
-      "sha256": "1cc15573811fa37c43e9f87ede955ad8232b9ceeed27aa3e7b8f14352975cac8"
-    },
-    {
-      "path": "libs/contract/commands/handler/get-inbound-users.command.ts",
-      "sha256": "ac194f82632b95d1da99d86027181584c0e24949dc4b335e9643246becb01f88"
     },
     {
       "path": "libs/contract/commands/handler/remove-user.command.ts",
@@ -171,19 +163,31 @@
     },
     {
       "path": "libs/contract/package.json",
-      "sha256": "3fd2808763f162ebd45c51242436b571009c638c6c3edb8ee5a90b05bd42ce95"
+      "sha256": "5c766727c88ed8d96eda0ca29c70c9e06441ddc4caf858c5d2511ddd656235eb"
     },
     {
       "path": "package-lock.json",
-      "sha256": "0586f8c549bf87d704f440bdfa01bcd7b9799d3085563a5fedf50d146923e9ea"
+      "sha256": "07a847fbcd7db3a2f5bd8c4f0443c214c9c7a8a716c715d24a0fbf3466787114"
     },
     {
       "path": "package.json",
-      "sha256": "a679c113eabb7493a6355b09071b53cd634601a555205011fc0f9affe155a372"
+      "sha256": "65279af504a0231c34dca58c0386a9d289fb17eca89d3bf5d49a99e3a6f80c20"
     },
     {
       "path": "src/app.module.ts",
-      "sha256": "a8357732dff06463a3a2421d726187f2f3aee8f6722d9d24e9b4f48bbb0307a4"
+      "sha256": "827d8c11aa627c9a4619858906a34bd8f5a0a8d65b8370e48047df5b7930ab6c"
+    },
+    {
+      "path": "src/common/config/app-config/config.schema.ts",
+      "sha256": "6ae9fea2283f700f4da879df799d849411b7a5479541f53657a8d6a291c9cc71"
+    },
+    {
+      "path": "src/common/config/app-config/typed-config.service.ts",
+      "sha256": "f0d68ea9ac06e64403d37634a2460b58a5f05e583919f1371d63838cc3cc93b1"
+    },
+    {
+      "path": "src/common/config/common-config/common-config.module.ts",
+      "sha256": "b5cc2d0292d882c5f5d15e6c1f14ebd4ae23b9e6f8ee0e7c9dd0c2d6f1f80be0"
     },
     {
       "path": "src/common/exception/http-exception.filter.ts",
@@ -195,7 +199,7 @@
     },
     {
       "path": "src/common/helpers/error-handler.helper.ts",
-      "sha256": "e786289de255567c22a983cff94616a9e5605325da4e70067d98ba24c92c69f2"
+      "sha256": "343e438a8b69e7e2cf78762576a02cc21e818150a84bcdfb8ce4fd88a956d32d"
     },
     {
       "path": "src/common/utils/decode-node-payload/decode-node-payload.ts",
@@ -235,7 +239,7 @@
     },
     {
       "path": "src/main.ts",
-      "sha256": "91b6f8ee56d3f27984cf8e6ebe94696cb09883381f046b63ca46556b8c13a7c7"
+      "sha256": "bf8962ca87dec754b315022fbc937a6855950bbc914b378a14fd261e60324ea7"
     },
     {
       "path": "src/modules/_plugin/commands/run-pre-start/run-pre-start.handler.ts",
@@ -255,7 +259,7 @@
     },
     {
       "path": "src/modules/_plugin/plugin.service.ts",
-      "sha256": "632bff333d78641677e46e2b64e909d5f59b86b1685eff3702aae4b7c4932c5a"
+      "sha256": "b97155ba1255868d0ac74ffc01310e0d469743ea2754879f01859dfa14fbba9c"
     },
     {
       "path": "src/modules/_plugin/queries/get-torrent-blocker-state/get-torrent-blocker-state.handler.ts",
@@ -264,6 +268,10 @@
     {
       "path": "src/modules/_plugin/queries/get-torrent-blocker-state/get-torrent-blocker-state.query.ts",
       "sha256": "8b4df9aedbed9b285d6e523beca3f5d59148ff711801e75957e0f82cae3983d1"
+    },
+    {
+      "path": "src/modules/_plugin/services/nft.service.ts",
+      "sha256": "7d3eb0fdb5cf7f4f3d7ba5937627bf057c6a04153febf5bc6be38f17a38743f7"
     },
     {
       "path": "src/modules/_plugin/services/plugin-state.service.ts",
@@ -287,11 +295,15 @@
     },
     {
       "path": "src/modules/handler/handler.controller.ts",
-      "sha256": "ad69d88217ce99d595711aa7ba9aab40de0b777481bdf8d251178f340ab00460"
+      "sha256": "134a4e8cfed2b5effe1cdab6787b4f746c83c4fb5b71dd27c989ad1fe03ba8c5"
     },
     {
       "path": "src/modules/handler/handler.module.ts",
       "sha256": "5642b0100ba2839e3e8089a3e1f799abcfd2342ee9fd0b0fda843455b3d31a0b"
+    },
+    {
+      "path": "src/modules/handler/handler.service.ts",
+      "sha256": "b90342f7232a3806c754923ca1d55023a7a807f34165fe06ab4bbae0e473d069"
     },
     {
       "path": "src/modules/internal/internal.controller.ts",
@@ -311,7 +323,7 @@
     },
     {
       "path": "src/modules/stats/geocheck.service.ts",
-      "sha256": "f3ec79766fd2e0913393fa19feb001f67cc1c9e5b4755bb4ce8acbcf8092fbe4"
+      "sha256": "e0e89c61b1c7409055ca5ffc5c12d804fa7e354af1f15056aac8554fbeeae1be"
     },
     {
       "path": "src/modules/stats/stats.controller.ts",
@@ -343,7 +355,7 @@
     },
     {
       "path": "src/modules/xray-core/xray.service.ts",
-      "sha256": "242d7c8303ed486ad9d89e6a18042b56104192f8479f990e6d5018465501b0da"
+      "sha256": "7cff93c5675db7df4c9e2106fbf757e2eacf7e5f6df43a86caa39383ee8cb897"
     }
   ],
   "routes": [
@@ -370,18 +382,6 @@
       "path": "/node/handler/drop-users-connections",
       "controllerSource": "src/modules/handler/handler.controller.ts",
       "decorator": "HANDLER_ROUTES.DROP_USERS_CONNECTIONS (REST_API.HANDLER.DROP_USERS_CONNECTIONS)"
-    },
-    {
-      "method": "POST",
-      "path": "/node/handler/get-inbound-users",
-      "controllerSource": "src/modules/handler/handler.controller.ts",
-      "decorator": "HANDLER_ROUTES.GET_INBOUND_USERS (REST_API.HANDLER.GET_INBOUND_USERS)"
-    },
-    {
-      "method": "POST",
-      "path": "/node/handler/get-inbound-users-count",
-      "controllerSource": "src/modules/handler/handler.controller.ts",
-      "decorator": "HANDLER_ROUTES.GET_INBOUND_USERS_COUNT (REST_API.HANDLER.GET_INBOUND_USERS_COUNT)"
     },
     {
       "method": "POST",

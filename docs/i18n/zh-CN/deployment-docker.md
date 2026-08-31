@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=5807f5ad275e0506a0a51fef5020b311a0f30f6a4ef5522e5da93c0117e671ba -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=ab16405a98512e44f3172aceeb6efa3f511da05d1b97e73cce9a4c72acee171d -->
 
 # Docker Compose 部署
 
@@ -244,12 +244,14 @@ tag 说明“希望引用哪个版本”，digest 说明“实际运行哪一份
 
 ## 更新与回滚
 
-当前 `3.3.2` Release 应使用该 Release 附带的 Compose 模板：模板选择 `3.3.2` 镜像，
-并包含 Release 固定的 GeoCheck 运行时资产。保留现有 `.env`，拉取精确镜像或 digest，
-重建容器后再检查 Panel 连接和真实流量。
+当前 `3.4.1` Release 应使用该 Release 附带的 Compose 模板：模板选择 `3.4.1` 镜像，
+包含 Release 固定的 GeoCheck 运行时资产，并明确映射新的 SNI 与 nftables 选项。保留
+现有 `.env`，拉取精确镜像或 digest，重建容器后再检查 Panel 连接和真实流量。
 
-请先把 Panel 升级到兼容的 `3.3.x` 版本。旧 Panel 不会发送 `3.3.2` Node TLS 门禁所需
-的派生 SNI，因此 Node 升级后将无法连接。
+派生 SNI 校验现在为可选且默认关闭；TLS 1.3、mTLS、JWT 与 Secret 完整性仍然强制。
+只有所有连接 Panel 都发送派生 server name 时才设置 `SNI_VERIFICATION=true`。繁忙
+主机上线前应检查 `NFTABLES_LOGGING`；除非 ingress list 阻断宿主机主动连接的回复且
+conntrack 可用，否则保持 `NFTABLES_ACCEPT_REPLY_TRAFFIC=false`。
 
 先备份当前 Compose 输入，再获取并校验目标 Release 附带的 Compose 模板。保留 `.env`，并有意重新应用所需的本地 override 后，才修改 `REMNANODE_IMAGE` 或明确内联的 `image:`。不要让新镜像继续使用旧 Compose：从 `3.0.0` 升级到 `3.2.2` 时尤其必须加入新的 `remnanode-state` volume，因为容器 rootfs 仍然只读。随后主动拉取并重建：
 

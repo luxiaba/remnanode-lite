@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: remnawave/node
-          ref: afdfa2d837118efd95c317700e60e9429a169b48
+          ref: 44912631321664dbd5822e9bf8d96766ccff7c93
           path: .official-source
           persist-credentials: false
 

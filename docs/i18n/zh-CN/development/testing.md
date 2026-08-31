@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=4f572543ae6ec6d03986fe381b5462f1f7820cccce563a6838b1efb31dca9656 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=0cf670b76345ff68102eea7b0fbdea1afa8a7e6e9f27ef76587fe26127cd8a27 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -143,7 +143,7 @@ REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 ### 外部插件 schema 证据
 
 官方 Node 的插件 `config` schema 来自独立 npm 包，不在固定源码 checkout 内。当前
-`@remnawave/node-plugins@0.7.3` tarball 可以在隔离临时目录中复核：
+`@remnawave/node-plugins@0.8.2` tarball 可以在隔离临时目录中复核：
 
 ```bash
 plugin_tgz="$(mktemp)"
@@ -151,20 +151,23 @@ trap 'rm -f "$plugin_tgz"' EXIT
 
 curl --fail --location --silent --show-error \
   --proto '=https' --tlsv1.2 \
-  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.7.3.tgz \
+  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.8.2.tgz \
   -o "$plugin_tgz"
 
 test "$(openssl dgst -sha1 "$plugin_tgz" | awk '{print $NF}')" = \
-  d58cc34d15838d6ac543c112ac65265d6189745e
+  9588288f9190b73b2ce868845d4248c98eadc25f
 test "sha512-$(openssl dgst -sha512 -binary "$plugin_tgz" | openssl base64 -A)" = \
-  'sha512-y1+dIrZVENchojkBJHC5KHocTTDl/xeCdIvbYgoTWYZ5pWuIkyoFYm/fGUA//W3DQ6eAlAKkg1HC24MeKAoIvA=='
+  'sha512-/klo/XH4imZ2cupLavj4++S+hHgVA8uzhVgpQdC0y9kzUtVE168d7brcYEdxB1UGw49LsER+UDYplcyTSvV5QQ=='
 tar -tzf "$plugin_tgz" \
   | grep -Fx 'package/build/backend/models/node-plugins.schema.js'
 ```
 
 检查实际 schema 时使用 `tar -xOf` 从上述固定路径读取，不要安装包或执行其中代码。
 当前 CI 不联网下载该 tarball；自动源码证据测试只覆盖官方 Git checkout 中登记的
-路径。升级插件版本时必须同时核对官方 `package.json`/`package-lock.json`、更新摘要、
+路径。3.4.1 基线解压后的 schema SHA-256 为
+`e096eba57a8ce1499a0e117bf5b9dfd7f324a9a6fc455066fcb31d5c86a91d21`，与已审查的
+0.7.3 schema 逐字节相同；变化只在包版本与 Zod 依赖。升级插件版本时必须同时核对
+官方 `package.json`/`package-lock.json`、更新摘要、
 重新审计 schema，并调整 `internal/nodeapi`、`internal/plugin` 和相关契约测试。
 
 ## 仓库与静态检查

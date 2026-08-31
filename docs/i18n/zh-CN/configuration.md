@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=0821228c1d80c814e27d40ea72c767175ac9234efe5514c31550cd4f15a9cd53 -->
+<!-- translation: locale=zh-CN; source=docs/configuration.md; source-sha256=6afdfae8a8f35d4816c285fbfa82aea299ab9bf88b721c61ed756afb8ac4db46 -->
 
 # 配置参考
 
@@ -33,6 +33,9 @@ Docker Compose 的 `.env` 是另一套机制：Compose 在创建容器前用于 
 | `INTERNAL_SOCKET_PATH` | 否 | `/run/remnanode-lite/internal.sock` | rw-core 与本地 healthcheck 使用的私有 Unix socket |
 | `INTERNAL_REST_TOKEN` | 否 | 启动时随机生成 | 私有 Unix HTTP 服务的 token；通常留空 |
 | `DISABLE_HASHED_SET_CHECK` | 否 | `false` | 调试开关；开启后每次 start 都重启 rw-core |
+| `SNI_VERIFICATION` | 否 | `false` | 启用派生 SNI 证书选择门禁；关闭时仍强制 TLS 1.3、mTLS、JWT 和 Secret 完整性 |
+| `NFTABLES_LOGGING` | 否 | `true` | 在 ingress 与 Torrent Blocker drop 前写入内核日志；egress 不记录 |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | 否 | `false` | 在 ingress block set 前接受 conntrack reply-direction；开启时要求 conntrack 可用 |
 | `LOW_MEMORY` | 否 | 模板为 `1` | 512 MiB 配置：Go 软上限 180 MiB、请求预算 16 MiB、较长 readiness 等待 |
 | `BODY_LIMIT_MB` | 否 | 自动 | 请求体预算；低内存模式自动为 16 MiB，否则为 256 MiB |
 | `GOMEMLIMIT` | 否 | 自动 | Go runtime 软上限，可用 `KiB/MiB/GiB/TiB` 或 `off` |
@@ -88,6 +91,9 @@ SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 | `SECRET_KEY` | 无 | 是 | 缺失或为空时 Compose 插值失败 |
 | `LOW_MEMORY` | `1` | 是 | 小机器配置 |
 | `DISABLE_HASHED_SET_CHECK` | `false` | 是 | 仅调试 |
+| `SNI_VERIFICATION` | `false` | 是 | 可选派生 SNI 门禁 |
+| `NFTABLES_LOGGING` | `true` | 是 | ingress 与 Torrent drop 的内核日志 |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | `false` | 是 | 可选 conntrack reply-direction 接受 |
 | `BODY_LIMIT_MB` | 空 | 是 | 空值使用 daemon 自动值 |
 | `GOMEMLIMIT` | 空 | 是 | 空值使用低内存默认值 |
 
@@ -121,13 +127,16 @@ LOG_DIR=/var/log/remnanode-lite
 ASN_DB_PATH=/usr/local/lib/remnanode-lite/current/share/asn/asn-prefixes.bin
 INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 LOW_MEMORY=1
+SNI_VERIFICATION=false
+NFTABLES_LOGGING=true
+NFTABLES_ACCEPT_REPLY_TRAFFIC=false
 ```
 
 `rnlctl` 会在安装时重写受管路径键，并拒绝重复的受管赋值。管理员可在同一文件中设置 `NODE_BIND_ADDR`、`BODY_LIMIT_MB` 和 `GOMEMLIMIT`，但不要把受管路径改到系统共用的 Xray 安装。`node.env` 与 Secret 必须是普通、非符号链接文件。
 
 ### Native 配置命令
 
-`rnlctl config show` 和 `get` 只会显示以下 6 个允许管理员修改的键：
+`rnlctl config show` 和 `get` 只会显示以下 9 个允许管理员修改的键：
 
 - `NODE_PORT`
 - `NODE_BIND_ADDR`
@@ -135,8 +144,11 @@ LOW_MEMORY=1
 - `BODY_LIMIT_MB`
 - `GOMEMLIMIT`
 - `DISABLE_HASHED_SET_CHECK`
+- `SNI_VERIFICATION`
+- `NFTABLES_LOGGING`
+- `NFTABLES_ACCEPT_REPLY_TRAFFIC`
 
-Secret、受管运行时路径赋值、内部 token 和版本覆盖字段都不会通过 `rnlctl config` 暴露，也不能由它修改。`show --json` 的顶层包含 `schemaVersion`、`path`（受管 `node.env` 文件的位置）和 `values`；只有 `values` 保存配置赋值，且仅限上述 6 个键。`show` 和 `get` 展示的是 `node.env` 中保存的值，不是 daemon 计算后的默认值；因此空的可选值在实际运行时仍可能有默认效果。
+Secret、受管运行时路径赋值、内部 token 和版本覆盖字段都不会通过 `rnlctl config` 暴露，也不能由它修改。`show --json` 的顶层包含 `schemaVersion`、`path`（受管 `node.env` 文件的位置）和 `values`；只有 `values` 保存配置赋值，且仅限上述 9 个键。`show` 和 `get` 展示的是 `node.env` 中保存的值，不是 daemon 计算后的默认值；因此空的可选值在实际运行时仍可能有默认效果。
 
 ```bash
 sudo rnlctl config show
@@ -161,11 +173,11 @@ sudo rnlctl config set NODE_PORT=2222 LOW_MEMORY=1
 sudo rnlctl config unset BODY_LIMIT_MB GOMEMLIMIT
 ```
 
-通过 `rnlctl config set` 传入的值必须为空，或是一个不含空白和控制字符的单个值。这 6 个可编辑字段都不需要引号；保持单个值可以避免命令的校验规则与服务读取环境文件时的解析规则不一致。
+通过 `rnlctl config set` 传入的值必须为空，或是一个不含空白和控制字符的单个值。这 9 个可编辑字段都不需要引号；保持单个值可以避免命令的校验规则与服务读取环境文件时的解析规则不一致。
 
 配置和 Secret 变更都需要 root、干净的生命周期状态，并共用生命周期操作锁。不带 `--apply` 时不会重启服务；active 进程会继续使用之前已加载的设置，直到运行 `config apply` 或重启。
 
-只能使用上述 6 个键。`NODE_PORT` 是必填项，不能保持为未设置状态。加上 `--apply` 后，命令会在一次操作中完成校验、写入、重启 active 服务，并等待内部健康检查：
+只能使用上述 9 个键。`NODE_PORT` 是必填项，不能保持为未设置状态。加上 `--apply` 后，命令会在一次操作中完成校验、写入、重启 active 服务，并等待内部健康检查：
 
 ```bash
 sudo rnlctl config set NODE_PORT=2222 --apply

@@ -2,7 +2,7 @@ name: remnanode-lite
 
 services:
   remnanode-lite:
-    image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:3.3.2}"
+    image: "${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:3.4.1}"
     container_name: remnanode-lite
     hostname: remnanode-lite
     init: true
@@ -15,6 +15,9 @@ services:
       SECRET_KEY: "${SECRET_KEY:?set SECRET_KEY in .env}"
       LOW_MEMORY: "${LOW_MEMORY:-1}"
       DISABLE_HASHED_SET_CHECK: "${DISABLE_HASHED_SET_CHECK:-false}"
+      SNI_VERIFICATION: "${SNI_VERIFICATION:-false}"
+      NFTABLES_LOGGING: "${NFTABLES_LOGGING:-true}"
+      NFTABLES_ACCEPT_REPLY_TRAFFIC: "${NFTABLES_ACCEPT_REPLY_TRAFFIC:-false}"
       BODY_LIMIT_MB: "${BODY_LIMIT_MB:-}"
       GOMEMLIMIT: "${GOMEMLIMIT:-}"
 

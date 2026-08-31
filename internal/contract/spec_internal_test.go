@@ -11,8 +11,8 @@ func TestOfficialContractInventory(t *testing.T) {
 	t.Parallel()
 
 	routes := OfficialRoutes()
-	if len(routes) != 27 {
-		t.Fatalf("route count = %d, want 27", len(routes))
+	if len(routes) != 25 {
+		t.Fatalf("route count = %d, want 25", len(routes))
 	}
 	seenIDs := make(map[string]struct{}, len(routes))
 	seenRoutes := make(map[string]struct{}, len(routes))
@@ -132,7 +132,7 @@ func TestOfficialStartXrayOptionalInternals(t *testing.T) {
 		"xrayConfig":{}
 	}`)
 	if err := route.Request.ValidateJSON(valid); err != nil {
-		t.Fatalf("optional 3.3.2 internals rejected: %v", err)
+		t.Fatalf("optional current-contract internals rejected: %v", err)
 	}
 
 	for _, body := range []string{

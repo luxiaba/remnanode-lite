@@ -25,7 +25,7 @@ Native support is distribution-specific. The [Native host matrix](deployment-nat
 1. Start with health, logs, updates, rollback, and fault isolation in [Operations and troubleshooting](operations.md).
 2. Confirm configuration sources and precedence in the [Configuration reference](configuration.md).
 3. Use the [Resource budget](development/resource-budget.md) to understand memory, disk, log, and shutdown budgets.
-4. For protocol or lifecycle failures, consult [Architecture and runtime design](architecture.md) and the [3.3.2 contract baseline](development/contract-3.3.2.md).
+4. For protocol or lifecycle failures, consult [Architecture and runtime design](architecture.md) and the [3.4.1 contract baseline](development/contract-3.4.1.md).
 5. Roll Docker back with a recorded exact version or manifest digest; roll Native back with its retained previous generation. Do not rely on a historical meaning of a moving channel.
 
 ### I want to read or change the Go code
@@ -36,7 +36,7 @@ You do not need to read every design document first:
 2. Follow [Development and code navigation](development/README.md) to install the toolchain, run ordinary tests, and find the relevant package.
 3. Read only the ownership, data-flow, and lock-order sections of [Architecture and runtime design](architecture.md) that affect your change.
 4. Select verification proportional to risk from the [Testing strategy](development/testing.md), then follow [CONTRIBUTING.md](../CONTRIBUTING.md) before submitting.
-5. If the change affects `/node` behavior, DTOs, or errors, first read the versioned [official 3.3.2 contract baseline](development/contract-3.3.2.md).
+5. If the change affects `/node` behavior, DTOs, or errors, first read the versioned [official 3.4.1 contract baseline](development/contract-3.4.1.md).
 
 ### I want to synchronize an official version or publish a Release
 
@@ -82,7 +82,8 @@ You do not need to read every design document first:
 | [Architecture and runtime design](architecture.md) | Component boundaries, request flow, Xray lifecycle, plugins, networking, and ownership |
 | [Development and code navigation](development/README.md) | Go toolchain, directory responsibilities, common commands, and workflow |
 | [Testing strategy](development/testing.md) | Unit, race, contract, Linux namespace, container, and Release testing |
-| [Official 3.3.2 contract baseline](development/contract-3.3.2.md) | Current pinned evidence, derived SNI, Secret integrity, GeoCheck, plugin schema 0.7.3, and accepted differences |
+| [Official 3.4.1 contract baseline](development/contract-3.4.1.md) | Current pinned evidence, retired Handler routes, optional SNI verification, replacement connection cleanup, nftables options, and plugin schema 0.8.2 |
+| [Official 3.3.2 contract baseline](development/contract-3.3.2.md) | Historical pinned evidence for derived SNI, Secret integrity, GeoCheck, plugin schema 0.7.3, and the 3.3.2 alignment |
 | [Official 3.2.2 contract baseline](development/contract-3.2.2.md) | Historical pinned evidence for optional start metadata and integrations, plugin schema 0.6.3, and the 3.2.2 alignment |
 | [Official 3.0.0 contract baseline](development/contract-3.0.0.md) | Historical pinned evidence for pre-start cleanup, Zod 4 boundaries, and the 3.0.0 alignment |
 | [Official 2.8.0 contract baseline](development/contract-2.8.0.md) | Historical pinned evidence, 26 routes, request/response behavior, and known differences |

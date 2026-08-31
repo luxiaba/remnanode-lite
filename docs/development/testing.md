@@ -139,7 +139,7 @@ These commands do not start the official Node. Machine extraction proves pinned 
 
 ### External Plugin Schema Evidence
 
-The official Node's plugin `config` schema comes from a separate npm package and is not part of the pinned source repository. Recheck the current `@remnawave/node-plugins@0.7.3` tarball in an isolated temporary directory:
+The official Node's plugin `config` schema comes from a separate npm package and is not part of the pinned source repository. Recheck the current `@remnawave/node-plugins@0.8.2` tarball in an isolated temporary directory:
 
 ```bash
 plugin_tgz="$(mktemp)"
@@ -147,19 +147,25 @@ trap 'rm -f "$plugin_tgz"' EXIT
 
 curl --fail --location --silent --show-error \
   --proto '=https' --tlsv1.2 \
-  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.7.3.tgz \
+  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.8.2.tgz \
   -o "$plugin_tgz"
 
 test "$(openssl dgst -sha1 "$plugin_tgz" | awk '{print $NF}')" = \
-  d58cc34d15838d6ac543c112ac65265d6189745e
+  9588288f9190b73b2ce868845d4248c98eadc25f
 test "sha512-$(openssl dgst -sha512 -binary "$plugin_tgz" | openssl base64 -A)" = \
-  'sha512-y1+dIrZVENchojkBJHC5KHocTTDl/xeCdIvbYgoTWYZ5pWuIkyoFYm/fGUA//W3DQ6eAlAKkg1HC24MeKAoIvA=='
+  'sha512-/klo/XH4imZ2cupLavj4++S+hHgVA8uzhVgpQdC0y9kzUtVE168d7brcYEdxB1UGw49LsER+UDYplcyTSvV5QQ=='
 
 tar -tzf "$plugin_tgz" \
   | grep -Fx 'package/build/backend/models/node-plugins.schema.js'
 ```
 
 Read the actual schema with `tar -xOf` from that pinned path; do not install the package or execute its code. CI does not download this tarball. Automated source evidence covers only registered paths in the official Git repository.
+
+For the 3.4.1 baseline, the extracted schema file has SHA-256
+`e096eba57a8ce1499a0e117bf5b9dfd7f324a9a6fc455066fcb31d5c86a91d21`,
+which is byte-for-byte identical to the reviewed 0.7.3 schema. The package
+version and its Zod dependency changed; the accepted plugin configuration did
+not.
 
 An upgrade to the plugin version must reconcile official `package.json` and `package-lock.json`, update both digests, re-audit the schema, and adjust `internal/nodeapi`, `internal/plugin`, and the related contract tests.
 

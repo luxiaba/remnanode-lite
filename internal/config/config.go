@@ -42,22 +42,25 @@ func ResolveEnvPath() string {
 }
 
 type Config struct {
-	NodePort              int
-	BindAddr              string
-	SecretKey             string
-	XrayBin               string
-	GeoDir                string
-	LogDir                string
-	InternalSocketPath    string
-	InternalRESTToken     string
-	ASNDBPath             string
-	DisableHashedSetCheck bool
-	LowMemory             bool
-	BodyLimitMB           int
-	GoMemoryLimitBytes    int64
-	GoMemoryLimitSet      bool
-	NodeContractVersion   string
-	XrayCoreVersion       string
+	NodePort                   int
+	BindAddr                   string
+	SecretKey                  string
+	XrayBin                    string
+	GeoDir                     string
+	LogDir                     string
+	InternalSocketPath         string
+	InternalRESTToken          string
+	ASNDBPath                  string
+	DisableHashedSetCheck      bool
+	SNIVerification            bool
+	NFTablesLogging            bool
+	NFTablesAcceptReplyTraffic bool
+	LowMemory                  bool
+	BodyLimitMB                int
+	GoMemoryLimitBytes         int64
+	GoMemoryLimitSet           bool
+	NodeContractVersion        string
+	XrayCoreVersion            string
 }
 
 var (
@@ -89,6 +92,9 @@ func Load(dotenvPath string) (Config, error) {
 		"INTERNAL_REST_TOKEN",
 		"ASN_DB_PATH",
 		"DISABLE_HASHED_SET_CHECK",
+		"SNI_VERIFICATION",
+		"NFTABLES_LOGGING",
+		"NFTABLES_ACCEPT_REPLY_TRAFFIC",
 		"LOW_MEMORY",
 		"BODY_LIMIT_MB",
 		"GOMEMLIMIT",
@@ -151,6 +157,18 @@ func configFromValues(values map[string]string, requireSecret, generateInternalT
 	if err != nil {
 		return Config{}, err
 	}
+	sniVerification, err := optionalBool(values, "SNI_VERIFICATION", false)
+	if err != nil {
+		return Config{}, err
+	}
+	nftablesLogging, err := optionalBool(values, "NFTABLES_LOGGING", true)
+	if err != nil {
+		return Config{}, err
+	}
+	nftablesAcceptReply, err := optionalBool(values, "NFTABLES_ACCEPT_REPLY_TRAFFIC", false)
+	if err != nil {
+		return Config{}, err
+	}
 	lowMemory, err := optionalBool(values, "LOW_MEMORY", false)
 	if err != nil {
 		return Config{}, err
@@ -173,22 +191,25 @@ func configFromValues(values map[string]string, requireSecret, generateInternalT
 	}
 
 	return Config{
-		NodePort:              nodePort,
-		BindAddr:              strings.TrimSpace(values["NODE_BIND_ADDR"]),
-		SecretKey:             secretKey,
-		XrayBin:               optionalString(values, "XRAY_BIN", DefaultXrayBinPath),
-		GeoDir:                optionalString(values, "GEO_DIR", DefaultGeoDir),
-		LogDir:                optionalString(values, "LOG_DIR", DefaultLogDir),
-		InternalSocketPath:    internalSocketPath,
-		InternalRESTToken:     internalRESTToken,
-		ASNDBPath:             optionalString(values, "ASN_DB_PATH", DefaultASNDBPath),
-		DisableHashedSetCheck: disableHashedSetCheck,
-		LowMemory:             lowMemory,
-		BodyLimitMB:           bodyLimitMB,
-		GoMemoryLimitBytes:    goMemoryLimitBytes,
-		GoMemoryLimitSet:      goMemoryLimitSet,
-		NodeContractVersion:   nodeContractVersion,
-		XrayCoreVersion:       xrayCoreVersion,
+		NodePort:                   nodePort,
+		BindAddr:                   strings.TrimSpace(values["NODE_BIND_ADDR"]),
+		SecretKey:                  secretKey,
+		XrayBin:                    optionalString(values, "XRAY_BIN", DefaultXrayBinPath),
+		GeoDir:                     optionalString(values, "GEO_DIR", DefaultGeoDir),
+		LogDir:                     optionalString(values, "LOG_DIR", DefaultLogDir),
+		InternalSocketPath:         internalSocketPath,
+		InternalRESTToken:          internalRESTToken,
+		ASNDBPath:                  optionalString(values, "ASN_DB_PATH", DefaultASNDBPath),
+		DisableHashedSetCheck:      disableHashedSetCheck,
+		SNIVerification:            sniVerification,
+		NFTablesLogging:            nftablesLogging,
+		NFTablesAcceptReplyTraffic: nftablesAcceptReply,
+		LowMemory:                  lowMemory,
+		BodyLimitMB:                bodyLimitMB,
+		GoMemoryLimitBytes:         goMemoryLimitBytes,
+		GoMemoryLimitSet:           goMemoryLimitSet,
+		NodeContractVersion:        nodeContractVersion,
+		XrayCoreVersion:            xrayCoreVersion,
 	}, nil
 }
 
