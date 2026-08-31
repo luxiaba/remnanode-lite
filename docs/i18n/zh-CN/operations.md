@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=b8fb94f1665d1c37da012250b8041de8f92325a2de8d9f3b6d46a9e1249f0c34 -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=797125eeff49198bb88d97ceb0b20197df49bd3a7bb814827d15d017a1f3572b -->
 
 # 运维与故障排查
 
@@ -151,9 +151,9 @@ sudo rnlctl start
 
 ## Docker 更新与回滚
 
-当前稳定目标是 `3.3.2`。该 Release 的 Compose 模板选择匹配的镜像，并包含 Release
-固定的 GeoCheck 资产。保留 `.env`，记录当前 digest，重建后检查 Panel 连接、GeoCheck、
-rw-core 和代表性代理流量。
+当前稳定目标是 `3.4.1`。该 Release 的 Compose 模板选择匹配的镜像，并包含 Release
+固定的 GeoCheck 资产。保留 `.env`，明确审查新的 SNI 与 nftables 选项，记录当前
+digest，重建后检查 Panel 连接、GeoCheck、rw-core 和代表性代理流量。
 
 | 引用 | 用途 |
 | --- | --- |
@@ -212,7 +212,7 @@ repair 使用已验证的缓存恢复已提交版本，绝不会自动升级。�
 
 ## 修改配置
 
-Docker 修改 `.env` 或 Compose mapping 后重新校验并创建容器。Native 的运行参数只以 `/etc/remnanode-lite/node.env` 为准；`rnlctl config` 直接读取和修改它，只显示 6 个不含 Secret 的管理员字段，不会显示 Secret 或内部受管字段。
+Docker 修改 `.env` 或 Compose mapping 后重新校验并创建容器。Native 的运行参数只以 `/etc/remnanode-lite/node.env` 为准；`rnlctl config` 直接读取和修改它，只显示 9 个不含 Secret 的管理员字段，不会显示 Secret 或内部受管字段。
 
 查看、校验和修改 active 安装：
 

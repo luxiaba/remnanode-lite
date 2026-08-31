@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=c4f03de4f1d242010a3470f4e2cccecf0e4128f1a1eb13dd9c32f96e5df42852 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-native.md; source-sha256=0fff17469fc4a3af03f5cef448174fcec2e8ceb87a06555040e72a52954e1df9 -->
 
 # 原生 Linux 部署
 
@@ -411,7 +411,7 @@ sudo rnlctl repair \
 
 ## 修改端口或 Secret
 
-`/etc/remnanode-lite/node.env` 是 Native 运行参数的唯一事实源。`rnlctl config` 只是这个文件之上的安全操作层，不会维护另一份配置。它只开放[配置说明](configuration.md)列出的 6 个管理员字段，不显示 Secret 或内部受管字段。
+`/etc/remnanode-lite/node.env` 是 Native 运行参数的唯一事实源。`rnlctl config` 只是这个文件之上的安全操作层，不会维护另一份配置。它只开放[配置说明](configuration.md)列出的 9 个管理员字段，不显示 Secret 或内部受管字段。
 
 active 节点可以一次完成端口修改与应用：
 

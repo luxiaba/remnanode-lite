@@ -6,6 +6,67 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-08-31
+
+This stable release aligns Remnanode Lite with the official Node `3.4.1`
+contract. It retires two unused Handler query routes, follows the new optional
+SNI policy, and closes previous connections when Panel replaces a user's
+credentials.
+
+### Added
+
+- Added `SNI_VERIFICATION`, defaulting to `false` like official Node 3.4.1.
+  Enabling it restores the exact derived-SNI certificate gate; TLS 1.3, mTLS,
+  JWT validation, and Secret integrity checks remain mandatory in both modes.
+- Added `NFTABLES_LOGGING`, defaulting to `true`, for ingress and Torrent
+  Blocker kernel-log expressions. Egress filters never log, and busy hosts can
+  disable the option explicitly.
+- Added `NFTABLES_ACCEPT_REPLY_TRAFFIC`, defaulting to `false`. When enabled,
+  conntrack reply-direction traffic is accepted before ingress block sets so
+  replies to host-originated connections are not mistaken for new inbound
+  traffic.
+
+### Changed
+
+- Removed the retired `POST /node/handler/get-inbound-users` and
+  `POST /node/handler/get-inbound-users-count` routes, reducing the official
+  public route inventory from 27 to 25.
+- When `add-user` supplies `prevVlessUuid`, read the user's IP statistics
+  without resetting them, remove the old credentials, attempt one bounded
+  connection-drop batch, and then add the replacement credentials. Connection
+  cleanup remains best-effort, matching the official response behavior.
+- Pinned the behavioral contract to official Node `3.4.1` at commit
+  `44912631321664dbd5822e9bf8d96766ccff7c93`, the official contract package
+  to `@remnawave/node-contract@3.4.1`, and the external plugin package to
+  `@remnawave/node-plugins@0.8.2`.
+- Re-audited the plugin archive and confirmed that its schema is byte-for-byte
+  identical to 0.7.3; no new Panel plugin document structure is introduced.
+- Updated Brotli to `1.2.3` and gRPC-Go to `1.83.2`.
+
+### Security
+
+- gRPC-Go `1.83.2` rejects malformed server requests that omit both
+  `:authority` and `Host`.
+- Disabling derived-SNI verification does not expose an unauthenticated Node:
+  the public listener still requires a valid Panel client certificate and JWT.
+
+### Fixed
+
+- Kept the bounded Xray JSON preflight byte-for-byte aligned with the selected
+  Go standard-library encoder when invalid UTF-8 is replaced, including the
+  Go 1.27 encoding change, without adding a Go-version branch or another JSON
+  implementation.
+
+### Upgrade Notes
+
+- Existing deployments that want the stricter 3.3.2 certificate-selection
+  behavior must set `SNI_VERIFICATION=true`; the new official default is
+  `false`.
+- `NFTABLES_LOGGING=true` can increase kernel/journald traffic on a busy
+  blocked address. Set it to `false` if that operational cost is undesirable.
+- Leave `NFTABLES_ACCEPT_REPLY_TRAFFIC=false` unless ingress lists interfere
+  with replies to connections initiated by the host and conntrack is available.
+
 ## [3.3.2] - 2026-08-21
 
 This stable release aligns Remnanode Lite with the official Node `3.3.2`

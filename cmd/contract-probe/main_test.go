@@ -13,8 +13,8 @@ func TestSelectRoutesUsesSafeDefault(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(routes) != 11 {
-		t.Fatalf("route count = %d, want 11", len(routes))
+	if len(routes) != 9 {
+		t.Fatalf("route count = %d, want 9", len(routes))
 	}
 	for _, route := range routes {
 		if !route.SafeForProbe() {

@@ -38,24 +38,6 @@ func (s *Server) handleRemoveUser(w http.ResponseWriter, r *http.Request) {
 	writeNodeResult(w, r, response, err)
 }
 
-func (s *Server) handleGetInboundUsersCount(w http.ResponseWriter, r *http.Request) {
-	var request nodeapi.TagRequest
-	if !s.decodeNodeRequest(w, r, &request) {
-		return
-	}
-	response, err := s.handlerService.GetInboundUsersCount(r.Context(), *request.Tag)
-	writeNodeResult(w, r, response, err)
-}
-
-func (s *Server) handleGetInboundUsers(w http.ResponseWriter, r *http.Request) {
-	var request nodeapi.TagRequest
-	if !s.decodeNodeRequest(w, r, &request) {
-		return
-	}
-	response, err := s.handlerService.GetInboundUsers(r.Context(), *request.Tag)
-	writeNodeResult(w, r, response, err)
-}
-
 func (s *Server) handleAddUsers(w http.ResponseWriter, r *http.Request) {
 	var request nodeapi.AddUsersRequest
 	if !s.decodeNodeRequest(w, r, &request) {

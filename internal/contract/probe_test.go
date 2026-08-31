@@ -220,11 +220,19 @@ func TestCompareProbeResultsDistinguishesGenericAndApplicationErrors(t *testing.
 
 func TestSemanticProjectionNormalizesEquivalentJSONNumbers(t *testing.T) {
 	t.Parallel()
-	integerHash, err := successSemanticHash("handler.inbound-users-count", []byte(`{"response":{"count":500}}`))
+	integer, err := decodeSemanticObject([]byte(`{"count":500}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-	exponentHash, err := successSemanticHash("handler.inbound-users-count", []byte(`{"response":{"count":5e2}}`))
+	exponent, err := decodeSemanticObject([]byte(`{"count":5e2}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	integerHash, err := semanticHash(integer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exponentHash, err := semanticHash(exponent)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,8 +245,8 @@ func TestDefaultProbeRoutesAreReadOnly(t *testing.T) {
 	t.Parallel()
 
 	routes := DefaultProbeRoutes()
-	if len(routes) != 11 {
-		t.Fatalf("safe route count = %d, want 11", len(routes))
+	if len(routes) != 9 {
+		t.Fatalf("safe route count = %d, want 9", len(routes))
 	}
 	for _, route := range routes {
 		if !route.SafeForProbe() {

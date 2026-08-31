@@ -137,7 +137,7 @@ require_text deploy/compose.single-file.yaml \
   "image: \"\${REMNANODE_IMAGE:-ghcr.io/luxiaba/remnanode-lite:latest}\""
 require_text deploy/compose.single-file.yaml \
   "SECRET_KEY: \"\${SECRET_KEY:?set SECRET_KEY in .env}\""
-for variable in NODE_PORT NODE_BIND_ADDR LOW_MEMORY DISABLE_HASHED_SET_CHECK BODY_LIMIT_MB GOMEMLIMIT; do
+for variable in NODE_PORT NODE_BIND_ADDR LOW_MEMORY DISABLE_HASHED_SET_CHECK SNI_VERIFICATION NFTABLES_LOGGING NFTABLES_ACCEPT_REPLY_TRAFFIC BODY_LIMIT_MB GOMEMLIMIT; do
   require_text compose.yaml "${variable}: \"\${${variable}"
   require_text deploy/compose.single-file.yaml "${variable}: \"\${${variable}"
 done
@@ -182,6 +182,9 @@ if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; 
     'SECRET_KEY=packaging-check' \
     'LOW_MEMORY=1' \
     'DISABLE_HASHED_SET_CHECK=false' \
+    'SNI_VERIFICATION=false' \
+    'NFTABLES_LOGGING=true' \
+    'NFTABLES_ACCEPT_REPLY_TRAFFIC=false' \
     'BODY_LIMIT_MB=12' \
     'GOMEMLIMIT=160MiB' \
     >"$compose_env"

@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=c4f03de4f1d242010a3470f4e2cccecf0e4128f1a1eb13dd9c32f96e5df42852 -->
+<!-- translation: locale=ru; source=docs/deployment-native.md; source-sha256=0fff17469fc4a3af03f5cef448174fcec2e8ceb87a06555040e72a52954e1df9 -->
 
 # Нативное развёртывание Linux
 
@@ -432,7 +432,7 @@ sudo rnlctl repair \
 
 ## Порт и Secret
 
-`/etc/remnanode-lite/node.env` — единственный источник настроек Native-службы. `rnlctl config` служит безопасным интерфейсом к этому файлу, а не отдельным хранилищем. Он открывает только шесть администраторских полей из [справочника конфигурации](configuration.md) и не показывает Secret или внутренние управляемые поля.
+`/etc/remnanode-lite/node.env` — единственный источник настроек Native-службы. `rnlctl config` служит безопасным интерфейсом к этому файлу, а не отдельным хранилищем. Он открывает только девять администраторских полей из [справочника конфигурации](configuration.md) и не показывает Secret или внутренние управляемые поля.
 
 Для активного Node порт можно изменить и применить одной командой:
 

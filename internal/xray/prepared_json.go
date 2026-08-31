@@ -19,7 +19,19 @@ const (
 var (
 	errPreparedRuntimeConfigTooLarge  = errors.New("prepared Xray config JSON exceeds 20 MiB (20971520 bytes)")
 	errUnsupportedPreparedRuntimeJSON = errors.New("unsupported prepared Xray config JSON value")
+	invalidUTF8EncodedSize            = detectInvalidUTF8EncodedSize()
 )
+
+// Go 1.27 changed invalid UTF-8 replacement from an escaped sequence to the
+// literal replacement rune. Measure the selected standard library once so the
+// preflight size remains identical to the encoder used below.
+func detectInvalidUTF8EncodedSize() int {
+	encoded, err := json.Marshal(string([]byte{0xff}))
+	if err != nil || len(encoded) < 2 {
+		return len(`\ufffd`)
+	}
+	return len(encoded) - 2 // opening and closing quotes
+}
 
 // encodePreparedRuntimeConfig sizes the generic JSON tree before invoking the
 // standard encoder. This keeps both the encoder's internal buffer and the
@@ -241,7 +253,9 @@ func (s *preparedJSONSizer) addString(value string) error {
 
 		runeValue, size := utf8.DecodeRuneInString(value[index:])
 		encodedSize := size
-		if (runeValue == utf8.RuneError && size == 1) || runeValue == '\u2028' || runeValue == '\u2029' {
+		if runeValue == utf8.RuneError && size == 1 {
+			encodedSize = invalidUTF8EncodedSize
+		} else if runeValue == '\u2028' || runeValue == '\u2029' {
 			encodedSize = 6
 		}
 		if err := s.add(encodedSize); err != nil {

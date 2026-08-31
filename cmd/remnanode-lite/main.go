@@ -377,7 +377,10 @@ func runNode() (runErr error) {
 		return nil
 	}
 	dropper := connections.NewDropper(pluginState.IsWhitelisted)
-	pluginService := plugin.NewService(pluginState, dropper, manager)
+	pluginService := plugin.NewService(pluginState, dropper, manager, plugin.Options{
+		NFTablesLogging:            cfg.NFTablesLogging,
+		NFTablesAcceptReplyTraffic: cfg.NFTablesAcceptReplyTraffic,
+	})
 	cleanup.closePlugin = pluginService.CloseContext
 	if err := pluginService.InitializeContext(ctx); err != nil {
 		if ctx.Err() != nil {

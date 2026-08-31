@@ -107,7 +107,7 @@ func New(cfg config.Config, payload secret.Payload, dependencies Dependencies) (
 	if err := dependencies.validate(); err != nil {
 		return nil, err
 	}
-	tlsConfig, err := buildTLSConfig(payload)
+	tlsConfig, err := buildTLSConfig(payload, cfg.SNIVerification)
 	if err != nil {
 		return nil, err
 	}
@@ -446,10 +446,6 @@ func (s *Server) handleNodeRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleAddUser(w, r)
 	case routeHandlerRemoveUser:
 		s.handleRemoveUser(w, r)
-	case routeHandlerGetInboundUsersCount:
-		s.handleGetInboundUsersCount(w, r)
-	case routeHandlerGetInboundUsers:
-		s.handleGetInboundUsers(w, r)
 	case routeHandlerAddUsers:
 		s.handleAddUsers(w, r)
 	case routeHandlerRemoveUsers:
@@ -473,14 +469,10 @@ func (s *Server) handleNodeRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func buildTLSConfig(payload secret.Payload) (*tls.Config, error) {
+func buildTLSConfig(payload secret.Payload, verifySNI bool) (*tls.Config, error) {
 	certificate, err := tls.X509KeyPair([]byte(payload.NodeCertPEM), []byte(payload.NodeKeyPEM))
 	if err != nil {
 		return nil, fmt.Errorf("load node TLS certificate: %w", err)
-	}
-	expectedSNI, err := secret.DeriveSNI(payload.CACertPEM, payload.JWTPublicKey)
-	if err != nil {
-		return nil, err
 	}
 
 	clientCAs := x509.NewCertPool()
@@ -488,17 +480,28 @@ func buildTLSConfig(payload secret.Payload) (*tls.Config, error) {
 		return nil, errors.New("append client CA certificate: no certificates found")
 	}
 
-	return &tls.Config{
-		MinVersion: tls.VersionTLS13,
-		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
-			if !secret.MatchesSNI(hello.ServerName, expectedSNI) {
-				return nil, errors.New("unknown SNI")
-			}
-			return &certificate, nil
-		},
-		ClientCAs:  clientCAs,
-		ClientAuth: tls.RequireAndVerifyClientCert,
-	}, nil
+	tlsConfig := &tls.Config{
+		MinVersion:   tls.VersionTLS13,
+		Certificates: []tls.Certificate{certificate},
+		ClientCAs:    clientCAs,
+		ClientAuth:   tls.RequireAndVerifyClientCert,
+	}
+	if !verifySNI {
+		return tlsConfig, nil
+	}
+
+	expectedSNI, err := secret.DeriveSNI(payload.CACertPEM, payload.JWTPublicKey)
+	if err != nil {
+		return nil, err
+	}
+	tlsConfig.Certificates = nil
+	tlsConfig.GetCertificate = func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+		if !secret.MatchesSNI(hello.ServerName, expectedSNI) {
+			return nil, errors.New("unknown SNI")
+		}
+		return &certificate, nil
+	}
+	return tlsConfig, nil
 }
 
 type envelope[T any] struct {

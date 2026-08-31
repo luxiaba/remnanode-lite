@@ -72,6 +72,85 @@ type recordingConnectionDropper struct {
 	batches   [][]string
 }
 
+type replacementConnectionProvider struct {
+	connectionCleanupProvider
+	order *[]string
+}
+
+func (p *replacementConnectionProvider) GetUserIPList(ctx context.Context, userID string, reset bool) ([]xrayrpc.IPEntry, error) {
+	*p.order = append(*p.order, "lookup")
+	return p.connectionCleanupProvider.GetUserIPList(ctx, userID, reset)
+}
+
+func (p *replacementConnectionProvider) HandlerRemoveUser(ctx context.Context, tag, username, hashUUID string) xrayrpc.HandlerResult {
+	*p.order = append(*p.order, "remove")
+	return p.connectionCleanupProvider.HandlerRemoveUser(ctx, tag, username, hashUUID)
+}
+
+func (p *replacementConnectionProvider) HandlerAddVlessUser(context.Context, string, string, string, string, uint32, string) xrayrpc.HandlerResult {
+	*p.order = append(*p.order, "add")
+	return xrayrpc.HandlerResult{OK: true}
+}
+
+type replacementConnectionDropper struct {
+	order   *[]string
+	succeed bool
+}
+
+func (*replacementConnectionDropper) Available() bool { return true }
+
+func (d *replacementConnectionDropper) DropIPs(context.Context, []string) bool {
+	*d.order = append(*d.order, "drop")
+	return d.succeed
+}
+
+func (*replacementConnectionDropper) DropUsers(context.Context, connections.IPListProvider, []string) bool {
+	panic("unexpected DropUsers call")
+}
+
+func TestAddUserDropsPreviousConnectionsBeforeAddingReplacement(t *testing.T) {
+	t.Parallel()
+
+	order := make([]string, 0, 4)
+	provider := &replacementConnectionProvider{
+		connectionCleanupProvider: connectionCleanupProvider{
+			stubProvider: stubProvider{inboundTags: []string{"in-1"}},
+			entries: map[string][]xrayrpc.IPEntry{
+				"u1": {{IP: "203.0.113.10"}},
+			},
+		},
+		order: &order,
+	}
+	dropper := &replacementConnectionDropper{order: &order, succeed: false}
+	service := nodehandler.NewService(provider, dropper)
+	previousUUID := "00000000-0000-4000-8000-000000000001"
+
+	response, err := service.AddUser(context.Background(), nodehandler.AddUserRequest{
+		Data: []nodehandler.AddUserItem{{
+			Type: "vless", Tag: "in-1", Username: "u1", UUID: "new-uuid",
+		}},
+		HashData: nodehandler.AddUserHashData{
+			VlessUUID:     "00000000-0000-4000-8000-000000000002",
+			PrevVlessUUID: &previousUUID,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.Success || response.Error != nil {
+		t.Fatalf("best-effort replacement response = %#v", response)
+	}
+	if !slices.Equal(order, []string{"lookup", "remove", "drop", "add"}) {
+		t.Fatalf("replacement order = %v, want lookup/remove/drop/add", order)
+	}
+	provider.mu.Lock()
+	flags := append([]bool(nil), provider.resetFlags...)
+	provider.mu.Unlock()
+	if !slices.Equal(flags, []bool{false}) {
+		t.Fatalf("replacement IP stats flags = %v, want one read-only lookup", flags)
+	}
+}
+
 func (d *recordingConnectionDropper) Available() bool { return d.available }
 
 func (d *recordingConnectionDropper) DropIPs(_ context.Context, ips []string) bool {

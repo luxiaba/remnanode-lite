@@ -27,11 +27,30 @@ func TestOfficialRouteRegistry(t *testing.T) {
 	sortRoutes(want)
 	got := httpserver.RegisteredNodeRoutes()
 
-	if len(got) != 27 {
-		t.Fatalf("registered route count = %d, want 27", len(got))
+	if len(got) != 25 {
+		t.Fatalf("registered route count = %d, want 25", len(got))
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("registered routes do not match official 3.3.2\n got: %#v\nwant: %#v", got, want)
+		t.Fatalf("registered routes do not match official 3.4.1\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestRemovedHandlerQueryRoutesAreNotExposed(t *testing.T) {
+	t.Parallel()
+
+	registered := httpserver.RegisteredNodeRoutes()
+	for _, removed := range []string{
+		"/node/handler/get-inbound-users",
+		"/node/handler/get-inbound-users-count",
+	} {
+		if _, ok := contractspec.FindRouteByPath(removed); ok {
+			t.Errorf("removed route remains in contract: %s", removed)
+		}
+		for _, route := range registered {
+			if route.Path == removed {
+				t.Errorf("removed route remains registered: %s", removed)
+			}
+		}
 	}
 }
 

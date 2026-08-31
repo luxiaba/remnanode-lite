@@ -10,8 +10,8 @@ import (
 
 const (
 	OfficialNodeRepository = "https://github.com/remnawave/node.git"
-	OfficialNodeVersion    = "3.3.2"
-	OfficialNodeCommit     = "afdfa2d837118efd95c317700e60e9429a169b48"
+	OfficialNodeVersion    = "3.4.1"
+	OfficialNodeCommit     = "44912631321664dbd5822e9bf8d96766ccff7c93"
 )
 
 // RouteContract is one executable route contract backed by the pinned
@@ -207,27 +207,17 @@ func buildOfficialRoutes() []RouteContract {
 			"handler.add-user", http.MethodPost, "/node/handler/add-user",
 			`{"data":[{"type":"vless","tag":"inbound-1","username":"user-1","uuid":"00000000-0000-4000-8000-000000000001","flow":""}],"hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000002"}}`,
 			[]string{"add one user to one or more rw-core inbounds", "update inbound user hash state"}, nil,
-			[]string{controller("handler/handler.controller.ts"), command("handler/add-user.command.ts")},
+			[]string{
+				controller("handler/handler.controller.ts"),
+				command("handler/add-user.command.ts"),
+				"src/modules/handler/handler.service.ts",
+			},
 		),
 		route(
 			"handler.remove-user", http.MethodPost, "/node/handler/remove-user",
 			`{"username":"user-1","hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000001"}}`,
 			[]string{"read and drop the user's active connections", "remove user from rw-core inbounds and hash state"}, nil,
 			[]string{controller("handler/handler.controller.ts"), command("handler/remove-user.command.ts")},
-		),
-		route(
-			"handler.inbound-users-count", http.MethodPost, "/node/handler/get-inbound-users-count",
-			`{"tag":"inbound-1"}`,
-			[]string{"query rw-core inbound users"},
-			[]string{"A014"},
-			[]string{controller("handler/handler.controller.ts"), command("handler/get-inbound-users-count.command.ts")},
-		),
-		route(
-			"handler.inbound-users", http.MethodPost, "/node/handler/get-inbound-users",
-			`{"tag":"inbound-1"}`,
-			[]string{"query rw-core inbound users"},
-			[]string{"A014"},
-			[]string{controller("handler/handler.controller.ts"), command("handler/get-inbound-users.command.ts")},
 		),
 		route(
 			"handler.add-users", http.MethodPost, "/node/handler/add-users",
@@ -311,6 +301,9 @@ func OfficialSourceFiles() []string {
 		"docker/Dockerfile":          {},
 		"src/app.module.ts":          {},
 		"src/main.ts":                {},
+		"src/common/config/app-config/config.schema.ts":                                              {},
+		"src/common/config/app-config/typed-config.service.ts":                                       {},
+		"src/common/config/common-config/common-config.module.ts":                                    {},
 		"src/common/utils/decode-node-payload/decode-node-payload.ts":                                {},
 		"src/common/utils/decode-node-payload/decode-servername.util.ts":                             {},
 		"src/common/utils/decode-node-payload/validate-secret-key.util.ts":                           {},
@@ -320,6 +313,7 @@ func OfficialSourceFiles() []string {
 		"src/integration-modules/integrations.module.ts":                                             {},
 		"src/modules/remnawave-node.modules.ts":                                                      {},
 		"src/modules/_plugin/plugin.module.ts":                                                       {},
+		"src/modules/_plugin/services/nft.service.ts":                                                {},
 		"src/modules/asn-lmdb/asn-lmdb.module.ts":                                                    {},
 		"src/modules/handler/handler.module.ts":                                                      {},
 		"src/modules/internal/internal.controller.ts":                                                {},
@@ -392,9 +386,7 @@ func (r RouteContract) SafeForProbe() bool {
 		"stats.outbound",
 		"stats.all-outbounds",
 		"stats.all-inbounds",
-		"stats.combined",
-		"handler.inbound-users-count",
-		"handler.inbound-users":
+		"stats.combined":
 		return true
 	default:
 		return false

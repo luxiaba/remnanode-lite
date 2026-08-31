@@ -8,10 +8,17 @@ import (
 	"strings"
 )
 
-func renderNFTConfig(config firewallConfig) string {
+type nftOptions struct {
+	logging            bool
+	acceptReplyTraffic bool
+}
+
+func renderNFTConfig(config firewallConfig, options nftOptions) string {
 	ingressV4, ingressV6 := normalizeFilterPrefixes(config.ingressIPs)
 	egressV4, egressV6 := normalizeFilterPrefixes(config.egressIPs)
 	ports := normalizedPorts(config.egressPorts)
+	ingressRulesV4 := renderNFTIngressRules("ip", options, ingressFilterIPSet, torrentBlockerSet)
+	ingressRulesV6 := renderNFTIngressRules("ip6", options, ingressFilterIPSetV6, torrentBlockerSetV6)
 
 	base := fmt.Sprintf(`
 add table ip %s
@@ -26,14 +33,12 @@ table ip %s {
 
 	chain input {
 		type filter hook input priority -10; policy accept;
-		ip saddr @%s drop
-		ip saddr @%s drop
+%s
 	}
 
 	chain forward {
 		type filter hook forward priority -10; policy accept;
-		ip saddr @%s drop
-		ip saddr @%s drop
+%s
 	}
 
 	chain output {
@@ -52,14 +57,12 @@ table ip6 %s {
 
 	chain input {
 		type filter hook input priority -10; policy accept;
-		ip6 saddr @%s drop
-		ip6 saddr @%s drop
+%s
 	}
 
 	chain forward {
 		type filter hook forward priority -10; policy accept;
-		ip6 saddr @%s drop
-		ip6 saddr @%s drop
+%s
 	}
 
 	chain output {
@@ -76,16 +79,16 @@ table ip6 %s {
 		ingressFilterIPSet, maxResolvedIPItems,
 		egressFilterIPSet, maxResolvedIPItems,
 		egressFilterPortSet, maxFilterItems,
-		ingressFilterIPSet, torrentBlockerSet,
-		ingressFilterIPSet, torrentBlockerSet,
+		ingressRulesV4,
+		ingressRulesV4,
 		egressFilterIPSet, egressFilterPortSet, egressFilterPortSet,
 		tableNameV6,
 		torrentBlockerSetV6, maxDynamicNFTElements,
 		ingressFilterIPSetV6, maxResolvedIPItems,
 		egressFilterIPSetV6, maxResolvedIPItems,
 		egressFilterPortSetV6, maxFilterItems,
-		ingressFilterIPSetV6, torrentBlockerSetV6,
-		ingressFilterIPSetV6, torrentBlockerSetV6,
+		ingressRulesV6,
+		ingressRulesV6,
 		egressFilterIPSetV6, egressFilterPortSetV6, egressFilterPortSetV6)
 
 	commands := []string{strings.TrimSpace(base)}
@@ -102,6 +105,21 @@ table ip6 %s {
 		appendElementCommand(&commands, "ip6", tableNameV6, egressFilterPortSetV6, items)
 	}
 	return strings.Join(commands, "\n")
+}
+
+func renderNFTIngressRules(addressFamily string, options nftOptions, sets ...string) string {
+	rules := make([]string, 0, len(sets)+1)
+	if options.acceptReplyTraffic {
+		rules = append(rules, "ct direction reply accept")
+	}
+	for _, set := range sets {
+		rule := fmt.Sprintf("%s saddr @%s", addressFamily, set)
+		if options.logging {
+			rule += fmt.Sprintf(" log prefix %q", set+": ")
+		}
+		rules = append(rules, rule+" drop")
+	}
+	return "\t\t" + strings.Join(rules, "\n\t\t")
 }
 
 func renderNFTDeleteTables() string {

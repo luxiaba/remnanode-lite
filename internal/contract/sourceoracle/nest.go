@@ -48,6 +48,9 @@ var allowedDynamicModuleImports = map[string]map[string]string{
 		"ScheduleModule.forRoot":           "@nestjs/schedule",
 		"XtlsSdkNestjsModule.forRootAsync": "@remnawave/xtls-sdk-nestjs",
 	},
+	"src/common/config/common-config/common-config.module.ts": {
+		"ConfigModule.forRoot": "@nestjs/config",
+	},
 }
 
 var allowedLocalDynamicModuleImports = map[string]map[string]string{
@@ -57,6 +60,9 @@ var allowedLocalDynamicModuleImports = map[string]map[string]string{
 }
 
 var allowedExternalModuleImports = map[string]map[string]string{
+	rootModuleSource: {
+		"CommonConfigModule": "@common/config/common-config",
+	},
 	"src/modules/remnawave-node.modules.ts": {
 		"IntegrationsModule": "@integration-modules/integrations.module",
 	},

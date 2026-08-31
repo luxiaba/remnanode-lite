@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=0912a624e627b50b9b412d0a5115c936bd6037cd7e43331962f6691145616ce5 -->
+<!-- translation: locale=ru; source=docs/versioning.md; source-sha256=5280326aa663aa24bac4414c7586e3fa0109bd5cc64561ef1e3bf9099a064e88 -->
 
 # Версии и теги образов
 
@@ -22,11 +22,11 @@ Remnanode Lite отделяет идентичность проекта от з�
 Например:
 
 ```text
-Version:         3.3.2
-ContractVersion: 3.3.2
+Version:         3.4.1
+ContractVersion: 3.4.1
 ```
 
-Это линия исходного кода Remnanode Lite, согласованная с проверенным контрактом официального Node `3.3.2`. Native Linux distribution появляется только после публикации соответствующего GitHub Release. Изменение только `Version` не расширяет заявленный контракт.
+Это линия исходного кода Remnanode Lite, согласованная с проверенным контрактом официального Node `3.4.1`. Native Linux distribution появляется только после публикации соответствующего GitHub Release. Изменение только `Version` не расширяет заявленный контракт.
 
 Изменение `ContractVersion` требует закреплённого официального исходного кода, проверки contract delta, изменений реализации и тестов и завершённой проверки совместимости. Одна смена project version никогда не расширяет контракт.
 
@@ -72,6 +72,7 @@ Preview никогда не обновляет `latest` и не становит
 | `3.0.0` | `3.0.0` | Stable | Контракт 3.0.0, очистка сокетов pre-start, границы Zod 4 и обновлённые runtime assets |
 | `3.2.2` | `3.2.2` | Stable | Контракт 3.2.2, optional start metadata и integrations, report webhook Torrent Blocker и plugin schema 0.6.3 |
 | `3.3.2` | `3.3.2` | Stable | Контракт 3.3.2, derived SNI, целостность Secret, GeoCheck 0.3.0, позиция Torrent-правила и plugin schema 0.7.3 |
+| `3.4.1` | `3.4.1` | Stable | Контракт 3.4.1, 25 routes, optional SNI, очистка соединений при замене credentials, nftables runtime options и plugin schema 0.8.2 |
 
 Версия может появиться в исходном коде до публикации. Наличие точных assets следует определять по критериям раздела [Когда выпуск считается опубликованным](#когда-выпуск-считается-опубликованным), а не только по исходному дереву.
 

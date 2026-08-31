@@ -45,6 +45,9 @@ func TestLoadDotEnvWithDefaults(t *testing.T) {
 	if cfg.InternalSocketPath != DefaultInternalSocketPath || cfg.InternalRESTToken == "" {
 		t.Fatalf("unexpected internal defaults: %#v", cfg)
 	}
+	if cfg.SNIVerification || !cfg.NFTablesLogging || cfg.NFTablesAcceptReplyTraffic {
+		t.Fatalf("unexpected official security defaults: %#v", cfg)
+	}
 }
 
 func TestLoadEnvironmentOverridesDotEnv(t *testing.T) {
@@ -378,13 +381,15 @@ func TestLoadInternalOverrides(t *testing.T) {
 
 func TestLoadStrictOptionalValues(t *testing.T) {
 	for _, key := range []string{
-		"LOW_MEMORY", "BODY_LIMIT_MB", "DISABLE_HASHED_SET_CHECK", "GOMEMLIMIT",
+		"LOW_MEMORY", "BODY_LIMIT_MB", "DISABLE_HASHED_SET_CHECK", "SNI_VERIFICATION",
+		"NFTABLES_LOGGING", "NFTABLES_ACCEPT_REPLY_TRAFFIC", "GOMEMLIMIT",
 		"NODE_CONTRACT_VERSION", "XRAY_CORE_VERSION",
 	} {
 		t.Setenv(key, "")
 	}
 	path := filepath.Join(t.TempDir(), ".env")
 	content := "NODE_PORT=3000\nSECRET_KEY=abc\nLOW_MEMORY=YES\nDISABLE_HASHED_SET_CHECK=no\n" +
+		"SNI_VERIFICATION=yes\nNFTABLES_LOGGING=no\nNFTABLES_ACCEPT_REPLY_TRAFFIC=1\n" +
 		"BODY_LIMIT_MB=16\nGOMEMLIMIT=180MiB\nNODE_CONTRACT_VERSION=2.8.0\nXRAY_CORE_VERSION=v26.6.27\n"
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
@@ -395,6 +400,7 @@ func TestLoadStrictOptionalValues(t *testing.T) {
 		t.Fatalf("Load returned error: %v", err)
 	}
 	if !cfg.LowMemory || cfg.DisableHashedSetCheck || cfg.BodyLimitMB != 16 ||
+		!cfg.SNIVerification || cfg.NFTablesLogging || !cfg.NFTablesAcceptReplyTraffic ||
 		!cfg.GoMemoryLimitSet || cfg.GoMemoryLimitBytes != 180<<20 ||
 		cfg.NodeContractVersion != "2.8.0" || cfg.XrayCoreVersion != "v26.6.27" {
 		t.Fatalf("unexpected optional values: %#v", cfg)
@@ -440,6 +446,9 @@ func TestLoadRejectsInvalidOptionalValues(t *testing.T) {
 	}{
 		{name: "low memory boolean", line: "LOW_MEMORY=enabled", wantError: "LOW_MEMORY must be a boolean"},
 		{name: "hash check boolean", line: "DISABLE_HASHED_SET_CHECK=disabled", wantError: "DISABLE_HASHED_SET_CHECK must be a boolean"},
+		{name: "SNI verification boolean", line: "SNI_VERIFICATION=enabled", wantError: "SNI_VERIFICATION must be a boolean"},
+		{name: "nftables logging boolean", line: "NFTABLES_LOGGING=enabled", wantError: "NFTABLES_LOGGING must be a boolean"},
+		{name: "nftables reply boolean", line: "NFTABLES_ACCEPT_REPLY_TRAFFIC=enabled", wantError: "NFTABLES_ACCEPT_REPLY_TRAFFIC must be a boolean"},
 		{name: "body limit text", line: "BODY_LIMIT_MB=large", wantError: "BODY_LIMIT_MB must be an integer"},
 		{name: "body limit integer overflow", line: "BODY_LIMIT_MB=999999999999999999999999", wantError: "BODY_LIMIT_MB must be an integer"},
 		{name: "memory limit suffix", line: "GOMEMLIMIT=180MB", wantError: "GOMEMLIMIT must be"},
@@ -450,7 +459,8 @@ func TestLoadRejectsInvalidOptionalValues(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			for _, key := range []string{
-				"LOW_MEMORY", "BODY_LIMIT_MB", "DISABLE_HASHED_SET_CHECK", "GOMEMLIMIT",
+				"LOW_MEMORY", "BODY_LIMIT_MB", "DISABLE_HASHED_SET_CHECK", "SNI_VERIFICATION",
+				"NFTABLES_LOGGING", "NFTABLES_ACCEPT_REPLY_TRAFFIC", "GOMEMLIMIT",
 				"NODE_CONTRACT_VERSION", "XRAY_CORE_VERSION",
 			} {
 				t.Setenv(key, "")

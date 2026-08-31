@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/configuration.md; source-sha256=0821228c1d80c814e27d40ea72c767175ac9234efe5514c31550cd4f15a9cd53 -->
+<!-- translation: locale=ru; source=docs/configuration.md; source-sha256=6afdfae8a8f35d4816c285fbfa82aea299ab9bf88b721c61ed756afb8ac4db46 -->
 
 # Справочник конфигурации
 
@@ -33,6 +33,9 @@ Daemon сначала читает один ограниченный файл д
 | `INTERNAL_SOCKET_PATH` | Нет | `/run/remnanode-lite/internal.sock` | Приватный Unix socket для rw-core и healthcheck |
 | `INTERNAL_REST_TOKEN` | Нет | Случайный при запуске | Token приватного Unix HTTP; обычно оставляйте пустым |
 | `DISABLE_HASHED_SET_CHECK` | Нет | `false` | Отладка: перезапускать rw-core при каждом start |
+| `SNI_VERIFICATION` | Нет | `false` | Включает фильтр сертификата по derived SNI; TLS 1.3, mTLS, JWT и целостность Secret остаются обязательными |
+| `NFTABLES_LOGGING` | Нет | `true` | Логирует ingress- и Torrent Blocker-drop в журнал ядра; egress не логируется |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | Нет | `false` | Принимает conntrack reply-direction до ingress block sets; требует conntrack при включении |
 | `LOW_MEMORY` | Нет | В шаблонах `1` | Профиль 512 MiB: soft limit Go 180 MiB и бюджет запроса 16 MiB |
 | `BODY_LIMIT_MB` | Нет | Автоматически | Общий бюджет request body |
 | `GOMEMLIMIT` | Нет | Автоматически | Soft limit Go; поддерживает `KiB/MiB/GiB/TiB` и `off` |
@@ -86,6 +89,9 @@ SECRET_KEY_FILE=/etc/remnanode-lite/secret.key
 | `SECRET_KEY` | Нет | Да | При отсутствии Compose завершает подстановку с ошибкой |
 | `LOW_MEMORY` | `1` | Да | Профиль малого сервера |
 | `DISABLE_HASHED_SET_CHECK` | `false` | Да | Только диагностика |
+| `SNI_VERIFICATION` | `false` | Да | Необязательный derived-SNI gate |
+| `NFTABLES_LOGGING` | `true` | Да | Kernel logging ingress/Torrent drop |
+| `NFTABLES_ACCEPT_REPLY_TRAFFIC` | `false` | Да | Необязательный приём conntrack reply-direction |
 | `BODY_LIMIT_MB` | Пусто | Да | Пусто выбирает значение daemon |
 | `GOMEMLIMIT` | Пусто | Да | Пусто выбирает low-memory default |
 
@@ -119,13 +125,16 @@ LOG_DIR=/var/log/remnanode-lite
 ASN_DB_PATH=/usr/local/lib/remnanode-lite/current/share/asn/asn-prefixes.bin
 INTERNAL_SOCKET_PATH=/run/remnanode-lite/internal.sock
 LOW_MEMORY=1
+SNI_VERIFICATION=false
+NFTABLES_LOGGING=true
+NFTABLES_ACCEPT_REPLY_TRAFFIC=false
 ```
 
 `rnlctl` переписывает управляемые пути при установке и отклоняет их дубликаты. Администратор может задавать `NODE_BIND_ADDR`, `BODY_LIMIT_MB` и `GOMEMLIMIT`, но не должен направлять управляемые пути на общую установку Xray. `node.env` и Secret должны оставаться обычными файлами, а не symbolic links.
 
 ### Команды конфигурации Native
 
-`rnlctl config show` и `get` открывают только шесть изменяемых администратором ключей:
+`rnlctl config show` и `get` открывают только девять изменяемых администратором ключей:
 
 - `NODE_PORT`
 - `NODE_BIND_ADDR`
@@ -133,8 +142,11 @@ LOW_MEMORY=1
 - `BODY_LIMIT_MB`
 - `GOMEMLIMIT`
 - `DISABLE_HASHED_SET_CHECK`
+- `SNI_VERIFICATION`
+- `NFTABLES_LOGGING`
+- `NFTABLES_ACCEPT_REPLY_TRAFFIC`
 
-Secret, значения управляемых путей runtime, внутренние токены и переопределения версий не раскрываются и не изменяются через `rnlctl config`. Верхний уровень ответа `show --json` содержит `schemaVersion`, `path` (путь к управляемому файлу `node.env`) и `values`; только `values` содержит параметры конфигурации, ограниченные шестью ключами выше. `show` и `get` выводят значения, сохранённые в `node.env`, а не значения по умолчанию, вычисленные службой; поэтому пустой необязательный параметр во время работы всё равно может получить значение по умолчанию.
+Secret, значения управляемых путей runtime, внутренние токены и переопределения версий не раскрываются и не изменяются через `rnlctl config`. Верхний уровень ответа `show --json` содержит `schemaVersion`, `path` (путь к управляемому файлу `node.env`) и `values`; только `values` содержит параметры конфигурации, ограниченные девятью ключами выше. `show` и `get` выводят значения, сохранённые в `node.env`, а не значения по умолчанию, вычисленные службой; поэтому пустой необязательный параметр во время работы всё равно может получить значение по умолчанию.
 
 ```bash
 sudo rnlctl config show
@@ -163,7 +175,7 @@ sudo rnlctl config unset BODY_LIMIT_MB GOMEMLIMIT
 
 Изменение конфигурации или Secret требует прав root, согласованного состояния жизненного цикла и общего lock-файла операций. Без `--apply` служба не перезапускается: активный процесс продолжает работать с ранее загруженными настройками до `config apply` или перезапуска.
 
-Принимаются только шесть перечисленных ключей. `NODE_PORT` обязателен и не может остаться незаданным. С `--apply` команда за одну операцию проверяет и пишет файл, перезапускает активную службу и ожидает внутреннюю проверку состояния:
+Принимаются только девять перечисленных ключей. `NODE_PORT` обязателен и не может остаться незаданным. С `--apply` команда за одну операцию проверяет и пишет файл, перезапускает активную службу и ожидает внутреннюю проверку состояния:
 
 ```bash
 sudo rnlctl config set NODE_PORT=2222 --apply

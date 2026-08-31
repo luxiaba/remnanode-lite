@@ -64,8 +64,16 @@ const (
 	maxConcurrentTorrentWebhooks = 4
 )
 
-func NewService(state *State, dropper *connections.Dropper, xray XrayController) *Service {
-	return newServiceWithBackend(state, dropper, xray, newNFTManager())
+type Options struct {
+	NFTablesLogging            bool
+	NFTablesAcceptReplyTraffic bool
+}
+
+func NewService(state *State, dropper *connections.Dropper, xray XrayController, options Options) *Service {
+	return newServiceWithBackend(state, dropper, xray, newNFTManager(nftOptions{
+		logging:            options.NFTablesLogging,
+		acceptReplyTraffic: options.NFTablesAcceptReplyTraffic,
+	}))
 }
 
 func newServiceWithBackend(state *State, dropper *connections.Dropper, xray XrayController, nft firewallBackend) *Service {

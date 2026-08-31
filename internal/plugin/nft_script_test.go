@@ -14,7 +14,7 @@ func TestRenderNFTConfigBuildsOneCompleteTransaction(t *testing.T) {
 		ingressIPs:  []string{"10.0.0.1", "10.0.0.0/24", "2001:db8::1"},
 		egressIPs:   []string{"192.0.2.1", "2001:db8:1::/64"},
 		egressPorts: []int{443, 80, 443},
-	})
+	}, nftOptions{logging: true})
 
 	for _, fragment := range []string{
 		"delete table ip remnanode",
@@ -28,10 +28,34 @@ func TestRenderNFTConfigBuildsOneCompleteTransaction(t *testing.T) {
 		"add element ip6 remnanode6 egress-filter-ip6 { 2001:db8:1::/64 }",
 		"add element ip remnanode egress-filter-port { 80, 443 }",
 		"add element ip6 remnanode6 egress-filter-port6 { 80, 443 }",
+		`ip saddr @ingress-filter-ip log prefix "ingress-filter-ip: " drop`,
+		`ip6 saddr @torrent-blocker6 log prefix "torrent-blocker6: " drop`,
 	} {
 		if !strings.Contains(script, fragment) {
 			t.Errorf("script missing %q:\n%s", fragment, script)
 		}
+	}
+}
+
+func TestRenderNFTConfigSupportsReplyTrafficAndLoggingSwitches(t *testing.T) {
+	t.Parallel()
+
+	withReply := renderNFTConfig(firewallConfig{}, nftOptions{
+		logging:            true,
+		acceptReplyTraffic: true,
+	})
+	firstReply := strings.Index(withReply, "ct direction reply accept")
+	firstDrop := strings.Index(withReply, "ip saddr @ingress-filter-ip")
+	if firstReply == -1 || firstDrop == -1 || firstReply > firstDrop {
+		t.Fatalf("reply acceptance must precede ingress drops:\n%s", withReply)
+	}
+	if got := strings.Count(withReply, "ct direction reply accept"); got != 4 {
+		t.Fatalf("reply acceptance rule count = %d, want 4", got)
+	}
+
+	stateless := renderNFTConfig(firewallConfig{}, nftOptions{})
+	if strings.Contains(stateless, "ct direction reply accept") || strings.Contains(stateless, " log prefix ") {
+		t.Fatalf("disabled nftables options emitted optional rules:\n%s", stateless)
 	}
 }
 

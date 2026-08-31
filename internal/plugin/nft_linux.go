@@ -26,12 +26,14 @@ type nftManager struct {
 	capable bool
 	owned   bool
 	healthy bool
+	options nftOptions
 	run     nftScriptRunner
 }
 
-func newNFTManager() *nftManager {
+func newNFTManager(options nftOptions) *nftManager {
 	return &nftManager{
 		capable: netadmin.HasCapNetAdmin(),
+		options: options,
 		run:     runNFTScript,
 	}
 }
@@ -48,7 +50,7 @@ func (m *nftManager) Initialize(ctx context.Context) error {
 	if !m.capable || m.run == nil {
 		return errNFTablesUnavailable
 	}
-	script := renderNFTConfig(firewallConfig{})
+	script := renderNFTConfig(firewallConfig{}, m.options)
 	if err := validateNFTScript(script); err != nil {
 		return fmt.Errorf("initialize nftables: %w", err)
 	}
@@ -100,7 +102,7 @@ func (m *nftManager) Reset(ctx context.Context, config firewallConfig) error {
 	if !m.capable || m.run == nil {
 		return errNFTablesUnavailable
 	}
-	script := renderNFTConfig(config)
+	script := renderNFTConfig(config, m.options)
 	if err := validateNFTScript(script); err != nil {
 		return fmt.Errorf("reset nftables config: %w", err)
 	}

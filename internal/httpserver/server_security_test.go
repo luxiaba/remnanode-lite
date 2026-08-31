@@ -39,9 +39,23 @@ func TestExternalServerSecurityPolicy(t *testing.T) {
 	}
 }
 
-func TestTLSCertificateRequiresExactDerivedSNI(t *testing.T) {
+func TestTLSCertificateUsesDefaultCertificateWhenSNIVerificationIsDisabled(t *testing.T) {
 	payload := testTLSPayload(t)
-	tlsConfig, err := buildTLSConfig(payload)
+	tlsConfig, err := buildTLSConfig(payload, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tlsConfig.Certificates) != 1 {
+		t.Fatalf("default certificate count = %d, want 1", len(tlsConfig.Certificates))
+	}
+	if tlsConfig.GetCertificate != nil {
+		t.Fatal("disabled SNI verification installed a certificate gate")
+	}
+}
+
+func TestTLSCertificateRequiresExactDerivedSNIWhenEnabled(t *testing.T) {
+	payload := testTLSPayload(t)
+	tlsConfig, err := buildTLSConfig(payload, true)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,7 +27,7 @@ func TestNFTManagerInNetworkNamespace(t *testing.T) {
 		return
 	}
 
-	manager := newNFTManager()
+	manager := newNFTManager(nftOptions{logging: true})
 	if !manager.capable {
 		t.Fatal("network namespace child does not have CAP_NET_ADMIN")
 	}
@@ -103,6 +103,16 @@ func TestNFTManagerInNetworkNamespace(t *testing.T) {
 	}
 	assertNFTTableMissing(t, "ip", tableName)
 	assertNFTTableMissing(t, "ip6", tableNameV6)
+
+	replyManager := newNFTManager(nftOptions{acceptReplyTraffic: true})
+	if err := replyManager.Initialize(context.Background()); err != nil {
+		t.Fatalf("Initialize reply-traffic manager: %v", err)
+	}
+	assertNFTContains(t, "list", "chain", "ip", tableName, "input", "ct direction reply accept")
+	assertNFTNotContains(t, "list", "chain", "ip", tableName, "input", "log prefix")
+	if err := replyManager.Close(context.Background()); err != nil {
+		t.Fatalf("Close reply-traffic manager: %v", err)
+	}
 }
 
 func runNFTIntegrationChild(t *testing.T) {

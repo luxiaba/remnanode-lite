@@ -183,10 +183,11 @@ On SIGTERM or SIGINT, the Node shares one 25-second application shutdown budget 
 
 ## Docker update and rollback
 
-The current stable target is `3.3.2`. Its Release Compose template selects
+The current stable target is `3.4.1`. Its Release Compose template selects
 the matching image and includes the release-locked GeoCheck asset. Preserve
-`.env`, record the current digest, and verify Panel connectivity, GeoCheck,
-rw-core, and representative traffic after recreation.
+`.env`, deliberately review the new SNI and nftables options, record the
+current digest, and verify Panel connectivity, GeoCheck, rw-core, and
+representative traffic after recreation.
 
 Choose the image reference according to the rollout:
 
@@ -281,7 +282,7 @@ docker compose config --quiet
 docker compose up -d --no-build --force-recreate
 ```
 
-For Native Linux, `/etc/remnanode-lite/node.env` is the only runtime-settings source. `rnlctl config` reads and updates it directly and shows only six non-secret administrator keys. It never displays the Secret or managed internal fields.
+For Native Linux, `/etc/remnanode-lite/node.env` is the only runtime-settings source. `rnlctl config` reads and updates it directly and shows only nine non-secret administrator keys. It never displays the Secret or managed internal fields.
 
 Inspect, validate, and change an active installation with:
 

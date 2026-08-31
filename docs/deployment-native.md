@@ -487,7 +487,7 @@ The supplied bundle must match an installed generation identity. After repair, r
 
 ## Change the port or Secret
 
-`/etc/remnanode-lite/node.env` is the single source of truth for Native runtime settings. `rnlctl config` is a safe editing layer over that file, not a separate store. It exposes only the six administrator-editable, non-secret keys documented in the [configuration reference](configuration.md#native-configuration-commands).
+`/etc/remnanode-lite/node.env` is the single source of truth for Native runtime settings. `rnlctl config` is a safe editing layer over that file, not a separate store. It exposes only the nine administrator-editable, non-secret keys documented in the [configuration reference](configuration.md#native-configuration-commands).
 
 For an active Node, change the port and apply it in one operation:
 
