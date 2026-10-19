@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/deployment-docker.md; source-sha256=ab16405a98512e44f3172aceeb6efa3f511da05d1b97e73cce9a4c72acee171d -->
+<!-- translation: locale=ru; source=docs/deployment-docker.md; source-sha256=9d0223f7aca47e0de47c4ca0007bce584ba963e4a3c41c84bf288cc5684e8d77 -->
 # Развёртывание Docker Compose
 
 > Это русский перевод. Если правила развёртывания расходятся с [английским руководством](../../deployment-docker.md), используйте английский оригинал.
@@ -243,8 +243,8 @@ gh attestation verify \
 
 ## Обновление и откат
 
-Для текущего стабильного Release `3.4.1` используйте приложенный Compose-шаблон: он выбирает
-образ `3.4.1`, содержит закреплённый runtime asset GeoCheck и явно передаёт новые SNI- и
+Используйте Compose-шаблон выбранного опубликованного Release: он выбирает
+точный образ этого выпуска, содержит закреплённый runtime asset GeoCheck и явно передаёт новые SNI- и
 nftables-параметры. Сохраните `.env`, скачайте точный образ или digest и после пересоздания
 проверьте связь с Panel и реальный трафик.
 

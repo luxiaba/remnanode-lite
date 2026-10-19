@@ -183,7 +183,7 @@ On SIGTERM or SIGINT, the Node shares one 25-second application shutdown budget 
 
 ## Docker update and rollback
 
-The current stable target is `3.4.1`. Its Release Compose template selects
+Choose an exact published stable release. Its Compose template selects
 the matching image and includes the release-locked GeoCheck asset. Preserve
 `.env`, deliberately review the new SNI and nftables options, record the
 current digest, and verify Panel connectivity, GeoCheck, rw-core, and

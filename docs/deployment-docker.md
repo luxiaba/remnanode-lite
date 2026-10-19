@@ -240,8 +240,8 @@ A tag states which version you intend to reference. A digest identifies the byte
 
 ## Update and rollback
 
-For the `3.4.1` release, use the Compose template shipped with that Release:
-it selects the `3.4.1` image, includes the release-locked GeoCheck runtime
+Use the Compose template shipped with the selected published Release:
+it selects that exact image, includes the release-locked GeoCheck runtime
 asset, and explicitly maps the new SNI and nftables options. Keep the existing
 `.env`, pull the exact image or digest, and recreate the container before
 checking Panel connectivity and real traffic.
