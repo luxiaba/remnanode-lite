@@ -141,10 +141,13 @@ func downloadFile(ctx context.Context, address, destination string, opts downloa
 	hasher := sha256.New()
 	reader := &downloadIdleReader{reader: io.LimitReader(response.Body, opts.maxSize+1), refresh: refreshIdle}
 	size, err := io.Copy(io.MultiWriter(temporary, hasher), reader)
+	// Some transports finish a canceled body with EOF rather than an error.
+	// Preserve cancellation (including the idle-timeout cause) before accepting
+	// or publishing the bytes, even when io.Copy reports success.
+	if cause := context.Cause(downloadCtx); cause != nil {
+		return downloadResult{}, cause
+	}
 	if err != nil {
-		if cause := context.Cause(downloadCtx); cause != nil {
-			return downloadResult{}, cause
-		}
 		return downloadResult{}, fmt.Errorf("read download body: %w", err)
 	}
 	if size == 0 {

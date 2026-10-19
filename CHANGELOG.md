@@ -33,6 +33,11 @@ the release-selected rw-core and GeoCheck assets.
   October standard-library security fixes. Separately bundled upstream
   rw-core and GeoCheck binaries retain their original build toolchains.
 
+### Fixed
+
+- Preserve cancellation and idle-timeout errors when an asset response ends
+  with EOF, preventing a canceled download from replacing a cached asset.
+
 ### Upgrade Notes
 
 - Post-start webhooks are disabled by default. Lite bounds the URL at 512

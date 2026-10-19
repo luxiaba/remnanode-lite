@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=ab16405a98512e44f3172aceeb6efa3f511da05d1b97e73cce9a4c72acee171d -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=9d0223f7aca47e0de47c4ca0007bce584ba963e4a3c41c84bf288cc5684e8d77 -->
 
 # Docker Compose 部署
 
@@ -244,7 +244,7 @@ tag 说明“希望引用哪个版本”，digest 说明“实际运行哪一份
 
 ## 更新与回滚
 
-当前 `3.4.1` Release 应使用该 Release 附带的 Compose 模板：模板选择 `3.4.1` 镜像，
+使用所选已发布 Release 附带的 Compose 模板：模板选择该版本的精确镜像，
 包含 Release 固定的 GeoCheck 运行时资产，并明确映射新的 SNI 与 nftables 选项。保留
 现有 `.env`，拉取精确镜像或 digest，重建容器后再检查 Panel 连接和真实流量。
 

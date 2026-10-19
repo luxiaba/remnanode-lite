@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -231,4 +232,39 @@ func assertNoDownloadTemporaryFiles(t *testing.T, directory string) {
 			t.Fatalf("temporary download remains: %s", entry.Name())
 		}
 	}
+}
+
+type canceledAssetTransport struct{ cancel context.CancelFunc }
+
+func (transport canceledAssetTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: http.StatusOK, Request: request,
+		Body: io.NopCloser(canceledAssetBody{cancel: transport.cancel})}, nil
+}
+
+type canceledAssetBody struct{ cancel context.CancelFunc }
+
+func (body canceledAssetBody) Read(buffer []byte) (int, error) {
+	n := copy(buffer, "canceled replacement")
+	body.cancel()
+	return n, io.EOF
+}
+
+func TestCanceledDownloadEndingWithEOFPreservesDestination(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	directory := t.TempDir()
+	destination := filepath.Join(directory, "asset.dat")
+	if err := os.WriteFile(destination, []byte("current"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, err := downloadFile(ctx, "https://example.com/asset", destination, downloadOptions{
+		transport: canceledAssetTransport{cancel: cancel},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want cancellation", err)
+	}
+	if raw, err := os.ReadFile(destination); err != nil || string(raw) != "current" {
+		t.Fatalf("destination = %q, %v", raw, err)
+	}
+	assertNoDownloadTemporaryFiles(t, directory)
 }
