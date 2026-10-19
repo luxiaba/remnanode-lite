@@ -83,6 +83,7 @@ func TestHandlerRequestsRejectContractViolations(t *testing.T) {
 		{name: "add user missing fields", path: "/node/handler/add-user", body: `{}`},
 		{name: "add user unknown type", path: "/node/handler/add-user", body: `{"data":[{"type":"unknown"}],"hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000001"}}`},
 		{name: "add user invalid flow", path: "/node/handler/add-user", body: `{"data":[{"type":"vless","tag":"in","username":"u","uuid":"u","flow":"invalid"}],"hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000001"}}`},
+		{name: "add user retired NONE cipher", path: "/node/handler/add-user", body: `{"data":[{"type":"shadowsocks","tag":"in","username":"u","password":"p","cipherType":9,"ivCheck":false}],"hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000001"}}`},
 		{name: "add user invalid cipher", path: "/node/handler/add-user", body: `{"data":[{"type":"shadowsocks","tag":"in","username":"u","password":"p","cipherType":3,"ivCheck":false}],"hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000001"}}`},
 		{name: "add user missing iv check", path: "/node/handler/add-user", body: `{"data":[{"type":"shadowsocks","tag":"in","username":"u","password":"p","cipherType":5}],"hashData":{"vlessUuid":"00000000-0000-4000-8000-000000000001"}}`},
 		{name: "add user bad hash UUID", path: "/node/handler/add-user", body: `{"data":[],"hashData":{"vlessUuid":"bad"}}`},

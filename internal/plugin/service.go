@@ -45,23 +45,23 @@ type Service struct {
 	// set may finish; all later mutations are rejected while Close may retry.
 	closing atomic.Bool
 
-	webhookQueue        chan queuedWebhook
-	webhookStop         chan struct{}
-	webhookDone         chan struct{}
-	webhookContext      context.Context
-	webhookCancel       context.CancelFunc
-	webhookStopOnce     sync.Once
-	webhookAdmissionMu  sync.RWMutex
-	webhookStopped      atomic.Bool
-	torrentWebhookSlots chan struct{}
-	torrentWebhookWG    sync.WaitGroup
-	cleanupTimeout      time.Duration
+	webhookQueue         chan queuedWebhook
+	webhookStop          chan struct{}
+	webhookDone          chan struct{}
+	webhookContext       context.Context
+	webhookCancel        context.CancelFunc
+	webhookStopOnce      sync.Once
+	webhookAdmissionMu   sync.RWMutex
+	webhookStopped       atomic.Bool
+	outboundWebhookSlots chan struct{}
+	outboundWebhookWG    sync.WaitGroup
+	cleanupTimeout       time.Duration
 }
 
 const (
-	pluginCleanupTimeout         = 15 * time.Second
-	maxQueuedWebhooks            = 64
-	maxConcurrentTorrentWebhooks = 4
+	pluginCleanupTimeout          = 15 * time.Second
+	maxQueuedWebhooks             = 64
+	maxConcurrentOutboundWebhooks = 4
 )
 
 type Options struct {
@@ -82,18 +82,18 @@ func newServiceWithBackend(state *State, dropper *connections.Dropper, xray Xray
 	}
 	webhookContext, webhookCancel := context.WithCancel(context.Background())
 	service := &Service{
-		operationGate:       make(chan struct{}, 1),
-		state:               state,
-		nft:                 nft,
-		dropper:             dropper,
-		xray:                xray,
-		webhookQueue:        make(chan queuedWebhook, maxQueuedWebhooks),
-		webhookStop:         make(chan struct{}),
-		webhookDone:         make(chan struct{}),
-		webhookContext:      webhookContext,
-		webhookCancel:       webhookCancel,
-		torrentWebhookSlots: make(chan struct{}, maxConcurrentTorrentWebhooks),
-		cleanupTimeout:      pluginCleanupTimeout,
+		operationGate:        make(chan struct{}, 1),
+		state:                state,
+		nft:                  nft,
+		dropper:              dropper,
+		xray:                 xray,
+		webhookQueue:         make(chan queuedWebhook, maxQueuedWebhooks),
+		webhookStop:          make(chan struct{}),
+		webhookDone:          make(chan struct{}),
+		webhookContext:       webhookContext,
+		webhookCancel:        webhookCancel,
+		outboundWebhookSlots: make(chan struct{}, maxConcurrentOutboundWebhooks),
+		cleanupTimeout:       pluginCleanupTimeout,
 	}
 	go service.runWebhookWorker()
 	return service
@@ -680,6 +680,7 @@ func pluginSnapshotsBehaviorEqual(left, right *pluginSnapshot) bool {
 		left.whitelistIPs.equal(right.whitelistIPs) &&
 		torrentSettingsEqual(left.torrent, right.torrent) &&
 		preStartSettingsEqual(left.preStart, right.preStart) &&
+		left.postStart == right.postStart &&
 		firewallConfigsEqual(left.firewall, right.firewall)
 }
 

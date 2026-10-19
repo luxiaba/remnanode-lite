@@ -161,7 +161,7 @@ func TestHandleXrayWebhookPostsConfiguredReportWithoutChangingLocalOutcome(t *te
 func TestSlowTorrentReportWebhookDoesNotDelayLocalProcessing(t *testing.T) {
 	t.Parallel()
 
-	const reports = maxConcurrentTorrentWebhooks + 2
+	const reports = maxConcurrentOutboundWebhooks + 2
 	requestsStarted := make(chan struct{}, reports)
 	releaseRequests := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
@@ -206,15 +206,15 @@ func TestSlowTorrentReportWebhookDoesNotDelayLocalProcessing(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	remoteDeadline := time.Now().Add(time.Second)
-	for len(requestsStarted) != maxConcurrentTorrentWebhooks-1 {
+	for len(requestsStarted) != maxConcurrentOutboundWebhooks-1 {
 		if time.Now().After(remoteDeadline) {
-			t.Fatalf("started remote webhooks = %d, want %d", len(requestsStarted)+1, maxConcurrentTorrentWebhooks)
+			t.Fatalf("started remote webhooks = %d, want %d", len(requestsStarted)+1, maxConcurrentOutboundWebhooks)
 		}
 		time.Sleep(time.Millisecond)
 	}
 	time.Sleep(20 * time.Millisecond)
-	if got := len(requestsStarted) + 1; got != maxConcurrentTorrentWebhooks {
-		t.Fatalf("concurrent remote webhooks = %d, want %d", got, maxConcurrentTorrentWebhooks)
+	if got := len(requestsStarted) + 1; got != maxConcurrentOutboundWebhooks {
+		t.Fatalf("concurrent remote webhooks = %d, want %d", got, maxConcurrentOutboundWebhooks)
 	}
 	backend.mu.Lock()
 	blockCalls := len(backend.blockCalls)

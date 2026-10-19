@@ -283,7 +283,7 @@ func validateCipherType(value *int, path []any) []Issue {
 	if value == nil {
 		return []Issue{MissingIssue(path, "number")}
 	}
-	allowed := []int{-1, 0, 5, 6, 7, 8, 9}
+	allowed := []int{-1, 0, 5, 6, 7, 8}
 	for _, item := range allowed {
 		if *value == item {
 			return nil

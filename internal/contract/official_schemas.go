@@ -176,7 +176,7 @@ func addUserRequestSchema() *Schema {
 		}, "uuid", "flow"),
 		base("shadowsocks", map[string]*Schema{
 			"tag": stringValue(), "username": stringValue(), "password": stringValue(),
-			"cipherType": numberEnum(-1, 0, 5, 6, 7, 8, 9), "ivCheck": booleanValue(),
+			"cipherType": numberEnum(-1, 0, 5, 6, 7, 8), "ivCheck": booleanValue(),
 		}, "password", "cipherType", "ivCheck"),
 		base("shadowsocks22", map[string]*Schema{
 			"tag": stringValue(), "username": stringValue(), "password": stringValue(),

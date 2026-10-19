@@ -270,7 +270,9 @@ func (m *Manager) Start(parent context.Context, req StartRequest) StartResponse 
 			if committed {
 				cancel()
 				log.Printf("xray/start succeeded: rw-core online on gRPC @%s", process.socket)
-				return m.startResponse(true, nil)
+				response := m.startResponse(true, nil)
+				response.CoreStarted = true
+				return response
 			}
 			if !owned {
 				cancel()

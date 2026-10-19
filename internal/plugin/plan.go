@@ -91,6 +91,14 @@ func buildPluginPlanFromConfigContext(
 			}
 		}
 	}
+	if postStart, ok := config["postStart"].(map[string]any); ok {
+		snapshot.postStart.enabled, _ = postStart["enabled"].(bool)
+		if webhook, ok := postStart["webhook"].(map[string]any); ok {
+			snapshot.postStart.webhookEnabled, _ = webhook["enabled"].(bool)
+			url, _ := webhook["url"].(string)
+			snapshot.postStart.url = strings.TrimSpace(url)
+		}
+	}
 	resolvedBudget := expansionBudget{remaining: maxResolvedIPItems}
 
 	if connectionDrop, ok := config["connectionDrop"].(map[string]any); ok {
