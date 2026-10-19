@@ -15,20 +15,22 @@ import (
 )
 
 type recordingPluginController struct {
-	calls         atomic.Int64
-	recreateCalls atomic.Int64
-	syncPlugin    *plugin.SyncPlugin
-	blockItems    []plugin.BlockIP
-	events        *[]string
-	resetOnce     sync.Once
-	resetStart    chan struct{}
-	resetWait     <-chan struct{}
-	syncOnce      sync.Once
-	syncStart     chan struct{}
-	syncWait      <-chan struct{}
-	recreateOnce  sync.Once
-	recreateStart chan struct{}
-	recreateWait  <-chan struct{}
+	postStartCalls    atomic.Int64
+	postStartMetadata *plugin.NodeMetadata
+	calls             atomic.Int64
+	recreateCalls     atomic.Int64
+	syncPlugin        *plugin.SyncPlugin
+	blockItems        []plugin.BlockIP
+	events            *[]string
+	resetOnce         sync.Once
+	resetStart        chan struct{}
+	resetWait         <-chan struct{}
+	syncOnce          sync.Once
+	syncStart         chan struct{}
+	syncWait          <-chan struct{}
+	recreateOnce      sync.Once
+	recreateStart     chan struct{}
+	recreateWait      <-chan struct{}
 }
 
 func (p *recordingPluginController) hit() { p.calls.Add(1) }
@@ -555,4 +557,9 @@ func TestPluginTransportPreservesConfigJSONAndFractionalTimeout(t *testing.T) {
 	if len(controller.blockItems) != 1 || controller.blockItems[0].Timeout != 1.5 {
 		t.Fatalf("block items = %+v, want fractional timeout", controller.blockItems)
 	}
+}
+
+func (p *recordingPluginController) NotifyCoreStarted(metadata *plugin.NodeMetadata) {
+	p.postStartCalls.Add(1)
+	p.postStartMetadata = metadata
 }

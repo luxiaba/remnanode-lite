@@ -55,6 +55,7 @@ type xrayController interface {
 }
 
 type pluginController interface {
+	NotifyCoreStarted(metadata *plugin.NodeMetadata)
 	ResetPluginsContext(ctx context.Context) error
 	SyncContext(ctx context.Context, request *plugin.SyncPlugin) plugin.AcceptedResponse
 	CollectReports() plugin.CollectReportsResponse

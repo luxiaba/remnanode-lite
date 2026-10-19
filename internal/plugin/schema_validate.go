@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// Validation aligned with @remnawave/node-plugins@0.8.2 (NodePluginSchema).
+// Validation aligned with @remnawave/node-plugins@0.8.3 (NodePluginSchema).
 
 func isPlainIP(value string) bool {
 	if strings.Contains(value, ":") && strings.Contains(value, ".") {

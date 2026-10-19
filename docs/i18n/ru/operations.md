@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/operations.md; source-sha256=797125eeff49198bb88d97ceb0b20197df49bd3a7bb814827d15d017a1f3572b -->
+<!-- translation: locale=ru; source=docs/operations.md; source-sha256=b62f7105502b3c5078e7b0a2a662252450cc2e0bfda5ab8b99cfc5f5c1a2ccdd -->
 
 # Эксплуатация и диагностика
 
@@ -161,7 +161,7 @@ sudo rnlctl start
 
 ## Обновление и откат Docker
 
-Текущая стабильная цель — `3.4.1`. Compose-шаблон этого Release выбирает соответствующий
+Выберите точный опубликованный стабильный Release. Его Compose-шаблон выбирает соответствующий
 образ и содержит закреплённый asset GeoCheck. Сохраните `.env`, явно проверьте новые SNI- и
 nftables-параметры, запишите текущий digest, а после пересоздания проверьте связь с Panel,
 GeoCheck, rw-core и репрезентативный proxy-трафик.

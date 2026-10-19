@@ -12,6 +12,7 @@ import (
 	"time"
 
 	contractspec "github.com/luxiaba/remnanode-lite/internal/contract"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
 	"github.com/luxiaba/remnanode-lite/internal/system"
 	"github.com/luxiaba/remnanode-lite/internal/xray"
 )
@@ -406,5 +407,43 @@ func TestXrayStartTransportAppliesDefaultsWithoutCopyingSemantics(t *testing.T) 
 	marker, ok := manager.request.XrayConfig["marker"].(map[string]any)
 	if !ok || marker["value"] != float64(42) {
 		t.Fatalf("xrayConfig = %#v", manager.request.XrayConfig)
+	}
+}
+
+type postStartController struct {
+	recordingXrayController
+	result xray.StartResponse
+}
+
+func (c *postStartController) Start(context.Context, xray.StartRequest) xray.StartResponse {
+	return c.result
+}
+
+func TestPostStartOnlyAfterActualCoreStart(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		started, changed bool
+		calls            int64
+	}{
+		{"new process", true, true, 1}, {"unchanged", true, false, 0}, {"failed", false, false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plugins := &recordingPluginController{}
+			manager := &postStartController{result: xray.StartResponse{IsStarted: tc.started, CoreStarted: tc.changed}}
+			server := &Server{manager: manager, pluginService: plugins, bodyBudget: newHTTPTestBudget(t, false, 0)}
+			body := `{"internals":{"hashes":{"emptyConfig":"h","inbounds":[]},"metadata":{"name":"n","uuid":"u","id":7,"tags":["edge"],"countryCode":"CN","private":"must not leak"}},"xrayConfig":{}}`
+			rec := httptest.NewRecorder()
+			server.handleNodeRoutes(rec, newJSONRequest(http.MethodPost, "/node/xray/start", strings.NewReader(body)))
+			if rec.Code != 200 || plugins.postStartCalls.Load() != tc.calls {
+				t.Fatalf("status %d, calls %d", rec.Code, plugins.postStartCalls.Load())
+			}
+			if tc.calls == 1 {
+				want := plugin.NodeMetadata{Name: "n", UUID: "u", ID: 7, Tags: []string{"edge"}, CountryCode: "CN"}
+				got := plugins.postStartMetadata
+				if got == nil || got.Name != want.Name || got.UUID != want.UUID || got.ID != want.ID || len(got.Tags) != 1 || got.Tags[0] != want.Tags[0] || got.CountryCode != want.CountryCode {
+					t.Fatalf("metadata = %+v", got)
+				}
+			}
+		})
 	}
 }

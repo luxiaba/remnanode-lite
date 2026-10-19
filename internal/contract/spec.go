@@ -10,8 +10,8 @@ import (
 
 const (
 	OfficialNodeRepository = "https://github.com/remnawave/node.git"
-	OfficialNodeVersion    = "3.4.1"
-	OfficialNodeCommit     = "44912631321664dbd5822e9bf8d96766ccff7c93"
+	OfficialNodeVersion    = "3.4.2"
+	OfficialNodeCommit     = "ea7a835485af81ec464ebbf7acaaa7d6dd486a05"
 )
 
 // RouteContract is one executable route contract backed by the pinned
@@ -98,6 +98,7 @@ func buildOfficialRoutes() []RouteContract {
 				"prepare configured core and GeoData assets before starting rw-core",
 				"run configured pre-start cleanup after the old core stops and before its replacement starts",
 				"replace active config and inbound hash state",
+				"send the configured post-start webhook after a newly started core becomes ready",
 			},
 			[]string{"HTTP 200 with isStarted=false and nullable error; RN-001 is an official readiness-failure log diagnostic, not a response field"},
 			[]string{
@@ -114,6 +115,12 @@ func buildOfficialRoutes() []RouteContract {
 				"src/modules/xray-core/xray-process.service.ts",
 				"src/modules/_plugin/commands/run-pre-start/run-pre-start.handler.ts",
 				"src/modules/_plugin/services/pre-start.service.ts",
+				"src/common/utils/send-webhook.ts",
+				"src/modules/_plugin/commands/index.ts",
+				"src/modules/_plugin/commands/run-post-start/run-post-start.command.ts",
+				"src/modules/_plugin/commands/run-post-start/run-post-start.handler.ts",
+				"src/modules/_plugin/services/post-start.service.ts",
+				"src/modules/_plugin/services/states/post-start.state.ts",
 				"docker/rootfs/etc/s6-overlay/s6-rc.d/xray/timeout-kill",
 				"libs/contract/constants/errors/known-errors.ts",
 			},

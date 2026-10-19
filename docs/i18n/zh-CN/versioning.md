@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=5280326aa663aa24bac4414c7586e3fa0109bd5cc64561ef1e3bf9099a064e88 -->
+<!-- translation: locale=zh-CN; source=docs/versioning.md; source-sha256=6c2b8efc4e8e952320675a94ac76cfae4903691385411850f23d4c49a4b86b93 -->
 
 # 版本与镜像标签
 
@@ -22,11 +22,11 @@ release workflow 是发布行为的可执行真相源。它调用 `release-tool 
 例如：
 
 ```text
-Version:         3.4.1
-ContractVersion: 3.4.1
+Version:         3.4.2
+ContractVersion: 3.4.2
 ```
 
-这表示已经对齐官方 Node `3.4.1` 契约的 Remnanode Lite 源码线。对应 GitHub Release 公开后，才会附带 Native Linux 发行包。仅改变 `Version` 不会扩大项目声明的兼容范围。
+这表示已经对齐官方 Node `3.4.2` 契约的 Remnanode Lite 源码线。对应 GitHub Release 公开后，才会附带 Native Linux 发行包。仅改变 `Version` 不会扩大项目声明的兼容范围。
 
 改变 `ContractVersion` 前，必须固定官方源码、审查契约差异、更新实现和测试，并完成兼容性验证。只改项目版本从不等于新增兼容性。
 
@@ -73,6 +73,7 @@ GitHub 也会将该 Release 标记为 Latest。它既是不可变的对齐点，
 | `3.2.2` | `3.2.2` | 稳定版 | 官方 3.2.2 契约、可选启动 metadata 与 integrations、Torrent Blocker 报告 webhook 和插件 schema 0.6.3 |
 | `3.3.2` | `3.3.2` | 稳定版 | 官方 3.3.2 契约、派生 SNI、Secret 完整性、GeoCheck 0.3.0、Torrent 规则位置和插件 schema 0.7.3 |
 | `3.4.1` | `3.4.1` | 稳定版 | 官方 3.4.1 契约、25 条路由、可选 SNI 校验、凭据替换连接清理、nftables 运行选项和插件 schema 0.8.2 |
+| `3.4.2` | `3.4.2` | Stable | 启动后 webhook、移除 Shadowsocks NONE cipher、插件 schema 0.8.3 和 Go 1.26.9 安全更新 |
 
 源码中的版本可能早于正式发布出现在本表中。判断精确资产是否可用时，应使用[何时才算已发布](#何时才算已发布)中的标准，而不是只看源码。
 

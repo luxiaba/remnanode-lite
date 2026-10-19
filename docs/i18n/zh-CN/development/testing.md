@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=0cf670b76345ff68102eea7b0fbdea1afa8a7e6e9f27ef76587fe26127cd8a27 -->
+<!-- translation: locale=zh-CN; source=docs/development/testing.md; source-sha256=c084d6102c3b664dd94f7f99e3f203b42cd1dc91b16c245f2e673a5bac17f939 -->
 # 测试指南
 
 > 这是中文译文；测试规则和命令以[英文原文](../../../development/testing.md)为准。
@@ -143,7 +143,7 @@ REMNANODE_OFFICIAL_SOURCE="$REMNANODE_OFFICIAL_SOURCE" \
 ### 外部插件 schema 证据
 
 官方 Node 的插件 `config` schema 来自独立 npm 包，不在固定源码 checkout 内。当前
-`@remnawave/node-plugins@0.8.2` tarball 可以在隔离临时目录中复核：
+`@remnawave/node-plugins@0.8.3` tarball 可以在隔离临时目录中复核：
 
 ```bash
 plugin_tgz="$(mktemp)"
@@ -151,24 +151,22 @@ trap 'rm -f "$plugin_tgz"' EXIT
 
 curl --fail --location --silent --show-error \
   --proto '=https' --tlsv1.2 \
-  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.8.2.tgz \
+  https://registry.npmjs.org/@remnawave/node-plugins/-/node-plugins-0.8.3.tgz \
   -o "$plugin_tgz"
 
 test "$(openssl dgst -sha1 "$plugin_tgz" | awk '{print $NF}')" = \
-  9588288f9190b73b2ce868845d4248c98eadc25f
+  ffe6e9bc719bce8bdbaf4042723762503f149953
 test "sha512-$(openssl dgst -sha512 -binary "$plugin_tgz" | openssl base64 -A)" = \
-  'sha512-/klo/XH4imZ2cupLavj4++S+hHgVA8uzhVgpQdC0y9kzUtVE168d7brcYEdxB1UGw49LsER+UDYplcyTSvV5QQ=='
+  'sha512-GtJv0vOoAarwj4dmVndkrOgA9QzqxiX4Qm4AgMKPk+MmLOQhcOfZSXjGrLstekNkuXgvTZY2KnLBzzR1qGcYKA=='
 tar -tzf "$plugin_tgz" \
   | grep -Fx 'package/build/backend/models/node-plugins.schema.js'
 ```
 
 检查实际 schema 时使用 `tar -xOf` 从上述固定路径读取，不要安装包或执行其中代码。
 当前 CI 不联网下载该 tarball；自动源码证据测试只覆盖官方 Git checkout 中登记的
-路径。3.4.1 基线解压后的 schema SHA-256 为
-`e096eba57a8ce1499a0e117bf5b9dfd7f324a9a6fc455066fcb31d5c86a91d21`，与已审查的
-0.7.3 schema 逐字节相同；变化只在包版本与 Zod 依赖。升级插件版本时必须同时核对
-官方 `package.json`/`package-lock.json`、更新摘要、
-重新审计 schema，并调整 `internal/nodeapi`、`internal/plugin` 和相关契约测试。
+路径。3.4.2 基线解压后的 schema SHA-256 为
+`4b6f8cff65d4ca1cfa192d6e512396ae207d849045759b64538c1734091b2836`。
+该版本新增可选的 `postStart` 阶段及 HTTP(S) webhook 配置。
 
 ## 仓库与静态检查
 

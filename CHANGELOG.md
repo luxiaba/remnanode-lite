@@ -6,6 +6,44 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.4.2] - 2026-10-19
+
+Align the Node with official `3.4.2` at
+`ea7a835485af81ec464ebbf7acaaa7d6dd486a05`, retaining the 25-route API and
+the release-selected rw-core and GeoCheck assets.
+
+### Added
+
+- Support plugin schema `0.8.3` post-start webhooks. A newly ready core emits
+  `service.core_started` with validated Node metadata; unchanged syncs and
+  failed starts emit no event. Delivery shares the bounded plugin queue,
+  has a five-second timeout, and is canceled during shutdown.
+
+### Changed
+
+- Reject the retired Shadowsocks `NONE` cipher (`cipherType=9`) before user
+  mutations. Other user protocol variants remain unchanged.
+- Update Brotli to `1.2.6`, Compress to `1.20.3`, x/net to `0.61.0`, x/sys to
+  `0.49.0`, x/term to `0.47.0`, and x/text to `0.43.0`.
+- Update the SHA-pinned artifact upload/download Actions to `7.0.2`/`8.0.2`.
+
+### Security
+
+- Upgrade the release toolchain and Docker builder to Go `1.26.9` for the
+  October standard-library security fixes. Separately bundled upstream
+  rw-core and GeoCheck binaries retain their original build toolchains.
+
+### Fixed
+
+- Preserve cancellation and idle-timeout errors when an asset response ends
+  with EOF, preventing a canceled download from replacing a cached asset.
+
+### Upgrade Notes
+
+- Post-start webhooks are disabled by default. Lite bounds the URL at 512
+  bytes and metadata at an 8 KiB pre-encoding budget; capacity exhaustion or
+  delivery failure never changes a successful core start.
+
 ## [3.4.1] - 2026-08-31
 
 This stable release aligns Remnanode Lite with the official Node `3.4.1`
