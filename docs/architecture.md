@@ -4,7 +4,7 @@
 
 This document is for maintainers encountering Remnanode Lite for the first time. It describes the boundaries, runtime flows, state ownership, and resource constraints implemented by the current code. Its purpose is to explain how the system works and which invariants a code change must preserve. It is not a deployment reference or a release checklist for a particular version.
 
-For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the current external API and lifecycle delta, see the [official 3.4.1 contract baseline](development/contract-3.4.1.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
+For deployment, see [Docker Compose](deployment-docker.md) or [Native Linux](deployment-native.md). For the current external API and lifecycle delta, see the [official 3.4.2 contract baseline](development/contract-3.4.2.md). For measured resource behavior, see the [512 MiB resource budget](development/resource-budget.md).
 
 ## 1. System Role
 
@@ -165,7 +165,7 @@ The daemon entry point is `runNode`, which `main` calls when no CLI arguments ar
 
 ### 5.1 Public Request Chain
 
-The public server exposes exactly 26 fixed `/node/*` routes. Requests pass through the following sequence:
+The public server exposes exactly 25 fixed `/node/*` routes. Requests pass through the following sequence:
 
 ```text
 TLS >= 1.3 mTLS handshake
@@ -190,8 +190,8 @@ TLS requires version 1.3 or later and a client certificate signed by the CA embe
 The requests fall into four groups:
 
 - Xray: start, stop, and healthcheck, for 3 routes.
-- Stats: user online state, traffic, system, and IP statistics, for 10 routes.
-- Handler: hot user updates and connection termination, for 8 routes.
+- Stats: user online state, traffic, system, and IP statistics, for 11 routes.
+- Handler: hot user updates and connection termination, for 6 routes.
 - Plugin: synchronization, report collection, and nftables operations, for 5 routes.
 
 The authoritative registry is [`internal/httpserver/node_routes.go`](../internal/httpserver/node_routes.go). Do not maintain a second runtime route registry elsewhere when adding or changing routes.
@@ -477,6 +477,23 @@ When the queue is full, the request waits for capacity within its 30-second cont
 Reports use a chronological ring buffer with a maximum of 1024 entries. At capacity, it overwrites the oldest record and increments a dropped counter; Panel collection drains the ring atomically. After an nft block succeeds, the report is marked blocked. The later socket drop is best effort, and its failure does not retroactively change `accepted` or blocked state.
 
 Connection termination targets only connected TCP sockets. It does not support UDP, LISTEN, or TIME_WAIT. `netadmin` performs one streaming socket dump for IPv6 and another for IPv4, validates every `SOCK_DESTROY` acknowledgment, and treats `ENOENT` as idempotent success.
+
+### 8.4 Post-start Webhook
+
+After a new core passes readiness and commits its running state, the HTTP
+coordinator admits `service.core_started` under the existing lifecycle lease.
+An unchanged successful start does not emit this event. The committed plugin
+snapshot supplies the URL; validated start metadata supplies only `name`,
+`uuid`, `id`, `tags`, and `countryCode`, or `{}` when absent.
+
+Post-start notifications share the existing 64-item queue and four outbound
+HTTP slots with Torrent delivery. The queue owns a serialized payload and URL
+captured at admission. Metadata is limited to an 8 KiB pre-encoding budget;
+URLs use the 512-byte plugin string limit. Queue or delivery saturation skips
+the best-effort notification with a diagnostic. Delivery has a five-second
+timeout and is canceled and joined during plugin shutdown. HTTP failure never
+changes the successful core start result. See the
+[3.4.2 contract](development/contract-3.4.2.md) for the schema and accepted bounds.
 
 ## 9. Shutdown Flow
 

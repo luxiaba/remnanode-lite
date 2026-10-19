@@ -142,6 +142,9 @@ type InboundHash struct {
 }
 
 type StartResponse struct {
+	// CoreStarted identifies an actual ready-process transition, not an
+	// unchanged configuration sync. It is internal and never sent to Panel.
+	CoreStarted     bool            `json:"-"`
 	IsStarted       bool            `json:"isStarted"`
 	Version         *string         `json:"version"`
 	Error           *string         `json:"error"`

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/luxiaba/remnanode-lite/internal/nodeapi"
+	"github.com/luxiaba/remnanode-lite/internal/plugin"
 	"github.com/luxiaba/remnanode-lite/internal/xray"
 )
 
@@ -36,5 +37,20 @@ func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer s.releaseXrayStart()
-	writeNodeResponse(w, s.manager.Start(r.Context(), command))
+	response := s.manager.Start(r.Context(), command)
+	if response.IsStarted && response.CoreStarted {
+		var metadata *plugin.NodeMetadata
+		if request.Internals.Metadata.Present {
+			value := request.Internals.Metadata.Value
+			metadata = &plugin.NodeMetadata{
+				Name: *value.Name, UUID: *value.UUID, ID: *value.ID,
+				Tags: *value.Tags, CountryCode: *value.CountryCode,
+			}
+		}
+		// The shared lifecycle lease still protects the committed plugin
+		// configuration. Notification admission is bounded and never delays
+		// the start response for an external HTTP delivery.
+		s.pluginService.NotifyCoreStarted(metadata)
+	}
+	writeNodeResponse(w, response)
 }

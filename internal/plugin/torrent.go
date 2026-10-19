@@ -1,12 +1,9 @@
 package plugin
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"log/slog"
 	"math"
-	"net/http"
 	"net/netip"
 	"regexp"
 	"time"
@@ -27,15 +24,9 @@ type torrentSettings struct {
 }
 
 type queuedWebhook struct {
-	payload xraywebhook.Payload
+	payload  xraywebhook.Payload
+	delivery *webhookDelivery
 }
-
-type torrentWebhookDelivery struct {
-	url    string
-	report TorrentReport
-}
-
-const torrentWebhookTimeout = 5 * time.Second
 
 func (s *State) TorrentBlockerEnabled() bool {
 	s.mu.RLock()
@@ -91,7 +82,7 @@ func (s *Service) runWebhookWorker() {
 	defer close(s.webhookDone)
 	// This worker is the only delivery producer. Waiting after its loop exits
 	// guarantees no WaitGroup Add can race with shutdown's wait.
-	defer s.torrentWebhookWG.Wait()
+	defer s.outboundWebhookWG.Wait()
 	for {
 		select {
 		case <-s.webhookStop:
@@ -102,6 +93,10 @@ func (s *Service) runWebhookWorker() {
 		case <-s.webhookStop:
 			return
 		case item := <-s.webhookQueue:
+			if item.delivery != nil {
+				s.dispatchWebhook(*item.delivery)
+				continue
+			}
 			select {
 			case <-s.webhookStop:
 				return
@@ -118,7 +113,7 @@ func (s *Service) runWebhookWorker() {
 			cancel()
 			s.releaseOperation()
 			if delivery != nil {
-				s.dispatchTorrentWebhook(*delivery)
+				s.dispatchWebhook(*delivery)
 			}
 		}
 	}
@@ -167,7 +162,7 @@ func (s *Service) finishWebhookShutdown(ctx context.Context) error {
 	}
 }
 
-func (s *Service) processXrayWebhookLocked(ctx context.Context, payload xraywebhook.Payload) *torrentWebhookDelivery {
+func (s *Service) processXrayWebhookLocked(ctx context.Context, payload xraywebhook.Payload) *webhookDelivery {
 	if s.readyLocked() != nil {
 		return nil
 	}
@@ -228,44 +223,7 @@ func (s *Service) processXrayWebhookLocked(ctx context.Context, payload xraywebh
 	if snapshot.torrent.webhookURL == "" {
 		return nil
 	}
-	return &torrentWebhookDelivery{url: snapshot.torrent.webhookURL, report: report}
-}
-
-func (s *Service) sendTorrentWebhook(ctx context.Context, delivery torrentWebhookDelivery) {
-	body, err := json.Marshal(delivery.report)
-	if err != nil {
-		return
-	}
-	deliveryCtx, cancel := context.WithTimeout(ctx, torrentWebhookTimeout)
-	defer cancel()
-	request, err := http.NewRequestWithContext(deliveryCtx, http.MethodPost, delivery.url, bytes.NewReader(body))
-	if err != nil {
-		return
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return
-	}
-	_ = response.Body.Close()
-}
-
-func (s *Service) dispatchTorrentWebhook(delivery torrentWebhookDelivery) {
-	if s.webhookContext.Err() != nil {
-		return
-	}
-	select {
-	case s.torrentWebhookSlots <- struct{}{}:
-	default:
-		return
-	}
-
-	s.torrentWebhookWG.Add(1)
-	go func() {
-		defer s.torrentWebhookWG.Done()
-		defer func() { <-s.torrentWebhookSlots }()
-		s.sendTorrentWebhook(s.webhookContext, delivery)
-	}()
+	return newWebhookDelivery(snapshot.torrent.webhookURL, report, false)
 }
 
 func torrentIPIgnored(settings torrentSettings, ip string) bool {

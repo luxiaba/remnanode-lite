@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=841b4fdf8e6d5ff0b39c5780a85ef405cb60a93b0f21be0963a0fb739eb2bf53 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=d2c3ac31a1f35dc08b5d0d6f4d467526b34583d9d936e1b242af7c82cc3671c9 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。
@@ -7,7 +7,7 @@
 
 本文面向第一次接触 Remnanode Lite 的维护者，描述当前代码真实采用的边界、运行流程、状态所有权和资源约束。它回答的是“系统如何工作、修改代码时应守住什么”，而不是部署参数或某个版本的发布清单。
 
-部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.4.1 契约基线](development/contract-3.4.1.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
+部署方式见 [Docker Compose 部署](deployment-docker.md)，当前外部 API 与生命周期差异见[官方 3.4.2 契约基线](development/contract-3.4.2.md)，资源实测见 [512 MiB 资源预算](development/resource-budget.md)。
 
 ## 1. 系统定位
 
@@ -168,7 +168,7 @@ cmd/remnanode-lite
 
 ### 5.1 公网请求链
 
-公网 server 只暴露固定的 26 条 `/node/*` 路由。请求按以下顺序进入：
+公网 server 只暴露固定的 25 条 `/node/*` 路由。请求按以下顺序进入：
 
 ```text
 TLS >= 1.3 mTLS handshake
@@ -193,8 +193,8 @@ TLS 要求 1.3 或更高版本，并使用 Secret 中的 CA 验证客户端证�
 请求分为四组：
 
 - Xray：start、stop、healthcheck，共 3 条。
-- Stats：用户在线、流量、系统和 IP 统计，共 10 条。
-- Handler：用户热更新和连接踢除，共 8 条。
+- Stats：用户在线、流量、系统和 IP 统计，共 11 条。
+- Handler：用户热更新和连接踢除，共 6 条。
 - Plugin：同步、报告收集和 nftables 操作，共 5 条。
 
 权威注册表是 [`internal/httpserver/node_routes.go`](../../../internal/httpserver/node_routes.go)。新增或修改路由时，不要在其他文件维护第二份运行时注册表。
@@ -681,3 +681,12 @@ Node 只拥有固定的项目表和自己创建的 rw-core 进程组，不应修
 | 容器运行边界 | `compose.yaml`、`Dockerfile` |
 
 文档用于解释这些约束及其理由。当文档与可执行真相源不一致时，应先核对代码和测试，再在同一变更中修正文档，避免把历史里程碑或一次验收数据当成永久架构事实。
+
+## 启动后 Webhook
+
+新 core 通过 readiness 并提交 running 状态后，HTTP 协调层在现有生命周期 lease 下
+提交 `service.core_started` 通知。配置未变化的成功同步不触发通知。URL 与元数据在
+入队时固定；元数据仅包含 `name`、`uuid`、`id`、`tags`、`countryCode`，缺省为 `{}`。
+通知与 Torrent 共用 64 项队列和 4 个出站 HTTP 槽位，超时 5 秒；插件关闭时取消并等待
+发送结束。元数据编码前预算为 8 KiB，URL 使用 512 字节字符串上限。超限或容量不足时
+记录诊断并跳过通知，发送失败不改变 core 启动结果。详见 [3.4.2 契约](development/contract-3.4.2.md)。
