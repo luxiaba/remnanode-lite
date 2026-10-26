@@ -7,12 +7,12 @@ import (
 )
 
 // Version is the release version (overridable via -ldflags at build time).
-var Version = "3.4.2"
+var Version = "3.4.3"
 
 // ContractVersion is the upstream @remnawave/node version reported to Panel as nodeVersion.
 // Default must stay in sync with contract.version and contract-sync CI.
 // Overridable via -ldflags at build time.
-var ContractVersion = "3.4.2"
+var ContractVersion = "3.4.3"
 
 const releaseRepo = "luxiaba/remnanode-lite"
 

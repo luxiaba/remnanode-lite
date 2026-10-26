@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7.0@sha256:dbbd5e059e8a07ff7ea6233b213b36aa516b4c53c645f1817a4dd18b83cbea56
 
-# Multi-architecture manifest digests Go builder refreshed on 2026-10-19; Debian runtime retained from 2026-08-15.
-ARG GO_IMAGE=golang:1.26.9-bookworm@sha256:d9c68c2c51161e12fd77e4c6320687c9cd86e1af1e3ad6e6cd63ff970641453c
+# Multi-architecture manifest digests Go builder refreshed on 2026-10-26; Debian runtime retained from 2026-08-15.
+ARG GO_IMAGE=golang:1.26.10-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af
 ARG DEBIAN_IMAGE=debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS build
