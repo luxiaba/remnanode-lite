@@ -32,7 +32,7 @@ Every translated Markdown file starts with metadata on its first non-empty
 line:
 
 ```markdown
-<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=<sha256> -->
+<!-- translation: locale=zh-CN; source=docs/operations.md; source-sha256=b62f7105502b3c5078e7b0a2a662252450cc2e0bfda5ab8b99cfc5f5c1a2ccdd -->
 ```
 
 Within the first 20 lines, the page must also link visibly to its English

@@ -31,7 +31,7 @@ func TestOfficialRouteRegistry(t *testing.T) {
 		t.Fatalf("registered route count = %d, want 25", len(got))
 	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("registered routes do not match official 3.4.2\n got: %#v\nwant: %#v", got, want)
+		t.Fatalf("registered routes do not match official 3.4.3\n got: %#v\nwant: %#v", got, want)
 	}
 }
 

@@ -6,6 +6,27 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.4.3] - 2026-10-26
+
+Align the source baseline with official Node `3.4.3` at
+`2ad154f8f1016c94c1872f337268af878af61b18`. The reviewed upstream diff
+only changes the Node.js Docker base from `24.20` to `24.22` and package
+version metadata; the 25-route API, plugins, and runtime assets are unchanged.
+
+### Changed
+
+- Update project and contract versions, deployment defaults, pinned official
+  source evidence, and current documentation to `3.4.3`.
+- Record the official Node.js/Brotli security update (CVE-2026-111497).
+  Remnanode Lite uses the independent Go implementation and has no Node.js runtime.
+
+### Security
+
+- Upgrade the Go toolchain and SHA-pinned Docker builder to `1.26.10` for
+  GO-2026-6809 (CVE-2026-111943), fixing the reachable `crypto/x509`
+  certificate-verification finding in the repository security scan. Bundled
+  upstream rw-core and GeoCheck retain their reviewed versions and build toolchains.
+
 ## [3.4.2] - 2026-10-19
 
 Align the Node with official `3.4.2` at
