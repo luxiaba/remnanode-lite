@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/README.md; source-sha256=bbbc8ee050bec26e80de28896fe41249af91585a2073051ad88c5fb27cf54fe4 -->
+<!-- translation: locale=ru; source=docs/README.md; source-sha256=3bd4d903f57d87573de9726e5f1a632dc52e729a7423344aa6198b384337ed4a -->
 # Документация Remnanode Lite
 
 Содержание и правила задаёт [английский индекс документации](../../README.md). Русский перевод подготовлен для операторов и иногда может обновляться с задержкой. Порядок перевода описан в [политике локализации (на английском)](../README.md).
@@ -28,7 +28,7 @@
 1. Начните с healthcheck, журналов, обновления, отката и диагностики в [руководстве по эксплуатации](operations.md).
 2. Проверьте источник и приоритет параметров в [справочнике конфигурации](configuration.md).
 3. Для памяти, диска, журналов и времени остановки используйте [бюджет ресурсов (англ.)](../../development/resource-budget.md).
-4. При проблемах протокола или жизненного цикла смотрите [архитектуру (англ.)](../../architecture.md) и [контракт 3.4.3 (англ.)](../../development/contract-3.4.3.md).
+4. При проблемах протокола или жизненного цикла смотрите [архитектуру (англ.)](../../architecture.md) и [контракт 3.4.4 (англ.)](../../development/contract-3.4.4.md).
 5. Docker откатывается к записанной exact version или manifest digest; Native — к сохранённому previous generation. Не полагайтесь на историческое значение движущегося канала.
 
 ## Руководства на русском
@@ -61,7 +61,7 @@
 | [Архитектура и устройство, англ.](../../architecture.md) | Владение компонентами, потоки запросов, Xray, плагины, сеть и ресурсы |
 | [Разработка и навигация по коду, англ.](../../development/README.md) | Инструменты Go, пакеты, команды и рабочий процесс |
 | [Стратегия тестирования, англ.](../../development/testing.md) | Unit, race, contract, Linux namespace, container и Release tests |
-| [Official 3.4.3 contract baseline](../../development/contract-3.4.3.md) | Current pinned evidence, official Node.js image security update, and Go 1.26.10 fix |
+| [Official 3.4.4 contract baseline](../../development/contract-3.4.4.md) | Current pinned evidence, official Node.js image security update, and Go 1.26.10 fix |
 | [Official 3.4.2 contract baseline](../../development/contract-3.4.2.md) | Historical pinned evidence, post-start webhook, Shadowsocks cipher retirement, and plugin schema 0.8.3 |
 | [Official 3.4.1 contract baseline](../../development/contract-3.4.1.md) | Исторические доказательства, удалённые Handler routes, optional SNI, очистка соединений, nftables options и plugin schema 0.8.2 |
 | [Official 3.3.2 contract baseline](../../development/contract-3.3.2.md) | Исторические доказательства derived SNI, целостности Secret, GeoCheck и plugin schema 0.7.3 |

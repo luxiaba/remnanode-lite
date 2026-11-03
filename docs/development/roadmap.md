@@ -33,7 +33,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 
 ## Compatibility boundary
 
-- `/node` routes follow official Node 3.4.3 HTTP methods, request and response shapes, and error semantics.
+- `/node` routes follow official Node 3.4.4 HTTP methods, request and response shapes, and error semantics.
 - Project-specific diagnostics and operations live in the CLI or a separate internal interface; they do not extend the official `/node` contract.
 - After a Node restart, the process waits for Panel to resend configuration instead of restoring a potentially stale full proxy configuration from disk.
 - Request-size and resource protections may create documented safety deviations, but they must fail explicitly rather than degrade silently.
@@ -58,7 +58,8 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M12 Official Node 3.3.2 alignment | Complete |
 | M13 Official Node 3.4.1 alignment | Published |
 | M14 Official Node 3.4.2 alignment | Published |
-| M15 Official Node 3.4.3 alignment | Aligned; publication follows the release process |
+| M15 Official Node 3.4.3 alignment | Published |
+| M16 Official Node 3.4.4 alignment | Aligned; publication follows the release process |
 
 The M6 50,000-user measurement from 2026-07-15 and the M7
 init/distribution snapshots from 2026-07-19 remain useful engineering
@@ -83,21 +84,21 @@ connections on credential replacement, and adds nftables runtime options while
 re-auditing plugin schema `0.8.2`.
 The published 3.4.2 release adds post-start webhooks, retires the Shadowsocks NONE
 cipher, and updates dependencies and the Go 1.26.9 security baseline.
-The 3.4.3 source tracks the upstream Node.js image-only update and includes
-the Go 1.26.10 certificate-verification security fix.
+The 3.4.3 tracked the upstream Node.js image update and included the Go 1.26.10 certificate-verification security fix.
+The 3.4.4 source updates the bundled Xray-core runtime to v26.10.31; official Node npm dependencies are not part of this Go implementation.
 Runtime observations stay outside the source repository, and GitHub generates
 the Release notes.
 
 ## Current focus
 
-- **Now:** Publish the immutable `3.4.3` maintenance candidate after checking
+- **Now:** Publish the immutable `3.4.4` maintenance candidate after checking
   the official source delta, version consistency, security fix, and artifact
-  provenance. Runtime behavior inherits the verified `3.4.2` contract.
+  provenance. Runtime behavior inherits the verified `3.4.3` contract.
 - **Release discipline:** For the next two release cycles, do not add release
   channels, artifact types, publication state, or proof mechanisms. Reliability
   and security fixes, and removal of redundant checks, remain in scope.
 - **Next:** Resume the explicit Native qualification candidates after the
-  `3.4.3` release decision.
+  `3.4.4` release decision.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements. Release decisions

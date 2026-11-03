@@ -6,6 +6,20 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.4.4] - 2026-11-03
+
+Align with official Node `3.4.4` at
+`c1e40e6d27c68e8a2325419a6c193488d8952984`. The upstream contract and Node
+application behavior are unchanged; official npm dependency updates are not
+part of this Go implementation.
+
+### Changed
+
+- Update the bundled Xray-core runtime from `v26.7.28` to `v26.10.31` for
+  both Linux architectures, including the locked archive and binary digests.
+- Update project and contract versions, deployment defaults, source evidence,
+  third-party notices, and current documentation to `3.4.4`.
+
 ## [3.4.3] - 2026-10-26
 
 Align the source baseline with official Node `3.4.3` at

@@ -25,7 +25,7 @@ The maintained deployment profile is designed for a server with **512 MiB RAM, 1
 
 ## Highlights
 
-- Implements the Remnawave Node `3.4.3` API contract, including optional
+- Implements the Remnawave Node `3.4.4` API contract, including optional
   derived-SNI verification, credential-replacement connection cleanup,
   GeoCheck, post-start webhooks, and the current nftables behavior.
 - Runs the Node as one Go process that directly manages rw-core, without Node.js or s6.
@@ -250,8 +250,8 @@ For a fleet, prefer one exact version or manifest digest and keep the previous v
 | --- | --- |
 | Native Linux bundles | Exact published Releases |
 | Native hosts | Distribution-specific; see the [Native host matrix](docs/deployment-native.md#native-host-matrix) |
-| Node contract | `3.4.3` |
-| rw-core | `v26.7.28` |
+| Node contract | `3.4.4` |
+| rw-core | `v26.10.31` |
 | Platforms | `linux/amd64`, `linux/arm64` |
 | Whole-host target | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose service limit | `448 MiB RAM`, no additional swap |
