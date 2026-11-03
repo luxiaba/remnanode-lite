@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=9d0223f7aca47e0de47c4ca0007bce584ba963e4a3c41c84bf288cc5684e8d77 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=484b614da80162c75ce7102e30fb30c002c59fe07727131e2f310e5db5075c64 -->
 
 # Docker Compose 部署
 
@@ -362,7 +362,7 @@ docker image prune
 当前构建包含：
 
 - 静态链接的 `remnanode-lite`；
-- 固定版本和资产摘要的 rw-core `v26.7.28`；
+- 固定版本和资产摘要的 rw-core `v26.10.31`；
 - 对应的 `geoip.dat`、`geosite.dat`；
 - 从固定 `ipverse/as-ip-blocks` commit 构建的 compact ASN 数据库；
 - Debian bookworm slim 运行环境、CA 证书和 nftables 依赖。

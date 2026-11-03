@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "repository": "https://github.com/remnawave/node.git",
   "packageName": "@remnawave/node",
-  "version": "3.4.3",
-  "commit": "2ad154f8f1016c94c1872f337268af878af61b18",
+  "version": "3.4.4",
+  "commit": "c1e40e6d27c68e8a2325419a6c193488d8952984",
   "files": [
     {
       "path": "docker/Dockerfile",
-      "sha256": "fe955791d4b030596972dfba5d653114eb83a051162f554eef9b8076c9d1062d"
+      "sha256": "f9776f7de9dc57e6f7cf0a01391926c4ac372b5a2ec8a3f181ad865a76078462"
     },
     {
       "path": "docker/rootfs/etc/s6-overlay/s6-rc.d/xray/timeout-kill",
@@ -167,11 +167,11 @@
     },
     {
       "path": "package-lock.json",
-      "sha256": "b7f7b3571a351bcd231933444b9d154038400ff843904c139d20569475c5b741"
+      "sha256": "3b92a41b3177c4c255c00dda2a2413d4081282507397b20e81c356dc6ec2e181"
     },
     {
       "path": "package.json",
-      "sha256": "877d2870bff66c60057d126abe006e47edd19b72042de47e21d898c4765afd34"
+      "sha256": "16982f5de99e68ade1dc0c03e0ebbd2df701ecb17164ed905a006ecf4882654a"
     },
     {
       "path": "src/app.module.ts",
