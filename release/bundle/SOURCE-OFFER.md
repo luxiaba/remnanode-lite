@@ -16,7 +16,7 @@ The immutable source locations currently pinned by the bundle are:
 
 | Component | Source |
 | --- | --- |
-| Xray-core | https://github.com/XTLS/Xray-core/tree/5ca6f4b7d4dc20a881d4330e498892697627ec0c |
+| Xray-core | https://github.com/XTLS/Xray-core/tree/a4a3dff5b20c2faae567b742c172c7b95e75c083 |
 | GeoIP | https://github.com/Loyalsoldier/geoip/tree/e0cb5fd94679b83cd612a27e01ade2998fc24cdb |
 | GeoIP snapshot | https://github.com/Loyalsoldier/geoip/archive/e0cb5fd94679b83cd612a27e01ade2998fc24cdb.tar.gz (`sha256:ac356437bcdefa3433a4eb100055debf0feda019f3757bcc25d31a1cb671d542`) |
 | GeoSite | https://github.com/Loyalsoldier/v2ray-rules-dat/tree/27c9bd1c8ebd2a1eb871476ef10b6c157db0b460 |
