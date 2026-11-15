@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=README.md; source-sha256=b81f0b02563ac43ca3e6b13ed07e897a52a294ad96d36f6050312715f6386db6 -->
+<!-- translation: locale=zh-CN; source=README.md; source-sha256=f175f28aa89daa3300ba9ca654e0808a28f930b8b631daee37a8d90a83de7f88 -->
 <div align="center">
 
 # Remnanode Lite
@@ -12,7 +12,7 @@
 [![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
 [![Candidate](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
 [![Security](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml/badge.svg)](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml)
-[![Go](https://img.shields.io/badge/Go-1.26.10-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.26.11-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 [Docker 快速部署](#docker-快速部署) · [原生 Linux](#原生-linux) · [配置](docs/i18n/zh-CN/configuration.md) · [运维](docs/i18n/zh-CN/operations.md) · [完整文档](docs/i18n/zh-CN/README.md)
@@ -28,7 +28,7 @@ Remnanode Lite 是一个运行在 Linux 上的 Remnawave Node 实现。它接收
 
 ## 主要特点
 
-- 实现 Remnawave Node `3.4.4` API 契约，包括可选派生 SNI 校验、凭据替换时的
+- 实现 Remnawave Node `3.4.6` API 契约，包括可选派生 SNI 校验、凭据替换时的
   连接清理、GeoCheck、启动后 webhook 和当前 nftables 行为。
 - 使用一个 Go 进程直接管理 rw-core，不依赖 Node.js 或 s6。
 - 提供面向 512 MiB 服务器维护的低内存 Compose 配置。
@@ -236,8 +236,8 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | 已发布的精确 Release |
 | Native 主机 | 按发行版划分，详见 [Native 主机矩阵](docs/i18n/zh-CN/deployment-native.md#native-主机矩阵) |
-| Node 契约 | `3.4.4` |
-| rw-core | `v26.10.31` |
+| Node 契约 | `3.4.6` |
+| rw-core | `v26.11.9` |
 | 平台 | `linux/amd64`、`linux/arm64` |
 | 整机目标 | `512 MiB RAM / 1 vCPU / 2 GB disk` |
 | Compose 服务限制 | `448 MiB RAM`，不额外使用 swap |

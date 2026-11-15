@@ -33,7 +33,7 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 
 ## Compatibility boundary
 
-- `/node` routes follow official Node 3.4.4 HTTP methods, request and response shapes, and error semantics.
+- `/node` routes follow official Node 3.4.6 HTTP methods, request and response shapes, and error semantics.
 - Project-specific diagnostics and operations live in the CLI or a separate internal interface; they do not extend the official `/node` contract.
 - After a Node restart, the process waits for Panel to resend configuration instead of restoring a potentially stale full proxy configuration from disk.
 - Request-size and resource protections may create documented safety deviations, but they must fail explicitly rather than degrade silently.
@@ -59,7 +59,8 @@ The project version and official contract version move independently. `X.Y.Z-rnl
 | M13 Official Node 3.4.1 alignment | Published |
 | M14 Official Node 3.4.2 alignment | Published |
 | M15 Official Node 3.4.3 alignment | Published |
-| M16 Official Node 3.4.4 alignment | Aligned; publication follows the release process |
+| M16 Official Node 3.4.4 alignment | Published |
+| M17 Official Node 3.4.6 alignment | Aligned; publication follows the release process |
 
 The M6 50,000-user measurement from 2026-07-15 and the M7
 init/distribution snapshots from 2026-07-19 remain useful engineering
@@ -85,20 +86,27 @@ re-auditing plugin schema `0.8.2`.
 The published 3.4.2 release adds post-start webhooks, retires the Shadowsocks NONE
 cipher, and updates dependencies and the Go 1.26.9 security baseline.
 The 3.4.3 tracked the upstream Node.js image update and included the Go 1.26.10 certificate-verification security fix.
-The 3.4.4 source updates the bundled Xray-core runtime to v26.10.31; official Node npm dependencies are not part of this Go implementation.
+The published 3.4.4 release updates the bundled Xray-core runtime to v26.10.31.
+The 3.4.5 source adds `NFTABLES_TABLE_NAME` and `SUPPRESS_DUPLICATE_INSTANCE_WARNING`, stops injecting the API routing rule when `routing.script` is present, and moves Xray-core to v26.11.9 and plugin schema to 0.9.0.
+The 3.4.6 source changes dependency metadata only; its contract, routes, and runtime assets match 3.4.5.
+Lite keeps the API routing rule under `routing.script` as a documented safety deviation and does not implement the two new multi-instance variables; see the [3.4.6 contract baseline](contract-3.4.6.md).
 Runtime observations stay outside the source repository, and GitHub generates
 the Release notes.
 
 ## Current focus
 
-- **Now:** Publish the immutable `3.4.4` maintenance candidate after checking
-  the official source delta, version consistency, security fix, and artifact
-  provenance. Runtime behavior inherits the verified `3.4.3` contract.
+- **Now:** Publish the immutable `3.4.6` maintenance candidate after checking
+  the official source delta, version consistency, and artifact provenance.
+  Runtime behavior inherits the verified `3.4.4` contract plus the documented
+  `routing.script` deviation.
+- **Security:** The `3.4.6` line also carries the Go `1.26.11` toolchain for
+  GO-2026-6859 (`net/http` `MaxBytesReader` header race), which is reachable
+  through the public request-body limit path.
 - **Release discipline:** For the next two release cycles, do not add release
   channels, artifact types, publication state, or proof mechanisms. Reliability
   and security fixes, and removal of redundant checks, remain in scope.
 - **Next:** Resume the explicit Native qualification candidates after the
-  `3.4.4` release decision.
+  `3.4.6` release decision.
 - **Later:** Improve observability, upgrade automation, and distribution coverage without compromising the 512 MiB target.
 
 The following are accepted limitations or later enhancements. Release decisions

@@ -272,6 +272,43 @@ func TestGenerateAPIConfigDedupesAPIRoutingRule(t *testing.T) {
 	}
 }
 
+func TestGenerateAPIConfigKeepsAPIRuleWhenRoutingScriptPresent(t *testing.T) {
+	t.Parallel()
+
+	// Official Node 3.4.5 stopped injecting the API routing rule when
+	// routing.script is present. Lite deliberately keeps it so rw-core retains
+	// its gRPC control channel; this test pins that documented deviation.
+	config := generateAPIConfig(map[string]any{
+		"routing": map[string]any{
+			"script": "function route(ctx) { return 'direct'; }",
+			"rules": []any{
+				map[string]any{"outboundTag": "direct"},
+			},
+		},
+	}, "remnanode-lite-xtls-test", TorrentBlockerOptions{})
+
+	routing, ok := config["routing"].(map[string]any)
+	if !ok {
+		t.Fatalf("routing is %T, want map[string]any", config["routing"])
+	}
+	if script, _ := routing["script"].(string); script == "" {
+		t.Fatal("routing.script was dropped from the prepared config")
+	}
+
+	rules := arrayFrom(routing["rules"])
+	if len(rules) != 2 {
+		t.Fatalf("routing rules = %d, want 2 (API rule plus the caller rule)", len(rules))
+	}
+	first, _ := rules[0].(map[string]any)
+	if tag, _ := first["outboundTag"].(string); tag != apiTag {
+		t.Fatalf("first rule outboundTag = %q, want %q", tag, apiTag)
+	}
+	inboundTags, _ := first["inboundTag"].([]any)
+	if len(inboundTags) != 1 || inboundTags[0] != apiInboundTag {
+		t.Fatalf("first rule inboundTag = %#v, want [%q]", first["inboundTag"], apiInboundTag)
+	}
+}
+
 func TestGenerateAPIConfigTorrentBlocker(t *testing.T) {
 	t.Parallel()
 

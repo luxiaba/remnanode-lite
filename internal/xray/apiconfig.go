@@ -2,6 +2,7 @@ package xray
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/luxiaba/remnanode-lite/internal/netadmin"
 )
@@ -172,6 +173,16 @@ func routingFrom(existing any) map[string]any {
 		for key, value := range existingRouting {
 			routing[key] = value
 		}
+	}
+
+	// Official Node 3.4.5 stopped injecting the API routing rule when
+	// routing.script is present, leaving the script responsible for the Node's
+	// own gRPC inbound. A Panel-authored script is not guaranteed to cover
+	// REMNAWAVE_API_INBOUND, and without this rule rw-core's API becomes
+	// unreachable, which silently removes all Handler and Stats control.
+	// Lite keeps the rule and reports the deviation instead of failing closed.
+	if _, hasScript := routing["script"]; hasScript {
+		slog.Warn("routing.script is present; retaining the Node API routing rule so rw-core keeps its gRPC control channel (documented deviation from official 3.4.5+)")
 	}
 
 	rules := []any{

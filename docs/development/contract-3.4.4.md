@@ -1,6 +1,6 @@
 # Remnawave Node 3.4.4 Behavioral Contract Baseline
 
-[Development guide](README.md) · [Previous 3.4.3 baseline](contract-3.4.3.md)
+[Development guide](README.md) · [Previous 3.4.3 baseline](contract-3.4.3.md) · [Next 3.4.6 baseline](contract-3.4.6.md)
 
 ## Pinned Evidence
 

@@ -6,11 +6,11 @@ The Remnanode Lite license does not replace their licenses.
 ## Xray-core (`rw-core`)
 
 `lib/rw-core` is the unmodified `xray` executable from XTLS/Xray-core
-`v26.10.31`, commit `a4a3dff5b20c2faae567b742c172c7b95e75c083`. It is renamed
+`v26.11.9`, commit `676eaf66f8f05d4d558ee7a74b4736623d3feeb9`. It is renamed
 so the service can distinguish the managed runtime from a system-wide Xray
 installation. Xray-core is licensed under MPL-2.0. The corresponding source is:
 
-https://github.com/XTLS/Xray-core/tree/a4a3dff5b20c2faae567b742c172c7b95e75c083
+https://github.com/XTLS/Xray-core/tree/676eaf66f8f05d4d558ee7a74b4736623d3feeb9
 
 ## Remnawave GeoCheck
 
@@ -74,8 +74,8 @@ redistributed in the bundle.
 
 | Component | Release and commit | Source SHA-256 | Payload SHA-256 | License |
 | --- | --- | --- | --- | --- |
-| Xray core (amd64) | `v26.10.31 @ a4a3dff5b20c2faae567b742c172c7b95e75c083` | `sha256:e4bd9119f50ae7c41658b1abd0679ae06f98bd864a2907ff33f2f2cf7081b214` (16692690 bytes) | `sha256:cc4b84d3069569f297a61f04b914f2bb37e9d202fd7b84cb50def1fc30fd40e1` (35151996 bytes) | `MPL-2.0` |
-| Xray core (arm64) | `v26.10.31 @ a4a3dff5b20c2faae567b742c172c7b95e75c083` | `sha256:1811c8f1da0c3b6dc707ebaf1c8390e987ba39859a8f0a7aadd8526157f2ec8d` (15175093 bytes) | `sha256:5939649960deaf535bcd5f7ce0467a2b1d63b72a2758a6f42eade714ae8d5328` (32637052 bytes) | `MPL-2.0` |
+| Xray core (amd64) | `v26.11.9 @ 676eaf66f8f05d4d558ee7a74b4736623d3feeb9` | `sha256:b651f7e1d9966ee2c1b1ee1bf8b52c72771824d3065dce96bbc8bcc19ed95f82` (16754078 bytes) | `sha256:e87bce586acdb9136aa5b1f1d9c8db9f1ea1d145b6d86368c7f6f662f9f6a66d` (35434620 bytes) | `MPL-2.0` |
+| Xray core (arm64) | `v26.11.9 @ 676eaf66f8f05d4d558ee7a74b4736623d3feeb9` | `sha256:64ed6858982a7f5eb85d88b811089063bd4f17561f4c8f44e0f1dc8e6f6430be` (15231921 bytes) | `sha256:c2d1e66a130556d32089adcf38202fcb6f9027e41fb456cc2cda9a5fabdc093a` (32964732 bytes) | `MPL-2.0` |
 | GeoCheck (amd64) | `v0.3.0 @ 50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc` | `sha256:eca33bbee3c2c3ea7ade85f9a61ef4c7471a8334eb8f0a715e844aef865307d9` (3648208 bytes) | `sha256:09f52e3de1a3037f5311d441b658de34349b33811da90d211daced7b88043da6` (9097378 bytes) | `MIT` |
 | GeoCheck (arm64) | `v0.3.0 @ 50e084bb3ed34b55fc6839fe0dc4bafd9fe275fc` | `sha256:1badce683fd901b4052a78b833d536b851cf1f5952d82bc985c875e37a153267` (3319891 bytes) | `sha256:5d0d2a662fa5a85b6d3286143769967f7edd7705b48e62b7e91b0268bf2644d0` (8519842 bytes) | `MIT` |
 | GeoIP | `202607230036 @ e0cb5fd94679b83cd612a27e01ade2998fc24cdb` | `sha256:ac356437bcdefa3433a4eb100055debf0feda019f3757bcc25d31a1cb671d542` (1398786 bytes) | `sha256:cdf411fce977a1f48adb6a3b224e3e2bd7eccfcd4d6e2e30c6dc443f1a0e8e52` (17683114 bytes) | `NOASSERTION` |
