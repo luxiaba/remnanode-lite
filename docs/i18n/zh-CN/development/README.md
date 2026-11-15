@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=eb846b6716f5829983940b868b3bdf14d74fd671623725fd3ddadaff67f3665b -->
+<!-- translation: locale=zh-CN; source=docs/development/README.md; source-sha256=f6527637e63a083f02a4e3b989cf5e23801218c4ed7d5c1f13a2bd7c8488c9b7 -->
 # 开发指南
 
 > 这是中文译文；涉及开发规则时，请以[英文原文](../../../development/README.md)为准。

@@ -99,6 +99,9 @@ the Release notes.
   the official source delta, version consistency, and artifact provenance.
   Runtime behavior inherits the verified `3.4.4` contract plus the documented
   `routing.script` deviation.
+- **Security:** The `3.4.6` line also carries the Go `1.26.11` toolchain for
+  GO-2026-6859 (`net/http` `MaxBytesReader` header race), which is reachable
+  through the public request-body limit path.
 - **Release discipline:** For the next two release cycles, do not add release
   channels, artifact types, publication state, or proof mechanisms. Reliability
   and security fixes, and removal of redundant checks, remain in scope.

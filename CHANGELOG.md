@@ -24,6 +24,13 @@ Align with official Node `3.4.6` at
 - Bump `andybalholm/brotli` to `1.2.8`, `docker/login-action` to `4.8.0`, and
   `softprops/action-gh-release` to `3.0.4`.
 
+### Security
+
+- Upgrade the Go toolchain and SHA-pinned Docker builder from `1.26.10` to
+  `1.26.11` for GO-2026-6859, an HTTP/1 server crash caused by a
+  `MaxBytesReader` header race in `net/http`. The flaw is reachable through the
+  request-body limit path, which every public `/node` route uses.
+
 ### Fixed
 
 - Derive the runtime-lock mutation fixture from the lock file instead of a
