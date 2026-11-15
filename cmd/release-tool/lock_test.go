@@ -20,14 +20,27 @@ func TestRuntimeLockRejectsUnknownAndDuplicateFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Derive the mutation target from the lock itself so a runtime asset
+	// upgrade cannot silently turn this case into a no-op.
+	lock, err := loadRuntimeLock(filepath.Join("..", "..", "release", "runtime-assets.lock.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := lock.Xray.Architectures.AMD64.Archive.SHA256
+	if !strings.Contains(string(original), digest) {
+		t.Fatalf("amd64 archive digest %q is not present in the lock file", digest)
+	}
 	tests := map[string]string{
 		"unknown field":         strings.Replace(string(original), "\"schemaVersion\": 3,", "\"schemaVersion\": 3, \"unexpected\": true,", 1),
 		"duplicate key":         strings.Replace(string(original), "\"schemaVersion\": 3,", "\"schemaVersion\": 3, \"schemaVersion\": 3,", 1),
-		"uppercase digest":      strings.Replace(string(original), "e4bd9119", "E4BD9119", 1),
+		"uppercase digest":      strings.Replace(string(original), digest, strings.ToUpper(digest), 1),
 		"escaped URL separator": strings.Replace(string(original), "/releases/download/", "%2Freleases/download/", 1),
 	}
 	for name, content := range tests {
 		t.Run(name, func(t *testing.T) {
+			if content == string(original) {
+				t.Fatalf("%s mutation did not modify the lock", name)
+			}
 			path := filepath.Join(t.TempDir(), "lock.json")
 			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 				t.Fatal(err)

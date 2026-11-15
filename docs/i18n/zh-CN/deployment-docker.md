@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=484b614da80162c75ce7102e30fb30c002c59fe07727131e2f310e5db5075c64 -->
+<!-- translation: locale=zh-CN; source=docs/deployment-docker.md; source-sha256=e8d4af8e06d2d4a3ceaa9dd5951a6a737eae25706a430ea10d4882dc794c10f5 -->
 
 # Docker Compose 部署
 

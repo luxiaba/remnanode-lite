@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=README.md; source-sha256=b81f0b02563ac43ca3e6b13ed07e897a52a294ad96d36f6050312715f6386db6 -->
+<!-- translation: locale=ru; source=README.md; source-sha256=f175f28aa89daa3300ba9ca654e0808a28f930b8b631daee37a8d90a83de7f88 -->
 <div align="center">
 
 # Remnanode Lite
@@ -12,7 +12,7 @@
 [![CI](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/ci.yml)
 [![Candidate](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml/badge.svg?branch=main)](https://github.com/luxiaba/remnanode-lite/actions/workflows/container.yml)
 [![Security](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml/badge.svg)](https://github.com/luxiaba/remnanode-lite/actions/workflows/security.yml)
-[![Go](https://img.shields.io/badge/Go-1.26.10-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.26.11-00ADD8?logo=go&logoColor=white)](go.mod)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 
 [Быстрый запуск Docker](#быстрый-запуск-docker) · [Native Linux](#native-linux) · [Настройка](docs/i18n/ru/configuration.md) · [Эксплуатация](docs/i18n/ru/operations.md) · [Документация](docs/i18n/ru/README.md)
@@ -28,7 +28,7 @@ Remnanode Lite работает как Remnawave-совместимый Node н�
 
 ## Возможности
 
-- Реализует контракт API Remnawave Node `3.4.4`, включая необязательную
+- Реализует контракт API Remnawave Node `3.4.6`, включая необязательную
   проверку производного SNI, очистку соединений при замене учётных данных,
   post-start webhook, GeoCheck и актуальное поведение nftables.
 - Node работает как единый процесс на Go и напрямую управляет rw-core; Node.js и s6 не требуются.
@@ -246,8 +246,8 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | Точные опубликованные Releases |
 | Хосты для Native | Зависит от дистрибутива; см. [матрицу хостов Native](docs/i18n/ru/deployment-native.md#матрица-хостов-native) |
-| Контракт Node | `3.4.4` |
-| rw-core | `v26.10.31` |
+| Контракт Node | `3.4.6` |
+| rw-core | `v26.11.9` |
 | Платформы | `linux/amd64`, `linux/arm64` |
 | Целевая конфигурация хоста | `512 MiB RAM / 1 vCPU / 2 GB диска` |
 | Лимит сервиса в Compose | `448 MiB RAM`, без дополнительной подкачки |

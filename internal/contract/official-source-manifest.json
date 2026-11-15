@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "repository": "https://github.com/remnawave/node.git",
   "packageName": "@remnawave/node",
-  "version": "3.4.4",
-  "commit": "c1e40e6d27c68e8a2325419a6c193488d8952984",
+  "version": "3.4.6",
+  "commit": "52d0f1c00c23bf99912687cb3b75faffb2d3bffb",
   "files": [
     {
       "path": "docker/Dockerfile",
-      "sha256": "f9776f7de9dc57e6f7cf0a01391926c4ac372b5a2ec8a3f181ad865a76078462"
+      "sha256": "a10a56bcbf35b7c83b6974c08f765266b17e905c1ba68d5a3830d33e98980477"
     },
     {
       "path": "docker/rootfs/etc/s6-overlay/s6-rc.d/xray/timeout-kill",
@@ -163,15 +163,15 @@
     },
     {
       "path": "libs/contract/package.json",
-      "sha256": "5c766727c88ed8d96eda0ca29c70c9e06441ddc4caf858c5d2511ddd656235eb"
+      "sha256": "1c921d396303660a85738f56435b9943ef3d3715e689271cfa1146656e345ed2"
     },
     {
       "path": "package-lock.json",
-      "sha256": "3b92a41b3177c4c255c00dda2a2413d4081282507397b20e81c356dc6ec2e181"
+      "sha256": "bb07f3d057c4ad4fde48bffa82c13187aedfe2f53a671f8bbb7e7fbb6cea97bf"
     },
     {
       "path": "package.json",
-      "sha256": "16982f5de99e68ade1dc0c03e0ebbd2df701ecb17164ed905a006ecf4882654a"
+      "sha256": "5cc755a59e76bb906f841d8457d0eca626d7cc398457a67560cdfe216f8d8097"
     },
     {
       "path": "src/app.module.ts",
@@ -179,7 +179,7 @@
     },
     {
       "path": "src/common/config/app-config/config.schema.ts",
-      "sha256": "6ae9fea2283f700f4da879df799d849411b7a5479541f53657a8d6a291c9cc71"
+      "sha256": "d7ef4011f121728d6c65e40b5ef8c76090ff7897fc941451af2b3cddf1adc3f1"
     },
     {
       "path": "src/common/config/app-config/typed-config.service.ts",
@@ -219,7 +219,7 @@
     },
     {
       "path": "src/common/utils/generate-api-config.ts",
-      "sha256": "58593d92f72b1cf7abdedebf6a9cede7cb506bc1f5067530788a8e3111d0ea46"
+      "sha256": "61fefee11181e09f4a7316c826d717e50919e6e3897335dd9cc228b7790c23a8"
     },
     {
       "path": "src/common/utils/read-core-version.ts",
@@ -243,7 +243,7 @@
     },
     {
       "path": "src/main.ts",
-      "sha256": "bf8962ca87dec754b315022fbc937a6855950bbc914b378a14fd261e60324ea7"
+      "sha256": "b3d85de6330fbf46ea16a1d889db4229ba885671e61d05f3ff12b3460543a94f"
     },
     {
       "path": "src/modules/_plugin/commands/index.ts",
@@ -287,7 +287,7 @@
     },
     {
       "path": "src/modules/_plugin/services/nft.service.ts",
-      "sha256": "c59a8800ee9e1bd57b400f85cb1119e4a6895fc4a62cd629d746a2077bbc96ea"
+      "sha256": "c36bfd0a6969067bed5272398b0e96635452030141eff86a56a03605311948fb"
     },
     {
       "path": "src/modules/_plugin/services/plugin-state.service.ts",

@@ -10,8 +10,8 @@ import (
 
 const (
 	OfficialNodeRepository = "https://github.com/remnawave/node.git"
-	OfficialNodeVersion    = "3.4.4"
-	OfficialNodeCommit     = "c1e40e6d27c68e8a2325419a6c193488d8952984"
+	OfficialNodeVersion    = "3.4.6"
+	OfficialNodeCommit     = "52d0f1c00c23bf99912687cb3b75faffb2d3bffb"
 )
 
 // RouteContract is one executable route contract backed by the pinned

@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/README.md; source-sha256=3bd4d903f57d87573de9726e5f1a632dc52e729a7423344aa6198b384337ed4a -->
+<!-- translation: locale=ru; source=docs/README.md; source-sha256=0187717724c6119ef8253d1fa004bfb9e69653af333caaada8d10dd8d368fa07 -->
 # Документация Remnanode Lite
 
 Содержание и правила задаёт [английский индекс документации](../../README.md). Русский перевод подготовлен для операторов и иногда может обновляться с задержкой. Порядок перевода описан в [политике локализации (на английском)](../README.md).

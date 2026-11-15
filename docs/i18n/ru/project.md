@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=docs/project.md; source-sha256=ffbb18ed30c120cae87dae6df4ce9f69522ab62e79965494a3a0239f4fb42efe -->
+<!-- translation: locale=ru; source=docs/project.md; source-sha256=1bfda86d0b0189b52f9dfb35df9c8835c38db5175b8b5472e94499b1db43ad15 -->
 
 # Область применения и цели проекта
 
