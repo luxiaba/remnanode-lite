@@ -1,4 +1,4 @@
-<!-- translation: locale=ru; source=README.md; source-sha256=b81f0b02563ac43ca3e6b13ed07e897a52a294ad96d36f6050312715f6386db6 -->
+<!-- translation: locale=ru; source=README.md; source-sha256=a96ee086e0e8b95b0d78465642b20b86701c7c9a579cebb4988bf817e9c22e0e -->
 <div align="center">
 
 # Remnanode Lite
@@ -28,7 +28,7 @@ Remnanode Lite работает как Remnawave-совместимый Node н�
 
 ## Возможности
 
-- Реализует контракт API Remnawave Node `3.4.4`, включая необязательную
+- Реализует контракт API Remnawave Node `3.4.6`, включая необязательную
   проверку производного SNI, очистку соединений при замене учётных данных,
   post-start webhook, GeoCheck и актуальное поведение nftables.
 - Node работает как единый процесс на Go и напрямую управляет rw-core; Node.js и s6 не требуются.
@@ -246,8 +246,8 @@ docker compose up -d --no-build --force-recreate
 | --- | --- |
 | Native Linux bundle | Точные опубликованные Releases |
 | Хосты для Native | Зависит от дистрибутива; см. [матрицу хостов Native](docs/i18n/ru/deployment-native.md#матрица-хостов-native) |
-| Контракт Node | `3.4.4` |
-| rw-core | `v26.10.31` |
+| Контракт Node | `3.4.6` |
+| rw-core | `v26.11.9` |
 | Платформы | `linux/amd64`, `linux/arm64` |
 | Целевая конфигурация хоста | `512 MiB RAM / 1 vCPU / 2 GB диска` |
 | Лимит сервиса в Compose | `448 MiB RAM`, без дополнительной подкачки |

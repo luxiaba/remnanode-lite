@@ -24,12 +24,12 @@ command derives the stable-versus-preview class from the source version.
 `Version` and `ContractVersion` move independently. For example:
 
 ```text
-Version:         3.4.4
-ContractVersion: 3.4.4
+Version:         3.4.6
+ContractVersion: 3.4.6
 ```
 
 This is the Remnanode Lite source line aligned with the verified official Node
-`3.4.4` contract. Its Native Linux distribution is attached only when the
+`3.4.6` contract. Its Native Linux distribution is attached only when the
 corresponding GitHub Release is published.
 
 Changing `ContractVersion` requires pinned official source, a reviewed contract
@@ -95,6 +95,7 @@ contract has already been implemented.
 | `3.4.1` | `3.4.1` | Stable | Official 3.4.1 contract, 25-route surface, optional SNI verification, replacement connection cleanup, nftables runtime options, and plugin schema 0.8.2 |
 | `3.4.2` | `3.4.2` | Stable | Post-start webhook, retired Shadowsocks NONE cipher, plugin schema 0.8.3, and Go 1.26.9 security updates |
 | `3.4.4` | `3.4.4` | Stable | Official Node.js image update, unchanged API, and Go 1.26.10 certificate-verification fix |
+| `3.4.6` | `3.4.6` | Stable | Official 3.4.5/3.4.6 contract, Xray-core v26.11.9, plugin schema 0.9.0, and the documented `routing.script` deviation |
 
 A source version can appear in this table before it is published. Use the
 criteria in [What Counts as Published](#what-counts-as-published), rather than

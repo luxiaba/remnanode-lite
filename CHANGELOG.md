@@ -6,6 +6,40 @@ This file follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and f
 
 ## [Unreleased]
 
+## [3.4.6] - 2026-11-15
+
+Align with official Node `3.4.6` at
+`52d0f1c00c23bf99912687cb3b75faffb2d3bffb`. This entry covers both official
+`3.4.5` and `3.4.6`; `3.4.6` changes dependency metadata only. The public
+25-route `/node` contract is unchanged.
+
+### Changed
+
+- Update the bundled Xray-core runtime from `v26.10.31` to `v26.11.9` for both
+  Linux architectures, including the locked archive and binary digests.
+- Update project and contract versions, deployment defaults, source evidence,
+  third-party notices, and current documentation to `3.4.6`.
+- Track plugin schema `0.9.0`. Its compiled schema is structurally identical to
+  `0.8.3`; only a `postStart` documentation string changed.
+- Bump `andybalholm/brotli` to `1.2.8`, `docker/login-action` to `4.8.0`, and
+  `softprops/action-gh-release` to `3.0.4`.
+
+### Fixed
+
+- Derive the runtime-lock mutation fixture from the lock file instead of a
+  hard-coded digest, so a runtime asset upgrade can no longer turn the
+  uppercase-digest rejection test into a silent no-op.
+
+### Known differences
+
+- Official `3.4.5` stops injecting the `REMNAWAVE_API_INBOUND` routing rule when
+  `routing.script` is present. Lite keeps the rule and logs a warning, because
+  without it rw-core's gRPC API becomes unreachable and every Handler and Stats
+  operation fails while the Node still reports a healthy start.
+- `NFTABLES_TABLE_NAME` and `SUPPRESS_DUPLICATE_INSTANCE_WARNING` are not
+  implemented. Lite keeps the fixed `remnanode`/`remnanode6` tables and the
+  single-instance model; both defaults match official behavior.
+
 ## [3.4.4] - 2026-11-03
 
 Align with official Node `3.4.4` at

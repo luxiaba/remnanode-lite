@@ -1,33 +1,33 @@
 {
   "schemaVersion": 3,
   "xray": {
-    "version": "v26.10.31",
-    "commit": "a4a3dff5b20c2faae567b742c172c7b95e75c083",
-    "sourceURL": "https://github.com/XTLS/Xray-core/tree/a4a3dff5b20c2faae567b742c172c7b95e75c083",
+    "version": "v26.11.9",
+    "commit": "676eaf66f8f05d4d558ee7a74b4736623d3feeb9",
+    "sourceURL": "https://github.com/XTLS/Xray-core/tree/676eaf66f8f05d4d558ee7a74b4736623d3feeb9",
     "architectures": {
       "amd64": {
         "archive": {
-          "url": "https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-linux-64.zip",
-          "sha256": "e4bd9119f50ae7c41658b1abd0679ae06f98bd864a2907ff33f2f2cf7081b214",
-          "size": 16692690
+          "url": "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-linux-64.zip",
+          "sha256": "b651f7e1d9966ee2c1b1ee1bf8b52c72771824d3065dce96bbc8bcc19ed95f82",
+          "size": 16754078
         },
         "core": {
           "archivePath": "xray",
-          "sha256": "cc4b84d3069569f297a61f04b914f2bb37e9d202fd7b84cb50def1fc30fd40e1",
-          "size": 35151996,
+          "sha256": "e87bce586acdb9136aa5b1f1d9c8db9f1ea1d145b6d86368c7f6f662f9f6a66d",
+          "size": 35434620,
           "license": "MPL-2.0"
         }
       },
       "arm64": {
         "archive": {
-          "url": "https://github.com/XTLS/Xray-core/releases/download/v26.10.31/Xray-linux-arm64-v8a.zip",
-          "sha256": "1811c8f1da0c3b6dc707ebaf1c8390e987ba39859a8f0a7aadd8526157f2ec8d",
-          "size": 15175093
+          "url": "https://github.com/XTLS/Xray-core/releases/download/v26.11.9/Xray-linux-arm64-v8a.zip",
+          "sha256": "64ed6858982a7f5eb85d88b811089063bd4f17561f4c8f44e0f1dc8e6f6430be",
+          "size": 15231921
         },
         "core": {
           "archivePath": "xray",
-          "sha256": "5939649960deaf535bcd5f7ce0467a2b1d63b72a2758a6f42eade714ae8d5328",
-          "size": 32637052,
+          "sha256": "c2d1e66a130556d32089adcf38202fcb6f9027e41fb456cc2cda9a5fabdc093a",
+          "size": 32964732,
           "license": "MPL-2.0"
         }
       }

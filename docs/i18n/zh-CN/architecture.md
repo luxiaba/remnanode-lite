@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=e6d569f75d0e6e353169308b7eec28624302912a0d1bea1c45c7693090ae0943 -->
+<!-- translation: locale=zh-CN; source=docs/architecture.md; source-sha256=6e2dbf170e84fef76e27408981e827ed6396c7bb7dc883481ae9dc11dbd8d902 -->
 # 架构与运行时设计
 
 > 这是中文译文；涉及实现、配置和规则时，请以[英文原文](../../architecture.md)为准。

@@ -1,4 +1,4 @@
-<!-- translation: locale=zh-CN; source=docs/development/contract-3.4.4.md; source-sha256=e7c8f6c624e24d887a4997f9943c2670edfbaa25a4d4ff061cf2aec8e214c843 -->
+<!-- translation: locale=zh-CN; source=docs/development/contract-3.4.4.md; source-sha256=ac2fbfeab1480e661cd8210618a85d735a7005336296351280b2c6cdbba129eb -->
 
 # Remnawave Node 3.4.4 行为契约基线
 
